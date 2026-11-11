@@ -74,12 +74,14 @@ npm run dev              # local dev server on port 3000
 
 ## Progress
 
-- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs.
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs; WP1.4 parsers (`domain/ingest/`).
 - Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
 - AI calls go only through `journey-ai`. Add a task to `domain/ai/tasks.ts`; never send prompts from the client. Secrets: `OPENAI_API_KEY`; optional `OPENAI_MODEL` (default `gpt-5.5`), `OPENAI_REASONING_EFFORT` (default `low`), `AI_MONTHLY_TOKEN_BUDGET` (default 2,000,000 per workspace), `ALLOWED_ORIGIN`.
 - Edit a Process Model only through `domain/processModel/patch.ts`: each operation takes a valid model and returns the next model plus its JSON Patch, or throws `ModelOpError`.
 - Save model edits only through the RPCs: `model_start_draft(process)`, `model_save_patch(revision, expected_seq, patch, origin, summary)`, `model_approve(revision, expected_seq)`, `model_history(process)`. Errors come back as HTTP 409 (stale `expected_seq` or approved revision), 403, 404 or 422. On 409, reload the draft and re-run the operation.
-- Next: WP1.3 workspace shell, WP1.4 parsers.
+- Read uploaded files with `parseFile` in `domain/ingest/parsers/index.ts`. It returns ordered segments with locators, or a state (`needs_ocr`, `unsupported`, `empty`, `error`); it never throws. PDFs need pdf.js passed in.
+- Dependencies: the agent workspace cannot reach npm. Change `package.json` on a `claude/` branch and `.github/workflows/lockfile.yml` commits the regenerated lockfile; pull it before the next push.
+- Next: WP1.3 workspace shell, then WP1.5 grounded extraction.
 
 ## Definition of done for a pull request
 
