@@ -1,7 +1,7 @@
 # Local-only Supabase configuration for repository validation.
 # This file is intentionally generic and contains no secret material.
 
-project_id = "avalaos-core-local"
+project_id = "avalaos-enterprise"
 
 [api]
 enabled = true
@@ -13,7 +13,7 @@ max_rows = 1000
 [db]
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
 
 [db.pooler]
 enabled = false

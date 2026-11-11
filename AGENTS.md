@@ -41,7 +41,9 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 | `App.tsx`, `components/`, `services/` | The existing application, inherited from AvalaOS Core. Being replaced route by route |
 | `services/assessV2/` | Data shapes and interaction-readiness rules that the Process Model reuses |
 | `services/scoringEngine.ts` | Legacy V1 scoring. Do not extend it |
-| `supabase/functions/`, `supabase/migrations/` | Inherited edge functions and schema. A new baseline schema replaces the migrations in WP0.2 |
+| `supabase/migrations/` | The live schema, applied to the AvalaOS Enterprise Supabase project. Access is by workspace membership (`admin`, `editor`, `viewer`, plus `can_approve`) |
+| `supabase/tests/baseline_rules.sql` | Behaviour checks for the schema. Run it against the database after any migration; it rolls back |
+| `supabase/functions/`, `supabase/legacy/` | Inherited edge functions and the inherited 256-table schema. Reference only, not deployed |
 | `domain/` | New pure domain code (created from Phase 1) |
 | `scripts/` | Unit-test runners only |
 
@@ -59,10 +61,23 @@ npm run build            # production build
 npm run dev              # local dev server on port 3000
 ```
 
+## Tests
+
+- Test what the change can break, not everything every time.
+- New code gets fast unit tests beside it. Database rules are checked by `supabase/tests/baseline_rules.sql`.
+- The inherited unit tests (`npm run test:unit`) run in CI only when inherited code, its runners or the dependencies change. Do not add to them.
+- When inherited code is retired, delete its tests in the same pull request.
+
+## Progress
+
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied.
+- Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
+- Next: WP0.3 eval corpus, WP0.4 AI gateway, then Phase 1.
+
 ## Definition of done for a pull request
 
 - The "Done when" line of the work package is covered by tests that fail before the change and pass after.
-- `npm test` and `npm run build` pass locally and in CI.
+- Typecheck, the tests relevant to the change, and `npm run build` pass in CI.
 - No rule in "Rules that always apply" is broken.
 - The pull request description says what changed, how it was verified, and what was not verified.
 
