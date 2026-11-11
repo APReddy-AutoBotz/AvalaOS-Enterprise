@@ -90,6 +90,8 @@ const fake: RunTask = async (task, input) => {
         ],
         questions: [{ question: 'When will the supplier invoice API be activated?', whyItMatters: 'API-first design.', members: ['U1'] }],
       } };
+    case 'review_flow':
+      return { usage, data: { merges: [], removals: [] } };
   }
   throw new Error(`unexpected task ${task.id}`);
 };
@@ -175,4 +177,43 @@ test('candidate listings carry ids, sources and order but no source text beyond 
   assert.match(flowListing(set), /S1 \[sop #1\] Log invoice — d \| actors: AP Clerk \| systems: — \| type: user/);
   assert.match(factsListing(set), /B1 \[sop #1\] Price tolerance: if 2% then post/);
   assert.doesNotMatch(flowListing(set) + factsListing(set), /6\.2 Log the invoice in the AP tracker/);
+});
+
+import { applyReview, MAX_REVIEW_SHARE } from './review.ts';
+
+test('review: merged steps pool their candidates, removed steps are bypassed, and the share of changes is capped', () => {
+  const flow: any = {
+    roles: [{ key: 'r1', name: 'AP Clerk', kind: 'person_role', members: ['R1'] }], systems: [],
+    steps: ['a', 'b', 'c', 'd', 'e', 'f'].map(k => ({ key: k, name: `Step ${k}`, description: '', taskType: 'user', roles: k === 'c' ? [] : ['r1'], systems: [k], members: [`S${k}`] })),
+    gateways: [{ key: 'g1', question: 'OK?', members: ['D1'] }],
+    events: [{ key: 'e1', kind: 'start', name: 'Start', members: [] }, { key: 'e2', kind: 'end', name: 'End', members: [] }, { key: 'e3', kind: 'end', name: 'Rejected', members: [] }],
+    flows: [
+      { from: 'e1', to: 'a', label: '' }, { from: 'a', to: 'b', label: '' }, { from: 'b', to: 'g1', label: '' },
+      { from: 'g1', to: 'c', label: 'Yes' }, { from: 'g1', to: 'd', label: 'No' }, { from: 'd', to: 'e3', label: '' },
+      { from: 'c', to: 'e', label: '' }, { from: 'e', to: 'f', label: '' }, { from: 'f', to: 'e2', label: '' },
+    ],
+  };
+  const { flow: out, applied, skipped } = applyReview(flow, {
+    merges: [{ step: 'b', into: 'a', reason: 'part of a' }, { step: 'f', into: 'e', reason: 'part of e' }, { step: 'x', into: 'a', reason: 'unknown' }],
+    removals: [{ step: 'd', kind: 'outcome', reason: 'rejection' }, { step: 'c', kind: 'not_an_activity', reason: 'over the cap' }],
+  });
+  assert.equal(Math.floor(6 * MAX_REVIEW_SHARE), 2, 'six steps allow two changes');
+  assert.deepEqual(out.steps.map((s: any) => s.key), ['a', 'c', 'd', 'e'], 'both merges applied; the removals are over the cap');
+  const a = out.steps.find((s: any) => s.key === 'a');
+  assert.deepEqual([a.members, a.systems], [['Sa', 'Sb'], ['a', 'b']]);
+  assert.ok(out.flows.some((f: any) => f.from === 'a' && f.to === 'g1'), 'flows of a merged step move to its target');
+  assert.ok(!out.flows.some((f: any) => f.from === f.to));
+  assert.equal(applied.length, 2, 'only two of six steps may change');
+  assert.ok(skipped.includes('merge x into a') && skipped.some(x => x.startsWith('remove')));
+});
+
+test('review: removing an outcome step joins its predecessor to what follows', () => {
+  const flow: any = {
+    roles: [], systems: [], gateways: [{ key: 'g1', question: 'Duplicate?', members: ['D1'] }],
+    steps: ['a', 'b', 'c', 'd', 'e'].map(k => ({ key: k, name: `Step ${k}`, description: '', taskType: 'user', roles: [], systems: [], members: [`S${k}`] })),
+    events: [{ key: 'e9', kind: 'end', name: 'Rejected', members: [] }],
+    flows: [{ from: 'a', to: 'g1', label: '' }, { from: 'g1', to: 'b', label: 'Yes' }, { from: 'b', to: 'e9', label: '' }, { from: 'g1', to: 'c', label: 'No' }],
+  };
+  const { flow: out } = applyReview(flow, { merges: [], removals: [{ step: 'b', kind: 'outcome', reason: 'rejection ends the case' }] });
+  assert.deepEqual(out.flows.find((f: any) => f.to === 'e9'), { from: 'g1', to: 'e9', label: 'Yes' });
 });

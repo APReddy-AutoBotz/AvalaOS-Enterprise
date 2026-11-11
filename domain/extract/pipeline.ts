@@ -4,7 +4,8 @@ import { verifyExcerpts, type DroppedItem, type Segment, type TaskDefinition } f
 import { toGatewaySegments, type IngestSegment } from '../ingest/segment.ts';
 import { buildCandidates, factsListing, flowListing, type CandidateSet, type SourceInfo, type SourcePassOutput } from './candidates.ts';
 import { assembleModel, type MergeFactsOutput, type MergeFlowOutput } from './assemble.ts';
-import { mergeFacts, mergeFlow, sourceFacts, sourceSteps } from './tasks.ts';
+import { mergeFacts, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from './tasks.ts';
+import { applyReview, reviewListing, type ReviewOutput } from './review.ts';
 
 export interface Usage { input: number; output: number }
 
@@ -38,12 +39,26 @@ export async function runMergeStage(run: RunTask, set: CandidateSet): Promise<Me
   return { flow: flow.data as MergeFlowOutput, facts: facts.data as MergeFactsOutput, usage: addUsage(flow.usage, facts.usage) };
 }
 
+/** Pass 3: review the merged step list. */
+export async function runReviewStage(run: RunTask, flow: MergeFlowOutput, set: CandidateSet): Promise<{ review: ReviewOutput; usage: Usage }> {
+  const r = await run(reviewFlow, { listing: reviewListing(flow, set) });
+  return { review: r.data as ReviewOutput, usage: r.usage };
+}
+
+/** Assembly with the review applied. */
+export function finish(processName: string, set: CandidateSet, flow: MergeFlowOutput, facts: MergeFactsOutput, review: ReviewOutput | null) {
+  const reviewed = review ? applyReview(flow, review) : { flow, applied: [], skipped: [] };
+  const { model, report } = assembleModel(processName, set, reviewed.flow, facts);
+  return { model, report: { ...report, review: { applied: reviewed.applied, skipped: reviewed.skipped } } };
+}
+
 /** The whole pipeline in one call, for tests and local runs. */
 export async function extractProcessModel(run: RunTask, processName: string, sources: SourceInput[]) {
   const stage1 = await Promise.all(sources.map(s => runSourceStage(run, s)));
   const set = buildCandidates(sources, stage1.map(r => r.output), sources.flatMap(s => s.segments));
   const merged = await runMergeStage(run, set);
-  const { model, report } = assembleModel(processName, set, merged.flow, merged.facts);
-  const usage = [...stage1.map(r => r.usage), merged.usage].reduce(addUsage, { input: 0, output: 0 });
+  const reviewed = await runReviewStage(run, merged.flow, set);
+  const { model, report } = finish(processName, set, merged.flow, merged.facts, reviewed.review);
+  const usage = [...stage1.map(r => r.usage), merged.usage, reviewed.usage].reduce(addUsage, { input: 0, output: 0 });
   return { model, report: { ...report, droppedQuotes: stage1.flatMap(r => r.dropped), candidates: set.items.length }, usage };
 }

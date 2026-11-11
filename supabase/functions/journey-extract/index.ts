@@ -4,7 +4,7 @@
 //
 // POST { action: 'create', workspaceId, processId, processName, sources: [{ sourceId, title, kind, segments }] }
 //      with the user's session -> { runId }. Members follow the run in extraction_runs.
-// POST { action: 'start' | 'pass' | 'merge' | 'assemble', runId, token, ... } -> internal stages.
+// POST { action: 'start' | 'pass' | 'merge' | 'review' | 'assemble', runId, token, ... } -> internal stages.
 //      An eval run is created in SQL and started with { action: 'start', runId, token }; it reads its
 //      sources from the public repository at a given commit and scores the result against the gold.
 //
@@ -15,8 +15,9 @@ import { toGatewaySegments, type IngestSegment } from '../../../domain/ingest/se
 import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, parseVtt } from '../../../domain/ingest/parsers/text.ts';
 import { parseDocx } from '../../../domain/ingest/parsers/docx.ts';
 import { buildCandidates, factsListing, flowListing, type SourcePassOutput } from '../../../domain/extract/candidates.ts';
-import { assembleModel } from '../../../domain/extract/assemble.ts';
-import { mergeFacts, mergeFlow, sourceFacts, sourceSteps } from '../../../domain/extract/tasks.ts';
+import { mergeFacts, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from '../../../domain/extract/tasks.ts';
+import { reviewListing } from '../../../domain/extract/review.ts';
+import { finish } from '../../../domain/extract/pipeline.ts';
 import { score } from '../../../eval/scorer.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
@@ -62,7 +63,8 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 async function callOpenAI(body: Record<string, unknown>) {
   for (let attempt = 1; ; attempt++) {
     const ctl = new AbortController();
-    const timer = setTimeout(() => ctl.abort(), 140_000);
+    // Edge functions are stopped at 150 s; stop the call first so the run can be marked failed.
+    const timer = setTimeout(() => ctl.abort(), 115_000);
     try {
       const res = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST', signal: ctl.signal, body: JSON.stringify(body),
@@ -75,6 +77,7 @@ async function callOpenAI(body: Record<string, unknown>) {
       if (!parsed.ok && parsed.code === 'INVALID_OUTPUT' && attempt < 2) continue;
       return parsed;
     } catch (e) {
+      if ((e as Error).name === 'AbortError') throw new Error('TIMEOUT: the AI provider took longer than this stage allows');
       if (attempt < 2) { await sleep(2000); continue; }
       throw new Error(`AI provider unreachable: ${(e as Error).name}`);
     } finally {
@@ -228,6 +231,15 @@ async function stageMerge(run: Run, token: string, which: 'flow' | 'facts') {
   const r = await runTask(task, { listing: which === 'flow' ? flowListing(set) : factsListing(set) });
   await logUsage(run, task.id, r.usage, true);
   const next = await putPart(run.id, `merge:${which}`, r.data, r.usage);
+  if (next === 'review') await trigger({ action: 'review', ...stageBody(run, token, {}) });
+}
+
+async function stageReview(run: Run, token: string) {
+  const { parts, set } = await candidatesOf(run);
+  const flow = parts.find(p => p.part === 'merge:flow')?.output;
+  const r = await runTask(reviewFlow, { listing: reviewListing(flow, set) });
+  await logUsage(run, reviewFlow.id, r.usage, true);
+  const next = await putPart(run.id, 'review:flow', r.data, r.usage);
   if (next === 'assemble') await trigger({ action: 'assemble', ...stageBody(run, token, {}) });
 }
 
@@ -235,8 +247,9 @@ async function stageAssemble(run: Run) {
   const { parts, set, dropped } = await candidatesOf(run);
   const flow = parts.find(p => p.part === 'merge:flow')?.output;
   const facts = parts.find(p => p.part === 'merge:facts')?.output;
+  const review = parts.find(p => p.part === 'review:flow')?.output ?? null;
   const name = run.kind === 'eval' ? CASES[run.case_id!].processName : run.input.processName ?? 'Process';
-  const { model, report } = assembleModel(name, set, flow, facts);
+  const { model, report } = finish(name, set, flow, facts, review);
   const result: Record<string, unknown> = { model, report: { ...report, droppedQuotes: dropped, candidates: set.items.length }, model_name: MODEL };
   if (run.kind === 'eval') {
     const gold = await (await fetch(corpusUrl(run, 'expected.model.json'))).json();
@@ -300,6 +313,7 @@ Deno.serve(async (req: Request) => {
     case 'merge':
       if (!['flow', 'facts'].includes(body.which)) return fail(400, 'INVALID_REQUEST', 'which is flow or facts.');
       inBackground(() => stageMerge(run, token, body.which), run.id); break;
+    case 'review': inBackground(() => stageReview(run, token), run.id); break;
     case 'assemble': inBackground(() => stageAssemble(run), run.id); break;
     default: return fail(400, 'INVALID_REQUEST', 'Unknown action.');
   }

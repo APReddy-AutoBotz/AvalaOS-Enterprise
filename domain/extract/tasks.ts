@@ -72,9 +72,7 @@ decisions: points where the path splits, as a yes/no or short question ("Duplica
 export const mergeFlow: TaskDefinition = {
   id: 'merge_flow',
   schemaName: 'merge_flow',
-  // Merging across sources at the right granularity is the hardest judgement in the pipeline.
-  reasoningEffort: 'medium',
-  maxOutputTokens: 20000,
+  maxOutputTokens: 16000,
   verifyArrays: [],
   instructions: `You receive numbered candidates extracted from several sources about one business process. Different sources describe the same things in different words. Merge them into one process.
 
@@ -121,4 +119,23 @@ Use only the candidate ids given.`,
   }),
 };
 
-export const EXTRACTION_TASKS = { sourceFacts, sourceSteps, mergeFlow, mergeFacts };
+export const reviewFlow: TaskDefinition = {
+  id: 'review_flow',
+  schemaName: 'review_flow',
+  // A short input and the judgement that most affects precision, so more reasoning here.
+  reasoningEffort: 'medium',
+  maxOutputTokens: 6000,
+  verifyArrays: [],
+  instructions: `You review the step list of a merged business process before it is shown to analysts. Each step shows its key, name, description, roles and the candidate statements it was built from.
+
+A good step list has one step per business activity at the level of a numbered procedure step. Check every step and return only the corrections:
+merges: a step that is part of another step's work goes into that step ("into" is the other step's key). Typical cases: a check, lookup or choice made while doing a step; saving, attaching or recording right after an action; a request that is the second half of the same action (park the invoice and request the receipt).
+removals: a step that is not an activity of this process. "kind" is "outcome" (the case ends, waits or is turned away: rejected, held, returned when nothing else is done), "outside_scope" (work done by a team outside the process, for example verifying a master data change), or "not_an_activity" (a special case of another step, a discussion, or a duplicate of the start event).
+Keep steps that the process waits on from other roles (posting a goods receipt, approving, investigating a variance, amending an order, requesting a corrected document) and automatic checks a system performs. When in doubt, keep the step. Give a short reason for each correction.`,
+  schema: obj({
+    merges: list({ step: str, into: str, reason: str }),
+    removals: list({ step: str, kind: { type: 'string', enum: ['outcome', 'outside_scope', 'not_an_activity'] }, reason: str }),
+  }),
+};
+
+export const EXTRACTION_TASKS = { sourceFacts, sourceSteps, mergeFlow, mergeFacts, reviewFlow };
