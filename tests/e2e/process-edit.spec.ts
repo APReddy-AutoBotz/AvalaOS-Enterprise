@@ -37,7 +37,7 @@ test('a step can be added, assigned a role, renamed, reordered and deleted, and 
 
   const roles = page.getByRole('group', { name: 'Roles for Check mandatory fields' });
   await page.getByLabel('Add to roles for check mandatory fields').selectOption({ label: 'AP Clerk' });
-  await expect(roles).toContainText('AP Clerk');
+  await expect(roles.getByRole('button', { name: 'Remove AP Clerk from roles for check mandatory fields' })).toBeVisible();
   await saved(page);
 
   // Change the role: remove the clerk, add the team lead.
@@ -50,8 +50,9 @@ test('a step can be added, assigned a role, renamed, reordered and deleted, and 
   await shot(page, '10-steps-edited');
 
   await page.reload();
-  await expect(page.getByRole('group', { name: 'Roles for Check mandatory fields' })).toContainText('AP Team Lead');
-  await expect(page.getByRole('group', { name: 'Roles for Check mandatory fields' })).not.toContainText('AP Clerk');
+  const chip = (role: string) => page.getByRole('button', { name: `Remove ${role} from roles for check mandatory fields` });
+  await expect(chip('AP Team Lead')).toBeVisible();
+  await expect(chip('AP Clerk')).toHaveCount(0);
   await expect(page.getByLabel('Name of step 2', { exact: true })).toHaveValue('Validate vendor and GSTIN in SAP');
   await expect(page.getByTestId('step-row').first().locator('[data-status]')).toHaveAttribute('data-status', 'user-confirmed');
   await expect(page.getByTestId('revision-status')).toHaveText('Working draft');
@@ -96,7 +97,7 @@ test('answering an open question writes the answer to the model as confirmed', a
   await expect(page.getByTestId('open-question')).toHaveCount(0);
   await expect(page.getByTestId('answered-question')).toContainText('Who does "Scan paper invoice"?');
   await page.getByRole('tab', { name: /^Steps/ }).click();
-  await expect(page.getByRole('group', { name: 'Roles for Scan paper invoice' })).toContainText('AP Clerk');
+  await expect(page.getByRole('button', { name: 'Remove AP Clerk from roles for scan paper invoice' })).toBeVisible();
   await expect(page.getByTestId('step-row').first().locator('[data-status]')).toHaveAttribute('data-status', 'user-confirmed');
 });
 
