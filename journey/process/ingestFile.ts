@@ -25,7 +25,8 @@ const dataUrl = (file: File) => new Promise<string>((resolve, reject) => {
   r.readAsDataURL(file);
 });
 
-export type IngestResult = { ok: true; source: NewSource } | { ok: false; message: string };
+// Both variants name both fields, so narrowing on `ok` works without strictNullChecks.
+export type IngestResult = { ok: true; source: NewSource; message?: undefined } | { ok: false; message: string; source?: undefined };
 
 export async function ingestFile(store: JourneyStore, workspaceId: string, file: File, takenKeys: string[]): Promise<IngestResult> {
   const key = sourceKey(formatFromName(file.name), takenKeys);

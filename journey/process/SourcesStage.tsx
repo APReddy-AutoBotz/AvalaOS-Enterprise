@@ -68,10 +68,11 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
       setUploading(file.name);
       try {
         const r = await ingestFile(store, workspaceId, file, taken);
-        if (!r.ok) { out.push({ file: file.name, message: r.message, ok: false }); continue; }
-        await store.addSource(processId, r.source);
-        taken.push(r.source.key);
-        const what = r.source.format === 'image' ? 'read from the image; check what was read' : `${r.source.segments.length} passages`;
+        if (!r.ok) { out.push({ file: file.name, message: r.message ?? '', ok: false }); continue; }
+        const source = r.source!;
+        await store.addSource(processId, source);
+        taken.push(source.key);
+        const what = source.format === 'image' ? 'read from the image; check what was read' : `${source.segments.length} passages`;
         out.push({ file: file.name, message: `Added: ${what}.`, ok: true });
       } catch (e) {
         out.push({ file: file.name, message: messageOf(e), ok: false });
