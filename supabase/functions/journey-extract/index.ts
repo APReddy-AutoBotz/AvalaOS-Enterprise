@@ -63,11 +63,14 @@ const randomToken = () => [...crypto.getRandomValues(new Uint8Array(24))].map(b 
 // ---- AI calls -------------------------------------------------------------------------------
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+// The 150 s limit counts from when the worker started, and one worker can serve several stages.
+const WORKER_STARTED = Date.now();
+const callBudgetMs = () => Math.max(5_000, Math.min(115_000, WORKER_STARTED + 135_000 - Date.now()));
 async function callOpenAI(body: Record<string, unknown>) {
   for (let attempt = 1; ; attempt++) {
     const ctl = new AbortController();
-    // Edge functions are stopped at 150 s; stop the call first so the run can be marked failed.
-    const timer = setTimeout(() => ctl.abort(), 115_000);
+    // Edge functions are stopped at 150 s; stop the call first so the stage can retry or fail cleanly.
+    const timer = setTimeout(() => ctl.abort(), callBudgetMs());
     try {
       const res = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST', signal: ctl.signal, body: JSON.stringify(body),
