@@ -1,0 +1,244 @@
+// The Process Model: the single, editable representation of one business process.
+// Assessment, documents, flows and work proposals are all derived from it.
+//
+// Rules this shape enforces by construction:
+// - Every extracted element carries the sources it came from.
+// - Unknown is explicit (status 'unknown' or value null), never a default.
+// - Access to a system is a list of methods, each with its own confirmation status,
+//   so "API-first" never rests on an assumed API.
+
+export const PROCESS_MODEL_SCHEMA_VERSION = 1 as const;
+
+/** How a value came to be in the model. */
+export type FactStatus =
+  | 'stated' // said or written in a source
+  | 'inferred' // derived from sources, not said outright
+  | 'user-confirmed' // set or confirmed by a person in the product
+  | 'assumed' // a working assumption someone recorded; must be confirmed later
+  | 'unknown'; // known to be missing
+
+/** Where in a source a fact was found. Only the fields that apply to the source type are set. */
+export interface SourceLocator {
+  page?: number;
+  section?: string; // e.g. "6.4" in an SOP
+  heading?: string;
+  lineStart?: number;
+  lineEnd?: number;
+  timestamp?: string; // "00:12:41" in a transcript
+  speaker?: string;
+  cell?: string; // "Sheet1!B12"
+  shapeId?: string; // a flowchart shape or edge id
+}
+
+export interface SourceRef {
+  sourceId: string;
+  locator: SourceLocator;
+  /** Verbatim text from the source. Verified against the source before it is stored. */
+  excerpt: string;
+}
+
+/** Common to every element in the model. */
+export interface Provenance {
+  status: FactStatus;
+  sources: SourceRef[];
+}
+
+/** A single value with its provenance. `value` is null when status is 'unknown'. */
+export interface Fact<T> extends Provenance {
+  value: T | null;
+  note?: string;
+}
+
+export interface ScopeItem extends Provenance {
+  id: string;
+  text: string;
+}
+
+export type MetricKind =
+  | 'volume'
+  | 'handling_time'
+  | 'cycle_time'
+  | 'fte'
+  | 'exception_rate'
+  | 'share'
+  | 'other';
+
+export interface Metric extends Provenance {
+  id: string;
+  kind: MetricKind;
+  label: string;
+  value: number | null;
+  /** A range when the source gave one ("10 to 12 minutes"). */
+  range?: [number, number];
+  unit: string; // "invoices/month", "minutes", "%", "FTE", "working days"
+  /** What the metric applies to: the whole process, a step id or a case type. */
+  appliesTo?: string;
+  period?: string;
+}
+
+export interface ProcessMeta {
+  name: string;
+  objective: Fact<string>;
+  owner: Fact<string>;
+  scopeIn: ScopeItem[];
+  scopeOut: ScopeItem[];
+  metrics: Metric[];
+}
+
+export type RoleKind = 'person_role' | 'team' | 'external' | 'system_actor';
+
+export interface Role extends Provenance {
+  id: string;
+  name: string;
+  kind: RoleKind;
+  inScope: boolean;
+}
+
+export type AccessMethodKind = 'api' | 'ui' | 'file' | 'database' | 'event' | 'email';
+
+export type AccessStatus =
+  | 'confirmed' // someone accountable confirmed it exists and can be used
+  | 'reported' // mentioned as existing, not confirmed for use
+  | 'unknown' // nobody has said
+  | 'confirmed_absent'; // confirmed not available
+
+export interface AccessMethod extends Provenance {
+  method: AccessMethodKind;
+  /** A named interface where one was given, e.g. an OData service name. */
+  name?: string;
+  operations: string[];
+  access: AccessStatus;
+  note?: string;
+}
+
+export type SystemKind =
+  | 'erp'
+  | 'email'
+  | 'document_store'
+  | 'spreadsheet'
+  | 'workflow'
+  | 'portal'
+  | 'scanner'
+  | 'other';
+
+export interface SystemRef extends Provenance {
+  id: string;
+  name: string;
+  kind: SystemKind;
+  version?: string;
+  inScope: boolean;
+  access: AccessMethod[];
+}
+
+export type TaskType = 'user' | 'manual' | 'service' | 'business_rule' | 'send' | 'receive';
+
+export interface Step extends Provenance {
+  id: string;
+  name: string; // verb + object
+  description: string;
+  roleIds: string[];
+  systemIds: string[];
+  taskType: TaskType;
+  inputs: string[];
+  outputs: string[];
+  ruleIds: string[];
+  exceptionIds: string[];
+}
+
+export interface ProcessEvent extends Provenance {
+  id: string;
+  kind: 'start' | 'end';
+  name: string;
+}
+
+export interface Gateway extends Provenance {
+  id: string;
+  type: 'exclusive' | 'parallel';
+  question: string;
+}
+
+export interface Flow {
+  id: string;
+  from: string;
+  to: string;
+  label?: string;
+  isException?: boolean;
+}
+
+export interface BusinessRule extends Provenance {
+  id: string;
+  name: string;
+  condition: string;
+  action: string;
+}
+
+export interface ExceptionPath extends Provenance {
+  id: string;
+  kind: 'business' | 'application';
+  name: string;
+  trigger: string;
+  stepIds: string[];
+  handling: string;
+  routedToRoleId?: string;
+}
+
+export interface DataObject extends Provenance {
+  id: string;
+  name: string;
+  format: string;
+  structured: boolean | null;
+  classification?: string;
+}
+
+export interface Note extends Provenance {
+  id: string;
+  text: string;
+  stepIds: string[];
+}
+
+export interface Control extends Note {
+  ruleIds: string[];
+}
+
+export interface ElementTarget {
+  kind: 'meta' | 'role' | 'system' | 'step' | 'gateway' | 'rule' | 'exception' | 'metric' | 'data';
+  id?: string;
+  field?: string;
+}
+
+export interface OpenQuestion {
+  id: string;
+  target: ElementTarget;
+  question: string;
+  whyItMatters: string;
+  owner: string | null;
+  status: 'open' | 'answered' | 'deferred';
+  answer?: string;
+}
+
+export interface Conflict {
+  id: string;
+  target: ElementTarget;
+  summary: string;
+  values: { value: string; sources: SourceRef[] }[];
+  resolution: { chosen: string; by: string; reason: string } | null;
+}
+
+export interface ProcessModel {
+  schemaVersion: typeof PROCESS_MODEL_SCHEMA_VERSION;
+  meta: ProcessMeta;
+  roles: Role[];
+  systems: SystemRef[];
+  events: ProcessEvent[];
+  steps: Step[];
+  gateways: Gateway[];
+  flows: Flow[];
+  rules: BusinessRule[];
+  exceptions: ExceptionPath[];
+  dataObjects: DataObject[];
+  painPoints: Note[];
+  controls: Control[];
+  risks: Note[];
+  openQuestions: OpenQuestion[];
+  conflicts: Conflict[];
+}

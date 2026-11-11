@@ -1,0 +1,3557 @@
+{
+  "schemaVersion": 1,
+  "meta": {
+    "name": "Vendor invoice processing (India, company code 1000)",
+    "objective": {
+      "value": "Pay suppliers accurately and on time; reduce receipt-to-posting cycle time, meet the MSE 45-day payment rule and capture early payment discounts.",
+      "status": "inferred",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "1"
+          },
+          "excerpt": "so that suppliers are paid accurately and on time and statutory requirements are met"
+        },
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:07:51",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "Under four days would be very good."
+        }
+      ]
+    },
+    "owner": {
+      "value": "Meera Iyer, Manager - Accounts Payable",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 1",
+            "cell": "row 4"
+          },
+          "excerpt": "Meera Iyer, Manager - Accounts Payable"
+        }
+      ]
+    },
+    "scopeIn": [
+      {
+        "id": "in-1",
+        "text": "PO and non-PO vendor invoices for company code 1000 (India)",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Purchase-order (PO) and non-PO vendor invoices for company code 1000 (India)."
+          }
+        ]
+      },
+      {
+        "id": "in-2",
+        "text": "Invoices received by email and paper invoices received at the Pune office",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Invoices received by email at ap.invoices@kaveri-ic.example and paper invoices received at the Pune office."
+          }
+        ]
+      }
+    ],
+    "scopeOut": [
+      {
+        "id": "out-1",
+        "text": "Payment run (F110), performed by Treasury",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Payment runs (F110), performed by Treasury"
+          },
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:05:12",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "No, treasury runs F110, twice a week, Tuesdays and Fridays."
+          }
+        ]
+      },
+      {
+        "id": "out-2",
+        "text": "Vendor master creation and changes",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Vendor master creation and changes, performed by the Vendor Master Data team"
+          }
+        ]
+      },
+      {
+        "id": "out-3",
+        "text": "Employee expense claims (SAP Concur)",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Employee expense claims, processed in SAP Concur."
+          }
+        ]
+      },
+      {
+        "id": "out-4",
+        "text": "Kaveri UK Ltd. on Workday Financials",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Kaveri UK Ltd., which uses Workday Financials."
+          },
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:22:52",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "The UK entity is on Workday Financials"
+          }
+        ]
+      },
+      {
+        "id": "out-5",
+        "text": "Month-end GR/IR clearing, accruals and GST input credit reconciliation (GSTR-2B)",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "section": "2"
+            },
+            "excerpt": "Month-end GR/IR clearing and accruals, and monthly GST input credit reconciliation (GSTR-2B)."
+          },
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:22:11",
+              "speaker": "Arjun Malhotra"
+            },
+            "excerpt": "I'd keep that out of this exercise for now."
+          }
+        ]
+      },
+      {
+        "id": "out-6",
+        "text": "Vendor credit notes (deferred to a separate session)",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:08:48",
+              "speaker": "Karthik Raman"
+            },
+            "excerpt": "Can we do that in a separate session?"
+          }
+        ]
+      },
+      {
+        "id": "out-7",
+        "text": "Vendor payment status queries",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:09:29",
+              "speaker": "Rahul Deshpande"
+            },
+            "excerpt": "I'll note vendor status queries as related but out of scope for this assessment."
+          }
+        ]
+      }
+    ],
+    "metrics": [
+      {
+        "id": "m-volume",
+        "kind": "volume",
+        "label": "Invoices per month",
+        "value": null,
+        "range": [
+          9000,
+          10000
+        ],
+        "unit": "invoices/month",
+        "appliesTo": "process",
+        "period": "recent months",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:01:08",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "Last few months it has been around nine to ten thousand invoices a month."
+          }
+        ]
+      },
+      {
+        "id": "m-po-share",
+        "kind": "share",
+        "label": "Share of invoices against a PO",
+        "value": 80,
+        "unit": "%",
+        "appliesTo": "process",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:01:08",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "Around eighty percent are against purchase orders"
+          }
+        ]
+      },
+      {
+        "id": "m-paper-share",
+        "kind": "share",
+        "label": "Share of paper invoices",
+        "value": null,
+        "range": [
+          10,
+          15
+        ],
+        "unit": "%",
+        "appliesTo": "step:s-scan",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:01:35",
+              "speaker": "Sunita Rao"
+            },
+            "excerpt": "I would say ten to fifteen percent is paper, honestly nobody has counted it properly."
+          }
+        ]
+      },
+      {
+        "id": "m-aht-clean",
+        "kind": "handling_time",
+        "label": "Handling time, clean PO invoice",
+        "value": null,
+        "range": [
+          10,
+          12
+        ],
+        "unit": "minutes",
+        "appliesTo": "case:clean-po",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:05:30",
+              "speaker": "Sunita Rao"
+            },
+            "excerpt": "A clean PO invoice, ten to twelve minutes if SAP is fast."
+          }
+        ]
+      },
+      {
+        "id": "m-aht-exception",
+        "kind": "handling_time",
+        "label": "Handling time, exception invoice",
+        "value": null,
+        "range": [
+          35,
+          40
+        ],
+        "unit": "minutes",
+        "appliesTo": "case:exception",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:00:26",
+              "speaker": "Karthik Raman"
+            },
+            "excerpt": "An exception invoice is more like thirty-five to forty minutes of actual work"
+          }
+        ]
+      },
+      {
+        "id": "m-exception-rate",
+        "kind": "exception_rate",
+        "label": "Invoices with at least one exception",
+        "value": 28,
+        "unit": "%",
+        "period": "last quarter",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:00:26",
+              "speaker": "Karthik Raman"
+            },
+            "excerpt": "last quarter about twenty-eight percent of invoices had at least one exception"
+          }
+        ]
+      },
+      {
+        "id": "m-cycle",
+        "kind": "cycle_time",
+        "label": "Receipt to posting, average",
+        "value": 9,
+        "unit": "days",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:06:50",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "From receipt to posting we average around nine days."
+          }
+        ]
+      },
+      {
+        "id": "m-cycle-target",
+        "kind": "cycle_time",
+        "label": "Receipt to posting, SOP target",
+        "value": 5,
+        "unit": "working days",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "sop",
+            "locator": {
+              "heading": "Table 6",
+              "cell": "row 2"
+            },
+            "excerpt": "5 working days or less"
+          }
+        ]
+      },
+      {
+        "id": "m-fte",
+        "kind": "fte",
+        "label": "AP team",
+        "value": 8,
+        "unit": "people",
+        "status": "inferred",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:00:32",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "Six AP clerks, one team lead"
+          }
+        ]
+      },
+      {
+        "id": "m-discount-vendors",
+        "kind": "other",
+        "label": "Vendors offering a 2% early payment discount within 10 days",
+        "value": 30,
+        "unit": "vendors",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-1",
+            "locator": {
+              "timestamp": "00:06:50",
+              "speaker": "Meera Iyer"
+            },
+            "excerpt": "About thirty vendors offer two percent if we pay within ten days"
+          }
+        ]
+      },
+      {
+        "id": "m-exc-gr",
+        "kind": "share",
+        "label": "Exceptions caused by missing GR",
+        "value": 40,
+        "unit": "% of exceptions",
+        "appliesTo": "exception:x-no-gr",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:00:59",
+              "speaker": "Karthik Raman"
+            },
+            "excerpt": "That's maybe forty percent of all exceptions."
+          }
+        ]
+      },
+      {
+        "id": "m-exc-price",
+        "kind": "share",
+        "label": "Exceptions caused by price variance",
+        "value": 25,
+        "unit": "% of exceptions",
+        "appliesTo": "exception:x-price",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:00:59",
+              "speaker": "Karthik Raman"
+            },
+            "excerpt": "Then price variance, around a quarter."
+          }
+        ]
+      },
+      {
+        "id": "m-exc-qty",
+        "kind": "share",
+        "label": "Exceptions caused by quantity differences",
+        "value": 10,
+        "unit": "% of exceptions",
+        "appliesTo": "exception:x-qty",
+        "status": "stated",
+        "sources": [
+          {
+            "sourceId": "call-2",
+            "locator": {
+              "timestamp": "00:00:59",
+              "speaker": "Karthik Raman"
+            },
+            "excerpt": "Then quantity differences, maybe ten percent."
+          }
+        ]
+      }
+    ]
+  },
+  "roles": [
+    {
+      "id": "r-clerk",
+      "name": "AP Clerk",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "accounts payable clerk",
+        "AP processor"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.1"
+          },
+          "excerpt": "AP Clerk"
+        }
+      ]
+    },
+    {
+      "id": "r-lead",
+      "name": "AP Team Lead",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "team lead"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.4"
+          },
+          "excerpt": "AP Team Lead"
+        }
+      ]
+    },
+    {
+      "id": "r-manager",
+      "name": "AP Manager",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "accounts payable manager"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 3",
+            "cell": "row 4"
+          },
+          "excerpt": "Owns this SOP; monitors KPIs; resolves policy questions."
+        }
+      ]
+    },
+    {
+      "id": "r-stores",
+      "name": "Requester / Stores",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "stores",
+        "requester",
+        "warehouse",
+        "goods receiver"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 3",
+            "cell": "row 5"
+          },
+          "excerpt": "Posts goods receipts in SAP; confirms whether goods or services were received."
+        }
+      ]
+    },
+    {
+      "id": "r-buyer",
+      "name": "Buyer (Procurement)",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "buyer",
+        "procurement",
+        "category buyer"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 3",
+            "cell": "row 6"
+          },
+          "excerpt": "Resolves price and quantity variances"
+        }
+      ]
+    },
+    {
+      "id": "r-approver",
+      "name": "Cost Centre Owner / DoA approver",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "cost center owner",
+        "approver",
+        "department head"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 3",
+            "cell": "row 7"
+          },
+          "excerpt": "Approve non-PO invoices within their authority."
+        }
+      ]
+    },
+    {
+      "id": "r-controller",
+      "name": "Finance Controller",
+      "kind": "person_role",
+      "inScope": true,
+      "aliases": [
+        "controller"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:20:32",
+            "speaker": "Arjun Malhotra"
+          },
+          "excerpt": "Above ten lakh it comes to me as finance controller."
+        }
+      ]
+    },
+    {
+      "id": "r-vmd",
+      "name": "Vendor Master Data team",
+      "kind": "team",
+      "inScope": false,
+      "aliases": [
+        "vendor master team",
+        "MDM team"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 3",
+            "cell": "row 8"
+          },
+          "excerpt": "Verifies and applies any vendor master change"
+        }
+      ]
+    },
+    {
+      "id": "r-treasury",
+      "name": "Treasury",
+      "kind": "team",
+      "inScope": false,
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:05:12",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "No, treasury runs F110"
+        }
+      ]
+    },
+    {
+      "id": "r-vendor",
+      "name": "Vendor",
+      "kind": "external",
+      "inScope": true,
+      "aliases": [
+        "supplier"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "lane-vendor"
+          },
+          "excerpt": "Vendor"
+        }
+      ]
+    }
+  ],
+  "systems": [
+    {
+      "id": "sys-sap",
+      "name": "SAP S/4HANA",
+      "kind": "erp",
+      "version": "2022, on-premise",
+      "inScope": true,
+      "aliases": [
+        "SAP",
+        "S/4",
+        "S4HANA"
+      ],
+      "access": [
+        {
+          "method": "ui",
+          "operations": [
+            "MIRO",
+            "MIR7",
+            "FB60",
+            "FBL1N",
+            "BP",
+            "MIGO",
+            "ME22N"
+          ],
+          "access": "confirmed",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:00:21",
+                "speaker": "Vikram Shah",
+                "lineStart": 8
+              },
+              "excerpt": "AP uses SAP GUI mostly, MIRO, MIR7, FB60, FBL1N."
+            }
+          ],
+          "name": "SAP GUI"
+        },
+        {
+          "method": "ui",
+          "operations": [
+            "scripted UI automation"
+          ],
+          "access": "confirmed_absent",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:02:53",
+                "speaker": "Ananya Bose",
+                "lineStart": 38
+              },
+              "excerpt": "SAP GUI scripting is disabled on production by policy."
+            }
+          ],
+          "name": "SAP GUI scripting",
+          "note": "Enabling needs a CISO-approved security exception; IT security prefers an API path."
+        },
+        {
+          "method": "api",
+          "operations": [
+            "create supplier invoice",
+            "post supplier invoice"
+          ],
+          "access": "reported",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:00:51",
+                "speaker": "Vikram Shah",
+                "lineStart": 12
+              },
+              "excerpt": "But we have not activated it in our Gateway."
+            },
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:01:36",
+                "speaker": "Daniel Fernandes",
+                "lineStart": 18
+              },
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ],
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "note": "Needs Gateway activation, API management exposure, security review and a technical user; IT estimate 4 to 6 weeks if prioritised, not promised."
+        },
+        {
+          "method": "api",
+          "operations": [
+            "read purchase order"
+          ],
+          "access": "confirmed",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:01:46",
+                "speaker": "Daniel Fernandes",
+                "lineStart": 22
+              },
+              "excerpt": "API_PURCHASEORDER_PROCESS_SRV is exposed through API management for the supplier portal project, read only."
+            }
+          ],
+          "name": "API_PURCHASEORDER_PROCESS_SRV"
+        },
+        {
+          "method": "api",
+          "operations": [
+            "read goods receipt"
+          ],
+          "access": "unknown",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:02:05",
+                "speaker": "Vikram Shah",
+                "lineStart": 26
+              },
+              "excerpt": "I'm not sure if it's exposed outside. I need to check."
+            }
+          ],
+          "name": "API_MATERIAL_DOCUMENT_SRV"
+        },
+        {
+          "method": "api",
+          "operations": [
+            "read business partner / supplier"
+          ],
+          "access": "confirmed",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:02:23",
+                "speaker": "Daniel Fernandes",
+                "lineStart": 30
+              },
+              "excerpt": "Business partner read, API_BUSINESS_PARTNER, is live through API management."
+            }
+          ],
+          "name": "API_BUSINESS_PARTNER"
+        },
+        {
+          "method": "api",
+          "operations": [
+            "attach document to SAP record"
+          ],
+          "access": "unknown",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:02:39",
+                "speaker": "Vikram Shah",
+                "lineStart": 34
+              },
+              "excerpt": "I don't know if it's active. Put it as unknown."
+            }
+          ]
+        }
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-3",
+          "locator": {
+            "timestamp": "00:00:21",
+            "speaker": "Vikram Shah",
+            "lineStart": 8
+          },
+          "excerpt": "India runs on SAP S/4HANA 2022, on-premise, company code 1000."
+        }
+      ]
+    },
+    {
+      "id": "sys-mailbox",
+      "name": "AP shared mailbox (Microsoft 365)",
+      "kind": "email",
+      "inScope": true,
+      "aliases": [
+        "shared mailbox",
+        "Outlook",
+        "ap.invoices",
+        "mailbox"
+      ],
+      "access": [
+        {
+          "method": "api",
+          "operations": [
+            "read mail",
+            "read attachments"
+          ],
+          "access": "confirmed",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:03:16",
+                "speaker": "Daniel Fernandes",
+                "lineStart": 42
+              },
+              "excerpt": "there's an app registration with mail read permission scoped to that mailbox"
+            }
+          ],
+          "name": "Microsoft Graph"
+        }
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-3",
+          "locator": {
+            "timestamp": "00:03:16",
+            "speaker": "Daniel Fernandes",
+            "lineStart": 42
+          },
+          "excerpt": "The ap.invoices shared mailbox is in Microsoft 365."
+        }
+      ]
+    },
+    {
+      "id": "sys-sharepoint",
+      "name": "SharePoint library \"AP Invoices\"",
+      "kind": "document_store",
+      "inScope": true,
+      "aliases": [
+        "SharePoint",
+        "AP Invoices library"
+      ],
+      "access": [
+        {
+          "method": "api",
+          "operations": [
+            "read files",
+            "write files"
+          ],
+          "access": "confirmed",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:03:16",
+                "speaker": "Daniel Fernandes",
+                "lineStart": 42
+              },
+              "excerpt": "we have Graph access to the AP Invoices library"
+            }
+          ],
+          "name": "Microsoft Graph",
+          "note": "Access to the library is confirmed; read versus write permission was not specified."
+        }
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.2"
+          },
+          "excerpt": "Save the PDF in the vendor folder of the SharePoint library \"AP Invoices\""
+        }
+      ]
+    },
+    {
+      "id": "sys-tracker",
+      "name": "AP tracker (Excel on SharePoint)",
+      "kind": "spreadsheet",
+      "inScope": true,
+      "aliases": [
+        "tracker",
+        "Excel tracker",
+        "AP tracker FY27"
+      ],
+      "access": [
+        {
+          "method": "file",
+          "operations": [
+            "read",
+            "update rows"
+          ],
+          "access": "reported",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-1",
+              "locator": {
+                "timestamp": "00:02:15",
+                "speaker": "Sunita Rao"
+              },
+              "excerpt": "it's an Excel file on SharePoint, AP tracker FY27"
+            }
+          ]
+        }
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:02:15",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "it's an Excel file on SharePoint, AP tracker FY27"
+        }
+      ]
+    },
+    {
+      "id": "sys-servicenow",
+      "name": "ServiceNow",
+      "kind": "workflow",
+      "inScope": false,
+      "aliases": [
+        "ServiceNow ticket"
+      ],
+      "access": [
+        {
+          "method": "api",
+          "operations": [],
+          "access": "unknown",
+          "status": "stated",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:05:12",
+                "speaker": "Daniel Fernandes",
+                "lineStart": 62
+              },
+              "excerpt": "That's a question for the ServiceNow team."
+            }
+          ]
+        }
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:03:14",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "We raise a ticket to the vendor master team in ServiceNow"
+        }
+      ]
+    },
+    {
+      "id": "sys-scanner",
+      "name": "Office scanner (Pune)",
+      "kind": "scanner",
+      "inScope": true,
+      "aliases": [
+        "scanner",
+        "MFP"
+      ],
+      "access": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:01:35",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "one of us scans it on the office scanner"
+        }
+      ]
+    },
+    {
+      "id": "sys-workday",
+      "name": "Workday Financials",
+      "kind": "erp",
+      "inScope": false,
+      "aliases": [
+        "Workday"
+      ],
+      "access": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:22:52",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "The UK entity is on Workday Financials"
+        }
+      ]
+    }
+  ],
+  "events": [
+    {
+      "id": "e-start",
+      "kind": "start",
+      "name": "Invoice sent by vendor",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-start"
+          },
+          "excerpt": "Invoice sent"
+        }
+      ]
+    },
+    {
+      "id": "e-posted",
+      "kind": "end",
+      "name": "Invoice posted",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-posted"
+          },
+          "excerpt": "Invoice posted"
+        }
+      ]
+    },
+    {
+      "id": "e-returned",
+      "kind": "end",
+      "name": "Invoice returned to vendor",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-returned"
+          },
+          "excerpt": "Invoice returned"
+        }
+      ]
+    },
+    {
+      "id": "e-hold-vmd",
+      "kind": "end",
+      "name": "On hold: vendor master",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-hold"
+          },
+          "excerpt": "On hold: vendor master"
+        }
+      ]
+    },
+    {
+      "id": "e-duplicate",
+      "kind": "end",
+      "name": "Not posted: duplicate",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-dup"
+          },
+          "excerpt": "Not posted: duplicate"
+        }
+      ]
+    },
+    {
+      "id": "e-rejected",
+      "kind": "end",
+      "name": "Rejected by approver",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-rejected"
+          },
+          "excerpt": "Rejected"
+        }
+      ]
+    },
+    {
+      "id": "e-credit",
+      "kind": "end",
+      "name": "On hold: awaiting credit note",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "e-credit"
+          },
+          "excerpt": "On hold: awaiting credit note"
+        }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "id": "s-scan",
+      "name": "Scan paper invoice",
+      "description": "Scan paper invoices received at the Pune office so they arrive in the shared mailbox as PDF.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-scanner",
+        "sys-mailbox"
+      ],
+      "taskType": "manual",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "scan paper invoices"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.1"
+          },
+          "excerpt": "Paper invoices received at the Pune office are scanned by the AP Clerk"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-scan"
+          },
+          "excerpt": "Scan paper invoice to mailbox"
+        }
+      ]
+    },
+    {
+      "id": "s-log",
+      "name": "Log invoice",
+      "description": "Save the invoice PDF to the vendor folder in SharePoint and add a row to the AP tracker.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-mailbox",
+        "sys-sharepoint",
+        "sys-tracker"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [
+        "AP tracker row"
+      ],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "save PDF and log in tracker",
+        "record invoice in tracker",
+        "register invoice"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.2"
+          },
+          "excerpt": "record it in the AP tracker"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-log"
+          },
+          "excerpt": "Save PDF to SharePoint and log in AP tracker"
+        }
+      ]
+    },
+    {
+      "id": "s-check",
+      "name": "Check mandatory fields",
+      "description": "Confirm legal name and GSTIN, vendor GSTIN, invoice number and date, PO number, HSN/SAC and tax breakup.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-entity"
+      ],
+      "exceptionIds": [
+        "x-missing-field",
+        "x-wrong-entity",
+        "x-unreadable"
+      ],
+      "aliases": [
+        "validate invoice completeness",
+        "check invoice fields"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.3"
+          },
+          "excerpt": "Confirm the invoice shows: Kaveri legal name and GSTIN"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-check"
+          },
+          "excerpt": "Check mandatory fields"
+        }
+      ]
+    },
+    {
+      "id": "s-return",
+      "name": "Return invoice to vendor",
+      "description": "Email the vendor with template AP-T01 stating the reason, and set tracker status Returned.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-mailbox",
+        "sys-tracker"
+      ],
+      "taskType": "send",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "send back to vendor",
+        "reject to vendor"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.3"
+          },
+          "excerpt": "return it to the vendor using template AP-T01"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-return"
+          },
+          "excerpt": "Return invoice to vendor (AP-T01)"
+        }
+      ]
+    },
+    {
+      "id": "s-vendor",
+      "name": "Validate vendor",
+      "description": "Confirm in SAP that the vendor exists, is not blocked and the GSTIN matches; compare bank details with the vendor master.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-bank"
+      ],
+      "exceptionIds": [
+        "x-bank",
+        "x-gstin"
+      ],
+      "aliases": [
+        "check vendor master",
+        "validate vendor and GSTIN"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.4"
+          },
+          "excerpt": "confirm the vendor exists, is not blocked for posting and that the GSTIN matches"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-vendor"
+          },
+          "excerpt": "Validate vendor and GSTIN in SAP"
+        }
+      ]
+    },
+    {
+      "id": "s-ticket",
+      "name": "Raise vendor master request",
+      "description": "Raise a ServiceNow request to Vendor Master Data and hold the invoice when bank details differ.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-servicenow",
+        "sys-tracker"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "raise ServiceNow ticket",
+        "put invoice on hold for vendor master"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.4"
+          },
+          "excerpt": "raise a ServiceNow request to Vendor Master Data"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-ticket"
+          },
+          "excerpt": "Raise ServiceNow request and hold invoice"
+        }
+      ]
+    },
+    {
+      "id": "s-dup",
+      "name": "Check for duplicates",
+      "description": "Search SAP (FBL1N) and the AP tracker by vendor and invoice number.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap",
+        "sys-tracker"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-duplicate"
+      ],
+      "exceptionIds": [
+        "x-duplicate"
+      ],
+      "aliases": [
+        "duplicate check",
+        "search for duplicates"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.5"
+          },
+          "excerpt": "Search SAP (FBL1N) and the AP tracker by vendor and invoice number."
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-dup"
+          },
+          "excerpt": "Search SAP and tracker for duplicates"
+        }
+      ]
+    },
+    {
+      "id": "s-miro",
+      "name": "Enter PO invoice",
+      "description": "Enter the invoice in MIRO with reference to the PO; SAP proposes PO lines and goods receipts.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "enter invoice in MIRO",
+        "key PO invoice"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.6"
+          },
+          "excerpt": "Enter the invoice in MIRO with reference to the PO."
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-miro"
+          },
+          "excerpt": "Enter invoice against PO (MIRO)"
+        }
+      ]
+    },
+    {
+      "id": "s-park-gr",
+      "name": "Park invoice and request goods receipt",
+      "description": "Park the invoice in MIR7, email the requester or stores to post the GR, remind at 3 and escalate at 7 working days.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap",
+        "sys-mailbox",
+        "sys-tracker"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-gr-followup"
+      ],
+      "exceptionIds": [
+        "x-no-gr"
+      ],
+      "aliases": [
+        "park and request GR",
+        "chase goods receipt"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.6"
+          },
+          "excerpt": "park the invoice (MIR7), email the requester or stores to post the GR"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-park-gr"
+          },
+          "excerpt": "Park invoice (MIR7) and request GR"
+        }
+      ]
+    },
+    {
+      "id": "s-gr",
+      "name": "Post goods receipt",
+      "description": "Requester or stores posts the goods receipt in MIGO, or confirms the goods were not received.",
+      "roleIds": [
+        "r-stores"
+      ],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "post GR",
+        "MIGO"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-gr"
+          },
+          "excerpt": "Post goods receipt (MIGO)"
+        },
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:02:44",
+            "speaker": "Karthik Raman"
+          },
+          "excerpt": "No, stores confirms that."
+        }
+      ]
+    },
+    {
+      "id": "s-match",
+      "name": "Three-way match",
+      "description": "SAP compares invoice, PO and GR for price and quantity against tolerances.",
+      "roleIds": [],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "service",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-price-tolerance",
+        "br-qty"
+      ],
+      "exceptionIds": [],
+      "aliases": [
+        "match invoice to PO and GR",
+        "3-way match"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-match"
+          },
+          "excerpt": "Three-way match: PO, GR, invoice"
+        },
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:03:58",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "SAP pulls the PO lines and the goods receipt."
+        }
+      ]
+    },
+    {
+      "id": "s-park-var",
+      "name": "Park invoice and refer variance",
+      "description": "Park the invoice and email the buyer with the PO and invoice; set tracker status Variance.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap",
+        "sys-mailbox",
+        "sys-tracker"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [
+        "x-price",
+        "x-qty"
+      ],
+      "aliases": [
+        "refer variance to buyer",
+        "query buyer"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.7"
+          },
+          "excerpt": "park the invoice, email the Buyer with the PO and invoice, and set status \"Variance\""
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-park-var"
+          },
+          "excerpt": "Park invoice and refer variance to buyer"
+        }
+      ]
+    },
+    {
+      "id": "s-investigate",
+      "name": "Investigate variance",
+      "description": "Buyer decides whether the PO or the invoice is wrong, based on contract and what was agreed.",
+      "roleIds": [
+        "r-buyer"
+      ],
+      "systemIds": [],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "resolve variance",
+        "review price variance"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:03:04",
+            "speaker": "Neha Kulkarni"
+          },
+          "excerpt": "That's a judgment call by the buyer, it depends on the contract and what was agreed."
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-investigate"
+          },
+          "excerpt": "Investigate price or quantity variance"
+        }
+      ]
+    },
+    {
+      "id": "s-amend-po",
+      "name": "Amend purchase order",
+      "description": "Buyer amends the PO in ME22N when the PO price is wrong.",
+      "roleIds": [
+        "r-buyer"
+      ],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "update PO",
+        "change PO price"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:03:04",
+            "speaker": "Neha Kulkarni"
+          },
+          "excerpt": "we amend the PO in ME22N and AP can post"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-amend"
+          },
+          "excerpt": "Amend PO (ME22N)"
+        }
+      ]
+    },
+    {
+      "id": "s-credit",
+      "name": "Request credit note or revised invoice",
+      "description": "Buyer asks the vendor for a credit note or revised invoice when the vendor charged wrongly.",
+      "roleIds": [
+        "r-buyer"
+      ],
+      "systemIds": [
+        "sys-mailbox"
+      ],
+      "taskType": "send",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "ask vendor for credit note"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:03:04",
+            "speaker": "Neha Kulkarni"
+          },
+          "excerpt": "we ask the vendor for a credit note or a revised invoice"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-credit"
+          },
+          "excerpt": "Request credit note or revised invoice"
+        }
+      ]
+    },
+    {
+      "id": "s-approval-request",
+      "name": "Request non-PO approval",
+      "description": "Email the invoice to the approver(s) required by the DoA; remind at 2 and escalate at 5 working days.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-mailbox"
+      ],
+      "taskType": "send",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-doa",
+        "br-approval-followup"
+      ],
+      "exceptionIds": [
+        "x-approval-delay"
+      ],
+      "aliases": [
+        "send for approval",
+        "route for approval"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.8"
+          },
+          "excerpt": "Email the invoice to the approver(s) required by Table 1."
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-approval-request"
+          },
+          "excerpt": "Email invoice to approver(s) per DoA"
+        }
+      ]
+    },
+    {
+      "id": "s-approve",
+      "name": "Approve non-PO invoice",
+      "description": "Approver reviews the invoice and replies approved or rejected by email.",
+      "roleIds": [
+        "r-approver"
+      ],
+      "systemIds": [
+        "sys-mailbox"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-doa"
+      ],
+      "exceptionIds": [],
+      "aliases": [
+        "review and approve",
+        "approve invoice"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-approve"
+          },
+          "excerpt": "Review and approve invoice"
+        },
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:05:48",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "Once they reply approved"
+        }
+      ]
+    },
+    {
+      "id": "s-fb60",
+      "name": "Enter non-PO invoice",
+      "description": "Save the approval email as PDF, then enter the invoice in FB60 with GL account and cost centre.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap",
+        "sys-sharepoint"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "enter invoice in FB60",
+        "code GL and cost centre"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.9"
+          },
+          "excerpt": "Enter the approved invoice in FB60 with the GL account and cost centre."
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-fb60"
+          },
+          "excerpt": "Enter non-PO invoice in FB60"
+        }
+      ]
+    },
+    {
+      "id": "s-review",
+      "name": "Review high-value invoice",
+      "description": "AP Team Lead reviews invoices of INR 5,00,000 or more (invoice, PO or approval, GL coding, tax) before posting.",
+      "roleIds": [
+        "r-lead"
+      ],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [
+        "br-four-eyes"
+      ],
+      "exceptionIds": [],
+      "aliases": [
+        "four-eyes review",
+        "second review"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.10"
+          },
+          "excerpt": "For invoices of INR 5,00,000 or more, the AP Team Lead reviews"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-review"
+          },
+          "excerpt": "Review invoice before posting (four-eyes)"
+        }
+      ]
+    },
+    {
+      "id": "s-post",
+      "name": "Post invoice and attach PDF",
+      "description": "Post the invoice in SAP and attach the PDF through Services for Object.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-sap"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "post invoice",
+        "attach invoice image"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.11"
+          },
+          "excerpt": "Post the invoice. Attach the invoice PDF to the SAP document"
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-post"
+          },
+          "excerpt": "Post invoice and attach PDF in SAP"
+        }
+      ]
+    },
+    {
+      "id": "s-close",
+      "name": "Update tracker to Posted",
+      "description": "Record the SAP document number and set tracker status Posted.",
+      "roleIds": [
+        "r-clerk"
+      ],
+      "systemIds": [
+        "sys-tracker"
+      ],
+      "taskType": "user",
+      "inputs": [],
+      "outputs": [],
+      "ruleIds": [],
+      "exceptionIds": [],
+      "aliases": [
+        "close tracker entry",
+        "update tracker"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.12"
+          },
+          "excerpt": "Update the AP tracker with the SAP document number and status \"Posted\"."
+        },
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "t-close"
+          },
+          "excerpt": "Update AP tracker to Posted"
+        }
+      ]
+    }
+  ],
+  "gateways": [
+    {
+      "id": "g-paper",
+      "type": "exclusive",
+      "question": "Paper invoice?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-paper"
+          },
+          "excerpt": "Paper invoice?"
+        }
+      ]
+    },
+    {
+      "id": "g-complete",
+      "type": "exclusive",
+      "question": "Complete and correct?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-complete"
+          },
+          "excerpt": "Complete and correct?"
+        }
+      ]
+    },
+    {
+      "id": "g-bank",
+      "type": "exclusive",
+      "question": "Bank details match vendor master?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-bank"
+          },
+          "excerpt": "Bank details match master?"
+        }
+      ]
+    },
+    {
+      "id": "g-dup",
+      "type": "exclusive",
+      "question": "Duplicate?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-dup"
+          },
+          "excerpt": "Duplicate?"
+        }
+      ]
+    },
+    {
+      "id": "g-po",
+      "type": "exclusive",
+      "question": "PO invoice?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-po"
+          },
+          "excerpt": "PO invoice?"
+        }
+      ]
+    },
+    {
+      "id": "g-approved",
+      "type": "exclusive",
+      "question": "Approved?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-approved"
+          },
+          "excerpt": "Approved?"
+        }
+      ]
+    },
+    {
+      "id": "g-gr",
+      "type": "exclusive",
+      "question": "Goods receipt posted?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-gr"
+          },
+          "excerpt": "GR posted?"
+        }
+      ]
+    },
+    {
+      "id": "g-tolerance",
+      "type": "exclusive",
+      "question": "Within tolerance?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-tolerance"
+          },
+          "excerpt": "Within tolerance?"
+        }
+      ]
+    },
+    {
+      "id": "g-po-wrong",
+      "type": "exclusive",
+      "question": "PO price wrong?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-po-wrong"
+          },
+          "excerpt": "PO price wrong?"
+        }
+      ]
+    },
+    {
+      "id": "g-amount",
+      "type": "exclusive",
+      "question": "Amount INR 5,00,000 or more?",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "flow",
+          "locator": {
+            "shapeId": "g-amount"
+          },
+          "excerpt": "Amount >= INR 5,00,000?"
+        }
+      ]
+    }
+  ],
+  "flows": [
+    {
+      "id": "f-01",
+      "from": "e-start",
+      "to": "g-paper"
+    },
+    {
+      "id": "f-02",
+      "from": "g-paper",
+      "to": "s-log",
+      "label": "No"
+    },
+    {
+      "id": "f-03",
+      "from": "g-paper",
+      "to": "s-scan",
+      "label": "Yes"
+    },
+    {
+      "id": "f-04",
+      "from": "s-scan",
+      "to": "s-log"
+    },
+    {
+      "id": "f-05",
+      "from": "s-log",
+      "to": "s-check"
+    },
+    {
+      "id": "f-06",
+      "from": "s-check",
+      "to": "g-complete"
+    },
+    {
+      "id": "f-07",
+      "from": "g-complete",
+      "to": "s-vendor",
+      "label": "Yes"
+    },
+    {
+      "id": "f-08",
+      "from": "g-complete",
+      "to": "s-return",
+      "label": "No",
+      "isException": true
+    },
+    {
+      "id": "f-09",
+      "from": "s-return",
+      "to": "e-returned"
+    },
+    {
+      "id": "f-10",
+      "from": "s-vendor",
+      "to": "g-bank"
+    },
+    {
+      "id": "f-11",
+      "from": "g-bank",
+      "to": "s-dup",
+      "label": "Yes"
+    },
+    {
+      "id": "f-12",
+      "from": "g-bank",
+      "to": "s-ticket",
+      "label": "No",
+      "isException": true
+    },
+    {
+      "id": "f-13",
+      "from": "s-ticket",
+      "to": "e-hold-vmd"
+    },
+    {
+      "id": "f-14",
+      "from": "s-dup",
+      "to": "g-dup"
+    },
+    {
+      "id": "f-15",
+      "from": "g-dup",
+      "to": "e-duplicate",
+      "label": "Yes",
+      "isException": true
+    },
+    {
+      "id": "f-16",
+      "from": "g-dup",
+      "to": "g-po",
+      "label": "No"
+    },
+    {
+      "id": "f-17",
+      "from": "g-po",
+      "to": "s-miro",
+      "label": "Yes"
+    },
+    {
+      "id": "f-18",
+      "from": "g-po",
+      "to": "s-approval-request",
+      "label": "No"
+    },
+    {
+      "id": "f-19",
+      "from": "s-approval-request",
+      "to": "s-approve"
+    },
+    {
+      "id": "f-20",
+      "from": "s-approve",
+      "to": "g-approved"
+    },
+    {
+      "id": "f-21",
+      "from": "g-approved",
+      "to": "e-rejected",
+      "label": "No",
+      "isException": true
+    },
+    {
+      "id": "f-22",
+      "from": "g-approved",
+      "to": "s-fb60",
+      "label": "Yes"
+    },
+    {
+      "id": "f-23",
+      "from": "s-fb60",
+      "to": "g-amount"
+    },
+    {
+      "id": "f-24",
+      "from": "s-miro",
+      "to": "g-gr"
+    },
+    {
+      "id": "f-25",
+      "from": "g-gr",
+      "to": "s-match",
+      "label": "Yes"
+    },
+    {
+      "id": "f-26",
+      "from": "g-gr",
+      "to": "s-park-gr",
+      "label": "No",
+      "isException": true
+    },
+    {
+      "id": "f-27",
+      "from": "s-park-gr",
+      "to": "s-gr"
+    },
+    {
+      "id": "f-28",
+      "from": "s-gr",
+      "to": "s-match"
+    },
+    {
+      "id": "f-29",
+      "from": "s-match",
+      "to": "g-tolerance"
+    },
+    {
+      "id": "f-30",
+      "from": "g-tolerance",
+      "to": "g-amount",
+      "label": "Yes"
+    },
+    {
+      "id": "f-31",
+      "from": "g-tolerance",
+      "to": "s-park-var",
+      "label": "No",
+      "isException": true
+    },
+    {
+      "id": "f-32",
+      "from": "s-park-var",
+      "to": "s-investigate"
+    },
+    {
+      "id": "f-33",
+      "from": "s-investigate",
+      "to": "g-po-wrong"
+    },
+    {
+      "id": "f-34",
+      "from": "g-po-wrong",
+      "to": "s-amend-po",
+      "label": "Yes"
+    },
+    {
+      "id": "f-35",
+      "from": "s-amend-po",
+      "to": "s-match"
+    },
+    {
+      "id": "f-36",
+      "from": "g-po-wrong",
+      "to": "s-credit",
+      "label": "No"
+    },
+    {
+      "id": "f-37",
+      "from": "s-credit",
+      "to": "e-credit"
+    },
+    {
+      "id": "f-38",
+      "from": "g-amount",
+      "to": "s-post",
+      "label": "No"
+    },
+    {
+      "id": "f-39",
+      "from": "g-amount",
+      "to": "s-review",
+      "label": "Yes"
+    },
+    {
+      "id": "f-40",
+      "from": "s-review",
+      "to": "s-post"
+    },
+    {
+      "id": "f-41",
+      "from": "s-post",
+      "to": "s-close"
+    },
+    {
+      "id": "f-42",
+      "from": "s-close",
+      "to": "e-posted"
+    }
+  ],
+  "rules": [
+    {
+      "id": "br-price-tolerance",
+      "name": "Price tolerance",
+      "condition": "Invoice unit price differs from PO price by no more than 2% or INR 5,000 per invoice, whichever is lower",
+      "action": "Invoice may be posted; larger differences are resolved by the buyer before posting",
+      "aliases": [
+        "price variance tolerance"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.1"
+          },
+          "excerpt": "by no more than 2% or INR 5,000 per invoice, whichever is lower"
+        },
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:04:34",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "Policy says two percent or five thousand rupees, whichever is lower."
+        }
+      ]
+    },
+    {
+      "id": "br-qty",
+      "name": "No over-invoicing of quantity",
+      "condition": "Invoiced quantity exceeds quantity received",
+      "action": "Do not post; park and ask stores (no tolerance)",
+      "aliases": [
+        "quantity tolerance"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.2"
+          },
+          "excerpt": "the invoiced quantity must not exceed the quantity received (GR). No tolerance applies."
+        }
+      ]
+    },
+    {
+      "id": "br-duplicate",
+      "name": "Duplicate definition",
+      "condition": "Same vendor, same invoice number and same gross amount in the same financial year",
+      "action": "Do not post; mark duplicate and inform vendor",
+      "aliases": [
+        "duplicate check rule"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.3"
+          },
+          "excerpt": "an invoice with the same vendor, the same invoice number and the same gross amount"
+        }
+      ]
+    },
+    {
+      "id": "br-four-eyes",
+      "name": "Four-eyes review",
+      "condition": "Gross amount is INR 5,00,000 or more",
+      "action": "AP Team Lead reviews before posting",
+      "aliases": [
+        "high value review"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.4"
+          },
+          "excerpt": "every invoice with a gross amount of INR 5,00,000 or more must be reviewed by the AP Team Lead before posting"
+        },
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:20:32",
+            "speaker": "Arjun Malhotra"
+          },
+          "excerpt": "That's the four-eyes control."
+        }
+      ]
+    },
+    {
+      "id": "br-bank",
+      "name": "Bank detail changes",
+      "condition": "Bank details on the invoice differ from the vendor master",
+      "action": "AP does not process; Vendor Master Data verifies by call-back to the registered number",
+      "aliases": [
+        "bank details call-back"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.5"
+          },
+          "excerpt": "AP must not process an invoice whose bank details differ from the vendor master."
+        }
+      ]
+    },
+    {
+      "id": "br-doa",
+      "name": "Delegation of authority for non-PO invoices",
+      "condition": "Gross amount up to INR 2,00,000 / above 2,00,000 up to 10,00,000 / above 10,00,000",
+      "action": "Cost Centre Owner / plus Department Head / plus Finance Controller",
+      "aliases": [
+        "DoA thresholds",
+        "approval limits"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 4",
+            "cell": "row 2"
+          },
+          "excerpt": "Up to 2,00,000 | Cost Centre Owner"
+        },
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 4",
+            "cell": "row 3"
+          },
+          "excerpt": "Above 2,00,000 up to 10,00,000 | Cost Centre Owner and Department Head"
+        },
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 4",
+            "cell": "row 4"
+          },
+          "excerpt": "Above 10,00,000 | Cost Centre Owner, Department Head and Finance Controller"
+        }
+      ]
+    },
+    {
+      "id": "br-entity",
+      "name": "Correct legal entity and GSTIN",
+      "condition": "Invoice not addressed to Kaveri Industrial Components Ltd. or GSTINs do not match",
+      "action": "Return to vendor for a corrected invoice",
+      "aliases": [
+        "legal entity check"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.7"
+          },
+          "excerpt": "Invoices must be addressed to Kaveri Industrial Components Ltd. and show its GSTIN"
+        }
+      ]
+    },
+    {
+      "id": "br-gr-followup",
+      "name": "Goods receipt follow-up",
+      "condition": "No GR for the invoiced quantity",
+      "action": "Remind requester after 3 working days; escalate to AP Team Lead after 7 working days",
+      "aliases": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.6"
+          },
+          "excerpt": "Send a reminder after 3 working days and escalate to the AP Team Lead after 7 working days."
+        },
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:01:43",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "If nothing happens in three working days I send a reminder."
+        }
+      ]
+    },
+    {
+      "id": "br-approval-followup",
+      "name": "Approval follow-up",
+      "condition": "No approval reply for a non-PO invoice",
+      "action": "Remind after 2 working days; escalate to the Finance Controller's office after 5 working days",
+      "aliases": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.8"
+          },
+          "excerpt": "Send a reminder after 2 working days and escalate to the Finance Controller's office after 5 working days."
+        }
+      ]
+    }
+  ],
+  "exceptions": [
+    {
+      "id": "x-missing-field",
+      "kind": "business",
+      "name": "Missing or incorrect mandatory field",
+      "trigger": "A mandatory field is missing or wrong",
+      "stepIds": [
+        "s-check"
+      ],
+      "handling": "Return to vendor using template AP-T01",
+      "routedToRoleId": "r-vendor",
+      "aliases": [
+        "incomplete invoice"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 2"
+          },
+          "excerpt": "Missing or incorrect mandatory field | Return to vendor (template AP-T01) | AP Clerk"
+        }
+      ]
+    },
+    {
+      "id": "x-wrong-entity",
+      "kind": "business",
+      "name": "Invoice addressed to another legal entity",
+      "trigger": "Invoice addressed to another entity, e.g. the UK company",
+      "stepIds": [
+        "s-check"
+      ],
+      "handling": "Return to vendor",
+      "routedToRoleId": "r-vendor",
+      "aliases": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 3"
+          },
+          "excerpt": "Invoice addressed to another legal entity | Return to vendor | AP Clerk"
+        },
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:07:06",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "addressed to the UK company instead of the India company"
+        }
+      ]
+    },
+    {
+      "id": "x-gstin",
+      "kind": "business",
+      "name": "GSTIN mismatch",
+      "trigger": "Vendor or Kaveri GSTIN on the invoice does not match",
+      "stepIds": [
+        "s-check",
+        "s-vendor"
+      ],
+      "handling": "Return to vendor for a corrected invoice",
+      "routedToRoleId": "r-vendor",
+      "aliases": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:07:06",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "If the vendor GSTIN on the invoice doesn't match vendor master, or our GSTIN is wrong"
+        }
+      ]
+    },
+    {
+      "id": "x-bank",
+      "kind": "business",
+      "name": "Bank details differ from vendor master",
+      "trigger": "Bank details on invoice differ from SAP vendor master",
+      "stepIds": [
+        "s-vendor"
+      ],
+      "handling": "Hold; ServiceNow request to Vendor Master Data; call-back verification",
+      "routedToRoleId": "r-vmd",
+      "aliases": [
+        "bank change",
+        "bank detail change"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 4"
+          },
+          "excerpt": "Bank details differ from vendor master | Hold; ServiceNow request to Vendor Master Data"
+        }
+      ]
+    },
+    {
+      "id": "x-duplicate",
+      "kind": "business",
+      "name": "Suspected duplicate",
+      "trigger": "Same vendor, invoice number and gross amount already recorded",
+      "stepIds": [
+        "s-dup"
+      ],
+      "handling": "Do not post; confirm with vendor; mark duplicate",
+      "routedToRoleId": "r-clerk",
+      "aliases": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 5"
+          },
+          "excerpt": "Suspected duplicate | Do not post; confirm with vendor | AP Clerk"
+        }
+      ]
+    },
+    {
+      "id": "x-no-gr",
+      "kind": "business",
+      "name": "No goods receipt",
+      "trigger": "No GR exists for the invoiced quantity",
+      "stepIds": [
+        "s-miro"
+      ],
+      "handling": "Park; request GR; remind at 3, escalate at 7 working days",
+      "routedToRoleId": "r-stores",
+      "aliases": [
+        "missing GR",
+        "missing goods receipt"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 6"
+          },
+          "excerpt": "No goods receipt | Park; request GR; remind at 3 and escalate at 7 working days"
+        }
+      ]
+    },
+    {
+      "id": "x-price",
+      "kind": "business",
+      "name": "Price variance beyond tolerance",
+      "trigger": "Invoice price exceeds PO price beyond tolerance",
+      "stepIds": [
+        "s-match"
+      ],
+      "handling": "Park; refer to buyer",
+      "routedToRoleId": "r-buyer",
+      "aliases": [
+        "price variance"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 7"
+          },
+          "excerpt": "Price or quantity variance | Park; refer to Buyer | Buyer"
+        }
+      ]
+    },
+    {
+      "id": "x-qty",
+      "kind": "business",
+      "name": "Quantity exceeds goods received",
+      "trigger": "Invoiced quantity is more than the GR quantity",
+      "stepIds": [
+        "s-match"
+      ],
+      "handling": "Park and ask stores for the difference",
+      "routedToRoleId": "r-stores",
+      "aliases": [
+        "quantity variance"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:04:43",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "If the invoice is for more than was received, it's the same as missing GR for the difference"
+        }
+      ]
+    },
+    {
+      "id": "x-approval-delay",
+      "kind": "business",
+      "name": "Non-PO approval not received",
+      "trigger": "No reply from approver",
+      "stepIds": [
+        "s-approval-request"
+      ],
+      "handling": "Remind at 2 and escalate at 5 working days",
+      "routedToRoleId": "r-controller",
+      "aliases": [
+        "stuck approval"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 8"
+          },
+          "excerpt": "Non-PO approval not received | Remind at 2 and escalate at 5 working days"
+        }
+      ]
+    },
+    {
+      "id": "x-unreadable",
+      "kind": "business",
+      "name": "Password-protected or unreadable PDF",
+      "trigger": "PDF cannot be opened",
+      "stepIds": [
+        "s-check"
+      ],
+      "handling": "Request a readable copy from the vendor",
+      "routedToRoleId": "r-vendor",
+      "aliases": [
+        "password protected PDF"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "heading": "Table 5",
+            "cell": "row 9"
+          },
+          "excerpt": "Password-protected or unreadable PDF | Request a readable copy from the vendor"
+        }
+      ]
+    },
+    {
+      "id": "x-po-locked",
+      "kind": "application",
+      "name": "PO locked in SAP",
+      "trigger": "MIRO reports the PO is being edited by the buyer in ME22N",
+      "stepIds": [
+        "s-miro"
+      ],
+      "handling": "Wait and retry later",
+      "routedToRoleId": "r-clerk",
+      "aliases": [
+        "PO locked"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:05:12",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "sometimes MIRO says the PO is locked because the buyer has it open in ME22N"
+        }
+      ]
+    }
+  ],
+  "dataObjects": [
+    {
+      "id": "d-invoice",
+      "name": "Vendor invoice",
+      "format": "PDF (email attachment or scanned paper)",
+      "structured": false,
+      "classification": "Confidential",
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:01:35",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "Most vendors email the PDF to the shared mailbox"
+        },
+        {
+          "sourceId": "call-3",
+          "locator": {
+            "timestamp": "00:04:39",
+            "speaker": "Ananya Bose",
+            "lineStart": 56
+          },
+          "excerpt": "Our classification for that is Confidential."
+        }
+      ]
+    },
+    {
+      "id": "d-tracker",
+      "name": "AP tracker row",
+      "format": "Excel row",
+      "structured": true,
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.2"
+          },
+          "excerpt": "vendor, invoice number, invoice date, gross amount, PO number, date received, status \"Received\""
+        }
+      ]
+    },
+    {
+      "id": "d-approval",
+      "name": "Approval email",
+      "format": "Email saved as PDF",
+      "structured": false,
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "6.8"
+          },
+          "excerpt": "Save the approval email as PDF in the vendor folder."
+        }
+      ]
+    },
+    {
+      "id": "d-doa",
+      "name": "Delegation of authority matrix",
+      "format": "PDF from Finance",
+      "structured": false,
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:06:21",
+            "speaker": "Karthik Raman"
+          },
+          "excerpt": "The delegation of authority matrix is a PDF from finance."
+        }
+      ]
+    },
+    {
+      "id": "d-dept-head-map",
+      "name": "Department head mapping",
+      "format": "Excel kept by the AP Team Lead",
+      "structured": true,
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:06:21",
+            "speaker": "Karthik Raman"
+          },
+          "excerpt": "We use an Excel that I keep."
+        }
+      ]
+    }
+  ],
+  "painPoints": [
+    {
+      "id": "p-keying",
+      "text": "All invoices are keyed manually into SAP.",
+      "stepIds": [
+        "s-miro",
+        "s-fb60"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:06:50",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "Everything is keyed manually into SAP."
+        }
+      ]
+    },
+    {
+      "id": "p-tracker",
+      "text": "The Excel tracker is double work, kept only for status visibility.",
+      "stepIds": [
+        "s-log",
+        "s-close"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:06:50",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "the tracker is double work"
+        }
+      ]
+    },
+    {
+      "id": "p-cycle",
+      "text": "Average nine days from receipt to posting, above the SOP target of five working days.",
+      "stepIds": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:06:50",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "From receipt to posting we average around nine days."
+        }
+      ]
+    },
+    {
+      "id": "p-discounts",
+      "text": "Early payment discounts are almost never captured.",
+      "stepIds": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:06:50",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "we almost never make it"
+        }
+      ]
+    },
+    {
+      "id": "p-msme",
+      "text": "Slow posting puts the 45-day MSE payment rule at risk.",
+      "stepIds": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:06:50",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "we have to pay micro and small enterprises within forty-five days"
+        }
+      ]
+    },
+    {
+      "id": "p-approval-evidence",
+      "text": "Approval evidence in email is inconsistent and was raised by internal audit.",
+      "stepIds": [
+        "s-approve",
+        "s-approval-request"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:21:25",
+            "speaker": "Arjun Malhotra"
+          },
+          "excerpt": "Internal audit raised an observation last year that approval evidence was not consistently attached"
+        }
+      ]
+    },
+    {
+      "id": "p-buyer-wait",
+      "text": "No agreed turnaround for buyers to resolve variances.",
+      "stepIds": [
+        "s-investigate"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:03:59",
+            "speaker": "Neha Kulkarni"
+          },
+          "excerpt": "There's no agreed turnaround."
+        }
+      ]
+    },
+    {
+      "id": "p-gr-wait",
+      "text": "Invoices often arrive before the goods receipt is posted.",
+      "stepIds": [
+        "s-park-gr"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-2",
+          "locator": {
+            "timestamp": "00:00:59",
+            "speaker": "Karthik Raman"
+          },
+          "excerpt": "The invoice comes before stores has posted the GR in SAP."
+        }
+      ]
+    },
+    {
+      "id": "p-password",
+      "text": "Password-protected PDFs need a call to the vendor.",
+      "stepIds": [
+        "s-check"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:08:39",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "Password protected PDFs."
+        }
+      ]
+    },
+    {
+      "id": "p-gl-coding",
+      "text": "GL coding for non-PO invoices depends on past postings and has no fixed rule.",
+      "stepIds": [
+        "s-fb60"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:06:30",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "There's no fixed rule, honestly. It depends."
+        }
+      ]
+    },
+    {
+      "id": "p-ocr-history",
+      "text": "A 2024 OCR pilot failed on line-item accuracy; the team re-checked everything.",
+      "stepIds": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:08:10",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "Accuracy on line items was poor for our vendors"
+        }
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "id": "c-four-eyes",
+      "text": "Second review of invoices of INR 5,00,000 or more by the AP Team Lead.",
+      "stepIds": [
+        "s-review"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.4"
+          },
+          "excerpt": "every invoice with a gross amount of INR 5,00,000 or more must be reviewed by the AP Team Lead before posting"
+        }
+      ],
+      "ruleIds": [
+        "br-four-eyes"
+      ]
+    },
+    {
+      "id": "c-bank",
+      "text": "Call-back verification of bank detail changes by Vendor Master Data.",
+      "stepIds": [
+        "s-vendor",
+        "s-ticket"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:03:14",
+            "speaker": "Sunita Rao"
+          },
+          "excerpt": "That's a fraud control"
+        }
+      ],
+      "ruleIds": [
+        "br-bank"
+      ]
+    },
+    {
+      "id": "c-duplicate",
+      "text": "SAP duplicate invoice check (warning only) on vendor, reference and amount.",
+      "stepIds": [
+        "s-dup",
+        "s-miro"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-3",
+          "locator": {
+            "timestamp": "00:04:25",
+            "speaker": "Vikram Shah",
+            "lineStart": 54
+          },
+          "excerpt": "It gives a warning, not an error, so a clerk can still post."
+        }
+      ],
+      "ruleIds": [
+        "br-duplicate"
+      ]
+    },
+    {
+      "id": "c-doa",
+      "text": "Non-PO approvals per delegation of authority.",
+      "stepIds": [
+        "s-approval-request",
+        "s-approve"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "sop",
+          "locator": {
+            "section": "5.6"
+          },
+          "excerpt": "Non-PO approvals follow the DoA thresholds below."
+        }
+      ],
+      "ruleIds": [
+        "br-doa"
+      ]
+    }
+  ],
+  "risks": [
+    {
+      "id": "k-tolerance-gap",
+      "text": "SAP accepts price variances up to 5% while policy allows 2% or INR 5,000, whichever is lower.",
+      "stepIds": [
+        "s-match"
+      ],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-3",
+          "locator": {
+            "timestamp": "00:04:11",
+            "speaker": "Vikram Shah",
+            "lineStart": 50
+          },
+          "excerpt": "Then the configuration doesn't match the policy."
+        }
+      ]
+    },
+    {
+      "id": "k-data",
+      "text": "Invoices contain bank account and personal data classified Confidential; any extraction or AI service must stay in an approved region and pass vendor risk assessment.",
+      "stepIds": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-3",
+          "locator": {
+            "timestamp": "00:04:39",
+            "speaker": "Ananya Bose",
+            "lineStart": 56
+          },
+          "excerpt": "the data has to stay in an approved region"
+        }
+      ]
+    },
+    {
+      "id": "k-ocr-trust",
+      "text": "Users will reject automation that needs everything re-checked.",
+      "stepIds": [],
+      "status": "stated",
+      "sources": [
+        {
+          "sourceId": "call-1",
+          "locator": {
+            "timestamp": "00:08:10",
+            "speaker": "Meera Iyer"
+          },
+          "excerpt": "I don't want to repeat that."
+        }
+      ]
+    }
+  ],
+  "openQuestions": [
+    {
+      "id": "q-aht-nonpo",
+      "target": {
+        "kind": "metric",
+        "field": "handling_time"
+      },
+      "question": "How long does a non-PO invoice take to handle?",
+      "whyItMatters": "Needed to size the benefit for the 20% of invoices without a PO.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "non-po",
+        "handle"
+      ]
+    },
+    {
+      "id": "q-paper-count",
+      "target": {
+        "kind": "metric",
+        "id": "m-paper-share",
+        "field": "value"
+      },
+      "question": "What share of invoices arrives on paper? The estimate is 10 to 15% and has not been counted.",
+      "whyItMatters": "Decides whether paper capture is worth designing for.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "paper"
+      ]
+    },
+    {
+      "id": "q-gr-api",
+      "target": {
+        "kind": "system",
+        "id": "sys-sap",
+        "field": "access"
+      },
+      "question": "Is API_MATERIAL_DOCUMENT_SRV exposed outside SAP, and can AP read goods receipts through it?",
+      "whyItMatters": "Determines whether GR checks can run without SAP GUI.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "goods receipt"
+      ]
+    },
+    {
+      "id": "q-invoice-api",
+      "target": {
+        "kind": "system",
+        "id": "sys-sap",
+        "field": "access"
+      },
+      "question": "Will the supplier invoice API be activated and exposed, and when?",
+      "whyItMatters": "API-first posting depends on it; GUI scripting is disabled.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "supplier invoice",
+        "api"
+      ]
+    },
+    {
+      "id": "q-attach-api",
+      "target": {
+        "kind": "system",
+        "id": "sys-sap",
+        "field": "access"
+      },
+      "question": "Is an SAP attachment API active for linking the invoice PDF?",
+      "whyItMatters": "Attaching the image is a manual step today.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "attachment"
+      ]
+    },
+    {
+      "id": "q-servicenow",
+      "target": {
+        "kind": "system",
+        "id": "sys-servicenow",
+        "field": "access"
+      },
+      "question": "Can a ServiceNow request to Vendor Master Data be raised through an API?",
+      "whyItMatters": "The bank detail hold raises a ticket by hand today.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "servicenow"
+      ]
+    },
+    {
+      "id": "q-gl-coding",
+      "target": {
+        "kind": "step",
+        "id": "s-fb60",
+        "field": "rule"
+      },
+      "question": "How should the GL account be chosen for a non-PO invoice from a vendor with no posting history?",
+      "whyItMatters": "There is no rule today; it is a judgment point.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "gl account"
+      ]
+    },
+    {
+      "id": "q-buyer-sla",
+      "target": {
+        "kind": "step",
+        "id": "s-investigate",
+        "field": "sla"
+      },
+      "question": "What turnaround should buyers meet when AP refers a variance?",
+      "whyItMatters": "Waiting on buyers is one of the largest delays and has no agreed time.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "buyer",
+        "turnaround"
+      ]
+    },
+    {
+      "id": "q-dept-head",
+      "target": {
+        "kind": "rule",
+        "id": "br-doa",
+        "field": "approver"
+      },
+      "question": "Where is the authoritative mapping of department heads for DoA approvals?",
+      "whyItMatters": "It is kept in a personal Excel file; approvals cannot be routed reliably without it.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "department head"
+      ]
+    },
+    {
+      "id": "q-credit-notes",
+      "target": {
+        "kind": "meta",
+        "field": "scope"
+      },
+      "question": "How are vendor credit notes processed?",
+      "whyItMatters": "Deferred to a separate session; the To-Be design must not ignore them.",
+      "owner": null,
+      "status": "open",
+      "matchKeywords": [
+        "credit note"
+      ]
+    }
+  ],
+  "conflicts": [
+    {
+      "id": "k-01",
+      "target": {
+        "kind": "rule",
+        "id": "br-price-tolerance",
+        "field": "condition"
+      },
+      "summary": "Price tolerance: policy is 2% or INR 5,000 (whichever is lower); SAP is configured at 5% with no amount limit.",
+      "values": [
+        {
+          "value": "2% or INR 5,000, whichever is lower (policy)",
+          "sources": [
+            {
+              "sourceId": "sop",
+              "locator": {
+                "section": "5.1"
+              },
+              "excerpt": "by no more than 2% or INR 5,000 per invoice, whichever is lower"
+            },
+            {
+              "sourceId": "call-1",
+              "locator": {
+                "timestamp": "00:04:34",
+                "speaker": "Meera Iyer"
+              },
+              "excerpt": "Two percent on price."
+            }
+          ]
+        },
+        {
+          "value": "5% upper and lower, no absolute limit (SAP configuration)",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "locator": {
+                "timestamp": "00:03:47",
+                "speaker": "Vikram Shah",
+                "lineStart": 46
+              },
+              "excerpt": "it's set to five percent upper and five percent lower. No absolute amount limit configured."
+            }
+          ]
+        }
+      ],
+      "resolution": null,
+      "matchKeywords": [
+        "tolerance"
+      ]
+    },
+    {
+      "id": "k-02",
+      "target": {
+        "kind": "metric",
+        "id": "m-volume",
+        "field": "value"
+      },
+      "summary": "Monthly volume: about 9,000 to 10,000 in recent months versus about 8,500 as the FY 2025-26 average in the SOP.",
+      "values": [
+        {
+          "value": "9,000 to 10,000 per month (recent months)",
+          "sources": [
+            {
+              "sourceId": "call-1",
+              "locator": {
+                "timestamp": "00:01:08",
+                "speaker": "Meera Iyer"
+              },
+              "excerpt": "around nine to ten thousand invoices a month"
+            }
+          ]
+        },
+        {
+          "value": "about 8,500 per month (FY 2025-26 average)",
+          "sources": [
+            {
+              "sourceId": "sop",
+              "locator": {
+                "section": "9"
+              },
+              "excerpt": "approximately 8,500 invoices per month (FY 2025-26 average)"
+            }
+          ]
+        }
+      ],
+      "resolution": null,
+      "matchKeywords": [
+        "volume",
+        "per month"
+      ]
+    }
+  ]
+}

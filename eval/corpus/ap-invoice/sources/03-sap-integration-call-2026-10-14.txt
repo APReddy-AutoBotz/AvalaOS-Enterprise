@@ -1,0 +1,68 @@
+AP Invoice Processing - SAP and integration review
+Tuesday 14 October 2026, 15:00-15:45 IST (Zoom)
+Attendees: Rahul Deshpande (Automation CoE, BA), Vikram Shah (SAP FI/MM functional lead), Daniel Fernandes (Integration architect), Ananya Bose (IT security)
+Transcript exported from Zoom. Lightly cleaned; filler words removed.
+
+[00:00:05] Rahul Deshpande: Thanks for joining. Short context: we're assessing AP invoice processing for the India entity. I want to understand what the systems can do today, so that any recommendation is grounded in what actually exists, not what we hope exists.
+
+[00:00:21] Vikram Shah: Sure. So, landscape first. India runs on SAP S/4HANA 2022, on-premise, company code 1000. AP uses SAP GUI mostly, MIRO, MIR7, FB60, FBL1N. Some people use the Fiori Manage Supplier Invoices app but most of the AP team is on GUI.
+
+[00:00:44] Rahul Deshpande: Are there APIs we could use to create supplier invoices instead of keying them in MIRO?
+
+[00:00:51] Vikram Shah: Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway. Nobody has needed it so far.
+
+[00:01:09] Daniel Fernandes: And even once it's activated in Gateway, nothing is exposed to other systems without going through our API management layer. That's a change request, security review, a technical user with the right authorisations. Realistically four to six weeks if it is prioritised. I wouldn't promise it until we raise the request and see.
+
+[00:01:31] Rahul Deshpande: Understood, so the API exists in the product but isn't available to us today.
+
+[00:01:36] Daniel Fernandes: Correct. Available in the product, not available in our landscape.
+
+[00:01:42] Rahul Deshpande: What about reading purchase orders?
+
+[00:01:46] Daniel Fernandes: That one is live. API_PURCHASEORDER_PROCESS_SRV is exposed through API management for the supplier portal project, read only. We can give another consumer read access with a normal access request.
+
+[00:02:02] Rahul Deshpande: Goods receipts?
+
+[00:02:05] Vikram Shah: For GRs there is the material document API, API_MATERIAL_DOCUMENT_SRV. I think the warehouse team activated it last year for their scanners, but I'm not sure if it's exposed outside. I need to check.
+
+[00:02:19] Rahul Deshpande: OK, I'll mark that as to be confirmed. Vendor master?
+
+[00:02:23] Daniel Fernandes: Business partner read, API_BUSINESS_PARTNER, is live through API management. The MDM team uses it. Read only.
+
+[00:02:33] Rahul Deshpande: And attaching the PDF to the SAP document, can that be done through an API?
+
+[00:02:39] Vikram Shah: There is an attachment API in S/4, but I've never set it up here. I don't know if it's active. Put it as unknown.
+
+[00:02:48] Rahul Deshpande: What about UI automation, bots driving SAP GUI?
+
+[00:02:53] Ananya Bose: SAP GUI scripting is disabled on production by policy. It's been like that since go-live. Enabling it needs a security exception approved by the CISO, and we would rather not. If there's an API path, that's our preference, much easier to control and audit.
+
+[00:03:12] Rahul Deshpande: That's a clear steer. And the mailbox?
+
+[00:03:16] Daniel Fernandes: The ap.invoices shared mailbox is in Microsoft 365. We already read it through Microsoft Graph for the vendor statement bot, there's an app registration with mail read permission scoped to that mailbox. SharePoint, same, we have Graph access to the AP Invoices library. So email and SharePoint are both doable today.
+
+[00:03:39] Rahul Deshpande: Good. Vikram, one specific thing. What price tolerance is configured for invoice verification in company code 1000?
+
+[00:03:47] Vikram Shah: Let me check, I have the system open. Tolerance key PP, price variance... it's set to five percent upper and five percent lower. No absolute amount limit configured. I don't think anyone has changed it since go-live.
+
+[00:04:05] Rahul Deshpande: Interesting. AP told me policy is two percent or five thousand rupees, whichever is lower.
+
+[00:04:11] Vikram Shah: Then the configuration doesn't match the policy. SAP will accept up to five percent without blocking. I'd raise that with Meera, it's a control gap regardless of automation.
+
+[00:04:21] Rahul Deshpande: I will. And the duplicate check in SAP?
+
+[00:04:25] Vikram Shah: Standard duplicate invoice check is on for company code 1000. It checks vendor, reference number and invoice amount. It gives a warning, not an error, so a clerk can still post.
+
+[00:04:39] Ananya Bose: Can I add something on data? Invoices have vendor bank account numbers and sometimes personal data for individual consultants. Our classification for that is Confidential. If any extraction or AI service is used, the data has to stay in an approved region, India or an approved cloud region, and the service has to go through vendor risk assessment. No sending invoices to random online tools.
+
+[00:05:02] Rahul Deshpande: Understood, I'll note that as a constraint.
+
+[00:05:05] Rahul Deshpande: Last one, the vendor master change tickets go into ServiceNow. Is there any integration there?
+
+[00:05:12] Daniel Fernandes: Not that I know of for AP. That's a question for the ServiceNow team.
+
+[00:05:17] Rahul Deshpande: OK. And the UK entity is on Workday, I assume nothing changes there?
+
+[00:05:21] Vikram Shah: Right, Workday is separate, not our team.
+
+[00:05:25] Rahul Deshpande: Great. I'll send a summary with the open items: GR API exposure, attachment API status, ServiceNow integration, and the tolerance gap. Thanks everyone.
