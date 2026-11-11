@@ -217,3 +217,26 @@ test('review: removing an outcome step joins its predecessor to what follows', (
   const { flow: out } = applyReview(flow, { merges: [], removals: [{ step: 'b', kind: 'outcome', reason: 'rejection ends the case' }] });
   assert.deepEqual(out.flows.find((f: any) => f.to === 'e9'), { from: 'g1', to: 'e9', label: 'Yes' });
 });
+
+test('review: a step that is the only one for a numbered procedure section cannot be merged away or removed', () => {
+  const ref = (section: string) => ({ sourceId: 'sop', locator: { section }, excerpt: 'x' });
+  const set: any = { sources: [], items: [
+    { id: 'S1', kind: 'step', sourceId: 'sop', order: 0, ref: ref('6.11'), data: { name: 'Post' } },
+    { id: 'S2', kind: 'step', sourceId: 'sop', order: 1, ref: ref('6.12'), data: { name: 'Close the record' } },
+    { id: 'S3', kind: 'step', sourceId: 'sop', order: 2, ref: ref('6.11'), data: { name: 'Attach PDF' } },
+  ] };
+  const flow: any = {
+    roles: [], systems: [], gateways: [], events: [],
+    steps: [
+      { key: 'p', name: 'Post', description: '', taskType: 'user', roles: [], systems: [], members: ['S1'] },
+      { key: 'c', name: 'Close record', description: '', taskType: 'user', roles: [], systems: [], members: ['S2'] },
+      { key: 'a', name: 'Attach PDF', description: '', taskType: 'user', roles: [], systems: [], members: ['S3'] },
+      { key: 'x1', name: 'x1', description: '', taskType: 'user', roles: [], systems: [], members: [] },
+      { key: 'x2', name: 'x2', description: '', taskType: 'user', roles: [], systems: [], members: [] },
+    ],
+    flows: [{ from: 'p', to: 'a', label: '' }, { from: 'a', to: 'c', label: '' }],
+  };
+  const { flow: out, skipped } = applyReview(flow, { merges: [{ step: 'c', into: 'p', reason: 'recording after posting' }, { step: 'a', into: 'p', reason: 'attach after posting' }], removals: [] }, set);
+  assert.deepEqual(out.steps.map((s: any) => s.key), ['p', 'c', 'x1', 'x2'], '6.12 keeps its step; attaching (also 6.11) merges into posting');
+  assert.ok(skipped.some(x => x.includes('procedure section 6.12')));
+});

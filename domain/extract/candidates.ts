@@ -65,13 +65,17 @@ export function formatMetric(m: any): string {
   return `${range(m)} ${m.unit ?? ''}`.trim();
 }
 
+/** A numbered procedure section ("6.12") when the quote has one, otherwise the position in the source. */
+export const procedureSection = (c: Candidate) => (c.ref.locator.section && c.ref.locator.section.includes('.') ? c.ref.locator.section : undefined);
+const where = (c: Candidate) => (procedureSection(c) ? `§${procedureSection(c)}` : `#${c.order + 1}`);
+
 function header(set: CandidateSet): string {
   return ['SOURCES', ...set.sources.map(s => `${s.sourceId}: ${s.title} (${s.kind})`)].join('\n');
 }
 
 function section(set: CandidateSet, kind: CandidateKind, title: string, line: (c: Candidate) => string): string {
   const xs = set.items.filter(c => c.kind === kind);
-  return [`${title} (${xs.length})`, ...xs.map(c => `${c.id} [${c.sourceId} #${c.order + 1}] ${line(c)}`)].join('\n');
+  return [`${title} (${xs.length})`, ...xs.map(c => `${c.id} [${c.sourceId} ${where(c)}] ${line(c)}`)].join('\n');
 }
 
 /** The candidate listing for merge_flow. */

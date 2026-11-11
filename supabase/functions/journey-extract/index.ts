@@ -133,10 +133,18 @@ async function trigger(body: Record<string, unknown>) {
   if (res.status !== 202) throw new Error(`could not start stage ${String(body.action)} (${res.status})`);
 }
 
-function inBackground(work: () => Promise<void>, runId: string) {
+/**
+ * Runs a stage after the response. A stage that timed out is started once more in a fresh
+ * invocation (the provider is sometimes slow under load); any other failure fails the run.
+ */
+function inBackground(work: () => Promise<void>, runId: string, retry?: Record<string, unknown>) {
   const p = work().catch(async e => {
-    console.error('stage failed', runId, e);
-    await patchRun(runId, { status: 'failed', error: String((e as Error).message ?? e).slice(0, 1000) }).catch(() => {});
+    const message = String((e as Error).message ?? e);
+    console.error('stage failed', runId, message);
+    if (retry && message.startsWith('TIMEOUT') && !retry.retried) {
+      try { await trigger({ ...retry, retried: true }); return; } catch { /* fall through and fail the run */ }
+    }
+    await patchRun(runId, { status: 'failed', error: message.slice(0, 1000) }).catch(() => {});
   });
   const rt = (globalThis as any).EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(p);
@@ -305,15 +313,16 @@ Deno.serve(async (req: Request) => {
   const run = await loadRun(String(body?.runId ?? ''), String(body?.token ?? ''));
   if (!run) return fail(404, 'NOT_FOUND', 'Unknown run.');
   const token = String(body.token);
+  const again = { ...body };
   switch (body.action) {
     case 'start': inBackground(() => stageStart(run, token), run.id); break;
     case 'pass':
       if (!['facts', 'steps'].includes(body.pass)) return fail(400, 'INVALID_REQUEST', 'pass is facts or steps.');
-      inBackground(() => stagePass(run, token, String(body.sourceId), body.pass), run.id); break;
+      inBackground(() => stagePass(run, token, String(body.sourceId), body.pass), run.id, again); break;
     case 'merge':
       if (!['flow', 'facts'].includes(body.which)) return fail(400, 'INVALID_REQUEST', 'which is flow or facts.');
-      inBackground(() => stageMerge(run, token, body.which), run.id); break;
-    case 'review': inBackground(() => stageReview(run, token), run.id); break;
+      inBackground(() => stageMerge(run, token, body.which), run.id, again); break;
+    case 'review': inBackground(() => stageReview(run, token), run.id, again); break;
     case 'assemble': inBackground(() => stageAssemble(run), run.id); break;
     default: return fail(400, 'INVALID_REQUEST', 'Unknown action.');
   }

@@ -47,7 +47,7 @@ export async function runReviewStage(run: RunTask, flow: MergeFlowOutput, set: C
 
 /** Assembly with the review applied. */
 export function finish(processName: string, set: CandidateSet, flow: MergeFlowOutput, facts: MergeFactsOutput, review: ReviewOutput | null) {
-  const reviewed = review ? applyReview(flow, review) : { flow, applied: [], skipped: [] };
+  const reviewed = review ? applyReview(flow, review, set) : { flow, applied: [], skipped: [] };
   const { model, report } = assembleModel(processName, set, reviewed.flow, facts);
   return { model, report: { ...report, review: { applied: reviewed.applied, skipped: reviewed.skipped } } };
 }

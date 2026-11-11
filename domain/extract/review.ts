@@ -1,7 +1,7 @@
 // The review pass sees the merged step list and returns corrections: merge a step into another,
 // or remove one that is not an activity of the process. Corrections are applied here, by rule:
 // merged steps pool their candidates and systems; removed steps are bypassed in the flow.
-import type { CandidateSet } from './candidates.ts';
+import { procedureSection, type CandidateSet } from './candidates.ts';
 import type { MergeFlowOutput } from './assemble.ts';
 
 export interface ReviewOutput {
@@ -29,8 +29,20 @@ export function reviewListing(flow: MergeFlowOutput, set: CandidateSet): string 
   ].join('\n');
 }
 
-export function applyReview(flow: MergeFlowOutput, review: ReviewOutput): { flow: MergeFlowOutput; applied: string[]; skipped: string[] } {
+/**
+ * Applies the review. With the candidate set, a correction is refused when it would make a numbered
+ * procedure section disappear: the step is the only one built from that section.
+ */
+export function applyReview(flow: MergeFlowOutput, review: ReviewOutput, set?: CandidateSet): { flow: MergeFlowOutput; applied: string[]; skipped: string[] } {
   const out: MergeFlowOutput = structuredClone(flow);
+  const byId = new Map((set?.items ?? []).map(c => [c.id, c]));
+  const sectionsOf = (members: string[]) => new Set(members.map(id => byId.get(id)).filter(Boolean).map(c => procedureSection(c!)).filter((x): x is string => !!x));
+  /** True when `key` is the only remaining step built from one of its procedure sections. */
+  const ownsSection = (key: string) => {
+    const mine = sectionsOf(steps.get(key)?.members ?? []);
+    for (const sec of mine) if (![...steps.values()].some(o => o.key !== key && sectionsOf(o.members).has(sec))) return sec;
+    return null;
+  };
   const applied: string[] = [];
   const skipped: string[] = [];
   const steps = new Map(out.steps.map(s => [s.key, s]));
@@ -42,6 +54,8 @@ export function applyReview(flow: MergeFlowOutput, review: ReviewOutput): { flow
     const src = steps.get(m.step);
     const target = steps.get(resolve(m.into));
     if (!src || !target || src === target || mergedInto.has(m.step) || budget <= 0) { skipped.push(`merge ${m.step} into ${m.into}`); continue; }
+    const sec = ownsSection(src.key);
+    if (sec) { skipped.push(`merge ${m.step} into ${m.into}: it is the only step for procedure section ${sec}`); continue; }
     target.members = [...new Set([...target.members, ...src.members])];
     target.systems = [...new Set([...target.systems, ...src.systems])];
     if (!target.roles.length) target.roles = [...src.roles];
@@ -55,6 +69,8 @@ export function applyReview(flow: MergeFlowOutput, review: ReviewOutput): { flow
   for (const r of review.removals ?? []) {
     const s = steps.get(r.step);
     if (!s || budget <= 0) { skipped.push(`remove ${r.step}`); continue; }
+    const sec = ownsSection(s.key);
+    if (sec) { skipped.push(`remove ${r.step}: it is the only step for procedure section ${sec}`); continue; }
     const ins = out.flows.filter(f => f.to === s.key);
     const outs = out.flows.filter(f => f.from === s.key);
     out.flows = out.flows.filter(f => f.to !== s.key && f.from !== s.key);
