@@ -23,7 +23,7 @@ async function signInAndCreateProcess(page: Page) {
   await page.getByLabel('First workspace').fill('Finance Operations');
   await page.getByRole('button', { name: 'Create organization' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Processes' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Processes', exact: true })).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/01-processes-empty.png`, fullPage: true });
   await page.getByLabel('Process name').fill('Vendor invoice processing');
   await page.getByRole('button', { name: 'Add process' }).click();
