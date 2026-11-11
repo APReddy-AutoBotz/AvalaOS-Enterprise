@@ -10,7 +10,7 @@
 //
 // Deployed with verify_jwt = false: 'create' checks the user's session; stages check the run token.
 
-import { buildListingRequest, buildOpenAIRequest, isRetryableStatus, parseOpenAIResponse, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
+import { buildImageRequest, buildListingRequest, buildOpenAIRequest, isRetryableStatus, parseOpenAIResponse, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
 import { toGatewaySegments, type IngestSegment } from '../../../domain/ingest/segment.ts';
 import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, parseVtt } from '../../../domain/ingest/parsers/text.ts';
 import { parseDocx } from '../../../domain/ingest/parsers/docx.ts';
@@ -19,6 +19,9 @@ import { mergeFacts, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from '../
 import { reviewListing } from '../../../domain/extract/review.ts';
 import { finish } from '../../../domain/extract/pipeline.ts';
 import { score } from '../../../eval/scorer.ts';
+import { parseDrawio } from '../../../domain/flowchart/drawio.ts';
+import { graphToSegments } from '../../../domain/flowchart/graph.ts';
+import { readFlowchart, readingToGraph } from '../../../domain/flowchart/vision.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const SUPABASE_URL = env('SUPABASE_URL');
@@ -60,11 +63,14 @@ const randomToken = () => [...crypto.getRandomValues(new Uint8Array(24))].map(b 
 // ---- AI calls -------------------------------------------------------------------------------
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+// The 150 s limit counts from when the worker started, and one worker can serve several stages.
+const WORKER_STARTED = Date.now();
+const callBudgetMs = () => Math.max(5_000, Math.min(115_000, WORKER_STARTED + 135_000 - Date.now()));
 async function callOpenAI(body: Record<string, unknown>) {
   for (let attempt = 1; ; attempt++) {
     const ctl = new AbortController();
-    // Edge functions are stopped at 150 s; stop the call first so the run can be marked failed.
-    const timer = setTimeout(() => ctl.abort(), 115_000);
+    // Edge functions are stopped at 150 s; stop the call first so the stage can retry or fail cleanly.
+    const timer = setTimeout(() => ctl.abort(), callBudgetMs());
     try {
       const res = await fetch('https://api.openai.com/v1/responses', {
         method: 'POST', signal: ctl.signal, body: JSON.stringify(body),
@@ -86,8 +92,10 @@ async function callOpenAI(body: Record<string, unknown>) {
   }
 }
 
-async function runTask(task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string }) {
-  const body = 'segments' in input ? buildOpenAIRequest(task, input.segments, MODEL) : buildListingRequest(task, input.listing, MODEL);
+async function runTask(task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string } | { image: string }) {
+  const body = 'segments' in input ? buildOpenAIRequest(task, input.segments, MODEL)
+    : 'image' in input ? buildImageRequest(task, input.image, MODEL)
+      : buildListingRequest(task, input.listing, MODEL);
   if (/^(gpt-5|o\d)/.test(MODEL)) body.reasoning = { effort: task.reasoningEffort ?? EFFORT };
   const parsed = await callOpenAI(body);
   if (!parsed.ok) throw new Error(`${task.id}: ${parsed.code} ${parsed.message}`);
@@ -96,7 +104,7 @@ async function runTask(task: TaskDefinition, input: { segments: ReturnType<typeo
 
 // ---- runs -----------------------------------------------------------------------------------
 
-interface SourceInput { sourceId: string; title: string; kind: string; segments: IngestSegment[] }
+interface SourceInput { sourceId: string; title: string; kind: string; segments: IngestSegment[]; inferred?: boolean }
 interface Run {
   id: string; kind: 'process' | 'eval'; status: string; token_hash: string; source_ids: string[];
   input: { processName?: string; sources?: SourceInput[] }; case_id: string | null; ref: string | null;
@@ -157,22 +165,42 @@ async function startPasses(run: Run, token: string, sourceIds: string[]) {
 
 // ---- eval cases -----------------------------------------------------------------------------
 
-const CASES: Record<string, { processName: string; sources: { sourceId: string; file: string; title: string; kind: string }[] }> = {
-  'ap-invoice': {
-    processName: 'Vendor invoice processing',
-    sources: [
+interface EvalCase { dir?: string; processName: string; sources: { sourceId: string; file: string; title: string; kind: string }[] }
+const AP_CALLS_AND_SOP = [
       { sourceId: 'call-1', file: 'sources/01-discovery-call-2026-10-06.vtt', title: 'Discovery call, 6 October 2026', kind: 'meeting transcript' },
       { sourceId: 'call-2', file: 'sources/02-exceptions-deep-dive-2026-10-09.srt', title: 'Exceptions deep dive, 9 October 2026', kind: 'meeting transcript' },
       { sourceId: 'call-3', file: 'sources/03-sap-integration-call-2026-10-14.txt', title: 'SAP and integration review, 14 October 2026', kind: 'meeting transcript' },
       { sourceId: 'sop', file: 'sources/04-SOP-FIN-AP-004-vendor-invoice-processing.docx', title: 'SOP FIN-AP-004 Vendor invoice processing', kind: 'standard operating procedure' },
-    ],
+];
+const CASES: Record<string, EvalCase> = {
+  'ap-invoice': {
+    processName: 'Vendor invoice processing',
+    sources: [...AP_CALLS_AND_SOP, { sourceId: 'flow', file: 'sources/05-AP-Invoice-AsIs.drawio', title: 'As-Is flowchart (Appendix A)', kind: 'flowchart' }],
+  },
+  // The same case with the flowchart as an image instead of a draw.io file.
+  'ap-invoice-image': {
+    dir: 'ap-invoice',
+    processName: 'Vendor invoice processing',
+    sources: [...AP_CALLS_AND_SOP, { sourceId: 'flow', file: 'sources/06-AP-Invoice-AsIs.png', title: 'As-Is flowchart (Appendix A), image', kind: 'flowchart image' }],
+  },
+  'ap-invoice-no-flow': {
+    dir: 'ap-invoice',
+    processName: 'Vendor invoice processing',
+    sources: AP_CALLS_AND_SOP,
   },
 };
-const corpusUrl = (run: Run, file: string) => `${REPO_RAW}/${run.ref}/eval/corpus/${run.case_id}/${file}`;
+const corpusUrl = (run: Run, file: string) => `${REPO_RAW}/${run.ref}/eval/corpus/${CASES[run.case_id ?? '']?.dir ?? run.case_id}/${file}`;
 
-/** The eval corpus has transcripts and a Word SOP; the browser parses everything else before 'create'. */
+/** The eval corpus formats; for 'create' the browser parses the files (and reads images through journey-ai). */
 async function parseCorpusFile(file: string, bytes: Uint8Array, sourceId: string): Promise<IngestSegment[]> {
   if (file.endsWith('.docx')) return parseDocx(bytes, sourceId);
+  if (file.endsWith('.drawio')) return graphToSegments(await parseDrawio(new TextDecoder().decode(bytes)), sourceId);
+  if (file.endsWith('.png')) {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    const r = await runTask(readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` });
+    return graphToSegments(readingToGraph(r.data), sourceId);
+  }
   const text = new TextDecoder().decode(bytes);
   if (file.endsWith('.vtt')) return parseVtt(text, sourceId);
   if (file.endsWith('.srt')) return parseSrt(text, sourceId);
@@ -188,7 +216,7 @@ async function loadEvalInput(run: Run) {
     if (!res.ok) throw new Error(`could not fetch ${s.file} (${res.status})`);
     const segments = await parseCorpusFile(s.file, new Uint8Array(await res.arrayBuffer()), s.sourceId);
     if (!segments.length) throw new Error(`${s.file}: no text`);
-    sources.push({ sourceId: s.sourceId, title: s.title, kind: s.kind, segments });
+    sources.push({ sourceId: s.sourceId, title: s.title, kind: s.kind, segments, ...(s.file.endsWith('.png') ? { inferred: true } : {}) });
   }
   return { processName: c.processName, sources };
 }
@@ -295,7 +323,7 @@ async function createRun(req: Request, body: any): Promise<Response> {
   const token = randomToken();
   const [row] = await rest('extraction_runs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
     kind: 'process', workspace_id: workspaceId, process_id: processId, created_by: user.id, token_hash: await sha256hex(token),
-    input: { processName: String(processName ?? ''), sources: sources.map((s: any) => ({ sourceId: s.sourceId, title: String(s.title ?? s.sourceId), kind: String(s.kind ?? ''), segments: s.segments })) },
+    input: { processName: String(processName ?? ''), sources: sources.map((s: any) => ({ sourceId: s.sourceId, title: String(s.title ?? s.sourceId), kind: String(s.kind ?? ''), segments: s.segments, ...(s.inferred === true ? { inferred: true } : {}) })) },
   }) });
   await trigger({ action: 'start', runId: row.id, token });
   return reply(202, { ok: true, runId: row.id });

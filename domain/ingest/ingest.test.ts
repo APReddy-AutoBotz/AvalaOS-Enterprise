@@ -142,7 +142,7 @@ test('unsupported, empty, damaged and binary files return a clear state instead 
   assert.equal((await parse('old.doc', new Uint8Array([0xd0, 0xcf, 0x11, 0xe0, 1, 2, 3]))).status, 'unsupported');
   assert.equal((await parse('empty.txt', new Uint8Array())).status, 'empty');
   assert.equal((await parse('blank.txt', new TextEncoder().encode('   \n\n  '))).status, 'empty');
-  assert.equal((await parse('flow.png', corpus('06-AP-Invoice-AsIs.png'))).status, 'unsupported');
+  assert.equal((await parse('flow.png', corpus('06-AP-Invoice-AsIs.png'))).status, 'needs_vision');
   assert.equal((await parse('x.bin', new Uint8Array([65, 0, 66, 0]))).status, 'unsupported');
   const broken = fixture('numbered-sop.docx').slice(0, 900);
   const r = await parse('broken.docx', broken);

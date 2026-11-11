@@ -276,8 +276,21 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
     addQuestion(g.target, g.label, g.kind === 'step_without_role' ? 'Assessment and documents need an owner for each step.' : g.kind === 'step_without_system' ? 'The automation design depends on the systems used.' : 'The assessment depends on it.');
   }
   model.openQuestions = questions;
+  downgradeInferred(model, new Set(set.sources.filter(s => s.inferred).map(s => s.sourceId)));
 
   const v = validateModel(model);
   if (!v.valid) throw new Error(`Assembled model is invalid: ${errorsOf(v).slice(0, 5).map(e => `${e.path} ${e.message}`).join('; ')}`);
   return { model, report: { dropped, questionsFromGaps: questions.length - before } };
+}
+
+/** An element supported only by sources read from images is "inferred", not "stated". */
+export function downgradeInferred(model: ProcessModel, inferredSources: Set<string>): void {
+  if (!inferredSources.size) return;
+  const lists: { status: string; sources: SourceRef[] }[][] = [model.roles, model.systems, model.events, model.steps, model.gateways, model.rules, model.exceptions, model.dataObjects, model.painPoints, model.controls, model.risks, model.meta.metrics, model.meta.scopeIn, model.meta.scopeOut];
+  for (const s of model.systems) lists.push(s.access);
+  for (const list of lists) {
+    for (const el of list) {
+      if ((el.status === 'stated' || el.status === 'confirmed') && el.sources.length && el.sources.every(r => inferredSources.has(r.sourceId))) el.status = 'inferred';
+    }
+  }
 }
