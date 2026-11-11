@@ -42,7 +42,7 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 | `services/assessV2/` | Data shapes and interaction-readiness rules that the Process Model reuses |
 | `services/scoringEngine.ts` | Legacy V1 scoring. Do not extend it |
 | `supabase/migrations/` | The live schema, applied to the AvalaOS Enterprise Supabase project. Access is by workspace membership (`admin`, `editor`, `viewer`, plus `can_approve`) |
-| `supabase/tests/baseline_rules.sql` | Behaviour checks for the schema. Run it against the database after any migration; it rolls back |
+| `supabase/tests/*.sql` | Behaviour checks for the schema (`baseline_rules.sql`) and model persistence (`model_persistence.sql`). Run the ones your migration touches against the database; each rolls back |
 | `supabase/functions/journey-ai/` | The AI gateway edge function (deployed, `verify_jwt = false`, authenticates the caller itself) |
 | `supabase/functions/` (others), `supabase/legacy/` | Inherited edge functions and the inherited 256-table schema. Reference only, not deployed |
 | `domain/` | New pure domain code. `domain/processModel/types.ts` is the Process Model |
@@ -68,17 +68,18 @@ npm run dev              # local dev server on port 3000
 ## Tests
 
 - Test what the change can break, not everything every time.
-- New code gets fast `node:test` tests beside it (`*.test.ts`), run by `npm run test:new`. Database rules are checked by `supabase/tests/baseline_rules.sql`.
+- New code gets fast `node:test` tests beside it (`*.test.ts`), run by `npm run test:new`. Database rules are checked by the SQL files in `supabase/tests/`.
 - The inherited unit tests (`npm run test:unit`) run in CI only when inherited code, its runners or the dependencies change. Do not add to them.
 - When inherited code is retired, delete its tests in the same pull request.
 
 ## Progress
 
-- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`).
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs.
 - Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
 - AI calls go only through `journey-ai`. Add a task to `domain/ai/tasks.ts`; never send prompts from the client. Secrets: `OPENAI_API_KEY`; optional `OPENAI_MODEL` (default `gpt-5.5`), `OPENAI_REASONING_EFFORT` (default `low`), `AI_MONTHLY_TOKEN_BUDGET` (default 2,000,000 per workspace), `ALLOWED_ORIGIN`.
 - Edit a Process Model only through `domain/processModel/patch.ts`: each operation takes a valid model and returns the next model plus its JSON Patch, or throws `ModelOpError`.
-- Next: WP1.2 persistence (`model_save_patch` and friends), then WP1.3 workspace shell.
+- Save model edits only through the RPCs: `model_start_draft(process)`, `model_save_patch(revision, expected_seq, patch, origin, summary)`, `model_approve(revision, expected_seq)`, `model_history(process)`. Errors come back as HTTP 409 (stale `expected_seq` or approved revision), 403, 404 or 422. On 409, reload the draft and re-run the operation.
+- Next: WP1.3 workspace shell, WP1.4 parsers.
 
 ## Definition of done for a pull request
 
