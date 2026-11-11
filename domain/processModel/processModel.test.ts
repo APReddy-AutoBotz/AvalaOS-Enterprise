@@ -325,3 +325,14 @@ test('a tracked gap becomes a question, and answering it confirms the field', ()
   assert.equal(m.openQuestions.find(x => x.id === q.questionId)?.status, 'answered');
   assert.ok(!gaps(m).some(g => g.kind === 'step_without_role' && g.target.id === step.id));
 });
+
+test('without a start event the flow still decides the step order', () => {
+  const base = { ...gold(), events: [], steps: [], gateways: [], flows: [], exceptions: [], openQuestions: [], conflicts: [], painPoints: [], controls: [], risks: [] } as ProcessModel;
+  base.meta = { ...base.meta, metrics: base.meta.metrics.map(x => { const { appliesTo: _a, ...rest } = x; return rest as typeof x; }) };
+  let m = addStep(base, { step: { name: 'A', taskType: 'manual' } }).model;
+  const a = m.steps[0].id;
+  m = addStep(m, { step: { name: 'B', taskType: 'manual' }, after: a }).model;
+  assert.deepEqual(orderedSteps(m).map(s => s.name), ['A', 'B']);
+  m = moveStep(m, { stepId: m.steps[1].id, before: a }).model;
+  assert.deepEqual(orderedSteps(m).map(s => s.name), ['B', 'A']);
+});

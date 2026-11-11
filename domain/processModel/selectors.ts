@@ -27,15 +27,27 @@ export function orderedSteps(m: ProcessModel): Step[] {
   const stepById = new Map(m.steps.map(s => [s.id, s]));
   const order: Step[] = [];
   const seen = new Set<string>();
-  const queue = m.events.filter(e => e.kind === 'start').map(e => e.id);
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const step = stepById.get(id);
-    if (step) order.push(step);
-    const next = outgoing(m, id).sort((a, b) => Number(!!a.isException) - Number(!!b.isException));
-    queue.push(...next.map(f => f.to));
+  const walk = (roots: string[]) => {
+    const queue = [...roots];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const step = stepById.get(id);
+      if (step) order.push(step);
+      const next = outgoing(m, id).sort((a, b) => Number(!!a.isException) - Number(!!b.isException));
+      queue.push(...next.map(f => f.to));
+    }
+  };
+  walk(m.events.filter(e => e.kind === 'start').map(e => e.id));
+  // Steps the start does not reach (for example a model built by hand without events): begin
+  // at those nothing unvisited leads into, so the flow still decides the order.
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const s of m.steps) {
+      if (seen.has(s.id)) continue;
+      if (incoming(m, s.id).every(f => seen.has(f.from))) { walk([s.id]); changed = true; }
+    }
   }
   for (const s of m.steps) if (!seen.has(s.id)) order.push(s);
   return order;
