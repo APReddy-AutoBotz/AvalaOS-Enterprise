@@ -50,20 +50,6 @@ import { resolveArtifactExportPolicy } from './services/artifactExportPolicy';
 import { filterActiveDeliveryTasks, resolveDeliveryImportGuard } from './services/deliveryWorkflowPolicy';
 import { queryStudioDeliveryAssignees } from './services/productAcceptanceBridge/client';
 import { resolveGovernPresentationAccess } from './services/governPresentationAccess';
-import {
-  isApplicationPortfolioMarketingCapture,
-  isProductMarketingCapture,
-  isStudioMarketingCapture,
-  preserveMarketingCaptureSearch,
-  resolveMarketingCapture,
-} from './services/marketingCapturePolicy';
-import {
-  MARKETING_CAPTURE_HANDOFFS,
-  MARKETING_CAPTURE_MONITOR_SIGNAL,
-  MARKETING_CAPTURE_PROCESSES,
-  MARKETING_CAPTURE_PROJECTS,
-  MARKETING_CAPTURE_TASKS,
-} from './data/marketingProductCapture';
 
 const MyWorkView = React.lazy(() => import('./components/delivery/MyWorkView'));
 const ProjectView = React.lazy(() => import('./components/delivery/ProjectView'));
@@ -214,17 +200,6 @@ function App() {
       workspaceId: tenantContext.workspaceId, authorizationVersion: tenantContext.authorizationVersion }, projectId)).items;
   }, [canAssignDeliveryTasks, dataAccess, sessionState, tenantContext]);
   const previousNavigationAuthorityKey = useRef(navigationAuthorityKey);
-  const marketingCapture = useMemo(() => resolveMarketingCapture(
-    typeof window === 'undefined' ? '' : window.location.search,
-    {
-      development: import.meta.env.DEV,
-      test: import.meta.env.MODE === 'test',
-      dedicatedCaptureBuild: import.meta.env.VITE_AVALA_MARKETING_CAPTURE === 'true',
-    },
-  ), []);
-  const productMarketingCapture = isProductMarketingCapture(marketingCapture);
-  const studioMarketingCapture = isStudioMarketingCapture(marketingCapture);
-  const applicationPortfolioMarketingCapture = isApplicationPortfolioMarketingCapture(marketingCapture);
 
   useEffect(() => { clearLegacyBrowserProviderKey(); }, []);
 
@@ -332,12 +307,11 @@ function App() {
 
   const writeProductNavigationSearch = useCallback((nextSearch: string, mode: ProductNavigationWrite = 'replace') => {
     if (typeof window === 'undefined') return;
-    const protectedSearch = preserveMarketingCaptureSearch(nextSearch, marketingCapture);
-    const nextUrl = `${window.location.pathname}${protectedSearch}${window.location.hash}`;
+    const nextUrl = `${window.location.pathname}${nextSearch}${window.location.hash}`;
     if (nextUrl !== `${window.location.pathname}${window.location.search}${window.location.hash}`) {
       window.history[mode === 'push' ? 'pushState' : 'replaceState'](null, '', nextUrl);
     }
-  }, [marketingCapture]);
+  }, []);
 
   useEffect(() => {
     if (aiProviderType === 'openai') {
@@ -1249,10 +1223,9 @@ function App() {
         return <div className="mx-auto max-w-3xl p-8"><div className="premium-surface rounded-3xl p-8 text-center"><p className="av-eyebrow">Governance overview unavailable</p><h1 className="mt-2 text-2xl font-bold text-[var(--av-color-text)]">Open an authorized source context to review governance signals.</h1><p className="mx-auto mt-3 max-w-xl text-sm font-semibold leading-6 text-[var(--av-color-text-muted)]">This read-only overview requires the current Assess read authority and never creates review or approval authority.</p><button type="button" onClick={() => { setGovernViewOpen(false); applyGuardedView(fallbackAccess.fallbackView, fallbackAccess.fallbackScope ?? currentScope); }} className="btn-primary mt-6 inline-flex min-h-10 items-center justify-center px-4 text-sm font-bold">Open available workspace</button></div></div>;
       }
       return <GovernView
-        processes={productMarketingCapture ? MARKETING_CAPTURE_PROCESSES : processes}
-        handoffEntries={productMarketingCapture ? MARKETING_CAPTURE_HANDOFFS : handoffEntries}
+        processes={processes}
+        handoffEntries={handoffEntries}
         onNavigate={handleViewChange}
-        captureMode={productMarketingCapture}
       />;
     }
 
@@ -1286,7 +1259,6 @@ function App() {
         onBack={() => applyGuardedView(View.PROCESS_CATALOG)}
         onStartAssessment={(id) => { setSelectedProcessId(id); applyGuardedView(View.GUIDED_ASSESSMENT); }}
         onGenerateDocs={handleAssessToDocsHandoff}
-        captureMode={applicationPortfolioMarketingCapture}
       />;
     }
 
@@ -1302,8 +1274,6 @@ function App() {
       return <ProcessCatalogView
         onViewDetail={(id) => { setSelectedProcessId(id); applyGuardedView(View.PROCESS_DETAIL); }}
         createProcessDecision={resolveProductActionDecision('process.create')}
-        presentationProcesses={productMarketingCapture ? MARKETING_CAPTURE_PROCESSES : undefined}
-        captureMode={productMarketingCapture}
       />;
     }
     if (currentView === View.TEMPLATE_LIBRARY) {
@@ -1337,21 +1307,19 @@ function App() {
         return <CustomDashboardView currentUser={currentUser} tasks={activeTasksForScope} projects={projectsForScope} sprints={sprintsForScope} handoffEntries={handoffEntries} onSelectTask={setSelectedTask} onStatClick={handleDashboardStatClick} />;
       case View.PORTFOLIO:
         return <PortfolioView
-          projects={productMarketingCapture ? MARKETING_CAPTURE_PROJECTS : projects}
-          tasks={productMarketingCapture ? MARKETING_CAPTURE_TASKS : activeTasks}
+          projects={projects}
+          tasks={activeTasks}
           users={users}
           onUpdateProjectStage={handleUpdateProjectLifecycleStage}
           onScopeChange={handleScopeChange}
           onViewChange={handleViewChange}
-          captureMode={productMarketingCapture}
-          outcomeSignal={productMarketingCapture ? MARKETING_CAPTURE_MONITOR_SIGNAL : undefined}
-          authoritativeDeliveryOutcomes={!productMarketingCapture && dataAccess === 'server'
+          authoritativeDeliveryOutcomes={dataAccess === 'server'
             && tenantContext && currentScope.type === ScopeType.PROJECT ? {
               scope: { actorId: tenantContext.userId, organizationId: tenantContext.organizationId,
                 workspaceId: tenantContext.workspaceId, authorizationVersion: tenantContext.authorizationVersion },
               projectId: currentScope.id,
             } : undefined}
-          canonicalMonitorContext={!productMarketingCapture && currentOrganization?.id && currentWorkspace?.id ? {
+          canonicalMonitorContext={currentOrganization?.id && currentWorkspace?.id ? {
             actorId: currentUser.id,
             organizationId: currentOrganization.id,
             workspaceId: currentWorkspace.id,
@@ -1545,7 +1513,7 @@ function App() {
           setActiveGenerationId(id);
           setTempArtifacts(null);
           applyGuardedView(View.WORKSPACE);
-        }} captureMode={studioMarketingCapture} />;
+        }} />;
       default:
         if (currentScope.type === ScopeType.MY_WORK) {
           return <MyWorkView view={currentView} allTasks={tasksForScope} allProjects={projectsForScope} allEpics={epicsForScope} currentUser={currentUser} onUpdateTaskStatus={handleUpdateTaskStatus} onSelectTask={setSelectedTask} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} quickFilter={quickFilter} setQuickFilter={setQuickFilter} onUpdateTask={handleUpdateTask} />;
@@ -1670,7 +1638,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans" data-marketing-capture={productMarketingCapture ? 'product' : undefined}>
+    <div className="app-shell flex h-screen text-text-light dark:text-text-dark font-sans">
       <a href="#app-main" className="av-skip-link">Skip to main content</a>
       <Sidebar
         currentScope={currentScope}

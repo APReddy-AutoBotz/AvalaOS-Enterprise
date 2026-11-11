@@ -15,7 +15,6 @@
   "view-access-guard": "node scripts/runTypeScriptTest.mjs types.ts constants/moduleConfig.ts services/viewAccessGuard.ts services/viewAccessGuard.test.ts",
   "govern-presentation-access": "node scripts/runTypeScriptTest.mjs types.ts services/governPresentationAccess.ts services/governPresentationAccess.test.ts && node scripts/runTypeScriptTest.mjs types.ts components/govern/GovernView.test.ts",
   "context-request-gate": "node scripts/runTypeScriptTest.mjs types.ts services/contextRequestGate.ts services/contextRequestGate.test.ts && node scripts/runTypeScriptTest.mjs types.ts services/clientContextSafety.test.ts",
-  "marketing-capture-policy": "node scripts/runTypeScriptTest.mjs types.ts services/marketingCapturePolicy.ts services/marketingCapturePolicy.test.ts",
   "view-state-persistence": "node scripts/runTypeScriptTest.mjs types.ts constants/moduleConfig.ts services/viewAccessGuard.ts services/viewStatePersistence.ts services/productNavigationState.ts services/viewStatePersistence.test.ts",
   "module-journey-lifecycle": "node scripts/runTypeScriptTest.mjs types.ts constants/moduleConfig.ts components/shared/moduleJourneyModel.ts components/shared/moduleJourneyModel.test.ts components/shared/Sidebar.test.ts",
   "decision-pack-rendering": "node scripts/runTypeScriptTest.mjs types.ts components/assess/decisionPackRenderModel.ts components/assess/decisionPackRenderModel.test.ts",
