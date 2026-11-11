@@ -93,6 +93,18 @@ jobs:
       - name: Browser tests
         run: npm run test:e2e
 
+      # The agent's workspace cannot download artifacts, so on its branches the screenshots are
+      # also printed to the log (base64 JPEG) for visual review.
+      - name: Print screenshots for review
+        if: always() && startsWith(github.head_ref, 'claude/')
+        run: |
+          for f in test-results/screens/*.jpg; do
+            [ -f "$f" ] || continue
+            echo "BEGIN_SCREEN $(basename "$f")"
+            base64 -w0 "$f"; echo
+            echo "END_SCREEN"
+          done
+
       - name: Keep screenshots and the report
         if: always()
         uses: actions/upload-artifact@v4
