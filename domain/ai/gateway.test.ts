@@ -17,7 +17,7 @@ test('validateRequest accepts a valid run and a health check', () => {
 });
 
 test('validateRequest rejects bad input with specific codes', () => {
-  const code = (b: unknown) => { const r = validateRequest(b, TASKS); return r.ok ? 'OK' : r.code; };
+  const code = (b: unknown) => { const r = validateRequest(b, TASKS); return 'code' in r ? r.code : 'OK'; };
   assert.equal(code(null), 'INVALID_REQUEST');
   assert.equal(code({ workspaceId: 'nope' }), 'INVALID_REQUEST');
   assert.equal(code({ workspaceId: WS, task: 'write_me_a_poem', segments: [seg('a', 'x')] }), 'UNKNOWN_TASK');
@@ -51,7 +51,7 @@ test('parseOpenAIResponse handles success, truncation, refusal, bad JSON and err
   const msg = (content: unknown[]) => ({ status: 'completed', output: [{ type: 'message', content }], usage: { input_tokens: 10, output_tokens: 5 } });
   const ok = parseOpenAIResponse(msg([{ type: 'output_text', text: '{"roles":[]}' }]));
   assert.deepEqual(ok, { ok: true, data: { roles: [] }, usage: { input: 10, output: 5 } });
-  const code = (j: unknown) => { const r = parseOpenAIResponse(j); return r.ok ? 'OK' : r.code; };
+  const code = (j: unknown) => { const r = parseOpenAIResponse(j); return 'code' in r ? r.code : 'OK'; };
   assert.equal(code({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } }), 'TRUNCATED');
   assert.equal(code(msg([{ type: 'refusal', refusal: 'no' }])), 'REFUSED');
   assert.equal(code(msg([{ type: 'output_text', text: '{not json' }])), 'INVALID_OUTPUT');
