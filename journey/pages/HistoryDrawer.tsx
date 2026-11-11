@@ -44,7 +44,7 @@ export function HistoryDrawer({ store, processId, onClose }: { store: JourneySto
                       <span className="text-xs font-medium text-slate-600">{STATE_LABEL[r.state]}</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">Started {when(r.createdAt)}{r.approvedAt ? ` · approved ${when(r.approvedAt)}` : ''}</p>
-                    <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5 text-xs text-slate-600">
+                    <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-slate-600">
                       <dt>Edits saved</dt><dd>{r.seq}</dd>
                       <dt>Content hash</dt><dd className="font-mono">{r.modelHash ? r.modelHash.slice(0, 16) : '—'}</dd>
                       <dt>Record id</dt><dd className="truncate font-mono">{r.id}</dd>
@@ -69,7 +69,7 @@ export function HistoryDrawer({ store, processId, onClose }: { store: JourneySto
           )}
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Versions</h3>
-            <dl className="mt-2 grid grid-cols-[auto,1fr] gap-x-3 gap-y-0.5 text-xs text-slate-600">
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-slate-600">
               <dt>Process model schema version</dt><dd>{PROCESS_MODEL_SCHEMA_VERSION}</dd>
             </dl>
           </section>
