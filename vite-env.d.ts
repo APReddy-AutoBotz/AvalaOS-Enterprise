@@ -6,7 +6,6 @@ interface ImportMetaEnv {
     readonly VITE_AVALA_RUNTIME_MODE?: string
     readonly VITE_AVALA_AUTOMATED_TEST_CONTEXT?: string
     readonly VITE_AVALA_HOSTED_SANDBOX_ENABLED?: string
-    readonly VITE_AVALA_MARKETING_CAPTURE?: string
     readonly VITE_AI_EDGE_FUNCTIONS_ENABLED?: string
     readonly VITE_SUPABASE_URL?: string
     readonly VITE_SUPABASE_ANON_KEY?: string

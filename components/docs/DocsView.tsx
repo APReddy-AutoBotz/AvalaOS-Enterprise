@@ -4,8 +4,6 @@ import { DocumentTextIcon, PlusCircleIcon, SparklesIcon } from '../shared/icons'
 import { useAuth } from '../auth/AuthProvider';
 import { useOrganizationContext } from '../auth/OrganizationProvider';
 import StudioArtifactWorkspace from './StudioArtifactWorkspace';
-import { createMarketingStudioCaptureContext, createMarketingStudioCaptureTransport } from '../../data/marketingStudioCapture';
-import type { StudioArtifactTransport } from '../../services/studioArtifacts/client';
 import { getRuntimeDataAccess } from '../../services/supabaseClient';
 
 interface DocsViewProps {
@@ -13,7 +11,6 @@ interface DocsViewProps {
     templates: DocTemplate[];
     onViewGeneration: (generationId: string) => void;
     onCreateEpic?: (generation: DocumentGeneration) => void;
-    captureMode?: boolean;
 }
 
 const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTemplate): string => {
@@ -27,11 +24,10 @@ const getPrimaryDocTitle = (generation: DocumentGeneration, template?: DocTempla
     return `Document Set (${template.title})`;
 };
 
-const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic, captureMode = false }) => {
+const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGeneration, onCreateEpic }) => {
 
     const { tenantContext, currentOrganization, currentWorkspace } = useOrganizationContext();
     const { user } = useAuth();
-    const marketingStudioCapture = captureMode;
     const serverAuthorityAvailable = useMemo(() => {
         try { return getRuntimeDataAccess() === 'server'; } catch { return false; }
     }, []);
@@ -50,25 +46,18 @@ const DocsView: React.FC<DocsViewProps> = ({ generations, templates, onViewGener
         };
     }, [currentOrganization, currentWorkspace, tenantContext, user?.id]);
 
-    const studioTransport = useMemo<StudioArtifactTransport | undefined>(() => {
-        if (!marketingStudioCapture || !studioContext) return undefined;
-        return createMarketingStudioCaptureTransport(createMarketingStudioCaptureContext(studioContext));
-    }, [marketingStudioCapture, studioContext?.authorizationVersion, studioContext?.organizationId, studioContext?.workspaceId]);
-
-    const studioPresentationContext = marketingStudioCapture && studioContext
-        ? createMarketingStudioCaptureContext(studioContext)
-        : studioContext;
+    const studioPresentationContext = studioContext;
     const governedStudioReadAvailable = studioPresentationContext?.capabilities.some(capability => [
         'studio.artifacts.read', 'studio.sources.read', 'studio.templates.read', 'studio.handoffs.read',
     ].includes(capability)) === true;
-    const showGovernedWorkspace = Boolean(studioPresentationContext && governedStudioReadAvailable && (serverAuthorityAvailable || studioTransport));
+    const showGovernedWorkspace = Boolean(studioPresentationContext && governedStudioReadAvailable && serverAuthorityAvailable);
 
     const sortedGenerations = [...generations].sort((a, b) => new Date(b.generatedAt).getTime() - new Date(a.generatedAt).getTime());
     const artifactCount = generations.reduce((sum, generation) => sum + Object.keys(generation.artifacts || {}).length, 0);
 
     return (
         <div data-testid="studio-application-route">
-            {showGovernedWorkspace && studioPresentationContext && <StudioArtifactWorkspace key={`${studioPresentationContext.organizationId}:${studioPresentationContext.workspaceId}:${studioPresentationContext.userId}:${studioPresentationContext.authorizationVersion}:${marketingStudioCapture ? 'capture' : 'live'}`} context={studioPresentationContext} capabilities={studioPresentationContext.capabilities} captureMode={marketingStudioCapture} transport={studioTransport} />}
+            {showGovernedWorkspace && studioPresentationContext && <StudioArtifactWorkspace key={`${studioPresentationContext.organizationId}:${studioPresentationContext.workspaceId}:${studioPresentationContext.userId}:${studioPresentationContext.authorizationVersion}`} context={studioPresentationContext} capabilities={studioPresentationContext.capabilities} />}
             {studioPresentationContext && !showGovernedWorkspace && <section className="av-surface mt-6 p-5" aria-labelledby="studio-server-boundary-title"><h2 id="studio-server-boundary-title" className="text-lg font-black text-slate-950 dark:text-white">Governed artifact workspace unavailable</h2><p className="mt-2 text-sm font-semibold text-slate-600 dark:text-slate-300">Canonical Studio artifacts require a current server-authorized read capability for this tenant workspace. No local persistence or provider fallback is offered; the unverified archive remains available below for reference.</p></section>}
             <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
