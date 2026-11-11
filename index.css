@@ -10,6 +10,7 @@
 @source "./App.tsx";
 @source "./index.tsx";
 @source "./components/**/*.{ts,tsx}";
+@source "./journey/**/*.{ts,tsx}";
 
 /* Preserve the Tailwind 3 defaults used by the existing visual system. */
 @theme {
