@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { ElementTarget, Flow, ProcessModel, Step } from './types.ts';
+import type { ElementTarget, Flow, ProcessModel, Role, Step, SystemRef } from './types.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 
 export interface OpResult {
@@ -253,4 +253,86 @@ export function resolveConflict(model: ProcessModel, args: { conflictId: string;
     c.resolution = { chosen: args.chosen, by: args.by, reason: args.reason };
     if (args.value !== undefined) setField(m, c.target, args.value);
   });
+}
+
+// ---------------------------------------------------------------- roles, systems, rules
+
+/** Adds a role a person named. It starts with no sources: it is the person's statement. */
+export function addRole(model: ProcessModel, args: { name: string; kind: Role['kind'] }): OpResult & { roleId: string } {
+  let roleId = '';
+  const name = args.name.trim();
+  if (!name) throw new ModelOpError('EMPTY', 'Name the role.');
+  if (model.roles.some(r => r.name.toLowerCase() === name.toLowerCase())) throw new ModelOpError('DUPLICATE', `There is already a role called ${name}.`);
+  const result = commit(model, m => {
+    roleId = newId(m, 'r');
+    m.roles.push({ id: roleId, name, kind: args.kind, inScope: args.kind !== 'external', status: 'user-confirmed', sources: [] });
+  });
+  return { ...result, roleId };
+}
+
+/** Adds a system a person named. Its access methods start empty: unknown until someone confirms one. */
+export function addSystem(model: ProcessModel, args: { name: string; kind: SystemRef['kind'] }): OpResult & { systemId: string } {
+  let systemId = '';
+  const name = args.name.trim();
+  if (!name) throw new ModelOpError('EMPTY', 'Name the system.');
+  if (model.systems.some(s => s.name.toLowerCase() === name.toLowerCase())) throw new ModelOpError('DUPLICATE', `There is already a system called ${name}.`);
+  const result = commit(model, m => {
+    systemId = newId(m, 'sys');
+    m.systems.push({ id: systemId, name, kind: args.kind, inScope: true, access: [], status: 'user-confirmed', sources: [] });
+  });
+  return { ...result, systemId };
+}
+
+/** Adds a business rule; both the condition and the action are required. */
+export function addRule(model: ProcessModel, args: { name: string; condition: string; action: string }): OpResult & { ruleId: string } {
+  let ruleId = '';
+  const result = commit(model, m => {
+    ruleId = newId(m, 'br');
+    m.rules.push({ id: ruleId, name: args.name.trim(), condition: args.condition.trim(), action: args.action.trim(), status: 'user-confirmed', sources: [] });
+  });
+  return { ...result, ruleId };
+}
+
+/** Removes a role, system, rule, exception or data object and every reference to it. */
+export function removeElement(model: ProcessModel, args: { kind: 'role' | 'system' | 'rule' | 'exception' | 'data'; id: string }): OpResult {
+  const { kind, id } = args;
+  const list = { role: model.roles, system: model.systems, rule: model.rules, exception: model.exceptions, data: model.dataObjects }[kind];
+  if (!list.some(x => x.id === id)) throw new ModelOpError('NOT_FOUND', `No ${kind} with id ${id}.`);
+  return commit(model, m => {
+    const drop = (ids: string[]) => ids.filter(x => x !== id);
+    if (kind === 'role') {
+      m.roles = m.roles.filter(x => x.id !== id);
+      m.steps.forEach(s => { s.roleIds = drop(s.roleIds); });
+      m.exceptions.forEach(x => { if (x.routedToRoleId === id) delete x.routedToRoleId; });
+    } else if (kind === 'system') {
+      m.systems = m.systems.filter(x => x.id !== id);
+      m.steps.forEach(s => { s.systemIds = drop(s.systemIds); });
+    } else if (kind === 'rule') {
+      m.rules = m.rules.filter(x => x.id !== id);
+      m.steps.forEach(s => { s.ruleIds = drop(s.ruleIds); });
+      m.controls.forEach(c => { c.ruleIds = drop(c.ruleIds); });
+    } else if (kind === 'exception') {
+      m.exceptions = m.exceptions.filter(x => x.id !== id);
+      m.steps.forEach(s => { s.exceptionIds = drop(s.exceptionIds); });
+    } else {
+      m.dataObjects = m.dataObjects.filter(x => x.id !== id);
+    }
+    const about = (t: ElementTarget) => t.kind === kind && t.id === id;
+    m.openQuestions = m.openQuestions.filter(q => !about(q.target));
+    m.conflicts = m.conflicts.filter(c => !about(c.target));
+  });
+}
+
+/** Records an open question about one element or field, for example a gap someone wants tracked. */
+export function addQuestion(model: ProcessModel, args: { target: ElementTarget; question: string; whyItMatters?: string; owner?: string | null }): OpResult & { questionId: string } {
+  const question = args.question.trim();
+  if (!question) throw new ModelOpError('EMPTY', 'Write the question.');
+  const same = (t: ElementTarget) => t.kind === args.target.kind && t.id === args.target.id && t.field === args.target.field;
+  if (model.openQuestions.some(q => q.status === 'open' && same(q.target) && q.question === question)) throw new ModelOpError('DUPLICATE', 'This question is already open.');
+  let questionId = '';
+  const result = commit(model, m => {
+    questionId = newId(m, 'q');
+    m.openQuestions.push({ id: questionId, target: args.target, question, whyItMatters: (args.whyItMatters ?? '').trim(), owner: args.owner ?? null, status: 'open' });
+  });
+  return { ...result, questionId };
 }

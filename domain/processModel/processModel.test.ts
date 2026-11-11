@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { ProcessModel } from './types.ts';
 import { validateModel } from './validate.ts';
 import { applyPatch, deepEqual, diff, JsonPatchError } from './jsonPatch.ts';
-import { addFlow, addStep, answerQuestion, ModelOpError, moveStep, removeFlow, removeStep, resolveConflict, updateFact, type OpResult } from './patch.ts';
+import { addFlow, addQuestion, addRole, addRule, addStep, addSystem, answerQuestion, ModelOpError, removeElement, moveStep, removeFlow, removeStep, resolveConflict, updateFact, type OpResult } from './patch.ts';
 import { changedSelections, hashModel, hashSelections, canonicalJson } from './hash.ts';
 import { gaps, incoming, orderedSteps, outgoing } from './selectors.ts';
 import { fromAssessV2 } from './fromAssessV2.ts';
@@ -285,4 +285,41 @@ test('the AP V2 fixture converts to a valid model without invented content', () 
   assert.equal(m.meta.owner.status, 'unknown');
   assert.ok(gaps(m).some(g => g.kind === 'decision_one_path'));
   assert.ok(gaps(m).some(g => g.kind === 'step_without_role'));
+});
+
+test('roles, systems and rules can be added and removed with their references', () => {
+  const m0 = gold();
+  const r = addRole(m0, { name: 'AP Supervisor', kind: 'person_role' });
+  assert.equal(r.model.roles.at(-1)?.status, 'user-confirmed');
+  rejects(() => addRole(r.model, { name: 'ap supervisor', kind: 'team' }), 'DUPLICATE');
+  rejects(() => addRole(r.model, { name: '  ', kind: 'team' }), 'EMPTY');
+  const s = addSystem(r.model, { name: 'Coupa', kind: 'portal' });
+  assert.deepEqual(s.model.systems.at(-1)?.access, []);
+  assert.ok(gaps(s.model).some(g => g.kind === 'system_access_unknown' && g.target.id === s.systemId));
+  const b = addRule(s.model, { name: 'Small invoices', condition: 'Amount below INR 1,000', action: 'Skip approval' });
+  assert.equal(b.model.rules.at(-1)?.id, b.ruleId);
+
+  const role = m0.roles.find(x => m0.steps.some(st => st.roleIds.includes(x.id)))!;
+  const gone = removeElement(m0, { kind: 'role', id: role.id }).model;
+  assert.ok(!gone.roles.some(x => x.id === role.id));
+  assert.ok(gone.steps.every(st => !st.roleIds.includes(role.id)));
+  assert.deepEqual(validateModel(gone).issues.filter(i => i.severity === 'error'), []);
+  const sys = m0.systems[0];
+  assert.ok(removeElement(m0, { kind: 'system', id: sys.id }).model.steps.every(st => !st.systemIds.includes(sys.id)));
+  rejects(() => removeElement(m0, { kind: 'rule', id: 'nope' }), 'NOT_FOUND');
+});
+
+test('a tracked gap becomes a question, and answering it confirms the field', () => {
+  let m = addStep(gold(), { step: { name: 'Check something new', taskType: 'manual' } }).model;
+  const step = m.steps.at(-1)!;
+  const gap = gaps(m).find(g => g.kind === 'step_without_role' && g.target.id === step.id)!;
+  const q = addQuestion(m, { target: gap.target, question: gap.label });
+  rejects(() => addQuestion(q.model, { target: gap.target, question: gap.label }), 'DUPLICATE');
+  const role = m.roles[0];
+  m = answerQuestion(q.model, { questionId: q.questionId, answer: role.name, value: [role.id] }).model;
+  const after = m.steps.find(s => s.id === step.id)!;
+  assert.deepEqual(after.roleIds, [role.id]);
+  assert.equal(after.status, 'user-confirmed');
+  assert.equal(m.openQuestions.find(x => x.id === q.questionId)?.status, 'answered');
+  assert.ok(!gaps(m).some(g => g.kind === 'step_without_role' && g.target.id === step.id));
 });
