@@ -174,8 +174,8 @@ test('candidate listings carry ids, sources and order but no source text beyond 
   const set = buildCandidates(SOURCES, [
     { sourceId: 'sop', facts: { ...empty, rules: [{ name: 'Price tolerance', condition: '2%', action: 'post', segmentId: 'sop:3', excerpt: 'Price tolerance' }] }, steps: { steps: [{ name: 'Log invoice', description: 'd', actors: ['AP Clerk'], systems: [], taskType: 'user', segmentId: 'sop:1', excerpt: 'Log the invoice' }], decisions: [] } },
   ], SOP);
-  assert.match(flowListing(set), /S1 \[sop #1\] Log invoice — d \| actors: AP Clerk \| systems: — \| type: user/);
-  assert.match(factsListing(set), /B1 \[sop #1\] Price tolerance: if 2% then post/);
+  assert.match(flowListing(set), /S1 \[sop §6.2\] Log invoice — d \| actors: AP Clerk \| systems: — \| type: user/);
+  assert.match(factsListing(set), /B1 \[sop §5.1\] Price tolerance: if 2% then post/);
   assert.doesNotMatch(flowListing(set) + factsListing(set), /6\.2 Log the invoice in the AP tracker/);
 });
 
