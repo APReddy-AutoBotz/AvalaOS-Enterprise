@@ -36,12 +36,6 @@ enabled = true
 enabled = true
 port = 54323
 
-[inbucket]
-enabled = true
-port = 54324
-smtp_port = 54325
-pop3_port = 54326
-
 [storage]
 enabled = true
 file_size_limit = "50MiB"
@@ -98,4 +92,11 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.legacy-delivery-query]
+verify_jwt = false
+
+# The journey functions authenticate callers themselves (user session or run token).
+[functions.journey-ai]
+verify_jwt = false
+
+[functions.journey-extract]
 verify_jwt = false
