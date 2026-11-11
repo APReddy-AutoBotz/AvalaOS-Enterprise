@@ -71,6 +71,7 @@ test('verifyExcerpts keeps grounded items and drops invented ones', () => {
   };
   const { data: kept, dropped } = verifyExcerpts(data, ['roles'], segments) as any;
   assert.deepEqual(kept.roles.map((r: any) => r.name), ['AP Clerk']);
+  assert.equal(kept.roles[0].excerpt, 'The AP Clerk checks the  “three-way match”', 'the stored quote is the source text, character for character');
   assert.deepEqual(dropped.map((d: any) => d.reason), ['excerpt_not_found', 'unknown_segment', 'missing_excerpt']);
   assert.equal(data.roles.length, 4, 'input is not mutated');
 });

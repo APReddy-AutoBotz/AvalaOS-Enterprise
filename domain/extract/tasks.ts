@@ -131,7 +131,11 @@ export const reviewFlow: TaskDefinition = {
 A good step list has one step per business activity at the level of a numbered procedure step. Check every step and return only the corrections:
 merges: a step that is part of another step's work goes into that step ("into" is the other step's key). Typical cases: a check, lookup or choice made while doing a step; saving, attaching or recording right after an action; a request that is the second half of the same action (park the invoice and request the receipt).
 removals: a step that is not an activity of this process. "kind" is "outcome" (the case ends, waits or is turned away: rejected, held, returned when nothing else is done), "outside_scope" (work done by a team outside the process, for example verifying a master data change), or "not_an_activity" (a special case of another step, a discussion, or a duplicate of the start event).
-Keep steps that the process waits on from other roles (posting a goods receipt, approving, investigating a variance, amending an order, requesting a corrected document) and automatic checks a system performs. When in doubt, keep the step. Give a short reason for each correction.`,
+Rules for corrections:
+- Merge only into a step performed by the same role. Work by one role never goes into another role's step (saving the approval evidence is the clerk's work, not part of the approver's step).
+- Never merge or remove a step that has its own number in a procedure (for example "6.12 Close the record"), or one that does real work of its own: sending a message with a template, updating a record to close the case, raising a request in another system.
+- Keep steps that the process waits on from other roles (posting a goods receipt, approving, investigating a variance, amending an order, requesting a corrected document) and automatic checks a system performs.
+- When in doubt, keep the step. Give a short reason for each correction.`,
   schema: obj({
     merges: list({ step: str, into: str, reason: str }),
     removals: list({ step: str, kind: { type: 'string', enum: ['outcome', 'outside_scope', 'not_an_activity'] }, reason: str }),
