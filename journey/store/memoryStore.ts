@@ -4,6 +4,8 @@
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { PROCESS_MODEL_SCHEMA_VERSION } from '../../domain/processModel/types.ts';
 import { hashModel } from '../../domain/processModel/hash.ts';
+import { applyPatch } from '../../domain/processModel/jsonPatch.ts';
+import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
 import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type Workspace } from './types.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
@@ -112,6 +114,27 @@ export function createMemoryStore(): JourneyStore {
       p.updatedAt = now();
       save();
       return { revisionId: rev.id, revNo, seq: 0, model, modelHash: rev.modelHash };
+    },
+    async savePatch(revisionId, expectedSeq, patch, origin, summary) {
+      requireMe();
+      const rev = state.revisions.find(r => r.id === revisionId);
+      if (!rev) throw new StoreError(404, 'Revision not found.');
+      const { p, w } = workspaceOf(rev.processId);
+      if (w.role === 'viewer') throw new StoreError(403, 'Editing needs the editor or admin role.');
+      if (rev.state !== 'working') throw new StoreError(409, 'This revision is approved and cannot change.');
+      if (rev.seq !== expectedSeq) throw new StoreError(409, 'The draft changed since you opened it. Reload and try again.');
+      if (!patch.length) throw new StoreError(422, 'The edit is empty.');
+      let next: ProcessModel;
+      try { next = applyPatch(rev.model, patch); } catch (e) { throw new StoreError(422, (e as Error).message); }
+      const v = validateModel(next);
+      if (!v.valid) throw new StoreError(422, errorsOf(v)[0].message);
+      rev.model = next;
+      rev.seq += 1;
+      rev.modelHash = hashModel(next);
+      state.edits.push({ processId: rev.processId, revisionId, seq: rev.seq, origin, summary, createdAt: now(), operations: patch.length });
+      p.updatedAt = now();
+      save();
+      return { seq: rev.seq };
     },
     async approve(revisionId, expectedSeq) {
       requireMe();

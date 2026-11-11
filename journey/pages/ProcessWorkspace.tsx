@@ -2,12 +2,14 @@
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
-import { gaps } from '../../domain/processModel/selectors.ts';
+import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { HistoryDrawer } from './HistoryDrawer.tsx';
+import { useModelEditor } from '../process/useModelEditor.ts';
+import { ProcessEditor } from '../process/ProcessEditor.tsx';
 
 const TONE = {
   neutral: 'border-slate-300 bg-slate-100 text-slate-700',
@@ -29,6 +31,8 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [me, setMe] = React.useState('');
+  React.useEffect(() => { store.currentUser().then(u => setMe(u?.email ?? '')).catch(() => {}); }, [store]);
 
   const load = React.useCallback(async () => {
     try {
@@ -103,10 +107,24 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
 
       <ErrorNote message={error} />
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
-        <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />
+        {stage === 'process' && model
+          ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
+          : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
       </section>
 
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
+    </div>
+  );
+}
+
+function ProcessStage({ store, processId, model, working, canEdit, me, onSaved }: {
+  store: JourneyStore; processId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
+}) {
+  const editor = useModelEditor(store, processId, { model, working }, onSaved);
+  return (
+    <div className="space-y-6">
+      <ModelSummary model={editor.model} />
+      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={id => id} />
     </div>
   );
 }
@@ -142,7 +160,7 @@ function StagePanel({ stage, model, canEdit, busy, onStart, onGo }: { stage: Sta
 }
 
 function ModelSummary({ model }: { model: ProcessModel }) {
-  const open = gaps(model).length + model.openQuestions.filter(q => q.status === 'open').length;
+  const open = openItemCount(model);
   const tiles: [string, number][] = [
     ['Steps', model.steps.length],
     ['Roles', model.roles.length],
@@ -161,9 +179,6 @@ function ModelSummary({ model }: { model: ProcessModel }) {
           </div>
         ))}
       </dl>
-      {model.steps.length === 0 && (
-        <EmptyState title="No steps yet">Add sources to extract the steps, or add them yourself once editing is available here.</EmptyState>
-      )}
     </div>
   );
 }

@@ -98,6 +98,11 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const d = data as any;
       return { revisionId: d.revisionId, revNo: d.revNo, seq: Number(d.seq), model: d.model, modelHash: d.modelHash ?? null };
     },
+    async savePatch(revisionId, expectedSeq, patch, origin, summary) {
+      const { data, error } = await db.rpc('model_save_patch', { target_revision: revisionId, expected_seq: expectedSeq, patch, origin, summary });
+      if (error) fail(error);
+      return { seq: Number((data as any).seq) };
+    },
     async approve(revisionId, expectedSeq) {
       const { error } = await db.rpc('model_approve', { target_revision: revisionId, expected_seq: expectedSeq });
       if (error) fail(error);

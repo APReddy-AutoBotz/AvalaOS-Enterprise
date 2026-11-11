@@ -1,6 +1,7 @@
 // Everything the journey screens read and write goes through this interface. The Supabase store is
 // the real one; the memory store backs browser tests and local runs without a backend.
 import type { ProcessModel } from '../../domain/processModel/types.ts';
+import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 
 export interface Me { id: string; email: string }
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean }
@@ -47,6 +48,8 @@ export interface JourneyStore {
   /** The model of one revision. */
   getModel(revisionId: string): Promise<ProcessModel | null>;
   startDraft(processId: string): Promise<Draft>;
+  /** Saves one edit to the working draft. 409 when the draft moved on or was approved: reload and redo. */
+  savePatch(revisionId: string, expectedSeq: number, patch: JsonPatchOp[], origin: 'user' | 'extraction' | 'diagram' | 'import', summary: string): Promise<{ seq: number }>;
   approve(revisionId: string, expectedSeq: number): Promise<void>;
   history(processId: string): Promise<{ revisions: RevisionRow[]; edits: EditRow[] }>;
 }

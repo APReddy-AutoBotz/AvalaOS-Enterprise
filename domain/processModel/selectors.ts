@@ -27,15 +27,27 @@ export function orderedSteps(m: ProcessModel): Step[] {
   const stepById = new Map(m.steps.map(s => [s.id, s]));
   const order: Step[] = [];
   const seen = new Set<string>();
-  const queue = m.events.filter(e => e.kind === 'start').map(e => e.id);
-  while (queue.length) {
-    const id = queue.shift()!;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const step = stepById.get(id);
-    if (step) order.push(step);
-    const next = outgoing(m, id).sort((a, b) => Number(!!a.isException) - Number(!!b.isException));
-    queue.push(...next.map(f => f.to));
+  const walk = (roots: string[]) => {
+    const queue = [...roots];
+    while (queue.length) {
+      const id = queue.shift()!;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const step = stepById.get(id);
+      if (step) order.push(step);
+      const next = outgoing(m, id).sort((a, b) => Number(!!a.isException) - Number(!!b.isException));
+      queue.push(...next.map(f => f.to));
+    }
+  };
+  walk(m.events.filter(e => e.kind === 'start').map(e => e.id));
+  // Steps the start does not reach (for example a model built by hand without events): begin
+  // at those nothing unvisited leads into, so the flow still decides the order.
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const s of m.steps) {
+      if (seen.has(s.id)) continue;
+      if (incoming(m, s.id).every(f => seen.has(f.from))) { walk([s.id]); changed = true; }
+    }
   }
   for (const s of m.steps) if (!seen.has(s.id)) order.push(s);
   return order;
@@ -96,3 +108,14 @@ export function select(m: ProcessModel, selector: Selector): unknown {
 
 export const selectorKey = (s: Selector): string =>
   'section' in s ? s.section : [s.element.kind, s.element.id ?? '', s.element.field ?? ''].join(':');
+
+const sameTarget = (a: ElementTarget, b: ElementTarget) => a.kind === b.kind && (a.id ?? '') === (b.id ?? '') && (a.field ?? '') === (b.field ?? '');
+
+/** Gaps that no open question already covers. */
+export function untrackedGaps(m: ProcessModel): Gap[] {
+  const open = m.openQuestions.filter(q => q.status === 'open');
+  return gaps(m).filter(g => !open.some(q => sameTarget(q.target, g.target)));
+}
+
+/** Open questions plus untracked gaps: what is still unknown. */
+export const openItemCount = (m: ProcessModel): number => m.openQuestions.filter(q => q.status === 'open').length + untrackedGaps(m).length;
