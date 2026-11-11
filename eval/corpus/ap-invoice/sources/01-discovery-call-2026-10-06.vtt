@@ -1,0 +1,175 @@
+WEBVTT
+
+NOTE
+Microsoft Teams auto-generated transcript
+Meeting: AP Invoice Processing - Discovery (Automation CoE)
+Date: 6 October 2026, 11:00 to 11:52 IST
+Organiser: Rahul Deshpande
+
+00:00:04.120 --> 00:00:09.870
+<v Rahul Deshpande>OK, I think we have everyone except Arjun, he said he'll join around half past. Can everyone hear me?
+
+00:00:10.440 --> 00:00:11.300
+<v Meera Iyer>Yes, loud and clear.
+
+00:00:11.900 --> 00:00:12.650
+<v Sunita Rao>Yes.
+
+00:00:13.300 --> 00:00:31.900
+<v Rahul Deshpande>Great. So as I mentioned in the invite, this is the first discovery call for the AP invoice processing assessment. The CoE wants to understand how invoices flow today for the India entity, where the pain is, and whether automation makes sense at all, and where. Nothing is decided yet. Meera, maybe you can start with the big picture?
+
+00:00:32.400 --> 00:01:02.180
+<v Meera Iyer>Sure. So I manage accounts payable for Kaveri Industrial Components, the India entity, company code 1000 in SAP. We are a shared services team here in Pune. Six AP clerks, one team lead, that's Karthik, he couldn't make it today, and me. We process all vendor invoices for the India business, both PO and non-PO.
+
+00:01:02.900 --> 00:01:08.400
+<v Rahul Deshpande>And roughly what volumes are we talking about?
+
+00:01:08.950 --> 00:01:29.300
+<v Meera Iyer>Last few months it has been around nine to ten thousand invoices a month. It goes up at quarter end. Around eighty percent are against purchase orders, the remaining twenty percent are non-PO, things like utilities, rent, professional fees, some services.
+
+00:01:29.900 --> 00:01:35.100
+<v Rahul Deshpande>OK. And how do invoices come in to you?
+
+00:01:35.700 --> 00:02:04.250
+<v Sunita Rao>Most vendors email the PDF to the shared mailbox, ap.invoices at kaveri-ic dot example. Some smaller vendors still send paper by courier to the Pune office. I would say ten to fifteen percent is paper, honestly nobody has counted it properly. When paper comes, one of us scans it on the office scanner and it lands back in the same mailbox as a PDF.
+
+00:02:04.800 --> 00:02:07.100
+<v Rahul Deshpande>So everything ends up in the mailbox.
+
+00:02:07.400 --> 00:02:08.200
+<v Sunita Rao>Yes, everything.
+
+00:02:08.900 --> 00:02:15.300
+<v Rahul Deshpande>Sunita, could you walk me through what you do with one invoice, say a normal PO invoice with no problem?
+
+00:02:15.900 --> 00:03:01.750
+<v Sunita Rao>OK. First I open the email, I save the PDF into the SharePoint library, we have a folder per vendor in the AP Invoices library. Then I make an entry in the tracker, it's an Excel file on SharePoint, AP tracker FY27. Vendor name, invoice number, invoice date, amount, PO number if there is one, date received, and status. Then I check the invoice itself, whether it has everything. Our legal name and GSTIN, the vendor GSTIN, invoice number and date, PO number, HSN or SAC codes, the tax breakup. If something is missing we send it back to the vendor with a standard email.
+
+00:03:02.300 --> 00:03:06.900
+<v Rahul Deshpande>Is that check written down somewhere, the list of mandatory fields?
+
+00:03:07.400 --> 00:03:14.100
+<v Meera Iyer>Yes, it's in the SOP, section six point three I think. I'll share the SOP after the call.
+
+00:03:14.700 --> 00:03:46.300
+<v Sunita Rao>Then I go to SAP and check the vendor. That the vendor exists, it's not blocked, and the GSTIN on the invoice matches what we have in vendor master. And bank details, if the invoice shows different bank details from what is in SAP we do not touch it. We raise a ticket to the vendor master team in ServiceNow and keep the invoice on hold. That's a fraud control, they call the vendor back on the registered number.
+
+00:03:46.900 --> 00:03:50.100
+<v Rahul Deshpande>How often does that happen, the bank detail thing?
+
+00:03:50.700 --> 00:03:58.200
+<v Sunita Rao>Not often. A few times a month maybe. But it's the one we are most careful about.
+
+00:03:58.800 --> 00:04:30.400
+<v Sunita Rao>Then duplicate check. I search in SAP, FBL1N, by vendor and the invoice number, and also in the tracker. SAP also gives a warning if the same reference is already posted. Then if it's a PO invoice I go to MIRO, enter the invoice date, reference, amount, tax code, and the PO number. SAP pulls the PO lines and the goods receipt. I check quantities and price, and if everything matches within tolerance I post it.
+
+00:04:31.000 --> 00:04:34.300
+<v Rahul Deshpande>What is the tolerance?
+
+00:04:34.900 --> 00:04:45.600
+<v Meera Iyer>Two percent on price. Policy says two percent or five thousand rupees, whichever is lower. Quantity has to match the GR exactly, we don't pay for more than what was received.
+
+00:04:46.200 --> 00:05:06.900
+<v Sunita Rao>After posting I attach the PDF to the SAP document, through the services for object button, create attachment. And then I go back to the tracker and mark it posted with the SAP document number. Then it's in the queue for the payment run.
+
+00:05:07.500 --> 00:05:11.700
+<v Rahul Deshpande>And the payment run itself, is that AP?
+
+00:05:12.200 --> 00:05:24.800
+<v Meera Iyer>No, treasury runs F110, twice a week, Tuesdays and Fridays. That is outside this process. Our job ends when the invoice is posted and released for payment.
+
+00:05:25.400 --> 00:05:30.200
+<v Rahul Deshpande>OK, I'll note payment run as out of scope. How long does a clean invoice take you, Sunita?
+
+00:05:30.800 --> 00:05:43.900
+<v Sunita Rao>A clean PO invoice, ten to twelve minutes if SAP is fast. Opening, saving, tracker, checks, MIRO, attaching. The ones with problems take much longer, Karthik will have better numbers on those.
+
+00:05:44.500 --> 00:05:48.100
+<v Rahul Deshpande>And non-PO invoices, how are those different?
+
+00:05:48.700 --> 00:06:25.400
+<v Sunita Rao>For non-PO we need approval first. We email the invoice to the cost centre owner and ask them to approve. Depending on amount it may need more approvals, that's the delegation of authority. Once they reply approved, I save the approval email as PDF in the same SharePoint folder, then I enter the invoice in FB60 with the GL account and cost centre, and post. The GL account is sometimes tricky, we look at what we used last time for that vendor.
+
+00:06:26.000 --> 00:06:30.100
+<v Rahul Deshpande>And if there is no last time, a new vendor?
+
+00:06:30.600 --> 00:06:41.200
+<v Sunita Rao>Then we ask the approver or Karthik. There's no fixed rule, honestly. It depends.
+
+00:06:41.800 --> 00:06:50.300
+<v Rahul Deshpande>OK. Meera, what would you say are the main problems today?
+
+00:06:50.900 --> 00:07:44.600
+<v Meera Iyer>Three things. First, cycle time. From receipt to posting we average around nine days. That hurts us with MSME vendors, because we have to pay micro and small enterprises within forty-five days, and when invoices sit for two weeks before posting we cut it close. Second, we lose early payment discounts. About thirty vendors offer two percent if we pay within ten days, and we almost never make it. Third, the team spends most of its time on typing and chasing, not on checking. Everything is keyed manually into SAP. And the tracker is double work, we maintain it because there is no other way to see status.
+
+00:07:45.200 --> 00:07:50.900
+<v Rahul Deshpande>Do you have a target in mind for cycle time?
+
+00:07:51.400 --> 00:07:59.800
+<v Meera Iyer>Under four days would be very good. The SOP says five working days but we don't meet it.
+
+00:08:00.400 --> 00:08:09.900
+<v Rahul Deshpande>Has anyone tried OCR or scanning tools before?
+
+00:08:10.400 --> 00:08:30.200
+<v Meera Iyer>We had a pilot with an OCR tool in 2024, maybe eight months. It didn't stick. Accuracy on line items was poor for our vendors, the team ended up re-checking everything, so it was not saving time. I don't want to repeat that.
+
+00:08:30.800 --> 00:08:37.200
+<v Rahul Deshpande>That's useful. So accuracy and trust matter more than raw speed.
+
+00:08:37.700 --> 00:08:39.100
+<v Meera Iyer>Exactly.
+
+00:08:39.700 --> 00:08:45.300
+<v Sunita Rao>Sorry, one more pain point. Password protected PDFs. Some vendors send those and we have to call them for the password.
+
+00:08:45.900 --> 00:08:48.200
+<v Rahul Deshpande>Noted, thank you.
+
+NOTE
+Recording paused from 00:08:48 to 00:20:12 at the organiser's request.
+
+00:20:12.400 --> 00:20:16.900
+<v Arjun Malhotra>Hi all, sorry, I was stuck in the audit committee prep. Where are we?
+
+00:20:17.500 --> 00:20:31.800
+<v Rahul Deshpande>Hi Arjun. We've covered the flow and the main pain points. I wanted to ask you about approvals for non-PO invoices and anything from a controls point of view.
+
+00:20:32.400 --> 00:21:20.300
+<v Arjun Malhotra>Sure. Delegation of authority for non-PO: up to two lakh rupees the cost centre owner can approve. Above two lakh up to ten lakh, the cost centre owner and the department head. Above ten lakh it comes to me as finance controller. And there's a separate rule in AP that anything five lakh and above gets a second check by the AP team lead before posting, PO or non-PO. That's the four-eyes control.
+
+00:21:20.900 --> 00:21:24.600
+<v Rahul Deshpande>And how are approvals recorded today?
+
+00:21:25.200 --> 00:22:03.400
+<v Arjun Malhotra>That is my concern. Approvals are emails. Internal audit raised an observation last year that approval evidence was not consistently attached, some approvals were forwarded chains, some were just "ok" replies, and we couldn't always prove the approver was the right person for that amount. So whatever we do, approval evidence must be clean and linked to the invoice.
+
+00:22:04.000 --> 00:22:10.900
+<v Rahul Deshpande>Understood. Anything on the regulatory side we should know?
+
+00:22:11.500 --> 00:22:35.200
+<v Arjun Malhotra>The MSME forty-five day rule, Meera probably mentioned it. Since the tax change, payments to micro and small enterprises beyond forty-five days are not deductible in that year, so late posting has a real cost now. And GST, input credit depends on the vendor's filing, but that reconciliation is a monthly activity, not per invoice. I'd keep that out of this exercise for now.
+
+00:22:35.800 --> 00:22:41.400
+<v Rahul Deshpande>OK, so GSTR-2B reconciliation is out of scope for now.
+
+00:22:41.900 --> 00:22:43.100
+<v Arjun Malhotra>For now, yes.
+
+00:22:43.700 --> 00:22:52.300
+<v Rahul Deshpande>And the UK subsidiary, is that part of this?
+
+00:22:52.900 --> 00:23:08.700
+<v Meera Iyer>No. The UK entity is on Workday Financials and they have their own small AP team. Different system, different process. Let's keep this to India and SAP.
+
+00:23:09.300 --> 00:23:12.800
+<v Arjun Malhotra>Agreed. I have to drop, sorry. Send me the notes.
+
+00:23:13.400 --> 00:23:34.100
+<v Rahul Deshpande>Thanks Arjun. Meera, Sunita, I'll set up a deep dive on exceptions with Karthik and someone from procurement, and a separate call with SAP and IT on what the system can do. Can you also send me a few sample invoices, with any personal or bank data masked?
+
+00:23:34.700 --> 00:23:38.900
+<v Meera Iyer>Yes, I'll ask Sunita to pick ten, mixed PO and non-PO.
+
+00:23:39.400 --> 00:23:42.100
+<v Rahul Deshpande>Perfect. Thanks everyone.

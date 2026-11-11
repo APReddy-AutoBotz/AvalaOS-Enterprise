@@ -44,6 +44,9 @@ jobs:
 
       # The inherited unit tests cover inherited code. They run only when that code,
       # its runners or the dependency set changes, or when the workflow is started by hand.
+      - name: Tests for new code and eval integrity
+        run: npm run test:new
+
       - name: Decide whether inherited unit tests are needed
         id: scope
         env:

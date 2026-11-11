@@ -44,7 +44,8 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 | `supabase/migrations/` | The live schema, applied to the AvalaOS Enterprise Supabase project. Access is by workspace membership (`admin`, `editor`, `viewer`, plus `can_approve`) |
 | `supabase/tests/baseline_rules.sql` | Behaviour checks for the schema. Run it against the database after any migration; it rolls back |
 | `supabase/functions/`, `supabase/legacy/` | Inherited edge functions and the inherited 256-table schema. Reference only, not deployed |
-| `domain/` | New pure domain code (created from Phase 1) |
+| `domain/` | New pure domain code. `domain/processModel/types.ts` is the Process Model |
+| `eval/` | The extraction eval: a synthetic source pack per case, its hand-checked gold model, and the scorer. See `eval/README.md` |
 | `scripts/` | Unit-test runners only |
 
 Legacy code is marked for retirement in `docs/product-plan.md` section 1. Do not build new features on the retire list.
@@ -55,8 +56,10 @@ Legacy code is marked for retirement in `docs/product-plan.md` section 1. Do not
 npm ci
 npm run typecheck        # application TypeScript
 npm run typecheck:edge   # supabase/functions TypeScript
-npm run test:unit        # all unit tests; pass a word to filter, e.g. npm run test:unit -- scoring
-npm test                 # typecheck + typecheck:edge + unit tests
+npm run test:new         # tests for new code (domain/, eval/); fast, run them on every change
+npm run eval -- ap-invoice [model.json]   # score an extracted Process Model against the gold
+npm run test:unit        # inherited unit tests; only when touching inherited code
+npm test                 # typecheck + typecheck:edge + test:new
 npm run build            # production build
 npm run dev              # local dev server on port 3000
 ```
@@ -64,15 +67,15 @@ npm run dev              # local dev server on port 3000
 ## Tests
 
 - Test what the change can break, not everything every time.
-- New code gets fast unit tests beside it. Database rules are checked by `supabase/tests/baseline_rules.sql`.
+- New code gets fast `node:test` tests beside it (`*.test.ts`), run by `npm run test:new`. Database rules are checked by `supabase/tests/baseline_rules.sql`.
 - The inherited unit tests (`npm run test:unit`) run in CI only when inherited code, its runners or the dependencies change. Do not add to them.
 - When inherited code is retired, delete its tests in the same pull request.
 
 ## Progress
 
-- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied.
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer.
 - Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
-- Next: WP0.3 eval corpus, WP0.4 AI gateway, then Phase 1.
+- Next: WP0.4 AI gateway (OpenAI key is set as the `OPENAI_API_KEY` Edge Function secret), then Phase 1.
 
 ## Definition of done for a pull request
 

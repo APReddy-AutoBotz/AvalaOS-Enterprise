@@ -1,0 +1,155 @@
+1
+00:00:03,200 --> 00:00:16,900
+Rahul Deshpande: Thanks for making time. Karthik, Neha, this is the second session on AP invoice processing. Last week we did the overall flow with Meera and Sunita. Today I want to go deep on the exceptions, because I'm told that's where most of the effort goes.
+
+2
+00:00:17,500 --> 00:00:21,100
+Karthik Raman: Yes, that's where the time goes. Happy to go through it.
+
+3
+00:00:21,800 --> 00:00:26,300
+Rahul Deshpande: How many invoices end up as exceptions, roughly?
+
+4
+00:00:26,900 --> 00:00:52,400
+Karthik Raman: From the tracker, last quarter about twenty-eight percent of invoices had at least one exception. So more than a quarter. A clean invoice is ten, twelve minutes. An exception invoice is more like thirty-five to forty minutes of actual work, spread over days because we are waiting on people.
+
+5
+00:00:53,000 --> 00:00:58,700
+Rahul Deshpande: What are the biggest exception types?
+
+6
+00:00:59,300 --> 00:01:38,900
+Karthik Raman: Number one by far is missing goods receipt. The invoice comes before stores has posted the GR in SAP. That's maybe forty percent of all exceptions. Then price variance, around a quarter. Then quantity differences, maybe ten percent. Then non-PO approvals that are stuck. Then smaller ones: GSTIN mismatch, wrong legal entity on the invoice, duplicates, password-protected PDFs. And the bank detail changes, those are rare but we treat them very seriously.
+
+7
+00:01:39,500 --> 00:01:43,200
+Rahul Deshpande: Let's take missing GR first. What do you do?
+
+8
+00:01:43,800 --> 00:02:20,600
+Sunita Rao: When I enter it in MIRO and there's no GR, I park the invoice in MIR7 so it is in SAP but not posted. Then I email the requester or the stores team with the PO number and ask them to post the GR. In the tracker I set status to Waiting GR. If nothing happens in three working days I send a reminder. After seven working days I escalate to Karthik.
+
+9
+00:02:21,200 --> 00:02:35,800
+Karthik Raman: And I escalate to the plant stores manager. Sometimes the goods were received but nobody did the MIGO. Sometimes the goods really didn't arrive, and then the invoice shouldn't be paid anyway.
+
+10
+00:02:36,400 --> 00:02:44,100
+Rahul Deshpande: Who decides that the goods really didn't arrive? Is that AP?
+
+11
+00:02:44,700 --> 00:02:55,300
+Karthik Raman: No, stores confirms that. We just wait. If stores says not received, we put the invoice on hold and tell the vendor.
+
+12
+00:02:56,000 --> 00:03:03,400
+Rahul Deshpande: OK. Price variance next. Neha, this is where procurement comes in?
+
+13
+00:03:04,000 --> 00:03:52,700
+Neha Kulkarni: Yes. When the invoice price is higher than the PO price beyond tolerance, AP sends us an email with the PO and the invoice. Then the buyer has to look at it. Sometimes the PO price is wrong, because a price revision was agreed and nobody updated the PO, so we amend the PO in ME22N and AP can post. Sometimes the vendor has charged wrong, freight added, an old rate, and then we ask the vendor for a credit note or a revised invoice. That's a judgment call by the buyer, it depends on the contract and what was agreed.
+
+14
+00:03:53,300 --> 00:03:58,900
+Rahul Deshpande: How quickly do buyers usually respond to AP?
+
+15
+00:03:59,500 --> 00:04:09,800
+Neha Kulkarni: Honestly it varies a lot. There's no agreed turnaround. Some buyers respond same day, some take a week.
+
+16
+00:04:10,400 --> 00:04:16,900
+Karthik Raman: That's one of our biggest waits, to be honest.
+
+17
+00:04:17,500 --> 00:04:25,200
+Rahul Deshpande: What tolerance is SAP applying today for price?
+
+18
+00:04:25,800 --> 00:04:36,300
+Karthik Raman: Policy is two percent or five thousand rupees, whichever is lower. I assume SAP is set to the same, I've never checked the configuration myself.
+
+19
+00:04:36,900 --> 00:04:42,400
+Rahul Deshpande: OK, I'll confirm that with the SAP team on Tuesday. And quantity?
+
+20
+00:04:43,000 --> 00:05:05,100
+Sunita Rao: Quantity must not be more than GR quantity. If the invoice is for more than was received, it's the same as missing GR for the difference, we park and ask stores. If the invoice is for less, partial invoice, that's fine, we post what is invoiced.
+
+21
+00:05:05,700 --> 00:05:12,200
+Rahul Deshpande: And when you park for variance, is that MIR7 again?
+
+22
+00:05:12,800 --> 00:05:29,600
+Sunita Rao: Yes, park in MIR7 with a note. One annoying thing, sometimes MIRO says the PO is locked because the buyer has it open in ME22N. Then we just wait and try again later.
+
+23
+00:05:30,200 --> 00:05:37,500
+Rahul Deshpande: Non-PO approvals next. What gets stuck?
+
+24
+00:05:38,100 --> 00:06:13,700
+Karthik Raman: We email the cost centre owner. If no reply in two working days we send a reminder. After five working days we escalate to the finance controller's office. The problem is people reply from their phones with 'ok', or forward it to someone else who replies, and then we have to work out if that person is allowed to approve that amount. Audit flagged this last year.
+
+25
+00:06:14,300 --> 00:06:20,400
+Rahul Deshpande: Do you have the approver list somewhere, who can approve what?
+
+26
+00:06:21,000 --> 00:06:36,900
+Karthik Raman: The delegation of authority matrix is a PDF from finance. The cost centre owners are in SAP against each cost centre. But the department heads, that mapping is not maintained anywhere properly. We use an Excel that I keep.
+
+27
+00:06:37,500 --> 00:06:44,600
+Rahul Deshpande: And what about rejected approvals?
+
+28
+00:06:45,200 --> 00:06:59,800
+Karthik Raman: Rare. If the owner says it's not theirs or not valid, we return it to the vendor or forward to the right person. We mark it rejected in the tracker.
+
+29
+00:07:00,400 --> 00:07:06,100
+Rahul Deshpande: GSTIN mismatch and wrong legal entity?
+
+30
+00:07:06,700 --> 00:07:33,200
+Sunita Rao: If the vendor GSTIN on the invoice doesn't match vendor master, or our GSTIN is wrong, or it is addressed to the UK company instead of the India company, we cannot post. We return it to the vendor asking for a corrected invoice. Same standard email template, we just change the reason.
+
+31
+00:07:33,800 --> 00:07:38,900
+Rahul Deshpande: Duplicates, how do they happen?
+
+32
+00:07:39,500 --> 00:08:09,200
+Karthik Raman: Vendors resend the same invoice, by email and then again by courier, or they send a reminder with the invoice attached. Our rule is same vendor, same invoice number and same gross amount means duplicate. If we suspect one we check the original posting and if it's really a duplicate we don't post it, mark it duplicate in the tracker and tell the vendor it's already in process.
+
+33
+00:08:09,800 --> 00:08:16,500
+Rahul Deshpande: And the high value review you mentioned, Arjun said five lakh and above?
+
+34
+00:08:17,100 --> 00:08:39,800
+Karthik Raman: Yes, anything five lakh and above I review before it's posted. I look at the invoice, the PO or approval, the GL coding, the tax. Then I tell the clerk to post. It's a few a day. That one I'd want to keep with a person even if everything else is automated.
+
+35
+00:08:40,400 --> 00:08:47,600
+Rahul Deshpande: Makes sense. And credit notes from vendors, are they the same flow?
+
+36
+00:08:48,200 --> 00:09:01,300
+Karthik Raman: Similar but not the same, they have to be matched against the original invoice. Can we do that in a separate session? It's a smaller volume.
+
+37
+00:09:01,900 --> 00:09:08,500
+Rahul Deshpande: Sure, I'll park credit notes for now. Anything else that takes a lot of time?
+
+38
+00:09:09,100 --> 00:09:28,600
+Sunita Rao: Vendor follow-ups. Vendors call and email asking for payment status. We look in the tracker and SAP and reply. That's maybe an hour a day for the whole team, but it's not really invoice processing.
+
+39
+00:09:29,200 --> 00:09:36,400
+Rahul Deshpande: I'll note vendor status queries as related but out of scope for this assessment. Thank you all, this was very helpful.
