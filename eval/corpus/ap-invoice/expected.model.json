@@ -1888,9 +1888,7 @@
       "roleIds": [
         "r-lead"
       ],
-      "systemIds": [
-        "sys-sap"
-      ],
+      "systemIds": [],
       "taskType": "user",
       "inputs": [],
       "outputs": [],

@@ -287,7 +287,8 @@ steps = [
          [('flow', 'Review and approve invoice'), ('call-1', 'Once they reply approved')], aliases=['review and approve', 'approve invoice'], rules=['br-doa']),
     step('s-fb60', 'Enter non-PO invoice', 'Save the approval email as PDF, then enter the invoice in FB60 with GL account and cost centre.', ['r-clerk'], ['sys-sap', 'sys-sharepoint'], 'user',
          [('sop', 'Enter the approved invoice in FB60 with the GL account and cost centre.'), ('flow', 'Enter non-PO invoice in FB60')], aliases=['enter invoice in FB60', 'code GL and cost centre']),
-    step('s-review', 'Review high-value invoice', 'AP Team Lead reviews invoices of INR 5,00,000 or more (invoice, PO or approval, GL coding, tax) before posting.', ['r-lead'], ['sys-sap'], 'user',
+    # No source names the system used for the review, so none is assigned.
+    step('s-review', 'Review high-value invoice', 'AP Team Lead reviews invoices of INR 5,00,000 or more (invoice, PO or approval, GL coding, tax) before posting.', ['r-lead'], [], 'user',
          [('sop', 'For invoices of INR 5,00,000 or more, the AP Team Lead reviews'), ('flow', 'Review invoice before posting (four-eyes)')], aliases=['four-eyes review', 'second review'],
          rules=['br-four-eyes']),
     step('s-post', 'Post invoice and attach PDF', 'Post the invoice in SAP and attach the PDF through Services for Object.', ['r-clerk'], ['sys-sap'], 'user',
