@@ -10,6 +10,11 @@ import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner } from '../ui.tsx
 import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
+import { SourcesStage } from '../process/SourcesStage.tsx';
+import { SourceContext } from '../process/widgets.tsx';
+import { quoteInContext } from '../../domain/workspace/sources.ts';
+import type { IngestSegment } from '../../domain/ingest/segment.ts';
+import type { SourceRow } from '../store/types.ts';
 
 const TONE = {
   neutral: 'border-slate-300 bg-slate-100 text-slate-700',
@@ -33,6 +38,21 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [me, setMe] = React.useState('');
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.email ?? '')).catch(() => {}); }, [store]);
+
+  // Sources, for titles and for showing a quote in its passage.
+  const [sources, setSources] = React.useState<SourceRow[]>([]);
+  const loadSources = React.useCallback(() => { store.listSources(processId).then(setSources).catch(() => {}); }, [store, processId]);
+  React.useEffect(() => { loadSources(); }, [loadSources]);
+  const segmentCache = React.useRef(new Map<string, Promise<IngestSegment[]>>());
+  const sourceCtx = React.useMemo(() => ({
+    title: (key: string) => sources.find(s => s.key === key)?.title ?? 'A source no longer in this process',
+    load: async (ref: { sourceId: string; locator: object; excerpt: string }) => {
+      const src = sources.find(s => s.key === ref.sourceId);
+      if (!src) return null;
+      if (!segmentCache.current.has(src.id)) segmentCache.current.set(src.id, store.getSourceSegments(src.id));
+      return quoteInContext(await segmentCache.current.get(src.id)!, ref as any);
+    },
+  }), [sources, store]);
 
   const load = React.useCallback(async () => {
     try {
@@ -107,9 +127,13 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
 
       <ErrorNote message={error} />
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
-        {stage === 'process' && model
+        <SourceContext.Provider value={sourceCtx}>
+        {stage === 'sources'
+          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
+        </SourceContext.Provider>
       </section>
 
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
@@ -121,10 +145,11 @@ function ProcessStage({ store, processId, model, working, canEdit, me, onSaved }
   store: JourneyStore; processId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
+  const { title } = React.useContext(SourceContext);
   return (
     <div className="space-y-6">
       <ModelSummary model={editor.model} />
-      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={id => id} />
+      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} />
     </div>
   );
 }

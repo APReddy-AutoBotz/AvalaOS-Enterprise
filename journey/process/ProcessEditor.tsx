@@ -78,7 +78,7 @@ export function ProcessEditor({ editor, canEdit, me, sourceTitle }: { editor: Mo
         {tab === 'questions' && <QuestionsTab {...ctx} />}
         {tab === 'conflicts' && <ConflictsTab {...ctx} />}
       </div>
-      {panel && <SidePanel title={`Sources: ${panel.title}`} onClose={() => setPanel(null)}><SourceList sources={panel.sources} sourceTitle={sourceTitle} /></SidePanel>}
+      {panel && <SidePanel title={`Sources: ${panel.title}`} onClose={() => setPanel(null)}><SourceList sources={panel.sources} /></SidePanel>}
     </div>
   );
 }
@@ -137,7 +137,7 @@ function StepsTab({ model, editor, canEdit, showSources, sourceTitle }: TabConte
           <div className="flex items-center gap-2"><StatusBadge status={open.status} /></div>
           <div>
             <p className="mb-2 text-xs font-semibold text-slate-600">Sources</p>
-            <SourceList sources={open.sources} sourceTitle={sourceTitle} />
+            <SourceList sources={open.sources} />
           </div>
         </SidePanel>
       )}

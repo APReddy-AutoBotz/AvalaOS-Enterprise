@@ -1,6 +1,11 @@
 // Small editing controls for the Process stage.
 import React from 'react';
 import type { FactStatus, SourceLocator, SourceRef } from '../../domain/processModel/types.ts';
+import type { QuoteInContext } from '../../domain/workspace/sources.ts';
+
+/** Finds a quote in its stored source; provided by the page that knows the sources. */
+export type ContextLoader = (ref: SourceRef) => Promise<QuoteInContext | null>;
+export const SourceContext = React.createContext<{ title(id: string): string; load?: ContextLoader }>({ title: id => id });
 import { cx } from '../ui.tsx';
 
 const STATUS: Record<FactStatus, { label: string; tone: string; title: string }> = {
@@ -101,19 +106,38 @@ export function locatorText(l: SourceLocator): string {
   return parts.join(' · ');
 }
 
-/** The sources behind an element: where each quote comes from, and the quote. */
-export function SourceList({ sources, sourceTitle }: { sources: SourceRef[]; sourceTitle: (id: string) => string }) {
+/** The sources behind an element: where each quote comes from, the quote, and the passage around it. */
+export function SourceList({ sources, sourceTitle }: { sources: SourceRef[]; sourceTitle?: (id: string) => string }) {
+  const ctx = React.useContext(SourceContext);
+  const title = sourceTitle ?? ctx.title;
   if (sources.length === 0) return <p className="text-sm text-slate-500">No source: this was entered or confirmed by a person.</p>;
   return (
     <ul className="space-y-3">
       {sources.map((s, i) => (
-        <li key={i} className="rounded-lg border border-slate-200 bg-white p-3">
-          <p className="text-xs font-semibold text-slate-700">{sourceTitle(s.sourceId)}</p>
+        <li key={i} className="rounded-lg border border-slate-200 bg-white p-3" data-testid="source-quote">
+          <p className="text-xs font-semibold text-slate-700">{title(s.sourceId)}</p>
           {locatorText(s.locator) && <p className="text-xs text-slate-500">{locatorText(s.locator)}</p>}
           <blockquote className="mt-2 border-l-2 border-[#FFBC03] pl-3 text-sm leading-6 text-slate-800">{s.excerpt}</blockquote>
+          {ctx.load && <InContext load={ctx.load} source={s} />}
         </li>
       ))}
     </ul>
+  );
+}
+
+function InContext({ load, source }: { load: ContextLoader; source: SourceRef }) {
+  const [state, setState] = React.useState<'closed' | 'loading' | 'missing' | QuoteInContext>('closed');
+  if (state === 'closed') return <button type="button" className="mt-2 text-xs font-medium text-[#002C4B] hover:underline" onClick={async () => { setState('loading'); try { setState((await load(source)) ?? 'missing'); } catch { setState('missing'); } }}>Show in context</button>;
+  if (state === 'loading') return <p className="mt-2 text-xs text-slate-500">Loading…</p>;
+  if (state === 'missing') return <p className="mt-2 text-xs text-slate-500">The passage is not in the stored source any more.</p>;
+  const { before, segment, after, range } = state;
+  const text = segment.text;
+  return (
+    <div className="mt-2 space-y-1 rounded-md bg-slate-50 p-2 text-xs leading-5 text-slate-600" data-testid="quote-context">
+      {before && <p>{before.text}</p>}
+      <p className="text-slate-800">{range ? <>{text.slice(0, range[0])}<mark className="bg-[#FFBC03]/40 text-slate-900">{text.slice(range[0], range[1])}</mark>{text.slice(range[1])}</> : text}</p>
+      {after && <p>{after.text}</p>}
+    </div>
   );
 }
 

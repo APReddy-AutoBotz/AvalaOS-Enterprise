@@ -189,7 +189,7 @@ const QUOTE_MAP: Record<string, string> = { '\u2018': "'", '\u2019': "'", '\u201
  * Text compared ignoring case, whitespace runs and typographic quotes and dashes, with a map from
  * each compared character back to its position in the original.
  */
-function comparable(text: string): { norm: string; at: number[] } {
+export function comparable(text: string): { norm: string; at: number[] } {
   let norm = '';
   const at: number[] = [];
   let space = false;

@@ -2,11 +2,12 @@
 // revisions never change, a new draft copies the approved model. State is kept in localStorage
 // so a reload keeps it. Used by browser tests and local runs without a backend; it starts empty.
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { PROCESS_MODEL_SCHEMA_VERSION } from '../../domain/processModel/types.ts';
 import { hashModel } from '../../domain/processModel/hash.ts';
+import { emptyModel } from '../../domain/processModel/empty.ts';
 import { applyPatch } from '../../domain/processModel/jsonPatch.ts';
 import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
-import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type Workspace } from './types.ts';
+import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import type { IngestSegment } from '../../domain/ingest/segment.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -15,10 +16,11 @@ interface State {
   processes: ProcessRow[];
   revisions: StoredRevision[];
   edits: (EditRow & { processId: string })[];
+  sources: (SourceRow & { processId: string; segments: IngestSegment[] })[];
 }
 
 const KEY = 'avala.journey.memory.v1';
-const empty = (): State => ({ me: null, workspaces: [], processes: [], revisions: [], edits: [] });
+const empty = (): State => ({ me: null, workspaces: [], processes: [], revisions: [], edits: [], sources: [] });
 
 function load(): State {
   try {
@@ -29,14 +31,7 @@ function load(): State {
   }
 }
 
-export function emptyModel(name: string): ProcessModel {
-  return {
-    schemaVersion: PROCESS_MODEL_SCHEMA_VERSION,
-    meta: { name, objective: { value: null, status: 'unknown', sources: [] }, owner: { value: null, status: 'unknown', sources: [] }, scopeIn: [], scopeOut: [], metrics: [] },
-    roles: [], systems: [], events: [], steps: [], gateways: [], flows: [], rules: [], exceptions: [],
-    dataObjects: [], painPoints: [], controls: [], risks: [], openQuestions: [], conflicts: [],
-  };
-}
+export { emptyModel };
 
 const uuid = () => globalThis.crypto.randomUUID();
 const now = () => new Date().toISOString();
@@ -149,6 +144,43 @@ export function createMemoryStore(): JourneyStore {
       rev.approvedAt = now();
       save();
     },
+    async listSources(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return state.sources.filter(x => x.processId === processId).map(({ processId: _p, segments: _s, ...row }) => row);
+    },
+    async getSourceSegments(sourceId) {
+      requireMe();
+      const src = state.sources.find(x => x.id === sourceId);
+      if (!src) throw new StoreError(404, 'Source not found.');
+      return src.segments;
+    },
+    async addSource(processId, input) {
+      requireMe();
+      const { w } = workspaceOf(processId);
+      if (w.role === 'viewer') throw new StoreError(403, 'Adding sources needs the editor or admin role.');
+      if (state.sources.some(x => x.processId === processId && x.key === input.key)) throw new StoreError(409, 'A source with this key exists.');
+      if (!input.segments.length) throw new StoreError(422, 'The source has no content.');
+      const row: SourceRow = {
+        id: uuid(), key: input.key, title: input.title.trim().slice(0, 200) || 'Untitled source', fileName: input.fileName, format: input.format, kind: input.kind,
+        inferred: input.inferred, segmentCount: input.segments.length, warnings: input.warnings, createdAt: now(), archived: false,
+      };
+      state.sources.push({ ...row, processId, segments: input.segments });
+      save();
+      return row;
+    },
+    async archiveSource(sourceId) {
+      requireMe();
+      const src = state.sources.find(x => x.id === sourceId);
+      if (!src) throw new StoreError(404, 'Source not found.');
+      if (workspaceOf(src.processId).w.role === 'viewer') throw new StoreError(403, 'Archiving needs the editor or admin role.');
+      src.archived = true;
+      save();
+    },
+    aiAvailable: false,
+    async readFlowchartImage() { throw new StoreError(501, 'Reading images needs the server; it is not available in local mode.'); },
+    async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
+    async latestExtraction() { return null; },
     async history(processId) {
       requireMe();
       return {
