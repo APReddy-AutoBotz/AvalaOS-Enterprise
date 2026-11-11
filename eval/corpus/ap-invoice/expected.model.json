@@ -1628,6 +1628,7 @@
         "x-qty"
       ],
       "aliases": [
+        "resolve variances",
         "refer variance to buyer",
         "query buyer"
       ],
@@ -1887,9 +1888,7 @@
       "roleIds": [
         "r-lead"
       ],
-      "systemIds": [
-        "sys-sap"
-      ],
+      "systemIds": [],
       "taskType": "user",
       "inputs": [],
       "outputs": [],
@@ -1936,7 +1935,8 @@
       "exceptionIds": [],
       "aliases": [
         "post invoice",
-        "attach invoice image"
+        "attach invoice image",
+        "post and attach"
       ],
       "status": "stated",
       "sources": [
@@ -1973,7 +1973,8 @@
       "exceptionIds": [],
       "aliases": [
         "close tracker entry",
-        "update tracker"
+        "update tracker",
+        "close the record"
       ],
       "status": "stated",
       "sources": [

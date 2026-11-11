@@ -43,7 +43,7 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 | `services/scoringEngine.ts` | Legacy V1 scoring. Do not extend it |
 | `supabase/migrations/` | The live schema, applied to the AvalaOS Enterprise Supabase project. Access is by workspace membership (`admin`, `editor`, `viewer`, plus `can_approve`) |
 | `supabase/tests/*.sql` | Behaviour checks for the schema (`baseline_rules.sql`) and model persistence (`model_persistence.sql`). Run the ones your migration touches against the database; each rolls back |
-| `supabase/functions/journey-ai/` | The AI gateway edge function (deployed, `verify_jwt = false`, authenticates the caller itself) |
+| `supabase/functions/journey-ai/`, `journey-extract/` | The AI gateway and the extraction pipeline (deployed by GitHub Actions, `verify_jwt = false`, they authenticate callers themselves) |
 | `supabase/functions/` (others), `supabase/legacy/` | Inherited edge functions and the inherited 256-table schema. Reference only, not deployed |
 | `domain/` | New pure domain code. `domain/processModel/types.ts` is the Process Model |
 | `eval/` | The extraction eval: a synthetic source pack per case, its hand-checked gold model, and the scorer. See `eval/README.md` |
@@ -74,14 +74,16 @@ npm run dev              # local dev server on port 3000
 
 ## Progress
 
-- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs; WP1.4 parsers (`domain/ingest/`).
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs; WP1.4 parsers (`domain/ingest/`); WP1.5 grounded extraction (`domain/extract/`, edge function `journey-extract`, `extraction_runs`).
 - Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
 - AI calls go only through `journey-ai`. Add a task to `domain/ai/tasks.ts`; never send prompts from the client. Secrets: `OPENAI_API_KEY`; optional `OPENAI_MODEL` (default `gpt-5.5`), `OPENAI_REASONING_EFFORT` (default `low`), `AI_MONTHLY_TOKEN_BUDGET` (default 2,000,000 per workspace), `ALLOWED_ORIGIN`.
 - Edit a Process Model only through `domain/processModel/patch.ts`: each operation takes a valid model and returns the next model plus its JSON Patch, or throws `ModelOpError`.
 - Save model edits only through the RPCs: `model_start_draft(process)`, `model_save_patch(revision, expected_seq, patch, origin, summary)`, `model_approve(revision, expected_seq)`, `model_history(process)`. Errors come back as HTTP 409 (stale `expected_seq` or approved revision), 403, 404 or 422. On 409, reload the draft and re-run the operation.
 - Read uploaded files with `parseFile` in `domain/ingest/parsers/index.ts`. It returns ordered segments with locators, or a state (`needs_ocr`, `unsupported`, `empty`, `error`); it never throws. PDFs need pdf.js passed in.
 - Dependencies: the agent workspace cannot reach npm. Change `package.json` on a `claude/` branch and `.github/workflows/lockfile.yml` commits the regenerated lockfile; pull it before the next push.
-- Next: WP1.3 workspace shell, then WP1.5 grounded extraction.
+- Extraction runs in stages in `journey-extract` (per-source passes, two merges, a review, assembly), tracked in `extraction_runs`. Prompts live in `domain/extract/tasks.ts`. Measure any prompt or merge change with live eval runs (`eval/README.md`).
+- Edge functions deploy from GitHub (`.github/workflows/deploy-functions.yml`): on main, and on `claude/` branches when the commit message contains `[deploy]`.
+- Next: WP1.6 flowchart import, then WP1.7 review and edit UI.
 
 ## Definition of done for a pull request
 

@@ -60,3 +60,29 @@ python3 make_gold.py                                                            
 ```
 
 Transcripts are plain text files in `sources/` and are edited directly. After any edit, run `make_gold.py` and `npm run test:new`.
+
+## Live extraction runs
+
+The extraction pipeline runs in the `journey-extract` edge function (see `domain/extract/`). An eval run reads the case's sources from this repository at a given commit, runs every pass against the AI provider, and scores the result against the gold at the same commit. Start one from the SQL editor (or any SQL client with service access):
+
+```sql
+with t as (select encode(extensions.gen_random_bytes(24), 'hex') as tok),
+r as (
+  insert into public.extraction_runs (kind, case_id, ref, token_hash, input)
+  select 'eval', 'ap-invoice', '<commit sha>', encode(extensions.digest(tok, 'sha256'), 'hex'), jsonb_build_object('tok', tok) from t
+  returning id, input->>'tok' tok
+)
+select r.id, net.http_post(
+  url := 'https://<project-ref>.supabase.co/functions/v1/journey-extract',
+  body := jsonb_build_object('action', 'start', 'runId', r.id, 'token', r.tok),
+  headers := '{"Content-Type": "application/json"}'::jsonb
+) from r;
+```
+
+The token is replaced when the run starts. After two to three minutes, read the scorecard:
+
+```sql
+select status, error, result->'score' from public.extraction_runs where id = '<run id>';
+```
+
+Extraction is not deterministic. Judge a change on the mean of at least two runs, not on one.

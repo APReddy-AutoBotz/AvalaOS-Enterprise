@@ -272,7 +272,7 @@ steps = [
          [('flow', 'Three-way match: PO, GR, invoice'), ('call-1', 'SAP pulls the PO lines and the goods receipt.')], aliases=['match invoice to PO and GR', '3-way match'],
          rules=['br-price-tolerance', 'br-qty']),
     step('s-park-var', 'Park invoice and refer variance', 'Park the invoice and email the buyer with the PO and invoice; set tracker status Variance.', ['r-clerk'], ['sys-sap', 'sys-mailbox', 'sys-tracker'], 'user',
-         [('sop', 'park the invoice, email the Buyer with the PO and invoice, and set status "Variance"'), ('flow', 'Park invoice and refer variance to buyer')], aliases=['refer variance to buyer', 'query buyer'],
+         [('sop', 'park the invoice, email the Buyer with the PO and invoice, and set status "Variance"'), ('flow', 'Park invoice and refer variance to buyer')], aliases=['resolve variances', 'refer variance to buyer', 'query buyer'],
          exc=['x-price', 'x-qty']),
     step('s-investigate', 'Investigate variance', 'Buyer decides whether the PO or the invoice is wrong, based on contract and what was agreed.', ['r-buyer'], [], 'user',
          [('call-2', "That's a judgment call by the buyer, it depends on the contract and what was agreed."), ('flow', 'Investigate price or quantity variance')], aliases=['resolve variance', 'review price variance']),
@@ -287,13 +287,14 @@ steps = [
          [('flow', 'Review and approve invoice'), ('call-1', 'Once they reply approved')], aliases=['review and approve', 'approve invoice'], rules=['br-doa']),
     step('s-fb60', 'Enter non-PO invoice', 'Save the approval email as PDF, then enter the invoice in FB60 with GL account and cost centre.', ['r-clerk'], ['sys-sap', 'sys-sharepoint'], 'user',
          [('sop', 'Enter the approved invoice in FB60 with the GL account and cost centre.'), ('flow', 'Enter non-PO invoice in FB60')], aliases=['enter invoice in FB60', 'code GL and cost centre']),
-    step('s-review', 'Review high-value invoice', 'AP Team Lead reviews invoices of INR 5,00,000 or more (invoice, PO or approval, GL coding, tax) before posting.', ['r-lead'], ['sys-sap'], 'user',
+    # No source names the system used for the review, so none is assigned.
+    step('s-review', 'Review high-value invoice', 'AP Team Lead reviews invoices of INR 5,00,000 or more (invoice, PO or approval, GL coding, tax) before posting.', ['r-lead'], [], 'user',
          [('sop', 'For invoices of INR 5,00,000 or more, the AP Team Lead reviews'), ('flow', 'Review invoice before posting (four-eyes)')], aliases=['four-eyes review', 'second review'],
          rules=['br-four-eyes']),
     step('s-post', 'Post invoice and attach PDF', 'Post the invoice in SAP and attach the PDF through Services for Object.', ['r-clerk'], ['sys-sap'], 'user',
-         [('sop', 'Post the invoice. Attach the invoice PDF to the SAP document'), ('flow', 'Post invoice and attach PDF in SAP')], aliases=['post invoice', 'attach invoice image']),
+         [('sop', 'Post the invoice. Attach the invoice PDF to the SAP document'), ('flow', 'Post invoice and attach PDF in SAP')], aliases=['post invoice', 'attach invoice image', 'post and attach']),
     step('s-close', 'Update tracker to Posted', 'Record the SAP document number and set tracker status Posted.', ['r-clerk'], ['sys-tracker'], 'user',
-         [('sop', 'Update the AP tracker with the SAP document number and status "Posted".'), ('flow', 'Update AP tracker to Posted')], aliases=['close tracker entry', 'update tracker']),
+         [('sop', 'Update the AP tracker with the SAP document number and status "Posted".'), ('flow', 'Update AP tracker to Posted')], aliases=['close tracker entry', 'update tracker', 'close the record']),
 ]
 
 G = lambda id, q, src: el(id=id, type='exclusive', question=q, sources=[('flow', src)])
