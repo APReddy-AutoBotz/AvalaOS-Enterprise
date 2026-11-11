@@ -3,8 +3,10 @@
 // POST { action: 'health', workspaceId }                    -> checks sign-in, membership, key and model
 // POST { action: 'run', workspaceId, task, segments[] }     -> runs a registered task with strict output
 //
-// The caller's own token decides access (RLS). The service key is used only to read the monthly
-// budget and to write the usage log. The OpenAI key never leaves this function.
+// The caller's own token decides access (RLS). A caller presenting the project's secret key is a
+// trusted server (it already has full database access): membership is not checked and no user is
+// logged. The service key is otherwise used only to read the monthly budget and write the usage log.
+// The OpenAI key never leaves this function.
 // Deployed with verify_jwt = false because the function authenticates the caller itself.
 
 import {
@@ -45,6 +47,21 @@ const CORS = {
 const reply = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
 const fail = (status: number, code: string, message: string) => reply(status, { ok: false, error: { code, message } });
+
+/** Constant-time string comparison. */
+function sameSecret(a: string, b: string): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** True when the request carries the project's secret key (apikey header or Bearer). */
+function isServerCaller(req: Request): boolean {
+  const apikey = req.headers.get('apikey') ?? '';
+  const bearer = (req.headers.get('Authorization') ?? '').replace(/^Bearer /, '');
+  return sameSecret(apikey, SECRET_KEY) || sameSecret(bearer, SECRET_KEY);
+}
 
 async function currentUser(authHeader: string): Promise<{ id: string } | null> {
   if (!authHeader.startsWith('Bearer ')) return null;
@@ -128,9 +145,17 @@ Deno.serve(async (req: Request) => {
   const request = v.value;
 
   const authHeader = req.headers.get('Authorization') ?? '';
-  const user = await currentUser(authHeader);
-  if (!user) return fail(401, 'UNAUTHENTICATED', 'Sign in again.');
-  if (!(await isMember(authHeader, request.workspaceId))) return fail(403, 'FORBIDDEN', 'You are not a member of this workspace.');
+  let userId: string | null = null;
+  if (isServerCaller(req)) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/workspaces?id=eq.${request.workspaceId}&select=id`, { headers: serviceHeaders() });
+    const rows = res.ok ? await res.json() : [];
+    if (!Array.isArray(rows) || rows.length !== 1) return fail(404, 'WORKSPACE_NOT_FOUND', 'No such workspace.');
+  } else {
+    const user = await currentUser(authHeader);
+    if (!user) return fail(401, 'UNAUTHENTICATED', 'Sign in again.');
+    if (!(await isMember(authHeader, request.workspaceId))) return fail(403, 'FORBIDDEN', 'You are not a member of this workspace.');
+    userId = user.id;
+  }
 
   const model = env('OPENAI_MODEL') || 'gpt-5.5';
 
@@ -168,7 +193,7 @@ Deno.serve(async (req: Request) => {
 
   await logUsage({
     workspace_id: request.workspaceId,
-    user_id: user.id,
+    user_id: userId,
     task: task.id,
     model,
     status: parsed.ok ? 'ok' : STATUS_FOR[parsed.code],
