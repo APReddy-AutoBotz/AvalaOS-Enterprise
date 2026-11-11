@@ -1,5 +1,5 @@
 {
-  "name": "AvalaOS Core",
+  "name": "AvalaOS Enterprise",
   "description": "The governed AI and automation delivery platform for evaluating processes, generating governed documentation, managing approvals, and proving decisions with evidence.",
   "requestFramePermissions": [
     "camera",

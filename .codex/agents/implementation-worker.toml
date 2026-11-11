@@ -1,3 +1,0 @@
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
-developer_instructions = "Implement only the controller-approved vertical slice. Follow AGENTS.md and PLANS.md. Keep behavior, tests, documentation, sanitized evidence, and rollback in the same PR. Stop on scope expansion, approval-required actions, or the P0 gate. Never spawn subagents, create descendant agents, or call delegation/spawn tools. Return results only to the root controller."

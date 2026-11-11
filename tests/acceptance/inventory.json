@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 3,
-  "inventoryId": "avalaos-hosted-acceptance-2026-08",
-  "coveredBranchesSource": "tests/acceptance/catalog/test-catalog.json",
-  "sourceProvenanceSource": "tests/acceptance/source-provenance.json",
-  "uncoveredBranches": []
-}
