@@ -3,7 +3,7 @@
 --
 -- Run the whole block against a database that has the migrations applied.
 -- It creates its own users and data and always rolls back: success ends with the
--- error "ALL_TESTS_PASSED (8 groups)"; any other error names the failed check.
+-- error "ALL_TESTS_PASSED (9 groups)"; any other error names the failed check.
 
 do $test$
 declare
@@ -140,6 +140,29 @@ begin
   select count(*) into n from public.process_model_revisions where process_id = p;
   if n <> 0 then raise exception 'TEST FAIL 8: cascade left % revisions', n; end if;
   if (select process_id from public.delivery_work_items where id = wi) is not null then raise exception 'TEST FAIL 8b: work item kept a dangling process'; end if;
+  passed := passed + 1;
+
+  -- 9. AI usage: server writes, members read, others and users cannot write or call the budget function.
+  insert into public.ai_usage (workspace_id, user_id, task, model, status, input_tokens, output_tokens) values (ws, u1, 'participants', 'm', 'ok', 100, 20);
+  if public.ai_tokens_used_this_month(ws) <> 120 then raise exception 'TEST FAIL 9: monthly token sum'; end if;
+  perform set_config('request.jwt.claims', json_build_object('sub', u1, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  select count(*) into n from public.ai_usage where workspace_id = ws;
+  if n <> 1 then raise exception 'TEST FAIL 9b: member cannot read usage'; end if;
+  begin
+    insert into public.ai_usage (workspace_id, task, model, status) values (ws, 't', 'm', 'ok');
+    raise exception 'TEST FAIL 9c: user wrote usage';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    perform public.ai_tokens_used_this_month(ws);
+    raise exception 'TEST FAIL 9d: user called the budget function';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('request.jwt.claims', json_build_object('sub', u2, 'role', 'authenticated')::text, true);
+  select count(*) into n from public.ai_usage;
+  if n <> 0 then raise exception 'TEST FAIL 9e: other user sees usage'; end if;
+  execute 'reset role';
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups); rolling back test data', passed;
