@@ -2,6 +2,8 @@
 // the real one; the memory store backs browser tests and local runs without a backend.
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
+import type { IngestSegment } from '../../domain/ingest/segment.ts';
+import type { StoredFormat } from '../../domain/workspace/sources.ts';
 
 export interface Me { id: string; email: string }
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean }
@@ -21,6 +23,35 @@ export interface RevisionRow {
 export interface EditRow { revisionId: string; seq: number; origin: string; summary: string; createdAt: string; operations: number }
 
 export interface Draft { revisionId: string; revNo: number; seq: number; model: ProcessModel; modelHash: string | null }
+
+export interface SourceRow {
+  id: string;
+  key: string;
+  title: string;
+  fileName: string;
+  format: StoredFormat;
+  kind: string;
+  inferred: boolean;
+  segmentCount: number;
+  warnings: string[];
+  createdAt: string;
+  archived: boolean;
+}
+
+export interface NewSource {
+  key: string;
+  title: string;
+  fileName: string;
+  format: StoredFormat;
+  kind: string;
+  segments: IngestSegment[];
+  inferred: boolean;
+  warnings: string[];
+  byteSize: number;
+}
+
+export type ExtractionStatus = 'queued' | 'running' | 'merging' | 'reviewing' | 'assembling' | 'done' | 'failed';
+export interface ExtractionRow { id: string; status: ExtractionStatus; error: string | null; createdAt: string; updatedAt: string; model: ProcessModel | null }
 
 /** A failed request, with the HTTP-like status the server returned. */
 export class StoreError extends Error {
@@ -52,4 +83,18 @@ export interface JourneyStore {
   savePatch(revisionId: string, expectedSeq: number, patch: JsonPatchOp[], origin: 'user' | 'extraction' | 'diagram' | 'import', summary: string): Promise<{ seq: number }>;
   approve(revisionId: string, expectedSeq: number): Promise<void>;
   history(processId: string): Promise<{ revisions: RevisionRow[]; edits: EditRow[] }>;
+
+  /** Sources of a process, oldest first, without their content. Archived ones are included and marked. */
+  listSources(processId: string): Promise<SourceRow[]>;
+  getSourceSegments(sourceId: string): Promise<IngestSegment[]>;
+  addSource(processId: string, source: NewSource): Promise<SourceRow>;
+  archiveSource(sourceId: string): Promise<void>;
+
+  /** Whether AI tasks (image reading, extraction) are available with this store. */
+  readonly aiAvailable: boolean;
+  /** Reads a flowchart image with the AI; returns the raw reading for readingToGraph. */
+  readFlowchartImage(workspaceId: string, dataUrl: string): Promise<unknown>;
+  startExtraction(workspaceId: string, processId: string, sourceIds: string[]): Promise<{ runId: string }>;
+  /** The latest extraction of a process, with its model once done. */
+  latestExtraction(processId: string): Promise<ExtractionRow | null>;
 }

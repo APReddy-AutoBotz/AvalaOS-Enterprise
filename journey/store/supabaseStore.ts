@@ -2,7 +2,7 @@
 // Uses only the project URL and the publishable key, which are safe in the browser.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { StoreError, type Draft, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type Workspace } from './types.ts';
+import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -17,10 +17,28 @@ const toRevision = (r: Record<string, any>): RevisionRow => ({
   basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, approvedAt: r.approved_at ?? r.approvedAt ?? null,
 });
 const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at });
+const toSource = (r: Record<string, any>): SourceRow => ({
+  id: r.id, key: r.source_key, title: r.title, fileName: r.file_name ?? '', format: r.format, kind: r.kind ?? '', inferred: Boolean(r.inferred),
+  segmentCount: Number(r.segment_count ?? 0), warnings: Array.isArray(r.warnings) ? r.warnings : [], createdAt: r.created_at, archived: Boolean(r.archived_at),
+});
+const SOURCE_COLUMNS = 'id, source_key, title, file_name, format, kind, inferred, warnings, segment_count, created_at, archived_at';
 const toMe = (u: { id: string; email?: string | null } | null | undefined): Me | null => (u ? { id: u.id, email: u.email ?? '' } : null);
 
 export function createSupabaseStore(url: string, publishableKey: string): JourneyStore {
   const db: SupabaseClient = createClient(url, publishableKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'avala.journey.auth' } });
+
+  /** Calls an edge function with the user's session; errors carry the function's own message. */
+  async function call(name: string, body: Record<string, unknown>): Promise<any> {
+    const { data, error } = await db.functions.invoke(name, { body });
+    if (!error) return data;
+    const res: Response | undefined = (error as any).context;
+    let message = error.message, status = 500;
+    if (res && typeof res.json === 'function') {
+      status = res.status;
+      try { const j = await res.json(); message = j?.error?.message ?? j?.message ?? message; } catch { /* keep the generic message */ }
+    }
+    throw new StoreError(status, message);
+  }
 
   return {
     kind: 'supabase',
@@ -106,6 +124,49 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async approve(revisionId, expectedSeq) {
       const { error } = await db.rpc('model_approve', { target_revision: revisionId, expected_seq: expectedSeq });
       if (error) fail(error);
+    },
+    async listSources(processId) {
+      const { data, error } = await db.from('process_sources').select(SOURCE_COLUMNS)
+        .eq('process_id', processId).order('created_at', { ascending: true });
+      if (error) fail(error);
+      return (data ?? []).map(toSource);
+    },
+    async getSourceSegments(sourceId) {
+      const { data, error } = await db.from('process_sources').select('segments').eq('id', sourceId).maybeSingle();
+      if (error) fail(error);
+      if (!data) throw new StoreError(404, 'Source not found.');
+      return data.segments as any;
+    },
+    async addSource(processId, input) {
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const { data, error } = await db.from('process_sources').insert({
+        workspace_id: process.workspaceId, process_id: processId, source_key: input.key, title: input.title.trim().slice(0, 200) || 'Untitled source',
+        file_name: input.fileName.slice(0, 300), format: input.format, kind: input.kind, segments: input.segments, inferred: input.inferred,
+        warnings: input.warnings.slice(0, 50), byte_size: input.byteSize,
+      }).select(SOURCE_COLUMNS).single();
+      if (error) fail(error);
+      return { ...toSource(data), segmentCount: input.segments.length };
+    },
+    async archiveSource(sourceId) {
+      const { error } = await db.from('process_sources').update({ archived_at: new Date().toISOString() }).eq('id', sourceId);
+      if (error) fail(error);
+    },
+    aiAvailable: true,
+    async readFlowchartImage(workspaceId, dataUrl) {
+      const r = await call('journey-ai', { action: 'run', workspaceId, task: 'readFlowchart', image: dataUrl });
+      return r.data;
+    },
+    async startExtraction(workspaceId, processId, sourceIds) {
+      const r = await call('journey-extract', { action: 'create', workspaceId, processId, sourceIds });
+      return { runId: r.runId };
+    },
+    async latestExtraction(processId): Promise<ExtractionRow | null> {
+      const { data, error } = await db.from('extraction_runs').select('id, status, error, result, created_at, updated_at')
+        .eq('process_id', processId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      if (error) fail(error);
+      if (!data) return null;
+      return { id: data.id, status: data.status, error: data.error, createdAt: data.created_at, updatedAt: data.updated_at, model: (data.result as any)?.model ?? null };
     },
     async history(processId) {
       const { data, error } = await db.rpc('model_history', { target_process: processId });

@@ -2,7 +2,7 @@
 // migration). Each request does one stage in the background and returns 202 at once; the stage
 // starts the next one by calling this function again with the run's token.
 //
-// POST { action: 'create', workspaceId, processId, processName, sources: [{ sourceId, title, kind, segments }] }
+// POST { action: 'create', workspaceId, processId, sourceIds: [process_sources.id] }
 //      with the user's session -> { runId }. Members follow the run in extraction_runs.
 // POST { action: 'start' | 'pass' | 'merge' | 'review' | 'assemble', runId, token, ... } -> internal stages.
 //      An eval run is created in SQL and started with { action: 'start', runId, token }; it reads its
@@ -302,28 +302,33 @@ async function createRun(req: Request, body: any): Promise<Response> {
   const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: PUBLISHABLE_KEY, Authorization: auth } });
   const user = userRes.ok ? await userRes.json() : null;
   if (!user?.id) return fail(401, 'UNAUTHENTICATED', 'Sign in again.');
-  const { workspaceId, processId, processName, sources } = body ?? {};
-  if (typeof workspaceId !== 'string' || typeof processId !== 'string' || !Array.isArray(sources) || !sources.length || sources.length > 40) return fail(400, 'INVALID_REQUEST', 'workspaceId, processId and 1 to 40 sources are required.');
+  const { workspaceId, processId, sourceIds } = body ?? {};
+  const UUID = /^[0-9a-f-]{36}$/i;
+  if (typeof workspaceId !== 'string' || !UUID.test(workspaceId) || typeof processId !== 'string' || !UUID.test(processId)
+    || !Array.isArray(sourceIds) || !sourceIds.length || sourceIds.length > 40 || !sourceIds.every((x: unknown) => typeof x === 'string' && UUID.test(x))) {
+    return fail(400, 'INVALID_REQUEST', 'workspaceId, processId and 1 to 40 sourceIds are required.');
+  }
   // Editors only: RLS answers whether the caller can see the process; the role check is explicit.
-  const proc = await fetch(`${SUPABASE_URL}/rest/v1/processes?id=eq.${processId}&workspace_id=eq.${workspaceId}&select=id`, { headers: { apikey: PUBLISHABLE_KEY, Authorization: auth } });
+  const proc = await fetch(`${SUPABASE_URL}/rest/v1/processes?id=eq.${processId}&workspace_id=eq.${workspaceId}&select=id,name`, { headers: { apikey: PUBLISHABLE_KEY, Authorization: auth } });
   const member = await fetch(`${SUPABASE_URL}/rest/v1/workspace_members?workspace_id=eq.${workspaceId}&user_id=eq.${user.id}&select=role`, { headers: { apikey: PUBLISHABLE_KEY, Authorization: auth } });
   const procRows = proc.ok ? await proc.json() : [];
   const memberRows = member.ok ? await member.json() : [];
   if (procRows.length !== 1) return fail(404, 'NOT_FOUND', 'Process not found.');
   if (!['admin', 'editor'].includes(memberRows[0]?.role)) return fail(403, 'FORBIDDEN', 'Extraction needs the editor or admin role.');
-  let total = 0;
-  for (const s of sources) {
-    if (typeof s?.sourceId !== 'string' || !/^[A-Za-z0-9._-]{1,24}$/.test(s.sourceId) || !Array.isArray(s.segments)) return fail(400, 'INVALID_REQUEST', 'Each source needs a sourceId and segments.');
-    total += s.segments.reduce((n: number, x: any) => n + String(x?.text ?? '').length, 0);
-  }
+  // The sources are read here, so what is extracted is what was stored for this process.
+  const rows: any[] = await rest(`process_sources?process_id=eq.${processId}&id=in.(${sourceIds.join(',')})&archived_at=is.null&select=source_key,title,kind,format,inferred,segments`);
+  if (!Array.isArray(rows) || rows.length !== new Set(sourceIds).size) return fail(404, 'SOURCE_NOT_FOUND', 'A source was not found for this process.');
+  const sources = rows.map(r => ({ sourceId: r.source_key, title: r.title, kind: r.kind || r.format, segments: r.segments, ...(r.inferred ? { inferred: true } : {}) }));
+  const total = sources.reduce((n, s) => n + s.segments.reduce((k: number, x: any) => k + String(x?.text ?? '').length, 0), 0);
   if (total > LIMITS.maxTotalChars * 2) return fail(413, 'TOO_LARGE', 'The sources are too large for one extraction.');
+  const processName = String(procRows[0].name ?? '');
   const used = Number(await rest('rpc/ai_tokens_used_this_month', { method: 'POST', body: JSON.stringify({ target_workspace: workspaceId }) }));
   if (used >= Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
 
   const token = randomToken();
   const [row] = await rest('extraction_runs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
     kind: 'process', workspace_id: workspaceId, process_id: processId, created_by: user.id, token_hash: await sha256hex(token),
-    input: { processName: String(processName ?? ''), sources: sources.map((s: any) => ({ sourceId: s.sourceId, title: String(s.title ?? s.sourceId), kind: String(s.kind ?? ''), segments: s.segments, ...(s.inferred === true ? { inferred: true } : {}) })) },
+    input: { processName, sources },
   }) });
   await trigger({ action: 'start', runId: row.id, token });
   return reply(202, { ok: true, runId: row.id });
