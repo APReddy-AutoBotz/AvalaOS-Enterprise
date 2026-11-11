@@ -11,6 +11,7 @@ on:
       - 'supabase/functions/journey-*/**'
       - 'domain/**'
       - 'eval/scorer.ts'
+      - 'supabase/config.toml'
       - '.github/workflows/deploy-functions.yml'
   workflow_dispatch:
 
