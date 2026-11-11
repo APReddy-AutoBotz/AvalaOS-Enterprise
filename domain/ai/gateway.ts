@@ -38,7 +38,9 @@ export const LIMITS = { maxSegments: 400, maxSegmentChars: 20_000, maxTotalChars
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SEGMENT_ID = /^[A-Za-z0-9._:-]{1,64}$/;
 
-export type Validation<T> = { ok: true; value: T } | { ok: false; code: string; message: string };
+// Success variants declare the failure fields as undefined so callers can read them in configs without
+// strictNullChecks, where narrowing on `ok` does not apply.
+export type Validation<T> = { ok: true; value: T; code?: undefined; message?: undefined } | { ok: false; code: string; message: string; value?: undefined };
 
 export function validateRequest(body: unknown, tasks: Record<string, TaskDefinition>): Validation<GatewayRequest> {
   const fail = (code: string, message: string) => ({ ok: false as const, code, message });
@@ -107,7 +109,7 @@ export function buildOpenAIRequest(task: TaskDefinition, segments: Segment[], mo
 }
 
 export type ParsedResponse =
-  | { ok: true; data: unknown; usage: { input: number; output: number } }
+  | { ok: true; data: unknown; usage: { input: number; output: number }; code?: undefined; message?: undefined }
   | { ok: false; code: 'REFUSED' | 'TRUNCATED' | 'INVALID_OUTPUT' | 'PROVIDER_ERROR'; message: string; usage: { input: number; output: number } };
 
 /** Reads an OpenAI Responses API result. */
