@@ -72,7 +72,9 @@ decisions: points where the path splits, as a yes/no or short question ("Duplica
 export const mergeFlow: TaskDefinition = {
   id: 'merge_flow',
   schemaName: 'merge_flow',
-  maxOutputTokens: 14000,
+  // Merging across sources at the right granularity is the hardest judgement in the pipeline.
+  reasoningEffort: 'medium',
+  maxOutputTokens: 20000,
   verifyArrays: [],
   instructions: `You receive numbered candidates extracted from several sources about one business process. Different sources describe the same things in different words. Merge them into one process.
 

@@ -24,6 +24,8 @@ export interface TaskDefinition {
   maxOutputTokens: number;
   /** Path to arrays of items whose { segmentId, excerpt } must be verified, e.g. ['roles']. */
   verifyArrays: string[];
+  /** Reasoning effort for reasoning models; the server default applies when unset. */
+  reasoningEffort?: 'low' | 'medium' | 'high';
 }
 
 export interface GatewayRequest {

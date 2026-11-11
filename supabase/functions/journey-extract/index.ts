@@ -85,7 +85,7 @@ async function callOpenAI(body: Record<string, unknown>) {
 
 async function runTask(task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string }) {
   const body = 'segments' in input ? buildOpenAIRequest(task, input.segments, MODEL) : buildListingRequest(task, input.listing, MODEL);
-  if (/^(gpt-5|o\d)/.test(MODEL)) body.reasoning = { effort: EFFORT };
+  if (/^(gpt-5|o\d)/.test(MODEL)) body.reasoning = { effort: task.reasoningEffort ?? EFFORT };
   const parsed = await callOpenAI(body);
   if (!parsed.ok) throw new Error(`${task.id}: ${parsed.code} ${parsed.message}`);
   return { data: parsed.data, usage: parsed.usage };
