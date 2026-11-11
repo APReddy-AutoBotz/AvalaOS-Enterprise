@@ -3,7 +3,11 @@
 import type { SourceLocator, SourceRef } from '../processModel/types.ts';
 import type { IngestSegment } from '../ingest/segment.ts';
 
-export interface SourceInfo { sourceId: string; title: string; kind: string }
+export interface SourceInfo {
+  sourceId: string; title: string; kind: string;
+  /** Read from an image by the vision task: what it supports is a reading, so at most "inferred". */
+  inferred?: boolean;
+}
 
 export type CandidateKind = 'role' | 'system' | 'interface' | 'rule' | 'exception' | 'metric' | 'unknown' | 'step' | 'decision';
 const PREFIX: Record<CandidateKind, string> = { role: 'R', system: 'Y', interface: 'I', rule: 'B', exception: 'X', metric: 'M', unknown: 'U', step: 'S', decision: 'D' };

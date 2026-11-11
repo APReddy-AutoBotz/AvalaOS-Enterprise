@@ -62,7 +62,8 @@ export const sourceSteps: TaskDefinition = {
 
 steps: one per business activity of the process as it runs today, at the level of a procedure step ("Check for duplicates", "Post goods receipt"). Name it with a verb and an object, at most six words. "actors" are the roles that do it (use role names, not people's names) and "systems" the applications used as a whole (SAP, not MIRO), only as the source states them. "taskType": "user" (a person using a system), "manual" (no system), "service" (a system on its own), "business_rule" (an automatic check), "send" or "receive" (a message to or from outside). Include activities by other teams that the process waits for (posting a goods receipt, investigating a variance, approving).
 Do not list as steps: small actions inside a step (opening the email, saving the file, attaching the PDF belong to the step they serve); reminders, escalations and waiting (those are rules or exception handling); work outside the process scope (for example payment runs by another team); discussions of systems, APIs, integrations or possible future designs; meeting chatter and opinions.
-decisions: points where the path splits, as a yes/no or short question ("Duplicate?"), with each outcome and what happens next in a few words.`,
+decisions: points where the path splits, as a yes/no or short question ("Duplicate?"), with each outcome and what happens next in a few words.
+When the source is a flowchart, each segment is one shape: the first line is its label, then its kind, its lane and the shapes that follow it. Quote the label line as the excerpt. A task shape is a step done by its lane; a decision shape is a decision whose outcomes are the labelled arrows after it. Start and end shapes are not steps.`,
   schema: obj({
     steps: list({ name: str, description: str, actors: strArr, systems: strArr, taskType: { type: 'string', enum: TASK_TYPES }, ...quoted }),
     decisions: list({ question: str, outcomes: { type: 'array', items: obj({ label: str, then: str }) }, ...quoted }),
@@ -86,7 +87,7 @@ Before answering, check every step once more: if it is a part of another step's 
 "roles" on a step are the role groups that perform it, usually one; do not add a team that contains the performer, or roles that are only informed or consulted. "systems" are all the system groups used in it. Use only what members state. Every step must have at least one member.
 gateways: one per distinct decision, grouped the same way, with a short question.
 events: one start event and one end event per distinct way the process can finish (for example "Invoice posted", "Invoice returned to vendor"), with candidate ids that mention them in "members" (may be empty).
-flows: the sequence between events, steps and gateways, using their keys. Every gateway has a flow for each outcome, labelled with the outcome. Use only orderings and branches the candidates describe; where the order is not stated, follow the numbered procedure.
+flows: the sequence between events, steps and gateways, using their keys. Every gateway has a flow for each outcome, labelled with the outcome. Use only orderings and branches the candidates describe; where the order is not stated, follow the numbered procedure. Candidates from a flowchart state the order and the branches directly.
 Keys are short: r1, y1, s1, g1, e1. Use only the candidate ids given.`,
   schema: obj({
     roles: list({ key: str, name: str, kind: { type: 'string', enum: ROLE_KINDS }, members: strArr }),

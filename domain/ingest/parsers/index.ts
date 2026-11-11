@@ -5,6 +5,9 @@ import { parseDocx } from './docx.ts';
 import { parseXlsx } from './xlsx.ts';
 import { parsePdf, type PdfJs } from './pdf.ts';
 import { ZipError } from '../zip.ts';
+import { parseDrawio } from '../../flowchart/drawio.ts';
+import { parseBpmn } from '../../flowchart/bpmn.ts';
+import { graphToSegments, type FlowGraph } from '../../flowchart/graph.ts';
 
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
@@ -52,12 +55,20 @@ export async function parseFile(file: { name: string; bytes: Uint8Array; sourceI
       }
       return { status: 'unsupported', format: 'unknown', message: `.${e} files are not supported here.` };
     }
-    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff', 'svg', 'drawio', 'bpmn', 'vsdx'].includes(e)) {
-      return { status: 'unsupported', format: 'unknown', message: 'Flowcharts and images are read by the flowchart import, not as text.' };
+    if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tif', 'tiff'].includes(e)) {
+      return { status: 'needs_vision', format: 'image', message: 'Images are read as flowcharts by the AI; what is read from them is marked inferred.' };
+    }
+    if (['svg', 'vsdx', 'vsd'].includes(e)) {
+      return { status: 'unsupported', format: 'unknown', message: 'Export the diagram as draw.io, BPMN or PNG and upload that.' };
     }
 
     const text = new TextDecoder('utf-8').decode(bytes);
     if (text.includes('\u0000')) return { status: 'unsupported', format: 'unknown', message: 'This looks like a binary file, not text.' };
+    if (e === 'drawio' || e === 'bpmn' || (e === 'xml' && /<mxfile\b|<mxGraphModel\b|<(\w+:)?definitions\b/.test(text))) {
+      const isDrawio = e === 'drawio' || /<mxfile\b|<mxGraphModel\b/.test(text);
+      const graph = isDrawio ? await parseDrawio(text) : parseBpmn(text);
+      return flowchartResult(graph, sourceId, isDrawio ? 'drawio' : 'bpmn');
+    }
     const format = textFormat(name, text);
     const segments =
       format === 'vtt' ? parseVtt(text, sourceId)
@@ -69,4 +80,10 @@ export async function parseFile(file: { name: string; bytes: Uint8Array; sourceI
     const message = err instanceof ZipError ? `The file could not be opened: ${err.message}` : `The file could not be read: ${(err as Error).message}`;
     return { status: 'error', format: 'unknown', message };
   }
+}
+
+/** A parsed flowchart as segments, one per shape. */
+export function flowchartResult(graph: FlowGraph, sourceId: string, format: 'drawio' | 'bpmn'): ParseResult {
+  const segments = graphToSegments(graph, sourceId);
+  return segments.length ? { status: 'ok', format, segments, warnings: graph.warnings } : { status: 'empty', format, message: 'No shapes were found in the diagram.' };
 }

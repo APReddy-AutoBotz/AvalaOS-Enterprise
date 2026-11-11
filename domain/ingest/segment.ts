@@ -4,7 +4,7 @@
 import type { SourceLocator } from '../processModel/types.ts';
 import type { Segment as GatewaySegment } from '../ai/gateway.ts';
 
-export type SourceFormat = 'txt' | 'md' | 'vtt' | 'srt' | 'transcript_txt' | 'docx' | 'xlsx' | 'pdf';
+export type SourceFormat = 'txt' | 'md' | 'vtt' | 'srt' | 'transcript_txt' | 'docx' | 'xlsx' | 'pdf' | 'drawio' | 'bpmn';
 
 export type SegmentKind = 'heading' | 'paragraph' | 'list_item' | 'table_row' | 'cue';
 
@@ -20,7 +20,7 @@ export interface IngestSegment {
 
 export type ParseResult =
   | { status: 'ok'; format: SourceFormat; segments: IngestSegment[]; warnings: string[] }
-  | { status: 'needs_ocr' | 'unsupported' | 'empty' | 'error'; format: SourceFormat | 'unknown'; message: string };
+  | { status: 'needs_ocr' | 'needs_vision' | 'unsupported' | 'empty' | 'error'; format: SourceFormat | 'image' | 'unknown'; message: string };
 
 /** Longest segment kept whole. Longer text is split at sentence ends, keeping the same locator. */
 export const MAX_SEGMENT_CHARS = 6000;

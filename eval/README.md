@@ -63,7 +63,7 @@ Transcripts are plain text files in `sources/` and are edited directly. After an
 
 ## Live extraction runs
 
-The extraction pipeline runs in the `journey-extract` edge function (see `domain/extract/`). An eval run reads the case's sources from this repository at a given commit, runs every pass against the AI provider, and scores the result against the gold at the same commit. Start one from the SQL editor (or any SQL client with service access):
+The extraction pipeline runs in the `journey-extract` edge function (see `domain/extract/`). An eval run reads the case's sources from this repository at a given commit, runs every pass against the AI provider, and scores the result against the gold at the same commit. Cases: `ap-invoice` (all sources, flowchart as draw.io), `ap-invoice-image` (flowchart as PNG, read by the vision task), `ap-invoice-no-flow` (calls and SOP only). Start one from the SQL editor (or any SQL client with service access):
 
 ```sql
 with t as (select encode(extensions.gen_random_bytes(24), 'hex') as tok),

@@ -2,6 +2,7 @@
 //
 // POST { action: 'health', workspaceId }                    -> checks sign-in, membership, key and model
 // POST { action: 'run', workspaceId, task, segments[] }     -> runs a registered task with strict output
+// POST { action: 'run', workspaceId, task, image }          -> the same, for tasks that read an image (a data URL)
 //
 // The caller's own token decides access (RLS). A caller presenting the project's secret key is a
 // trusted server (it already has full database access): membership is not checked and no user is
@@ -10,7 +11,7 @@
 // Deployed with verify_jwt = false because the function authenticates the caller itself.
 
 import {
-  validateRequest, buildOpenAIRequest, parseOpenAIResponse, verifyExcerpts,
+  validateRequest, buildOpenAIRequest, buildImageRequest, parseOpenAIResponse, verifyExcerpts,
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
@@ -178,9 +179,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const task = TASKS[request.task!];
-  const segments = request.segments!;
-  const openaiBody = buildOpenAIRequest(task, segments, model);
-  const effort = env('OPENAI_REASONING_EFFORT') || 'low';
+  const segments = request.segments ?? [];
+  const openaiBody = task.input === 'image' ? buildImageRequest(task, request.image!, model) : buildOpenAIRequest(task, segments, model);
+  const effort = task.reasoningEffort || env('OPENAI_REASONING_EFFORT') || 'low';
   if (/^(gpt-5|o\d)/.test(model)) openaiBody.reasoning = { effort };
 
   const started = Date.now();
@@ -205,6 +206,7 @@ Deno.serve(async (req: Request) => {
   });
 
   if (!parsed.ok) return fail(502, parsed.code, parsed.message);
+  if (task.input === 'image') return reply(200, { ok: true, data: parsed.data, dropped: [], usage: parsed.usage, model });
   const { data, dropped } = verifyExcerpts(parsed.data, task.verifyArrays, segments);
   return reply(200, { ok: true, data, dropped, usage: parsed.usage, model });
 });
