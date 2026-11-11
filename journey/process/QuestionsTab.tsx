@@ -2,13 +2,11 @@
 // missing information found by rule, and conflicts between sources (the person picks the value).
 import React from 'react';
 import { addQuestion, answerQuestion, resolveConflict } from '../../domain/processModel/patch.ts';
-import { gaps, getElement } from '../../domain/processModel/selectors.ts';
+import { getElement, untrackedGaps } from '../../domain/processModel/selectors.ts';
 import type { Conflict, ElementTarget, OpenQuestion, ProcessModel } from '../../domain/processModel/types.ts';
 import { Button, EmptyState } from '../ui.tsx';
 import type { TabContext } from './ProcessEditor.tsx';
 import { Select, SourceList } from './widgets.tsx';
-
-const sameTarget = (a: ElementTarget, b: ElementTarget) => a.kind === b.kind && (a.id ?? '') === (b.id ?? '') && (a.field ?? '') === (b.field ?? '');
 
 /** What a question is about, in words. */
 export function targetLabel(m: ProcessModel, t: ElementTarget): string {
@@ -30,7 +28,7 @@ function valueKind(t: ElementTarget): ValueKind {
 export function QuestionsTab({ model, editor, canEdit }: TabContext) {
   const open = model.openQuestions.filter(q => q.status === 'open');
   const answered = model.openQuestions.filter(q => q.status !== 'open');
-  const missing = gaps(model).filter(g => !open.some(q => sameTarget(q.target, g.target)));
+  const missing = untrackedGaps(model);
   return (
     <div className="space-y-6">
       <section className="space-y-2">

@@ -3,7 +3,7 @@
 import React from 'react';
 import type { ProcessModel, RoleKind, SourceRef, SystemKind, TaskType } from '../../domain/processModel/types.ts';
 import { addRole, addStep, addSystem, moveStep, ModelOpError, removeElement, removeStep, updateFact } from '../../domain/processModel/patch.ts';
-import { gaps, orderedSteps, stepsForRole, stepsForSystem } from '../../domain/processModel/selectors.ts';
+import { openItemCount, orderedSteps, stepsForRole, stepsForSystem } from '../../domain/processModel/selectors.ts';
 import { Button, cx, ErrorNote } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
 import { ConfirmDelete, InlineText, RefChips, Select, SidePanel, SourceList, SourcesButton, StatusBadge, TableShell } from './widgets.tsx';
@@ -41,7 +41,7 @@ export function ProcessEditor({ editor, canEdit, me, sourceTitle }: { editor: Mo
   const model = editor.model;
   const [tab, setTab] = React.useState<TabId>('steps');
   const [panel, setPanel] = React.useState<{ title: string; sources: SourceRef[] } | null>(null);
-  const openCount = model.openQuestions.filter(q => q.status === 'open').length + gaps(model).length;
+  const openCount = openItemCount(model);
   const conflictCount = model.conflicts.filter(c => !c.resolution).length;
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: 'steps', label: 'Steps', count: model.steps.length },

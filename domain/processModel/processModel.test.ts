@@ -6,7 +6,7 @@ import { validateModel } from './validate.ts';
 import { applyPatch, deepEqual, diff, JsonPatchError } from './jsonPatch.ts';
 import { addFlow, addQuestion, addRole, addRule, addStep, addSystem, answerQuestion, ModelOpError, removeElement, moveStep, removeFlow, removeStep, resolveConflict, updateFact, type OpResult } from './patch.ts';
 import { changedSelections, hashModel, hashSelections, canonicalJson } from './hash.ts';
-import { gaps, incoming, orderedSteps, outgoing } from './selectors.ts';
+import { gaps, incoming, openItemCount, orderedSteps, outgoing, untrackedGaps } from './selectors.ts';
 import { fromAssessV2 } from './fromAssessV2.ts';
 import { AP_INVOICE_EXCEPTION_V2_FIXTURE } from '../../services/assessV2/fixture.ts';
 
@@ -315,6 +315,8 @@ test('a tracked gap becomes a question, and answering it confirms the field', ()
   const gap = gaps(m).find(g => g.kind === 'step_without_role' && g.target.id === step.id)!;
   const q = addQuestion(m, { target: gap.target, question: gap.label });
   rejects(() => addQuestion(q.model, { target: gap.target, question: gap.label }), 'DUPLICATE');
+  assert.equal(openItemCount(q.model), openItemCount(m) , 'a tracked gap is counted once');
+  assert.ok(!untrackedGaps(q.model).some(g => g.target.id === step.id && g.kind === 'step_without_role'));
   const role = m.roles[0];
   m = answerQuestion(q.model, { questionId: q.questionId, answer: role.name, value: [role.id] }).model;
   const after = m.steps.find(s => s.id === step.id)!;

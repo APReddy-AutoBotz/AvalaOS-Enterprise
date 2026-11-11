@@ -96,3 +96,14 @@ export function select(m: ProcessModel, selector: Selector): unknown {
 
 export const selectorKey = (s: Selector): string =>
   'section' in s ? s.section : [s.element.kind, s.element.id ?? '', s.element.field ?? ''].join(':');
+
+const sameTarget = (a: ElementTarget, b: ElementTarget) => a.kind === b.kind && (a.id ?? '') === (b.id ?? '') && (a.field ?? '') === (b.field ?? '');
+
+/** Gaps that no open question already covers. */
+export function untrackedGaps(m: ProcessModel): Gap[] {
+  const open = m.openQuestions.filter(q => q.status === 'open');
+  return gaps(m).filter(g => !open.some(q => sameTarget(q.target, g.target)));
+}
+
+/** Open questions plus untracked gaps: what is still unknown. */
+export const openItemCount = (m: ProcessModel): number => m.openQuestions.filter(q => q.status === 'open').length + untrackedGaps(m).length;

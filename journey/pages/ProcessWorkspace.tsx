@@ -2,7 +2,7 @@
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
-import { gaps } from '../../domain/processModel/selectors.ts';
+import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -160,7 +160,7 @@ function StagePanel({ stage, model, canEdit, busy, onStart, onGo }: { stage: Sta
 }
 
 function ModelSummary({ model }: { model: ProcessModel }) {
-  const open = gaps(model).length + model.openQuestions.filter(q => q.status === 'open').length;
+  const open = openItemCount(model);
   const tiles: [string, number][] = [
     ['Steps', model.steps.length],
     ['Roles', model.roles.length],
