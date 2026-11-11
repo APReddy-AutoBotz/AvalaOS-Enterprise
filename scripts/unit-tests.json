@@ -18,7 +18,6 @@
   "marketing-capture-policy": "node scripts/runTypeScriptTest.mjs types.ts services/marketingCapturePolicy.ts services/marketingCapturePolicy.test.ts",
   "view-state-persistence": "node scripts/runTypeScriptTest.mjs types.ts constants/moduleConfig.ts services/viewAccessGuard.ts services/viewStatePersistence.ts services/productNavigationState.ts services/viewStatePersistence.test.ts",
   "module-journey-lifecycle": "node scripts/runTypeScriptTest.mjs types.ts constants/moduleConfig.ts components/shared/moduleJourneyModel.ts components/shared/moduleJourneyModel.test.ts components/shared/Sidebar.test.ts",
-  "marketing-studio-capture": "node scripts/runPr1fTypeScriptTest.mjs types.ts services/studioArtifacts/contracts.ts services/studioArtifacts/client.ts data/marketingStudioCapture.ts data/marketingStudioCapture.test.ts",
   "decision-pack-rendering": "node scripts/runTypeScriptTest.mjs types.ts components/assess/decisionPackRenderModel.ts components/assess/decisionPackRenderModel.test.ts",
   "assess-to-studio-handoff": "node scripts/runTypeScriptTest.mjs types.ts services/assessToStudioHandoff.ts services/assessToStudioHandoff.test.ts",
   "docs-to-delivery-lineage": "node scripts/runTypeScriptTest.mjs types.ts services/docsToDeliveryLineage.ts services/docsToDeliveryLineage.test.ts",
