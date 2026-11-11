@@ -49,7 +49,7 @@ export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav })
           </label>
         )}
       </div>
-      <ProcessList key={workspace.id} store={store} nav={nav} workspace={workspace} />
+      <React.Fragment key={workspace.id}><ProcessList store={store} nav={nav} workspace={workspace} /></React.Fragment>
     </div>
   );
 }

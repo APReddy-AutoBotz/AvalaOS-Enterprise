@@ -92,7 +92,7 @@ function Journey({ store }: { store: JourneyStore }) {
       <main className="mx-auto max-w-7xl px-6 py-8">
         {!me || nav.route.page === 'signin' ? <SignInPage store={store} /> :
           nav.route.page === 'processes' ? <ProcessesPage store={store} nav={nav} /> :
-            <ProcessWorkspace key={nav.route.processId} store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} />}
+            <React.Fragment key={nav.route.processId}><ProcessWorkspace store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} /></React.Fragment>}
       </main>
     </div>
   );
