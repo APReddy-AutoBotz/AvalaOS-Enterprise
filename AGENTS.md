@@ -74,7 +74,7 @@ npm run dev              # local dev server on port 3000
 
 ## Progress
 
-- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs; WP1.4 parsers (`domain/ingest/`); WP1.5 grounded extraction (`domain/extract/`, edge function `journey-extract`, `extraction_runs`); WP1.6 flowchart import (`domain/flowchart/`).
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table); WP1.1 Process Model domain (`validate`, `patch`, `selectors`, `hash`, `fromAssessV2`); WP1.2 model persistence RPCs; WP1.4 parsers (`domain/ingest/`); WP1.5 grounded extraction (`domain/extract/`, edge function `journey-extract`, `extraction_runs`); WP1.6 flowchart import (`domain/flowchart/`); WP1.7 review and edit UI (`journey/process/`), sources (`process_sources`) and re-extraction (`domain/extract/rebase.ts`).
 - Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
 - AI calls go only through `journey-ai`. Add a task to `domain/ai/tasks.ts`; never send prompts from the client. Secrets: `OPENAI_API_KEY`; optional `OPENAI_MODEL` (default `gpt-5.5`), `OPENAI_REASONING_EFFORT` (default `low`), `AI_MONTHLY_TOKEN_BUDGET` (default 2,000,000 per workspace), `ALLOWED_ORIGIN`.
 - Edit a Process Model only through `domain/processModel/patch.ts`: each operation takes a valid model and returns the next model plus its JSON Patch, or throws `ModelOpError`.
@@ -85,7 +85,10 @@ npm run dev              # local dev server on port 3000
 - Edge functions deploy from GitHub (`.github/workflows/deploy-functions.yml`): on main, and on `claude/` branches when the commit message contains `[deploy]`.
 - Flowcharts: `parseFile` reads draw.io and BPMN into one segment per lane and shape (`locator.shapeId`, label on the first line), so they go through the same extraction. Images return `needs_vision`: send them to the `readFlowchart` task in `journey-ai` (`{ task, image: dataUrl }`), turn the result into segments with `readingToGraph` and `graphToSegments`, and pass the source to extraction with `inferred: true`; what only it supports stays "inferred". Export flows with `modelToBpmn` (`domain/flowchart/bpmn.ts`).
 - Eval cases in `journey-extract`: `ap-invoice` (calls, SOP, draw.io), `ap-invoice-image` (the PNG instead of the draw.io), `ap-invoice-no-flow`.
-- Next: WP1.7 review and edit UI.
+- Sources: the browser parses uploads and stores segments in `process_sources` (archive, never delete). `journey-extract` `create` takes `sourceIds` of that table.
+- Bring an extraction into a model only through `proposeChanges` / `applyChanges` (`domain/extract/rebase.ts`): confirmed elements are never overwritten (a conflict is recorded), removals are opt-in.
+- The journey screens read and write only through `journey/store` (`JourneyStore`); the memory store backs the browser tests and has no AI.
+- Next: Phase 2, WP2.1 assessment.
 
 ## Definition of done for a pull request
 
