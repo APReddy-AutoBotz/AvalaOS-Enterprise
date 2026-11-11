@@ -1,1 +1,0 @@
-Synthetic interview notes identify an intake step but deliberately omit systems, exceptions, and ownership. The expected result is review-required evidence with explicit missing-input blockers, never a completed assessment.

@@ -1,121 +1,71 @@
-# AvalaOS Core Agent Instructions
+# AvalaOS Enterprise: agent brief
 
-Read `docs/00_SOURCE_OF_TRUTH.md` before planning, reviewing, or implementing repository work.
+Read this file and the one work-package spec you were given. Nothing else is required reading.
 
-## Minimum Authoritative Reading Sequence
+## Product goal
 
-1. The current snapshot in `docs/00_SOURCE_OF_TRUTH.md` (read retained entries only for a specific linked dependency)
-2. This `AGENTS.md`
-3. `docs/09_END_TO_END_PRODUCT_GUIDE.md`, `docs/05_IMPLEMENTATION_STATUS.md` and `docs/04_MVP_ROADMAP.md` for current product work
-4. `PLANS.md` for substantial execution, then the active task plan and domain document routed by `docs/architecture/document-authority-map.md`
+A working, reviewable journey for one business process:
 
-Consult the relevant current sections of the enterprise acceleration plan, target architecture and risk register when changing their sequence, trust boundaries or risk/proof disposition. Their domain authority and all execution/security gates below remain unchanged. Do not repeatedly load their duplicated historical snapshots for an ordinary scoped correction.
+supported source documents → editable assessment → useful BRD / PDD / FRD / SDD and As-Is / To-Be flows → reviewed work proposals → persistent Delivery board items.
 
-Do not read the full historical planning or evidence corpus by default. Historical plans, evidence, reconciliation records, and post-merge verification are consulted only when an active artifact links to them or the task requires a specific audit trail.
+## The six behaviours that define "done"
 
-## Authority Precedence
+1. One Assess experience and one current assessment per process. One current document per selected type. Engine, schema, handoff and record versions appear only in History. Approved revisions are preserved and clearly distinct from the working draft.
+2. Ingest real transcript, SOP and flowchart content. Show source references, missing information and uncertainty. Users can edit extracted fields and steps; edits persist and drive assessment and documents.
+3. Recommend at process and step level. Support "AI unnecessary", API-first where an API is confirmed, and human judgment where it belongs. Explain reasons and alternatives.
+4. Generate useful, distinct BRD / PDD / FRD / SDD and editable flows. Preserve user edits. When inputs change, mark dependent outputs "needs review" and let the user choose. Missing design facts stay explicit questions or proposals.
+5. Generate actionable work-item proposals with descriptions, acceptance criteria and requirement links. Owner, estimate and dates may be unassigned. Document headings are never work items.
+6. Users review, edit and select proposals before confirming. Confirmed items appear once on the normal Delivery board and keep status and detail updates.
 
-- `AGENTS.md` governs agent execution, approval requirements, safety constraints, delegation, and delivery discipline.
-- `docs/00_SOURCE_OF_TRUTH.md` governs product scope, maturity, readiness/proof boundaries, and the accepted implementation sequence.
-- Domain documents govern only the areas assigned to them by `docs/architecture/document-authority-map.md`.
-- No document has blanket precedence outside its assigned domain.
-- If a genuine conflict crosses these boundaries and cannot be resolved safely, stop and request AP clarification.
+## Rules that always apply
 
-## Product Law
+- **Invent nothing.** No default, sample or "baseline" content in a user's model or document. No assumed API, policy, cost, ROI, volume or evidence. Unknown stays unknown and becomes an open question.
+- **One model.** The Process Model is the single source for assessment, documents, flows and proposals. Do not add a second representation of a process.
+- **No internal labels in primary views.** Version numbers, hashes, schema names and PR numbers belong in History only.
+- **Pure domain first.** Logic goes in `domain/` with no I/O and no React, with unit tests. Then the server command. Then the UI.
+- **Server holds secrets.** AI provider keys and service-role keys never reach the browser or the repository.
+- **Small pull requests.** One work package per pull request, with its tests. Do not add governance, evidence or status documents.
 
-- Assess before automation.
-- Govern before execution.
-- Humans approve risk.
-- Evidence proves every decision.
+## Stop and ask before
 
-## P0 Stop Gate
+- changing the database schema outside your work package;
+- adding a dependency;
+- deleting or rewriting product code that your work package does not name;
+- anything that would write generated default content.
 
-The service-role Storage URL escape recorded as `P0-001` in the active risk register is the first gate for PR 1A and every readiness claim.
+## Where things are
 
-- Deployment disposition is **NOT DEPLOYED**, based on the AP manual inspection recorded in the active source of truth, acceleration plan, and risk register.
-- Do not inspect or mutate live infrastructure, disable endpoints, review production logs, rotate credentials, or perform incident actions without separate explicit approval.
-- The disposition closed only the P0 deployment-question stop condition; it is not pilot, production, hosted, deployment, storage, or security readiness proof.
-- Preserve the accepted PR 1A remediation and follow the acceleration plan for later work.
-- Never place secrets, raw logs, signed URLs, customer data, object identifiers, or production infrastructure identifiers in evidence.
+| Path | What it is |
+| --- | --- |
+| `docs/product-plan.md` | The review and the full plan: target templates (section 4), flow design (5), data model (7), work packages (8) |
+| `App.tsx`, `components/`, `services/` | The existing application, inherited from AvalaOS Core. Being replaced route by route |
+| `services/assessV2/` | Data shapes and interaction-readiness rules that the Process Model reuses |
+| `services/scoringEngine.ts` | Legacy V1 scoring. Do not extend it |
+| `supabase/functions/`, `supabase/migrations/` | Inherited edge functions and schema. A new baseline schema replaces the migrations in WP0.2 |
+| `domain/` | New pure domain code (created from Phase 1) |
+| `scripts/` | Unit-test runners only |
 
-## Non-Negotiable Rules
+Legacy code is marked for retirement in `docs/product-plan.md` section 1. Do not build new features on the retire list.
 
-- Do not change scoring formulas, score weights, thresholds, hard stops, or recommendation logic without an explicit score version change and regression tests.
-- Do not use AI to decide deterministic scores, risk gates, approvals, or regulated decisions.
-- Do not add unsupported compliance claims.
-- Do not introduce browser-side provider secrets or browser-side AI execution for pilot or production behavior.
-- Do not treat client claims, email matching, demo personas, cached permissions, routes, or UI state as server authorization.
-- Do not modify KlarityFlow Health unless the user explicitly requests Health work.
-- Do not push to the historical prototype repository.
-- Do not add runtime AGS, MCP, A2A, or agent execution behavior unless a later approved milestone authorizes it.
-- If a change expands product scope, stop and request approval.
+## Commands
 
-## Delivery Discipline
+```
+npm ci
+npm run typecheck        # application TypeScript
+npm run typecheck:edge   # supabase/functions TypeScript
+npm run test:unit        # all unit tests; pass a word to filter, e.g. npm run test:unit -- scoring
+npm test                 # typecheck + typecheck:edge + unit tests
+npm run build            # production build
+npm run dev              # local dev server on port 3000
+```
 
-- PR #205 is the explicitly authorized one-time docs/config-only enterprise rebaseline. It does not authorize another plan-only, evidence-only, reconciliation-only, post-merge-only, or closure-only PR.
-- A workstream may use one to three substantial vertical PRs when security, schema, deployment, or rollback boundaries require it.
-- After PR #205 is accepted, do not create routine plan-only, evidence-only, reconciliation-only, post-merge-only, or closure-only PRs.
-- Keep feature documentation, migrations, security controls, tests, verification, evidence, and rollback instructions in the implementation PR that needs them.
-- Every implementation PR must include acceptance criteria, feature-specific quality gates, exact verification results, and a safe rollback or read-only fallback.
-- Stop after each substantial PR boundary and report evidence; do not fragment one boundary into process-theatre PRs.
-- Use the status vocabulary `confirmed source defect`, `suspected defect requiring deeper validation`, `deployment status unknown`, `executed evidence`, `planned verification`, `blocked`, and `not run` precisely.
+## Definition of done for a pull request
 
-## Parallel Execution
+- The "Done when" line of the work package is covered by tests that fail before the change and pass after.
+- `npm test` and `npm run build` pass locally and in CI.
+- No rule in "Rules that always apply" is broken.
+- The pull request description says what changed, how it was verified, and what was not verified.
 
-The root controller retains final authority for scope, plan, integration, acceptance, and the single PR. No broader parallel implementation may begin before the P0 decision tree authorizes continuation.
+## History
 
-- Only the root controller may spawn agents.
-- Recursive or nested delegation is prohibited. Child agents must never spawn subagents, create descendants, or call delegation/spawn tools.
-- If any child creates or attempts to create a descendant, the controller must interrupt it immediately and mark the orchestration run failed.
-- `max_threads = 4` is the effective tested concurrency control and must not be exceeded.
-- `max_depth = 1` remains configured so the intended technical control becomes effective when the upstream defect is fixed, but it must not be the only descendant-containment control until [openai/codex#32027](https://github.com/openai/codex/issues/32027) is fixed and retested.
-- Per-agent `sandbox_mode` values are defaults; when the managed environment exposes a selectable live parent permission profile, that selected profile governs spawned children.
-- Never explicitly request, configure, or escalate to `--yolo` or `danger-full-access` for this controlled workflow.
-
-### Managed Codex Cloud permission compatibility
-
-A managed Codex Cloud session may be provisioned with a fixed filesystem permission profile that the task cannot change. A fixed broad profile is an environment property, not an instruction to use broad authority, and **must not by itself block an otherwise authorized repository task**.
-
-When the live parent profile cannot be changed:
-
-- Wave 1 remains **behaviorally read-only**: reviewers and the root controller may inspect repository state and run non-mutating checks, but they must not edit files, commit, push, create branches/PRs, or invoke repository/hosted mutation tools during Wave 1.
-- All Wave 1 reviewers must finish and close, and the root controller must synthesize their findings before any write begins.
-- Wave 2 may then use the already-provisioned fixed filesystem profile only for the explicitly AP-authorized repository work package. Do not treat the broad profile as authorization for additional scope.
-- Hosted/live infrastructure inspection or mutation, real secrets, deployment, production actions, external operational side effects, and other task stop-gates remain prohibited unless separately and explicitly approved.
-- Do not block merely because the managed profile cannot be toggled if these behavioral phase boundaries can be enforced. If the environment cannot enforce the task's actual product/security stop-gates, stop and request AP clarification.
-
-After the P0 gate permits broader work:
-
-### Wave 1 — Concurrent Findings Only
-
-Wave 1 must be read-only so every reviewer is confined to findings and evidence. Prefer an actual read-only live parent/controller permission profile when the environment supports switching. If a managed Codex Cloud session exposes only a fixed profile, enforce the Managed Codex Cloud permission compatibility rules above instead.
-
-- `architecture_explorer`: map affected trust boundaries, dependencies, and file ownership.
-- `security_reviewer`: validate attack paths, authorization boundaries, negative tests, and residual risk.
-- `quality_reviewer`: define feature-owned CI, migration, coverage, accessibility, performance, rollback, and evidence requirements.
-
-All Wave 1 reviewers must finish and close before implementation writes begin.
-
-The controller must synthesize the findings and resolve conflicts before implementation begins.
-
-### Permission Transition
-
-Only after Wave 1 is complete and no reviewer remains active may implementation writes begin. If the live profile is selectable, the root controller explicitly switches to workspace-write. If the managed environment provides only a fixed profile, the controller records the transition and begins Wave 2 under that fixed profile while continuing to enforce the task scope and stop-gates behaviorally. Reviewer agents must not run during the write-enabled phase.
-
-### Wave 2 — Substantial Implementation Ownership
-
-Wave 2 may contain only `implementation_worker` agents. Use up to three workers for independent, non-overlapping tracks. Every assignment must be a meaningful body of work, not a micro-task, and must include its behavior, focused tests, documentation updates, and rollback notes.
-
-Suggested PR 1A ownership:
-
-- Track A: explicit runtime modes and removal of demo/mock/browser-AI authority from pilot and production paths.
-- Track B: P0 Storage remediation, Edge export authorization, privileged audit behavior, and affected Edge tests.
-- Track C: validated unsafe-rendering remediation and directly related false-success UI behavior with tests.
-
-Assign exclusive file ownership before workers edit. Workers must not create branches or PRs independently. If tracks overlap materially, serialize the affected portion.
-
-The root controller owns migration-chain reconciliation, CI integration, conflict resolution, full verification, final security/quality review, and the one draft PR.
-
-## Historical Evidence
-
-Historical evidence and post-merge verification under `docs/quality/` are immutable. Update active canonical documents when the current position changes. Do not rewrite closed evidence unless the user explicitly authorizes a corrective addendum.
+This repository continues `APReddy-AutoBotz/AvalaOS-Core` from commit `88d0643`. The earlier governance documents, acceptance harnesses and CI workflows remain in that repository and in this repository's git history. They are not instructions for work here.

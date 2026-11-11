@@ -1,6 +1,0 @@
-Process,Step,Application,Owner,Manual minutes,Notes
-Synthetic invoice review,Capture invoice,Synthetic inbox,Synthetic operations team,2,"Capture reference, date and amount"
-Synthetic invoice review,Validate purchase order,Synthetic ERP,Synthetic finance team,8,Rules are stable
-Synthetic invoice review,Investigate exception,Synthetic ERP,Synthetic finance team,,Unknown effort remains unknown
-Synthetic invoice review,Human approval,Synthetic ERP,Synthetic approver,5,No autonomous payment release
-Synthetic injection example,=1+1,No execution,No execution,,Formula-like text is inert

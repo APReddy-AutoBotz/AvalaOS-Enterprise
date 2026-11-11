@@ -1,23 +1,27 @@
-name: AvalaOS Core CI
+name: CI
 
 on:
   pull_request:
   push:
     branches:
       - main
-      - master
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   verify:
-    name: AvalaOS Core Quality Gates
+    name: Typecheck, unit tests, build
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -27,275 +31,18 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      - name: Cheap workflow, documentation, claims, and link contracts
-        run: npm run test:workflow-yaml && npm run test:docs:pr1d && npm run test:docs:pr1e
-
-      - name: Dependency audit
-        run: npm audit --audit-level=moderate
-
-      - name: Static AI boundary scan
-        run: npm run test:ai-boundary-static
 
       - name: Secret hygiene scan
         run: npm run test:secret-hygiene
 
-      - name: Hosted non-production pilot contracts
-        run: npm run test:hosted-pilot
+      - name: Typecheck application
+        run: npm run typecheck
 
-      - name: Regression and policy tests
-        run: npm run test:runtime
+      - name: Typecheck edge functions
+        run: npm run typecheck:edge
+
+      - name: Unit tests
+        run: npm run test:unit
 
       - name: Production build
         run: npm run build
-
-  enterprise-browser:
-    name: PR 1A, PR 1C, and PR 1D Chromium, accessibility, viewport, and performance gates
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Install official Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run retained deterministic desktop and mobile browser gates
-        env:
-          EXPECTED_RELEASE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: npm run test:browser
-      - name: Run PR 1D browser gates with the dedicated pilot-mode configuration
-        run: npm run test:browser:pr1d
-      - name: Run PR 1E desktop/mobile accessibility and viewport gates
-        run: npm run test:browser:pr1e
-  canonical-ap-invoice-exception:
-    name: Canonical AP Invoice Exception disposable browser journey
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npx playwright install --with-deps chromium
-      - name: Verify database evidence fails closed
-        run: node --test scripts/canonicalInvoiceExceptionDatabaseEvidence.test.mjs
-      - name: Production UI and handlers with disposable PostgreSQL and synthetic sessions
-        run: npm run test:canonical-ap-invoice-exception
-      - name: Retain bounded canonical review outputs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: canonical-ap-invoice-exception-review
-          if-no-files-found: error
-          path: |
-            output/local-private/primary-lifecycle-timeout-local/canonical-*/review-manifest.json
-            output/local-private/primary-lifecycle-timeout-local/canonical-*/result.json
-            output/local-private/primary-lifecycle-timeout-local/canonical-*/cleanup.json
-            output/local-private/primary-lifecycle-timeout-local/canonical-*/*-ap-invoice-exception-*.md
-            output/local-private/primary-lifecycle-timeout-local/canonical-*/*-ap-invoice-exception-*.png
-
-  pr1a-migrations:
-    name: PR 1A Migration Gates
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PR1A_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Fresh, upgrade, RLS, and failure migration checks
-        run: npm run test:migrations:pr1a
-
-  pr1b-migrations:
-    name: PR 1B Identity, RLS, and Assess Migration Gates
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PR1B_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Fresh, upgrade, two-tenant RLS, failure, and read-only checks
-        run: npm run test:migrations:pr1b
-
-  pr1c-migrations:
-    name: PR 1C Govern, Studio Handoff, ACL, and Atomicity Migration Gates
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PR1C_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: ACL, adversarial ancestry, idempotency, concurrency, and rollback checks
-        run: npm run test:migrations:pr1c
-
-  pr1d-migrations:
-    name: PR 1D V2 Schema, RLS, Snapshot, ACL, and Atomicity Migration Gates
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PR1D_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Fresh, PR 1C upgrade, populated, ACL, RLS, hash, idempotency, concurrency, audit, and rollback checks
-        run: npm run test:migrations:pr1d
-      - name: Canonical AP fixture authority and synthetic permit regressions
-        env:
-          ENTERPRISE_LIFECYCLE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
-        run: node --test scripts/canonicalInvoiceExceptionBackend.test.mjs
-
-  pr1e-migrations:
-    name: PR 1E PostgreSQL 16 Review, Govern, Studio, RLS, and Private-RPC Gates
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      PR1E_MIGRATION_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Fresh and ordered-upgrade schema, forced-RLS, and private-RPC ACL checks
-        run: npm run test:migrations:pr1e
-
-  supabase-smoke:
-    name: Supabase Smoke Checks
-    runs-on: ubuntu-latest
-    needs: verify
-    if: ${{ vars.RUN_SUPABASE_SMOKE == 'true' }}
-    env:
-      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-      VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-      SUPABASE_SMOKE_EMAIL: ${{ secrets.SUPABASE_SMOKE_EMAIL }}
-      SUPABASE_SMOKE_PASSWORD: ${{ secrets.SUPABASE_SMOKE_PASSWORD }}
-      SUPABASE_SMOKE_ORG_ID: ${{ secrets.SUPABASE_SMOKE_ORG_ID }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Delivery RLS smoke test
-        run: npm run test:supabase:delivery

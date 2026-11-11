@@ -1,7 +1,0 @@
-1
-00:00:01,000 --> 00:00:05,000
-The synthetic reviewer verifies evidence and records a rationale.
-
-2
-00:00:06,000 --> 00:00:10,000
-The final approver is distinct from the source creator.

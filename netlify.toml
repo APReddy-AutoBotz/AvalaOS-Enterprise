@@ -1,16 +1,9 @@
 [build]
-  # The permanent build router gives exact PR previews public deploy identity,
-  # preserves ordinary branch behavior,
-  # admits controlled-human mode only for the exact PR #264 Deploy Preview,
-  # and fails closed for production context unless the pre-existing exact
-  # avalaos-pilot stable non-production authorization tuple is present.
-  # Neither path authorizes AvalaOS.com, custom domains, customer data, real
-  # provider keys/calls, or production use.
-  command = "node scripts/writeHostedPilotNetlifyHeaders.mjs --build"
+  command = "npm run build"
   publish = "dist"
 
-[functions]
-  directory = "netlify/functions"
+[build.environment]
+  NODE_VERSION = "22"
 
 [[redirects]]
   from = "/*"

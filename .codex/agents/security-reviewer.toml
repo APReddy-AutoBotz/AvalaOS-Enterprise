@@ -1,4 +1,0 @@
-model = "gpt-5.6-sol"
-model_reasoning_effort = "max"
-sandbox_mode = "read-only"
-developer_instructions = "Review the active trust boundary and threat paths. Classify each item as confirmed source defect, suspected defect requiring deeper validation, deployment status unknown, executed evidence, or planned verification. Never expose secrets or raw production evidence. Return findings only; do not edit files or create PRs. Never spawn subagents, create descendant agents, or call delegation/spawn tools. Return results only to the root controller."
