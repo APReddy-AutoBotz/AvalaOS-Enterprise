@@ -43,7 +43,8 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 | `services/scoringEngine.ts` | Legacy V1 scoring. Do not extend it |
 | `supabase/migrations/` | The live schema, applied to the AvalaOS Enterprise Supabase project. Access is by workspace membership (`admin`, `editor`, `viewer`, plus `can_approve`) |
 | `supabase/tests/baseline_rules.sql` | Behaviour checks for the schema. Run it against the database after any migration; it rolls back |
-| `supabase/functions/`, `supabase/legacy/` | Inherited edge functions and the inherited 256-table schema. Reference only, not deployed |
+| `supabase/functions/journey-ai/` | The AI gateway edge function (deployed, `verify_jwt = false`, authenticates the caller itself) |
+| `supabase/functions/` (others), `supabase/legacy/` | Inherited edge functions and the inherited 256-table schema. Reference only, not deployed |
 | `domain/` | New pure domain code. `domain/processModel/types.ts` is the Process Model |
 | `eval/` | The extraction eval: a synthetic source pack per case, its hand-checked gold model, and the scorer. See `eval/README.md` |
 | `scripts/` | Unit-test runners only |
@@ -73,9 +74,10 @@ npm run dev              # local dev server on port 3000
 
 ## Progress
 
-- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer.
+- Done: WP0.1 repository slimmed; WP0.2 baseline schema applied; WP0.3 eval corpus (AP invoice case) and scorer; WP0.4 AI gateway (`domain/ai/`, edge function `journey-ai`, `ai_usage` table).
 - Changed from the plan in WP0.2: the inherited tenant model and schema were not carried over. Their 20 RPCs and 22 edge functions depend on the full inherited schema, so the new database has a small tenancy model of its own. The inherited screens therefore run only in local demo mode until each is replaced.
-- Next: WP0.4 AI gateway (OpenAI key is set as the `OPENAI_API_KEY` Edge Function secret), then Phase 1.
+- AI calls go only through `journey-ai`. Add a task to `domain/ai/tasks.ts`; never send prompts from the client. Secrets: `OPENAI_API_KEY`; optional `OPENAI_MODEL` (default `gpt-5.5`), `OPENAI_REASONING_EFFORT` (default `low`), `AI_MONTHLY_TOKEN_BUDGET` (default 2,000,000 per workspace), `ALLOWED_ORIGIN`.
+- Next: Phase 1, starting with WP1.1 (Process Model validation, patches and selectors).
 
 ## Definition of done for a pull request
 
