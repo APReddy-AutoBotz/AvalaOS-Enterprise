@@ -11,6 +11,8 @@ node_modules
 dist
 dist-trust-assurance
 dist-ssr
+dist-e2e
+playwright-report
 .agent/ts-tests
 .agent/edge-ts-tests
 .agent/pr1f-ts-tests

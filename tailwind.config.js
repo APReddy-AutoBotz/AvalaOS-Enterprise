@@ -6,6 +6,7 @@ export default {
     './App.tsx',
     './index.tsx',
     './components/**/*.{ts,tsx}',
+    './journey/**/*.{ts,tsx}',
   ],
   theme: {
     extend: {
