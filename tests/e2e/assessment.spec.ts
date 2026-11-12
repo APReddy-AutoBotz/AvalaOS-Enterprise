@@ -173,6 +173,16 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
   await expect(page.getByTestId('value')).toContainText('2,400');
   await expect(page.getByTestId('readiness')).toContainText('Ready to automate');
   await expect(page.getByTestId('value-assumed')).toContainText('2 steps');
+  // Money only from figures entered here: 2,400 hours at 500 an hour, build 600,000, running 120,000 a year.
+  await page.getByLabel('Currency').fill('inr');
+  await page.getByLabel('Cost per hour').fill('500');
+  await page.getByLabel('Build cost').fill('600000');
+  await page.getByLabel('Running cost a year').fill('120,000');
+  await page.getByRole('button', { name: 'Save figures' }).click();
+  await expect(page.getByTestId('benefit-value')).toContainText('INR 1,200,000');
+  await expect(page.getByTestId('benefit-payback')).toContainText('6.7 months');
+  await page.getByTestId('benefit-payback').scrollIntoViewIfNeeded();
+  await shot(page, '38-benefit-payback');
   await shot(page, '33-assessment-priority');
 
   await page.reload();
