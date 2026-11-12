@@ -3,7 +3,8 @@
 // Model and the assessment; nothing is drafted here and nothing is assumed.
 import { gaps, orderedSteps } from '../processModel/selectors.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
-import { accessText, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
+import { robotsBlocked } from '../assess/scoring.ts';
+import { ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
 
@@ -31,7 +32,7 @@ export function buildPdd(input: DocInput): DocTree {
   b.section('1.4', 'Minimum prerequisites for automation');
   const access = m.systems.filter(s => s.inScope && (s.access.length === 0 || s.access.every(x => x.access === 'unknown')));
   b.list([
-    ...m.systems.filter(s => s.inScope).map(s => `Access to ${s.name} for the automation (${accessText(s)}).`),
+    ...m.systems.filter(s => s.inScope).map(s => `Access to ${s.name} for the automation (${accessSummary(s)}).`),
     ...(known(m.meta.profile?.processChange) === null ? ['Confirmation that the process will not change materially in the next six months.'] : []),
   ]);
   for (const s of access) b.note(`How can ${s.name} be accessed (API, UI, file)?`, { kind: 'system', id: s.id, field: 'access' });
@@ -53,9 +54,20 @@ export function buildPdd(input: DocInput): DocTree {
     ['Steps', String(steps.length)],
   ]);
   b.section('2.2', 'Applications used');
-  b.table('Applications used', ['Application', 'Kind', 'Version', 'Access method and status', 'Robots allowed on screens', 'Screens stable', 'Remote desktop'],
-    m.systems.map(s => [s.name, s.kind.replace('_', ' '), s.version ?? missing(), accessText(s), factCell(s.uiAllowed, v => (v ? 'Yes' : 'No')), factCell(s.uiStable, v => (v ? 'Yes' : 'No')), factCell(s.remote, v => (v ? 'Yes' : 'No'))]),
+  const robots = (s: typeof m.systems[number]) => {
+    const f = s.uiAllowed;
+    if (f && f.status !== 'unknown' && f.value !== null) return factCell(f, v => (v ? 'Yes' : 'No'));
+    const ban = s.access.find(a => a.method === 'ui' && a.access === 'confirmed_absent' && robotsBlocked({ ...s, access: [a] }));
+    return ban ? { text: `No (${ban.name}: not available)`, status: ban.status } : missing();
+  };
+  b.table('Applications used', ['Application', 'Kind', 'Version', 'Access', 'Robots allowed on screens', 'Screens stable', 'Remote desktop'],
+    m.systems.map(s => [s.name, s.kind.replace('_', ' '), s.version ?? missing(), accessSummary(s), robots(s), factCell(s.uiStable, v => (v ? 'Yes' : 'No')), factCell(s.remote, v => (v ? 'Yes' : 'No'))]),
     'No applications are recorded yet.');
+  const ifaces = m.systems.flatMap(s => s.access.map(a => ({ s, a })));
+  if (ifaces.length > m.systems.length) {
+    b.table('Interfaces and transactions', ['Application', 'Method', 'Interface or transaction', 'Used for', 'Status', 'Source'],
+      ifaces.map(({ s, a }) => [s.name, a.method.toUpperCase(), a.name ?? '', a.operations.join(', '), { text: ACCESS_TEXT[a.access], status: a.status }, sourceList(a.sources)]), '');
+  }
   b.section('2.3', 'As-Is process map');
   b.callout('The As-Is map is drawn from the same steps in the Flows stage and will be embedded here.');
   b.section('2.4', 'Detailed As-Is steps');

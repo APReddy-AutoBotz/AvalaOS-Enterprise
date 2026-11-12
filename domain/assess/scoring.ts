@@ -10,7 +10,7 @@
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
-export const MODEL_VERSION = 'assess-scoring-2026-11.4';
+export const MODEL_VERSION = 'assess-scoring-2026-11.5';
 
 export type Approach = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human';
 /** Automation approaches. On equal scores the earlier one wins: a confirmed API, then RPA, then AI. */
@@ -155,6 +155,19 @@ const TEXT = {
 const known = (f: Fact<unknown> | undefined): Fact<unknown> | null => (f && f.status !== 'unknown' && f.value !== null && f.value !== undefined ? f : null);
 const yesNo = (f: Fact<unknown> | null): YesNo => (f ? (f.value === true ? 'yes' : 'no') : 'unknown');
 
+/** A UI access method that is about robots driving the screens (scripting, bots, RPA). */
+const ROBOT_UI = /script|automat|robot|\bbots?\b|\brpa\b/i;
+/**
+ * Whether robots may not drive a system's screens: a person or source said so (uiAllowed false), or,
+ * where nobody has answered that directly, the sources record a UI method for robots as not available
+ * (for example "SAP GUI scripting: not available").
+ */
+export function robotsBlocked(s: SystemRef): boolean {
+  const f = s.uiAllowed;
+  if (f && f.status !== 'unknown' && f.value !== null) return f.value === false;
+  return s.access.some(a => a.method === 'ui' && a.access === 'confirmed_absent' && ROBOT_UI.test(a.name ?? ''));
+}
+
 /** Kinds of system that have no interface or screens to automate: a device, not an application. */
 export const NON_INTEGRABLE: SystemRef['kind'][] = ['scanner'];
 const apiOf = (s: SystemRef): AccessMethod[] => s.access.filter(a => a.method === 'api');
@@ -236,7 +249,7 @@ function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFa
     language: read('language', t.language, yesNo),
     write: read('write', t.write, k => (k ? (k.value as WriteImpact) : 'unknown')),
     agent: { ambiguity: agentRead('ambiguity'), adaptive: agentRead('adaptive'), toolChoice: agentRead('toolChoice'), value: agentRead('value'), controllable: agentRead('controllable') },
-    systems, apis, screens, blocked: systems.filter(s => known(s.uiAllowed as Fact<unknown> | undefined)?.value === false),
+    systems, apis, screens, blocked: systems.filter(robotsBlocked),
   };
 }
 
