@@ -112,9 +112,10 @@ function agentTrait(ctx: Ctx, k: keyof NonNullable<StepTraits['agent']>): Fact<b
 const used = (path: string, f: Fact<unknown>, label = LABEL[path.replace(/^traits\./, '')] ?? path): FactUsed =>
   ({ path, label, value: f.value, status: f.status, sources: f.sources });
 
+// Both variants name every field, so narrowing on `fires` works without strictNullChecks.
 type Check =
-  | { fires: true; reasons: Reason[]; human?: HumanPoint; questions?: StepResult['questions']; unknowns?: Unknown[] }
-  | { fires: false; reason: string; unknowns?: Unknown[] };
+  | { fires: true; reasons: Reason[]; reason?: undefined; human?: HumanPoint; questions?: StepResult['questions']; unknowns?: Unknown[] }
+  | { fires: false; reason: string; reasons?: undefined; human?: undefined; questions?: undefined; unknowns?: Unknown[] };
 
 interface Rung {
   id: RungId;
@@ -322,12 +323,12 @@ export function evaluateStep(model: ProcessModel, step: Step): StepResult {
   for (const rung of LADDER) {
     const c = rung.check(ctx);
     if (!c.fires) {
-      rejected.push({ rung: rung.id, label: rung.label, reason: c.reason });
+      rejected.push({ rung: rung.id, label: rung.label, reason: c.reason ?? '' });
       for (const u of c.unknowns ?? []) if (!unknowns.some(x => x.path === u.path)) unknowns.push(u);
       continue;
     }
     for (const u of c.unknowns ?? []) if (!unknowns.some(x => x.path === u.path)) unknowns.push(u);
-    return finish(ctx, rung, c.reasons, c.human ?? rung.human, rejected, unknowns, c.questions ?? []);
+    return finish(ctx, rung, c.reasons ?? [], c.human ?? rung.human, rejected, unknowns, c.questions ?? []);
   }
   const reasons: Reason[] = [{ text: 'No simpler mechanism fits on what is known, and the conditions for an agent do not all hold. Keep the step with a person; the facts below could change this.', facts: [] }];
   return finish(ctx, { id: 'none', mechanism: 'no_option', label: 'Keep with a person for now', ai: 'no', human: 'does_it', check: () => ({ fires: false, reason: '' }) }, reasons, 'does_it', rejected, unknowns, []);
