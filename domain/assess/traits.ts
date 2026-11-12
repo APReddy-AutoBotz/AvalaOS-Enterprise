@@ -20,7 +20,8 @@ export type TraitKey = typeof TRAIT_NAMES[number];
 export const stepTraits: TaskDefinition = {
   id: 'stepTraits',
   schemaName: 'step_traits',
-  reasoningEffort: 'medium',
+  // Low effort keeps a batch of seven steps well inside the edge function's time limit.
+  reasoningEffort: 'low',
   instructions: [
     'Segments whose id starts with "step:" describe the steps to assess. The other segments are passages from the sources.',
     'For each step, report the traits below that the passages state or clearly imply, each with one short verbatim quote from a source passage (never from a "step:" segment) and its segment id.',
