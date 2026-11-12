@@ -114,6 +114,8 @@ export interface StepScore {
   bestAutomation: Approach;
   /** Kept with a person only because no approach reaches the "possible" band on what is known. */
   forNow: boolean;
+  /** Judgment or physical work: the step is not a candidate for any automation approach. */
+  mustStayHuman: boolean;
   aiNeeded: boolean;
   /** Automated without AI: said outright. */
   aiUnnecessary: boolean;
@@ -345,8 +347,8 @@ export function limiter(a: ApproachScore): string {
   return worst && worst.weight - worst.points > 0 ? `${worst.text}.` : '';
 }
 
-/** Lower-cases a sentence start, leaving names and acronyms ("SAP", "RPA") alone. */
-export const lower = (s: string) => (/^[A-Z][a-z' ]/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
+/** Lower-cases the start of one of the fact sentences above, leaving names ("SAP", "Shared AP mailbox") alone. */
+export const lower = (s: string) => (/^(The|It|Its|No|An?|Not|Needs|Does|Done|Drafts|Makes|Updates|Changes|Structured|Assuming|AI can)\b/.test(s) ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 const joinAnd = (list: string[]) => (list.length <= 1 ? list.join('') : `${list.slice(0, -1).join(', ')} and ${list[list.length - 1]}`);
 
 function reasonFor(winner: ApproachScore, runnerUp: ApproachScore | undefined, best: ApproachScore, forNow: boolean): string {
@@ -364,7 +366,7 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
   const rework = known(step.traits?.rework as Fact<unknown> | undefined)?.value === true;
   if (step.taskType === 'service') {
     return {
-      stepId: step.id, alreadyAutomated: true, scores: [], winner: 'human', bestAutomation: 'rpa', forNow: false, aiNeeded: false, aiUnnecessary: false, human: 'none', rework,
+      stepId: step.id, alreadyAutomated: true, scores: [], winner: 'human', bestAutomation: 'rpa', forNow: false, mustStayHuman: false, aiNeeded: false, aiUnnecessary: false, human: 'none', rework,
       reason: 'A system already does this step on its own; there is nothing to automate.', knownShare: 1, confidence: 'high', unknowns: [], questions: [], apiWouldWin: false,
     };
   }
@@ -405,7 +407,7 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
   }));
 
   return {
-    stepId: step.id, alreadyAutomated: false, scores, winner: winner.approach, bestAutomation: best.approach, forNow,
+    stepId: step.id, alreadyAutomated: false, scores, winner: winner.approach, bestAutomation: best.approach, forNow, mustStayHuman: Boolean(s.human.floor),
     aiNeeded: winner.approach === 'ai_assist' || winner.approach === 'agent', aiUnnecessary: winner.approach === 'rpa' || winner.approach === 'api',
     human, rework, reason: reasonFor(winner, order[0], best, forNow), knownShare,
     confidence: knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low', unknowns, questions, apiWouldWin,

@@ -177,6 +177,7 @@ const humanStep = (effort?: number, share?: number): StepSpec => ({ name: 'Appro
 test('the process gets a ranked outcome: RPA first where no API is confirmed, API second, AI third', () => {
   const r = assessProcess(build([rpaStep(), rpaStep(), rpaStep(), apiStep, aiStep(), humanStep(), { type: 'service' }]));
   assert.equal(r.assessed, 6);
+  assert.equal(r.candidates, 5, 'the step that needs judgment is not part of the average');
   assert.equal(r.alreadyAutomated, 1);
   assert.deepEqual(r.ranking.map(x => x.approach), ['rpa', 'api', 'ai_assist', 'agent']);
   assert.deepEqual(r.ranking.map(x => x.rank), [1, 2, 3, 4]);
@@ -194,7 +195,7 @@ test('the process gets a ranked outcome: RPA first where no API is confirmed, AP
 test('the summary says in plain words why the approach is proposed', () => {
   const r = assessProcess(build([rpaStep(), rpaStep(), apiStep, aiStep(), humanStep()]));
   assert.deepEqual(r.narrative.map(x => x.title), ['Why RPA-led automation', 'Why the others rank lower', 'Where AI is needed', 'What stays with people', 'How firm this is']);
-  assert.match(r.narrative[0].text, /^Rule-based RPA scores \d+ out of 100 across the process, the highest of the four approaches\. Best fit for 2 of 5 steps/);
+  assert.match(r.narrative[0].text, /^Rule-based RPA scores \d+ out of 100 across the 4 steps open to automation, the highest of the four approaches\. Best fit for 2 of 5 steps/);
   assert.match(r.narrative[1].text, /API integration ranks second with \d+\./);
   assert.match(r.narrative[2].text, /^AI is needed in 1 of 5 steps: "Read paper invoice"\./);
   assert.match(r.narrative[3].text, /1 step needs a person because of judgment, accountability or physical work: "Approve exception"\./);
