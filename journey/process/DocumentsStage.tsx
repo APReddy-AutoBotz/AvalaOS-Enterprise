@@ -62,8 +62,8 @@ function BlockView({ b }: { b: Block; key?: React.Key }) {
   }
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources }: {
-  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; onSaved: () => void; canEdit: boolean;
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; onSaved: () => void; canEdit: boolean; me: string; onSourcesChanged: () => void;
   revision: { label: string; state: 'working' | 'approved'; date: string }; sources: SourceRow[];
 }) {
   const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
@@ -92,7 +92,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   };
 
   const toAnswer = React.useMemo(() => (decisions ? triage(model, assessProcess(model, { settings })) : null), [model, decisions, settings]);
-  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} /></>;
+  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} /></>;
 
   return (
     <div className="space-y-5">

@@ -31,15 +31,22 @@ export interface TaskDefinition {
 }
 
 export interface GatewayRequest {
-  action: 'run' | 'health';
+  action: 'run' | 'health' | 'transcribe';
   workspaceId: string;
   task?: string;
   segments?: Segment[];
   /** A data URL, for tasks that read an image. */
   image?: string;
+  /** A data URL of recorded speech, for transcribe. */
+  audio?: string;
 }
 
-export const LIMITS = { maxSegments: 400, maxSegmentChars: 20_000, maxTotalChars: 400_000, maxImageChars: 10_000_000 } as const;
+export const LIMITS = { maxSegments: 400, maxSegmentChars: 20_000, maxTotalChars: 400_000, maxImageChars: 10_000_000, maxAudioChars: 14_000_000 } as const;
+const AUDIO_DATA_URL = /^data:audio\/(webm|ogg|mp4|mpeg|wav|x-m4a)(;codecs=[a-z0-9.,]+)?;base64,[A-Za-z0-9+/]+={0,2}$/;
+/** A recording of speech as a data URL, within the size limit (about ten minutes of compressed audio). */
+export function validAudio(audio: unknown): audio is string {
+  return typeof audio === 'string' && audio.length <= LIMITS.maxAudioChars && AUDIO_DATA_URL.test(audio);
+}
 const IMAGE_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/]+={0,2}$/;
 
 export function validImage(image: unknown): image is string {
@@ -58,9 +65,14 @@ export function validateRequest(body: unknown, tasks: Record<string, TaskDefinit
   if (!body || typeof body !== 'object') return fail('INVALID_REQUEST', 'Body must be a JSON object.');
   const b = body as Record<string, unknown>;
   const action = b.action ?? 'run';
-  if (action !== 'run' && action !== 'health') return fail('INVALID_REQUEST', 'action must be "run" or "health".');
+  if (action !== 'run' && action !== 'health' && action !== 'transcribe') return fail('INVALID_REQUEST', 'action must be "run", "health" or "transcribe".');
   if (typeof b.workspaceId !== 'string' || !UUID.test(b.workspaceId)) return fail('INVALID_REQUEST', 'workspaceId must be a UUID.');
   if (action === 'health') return { ok: true, value: { action, workspaceId: b.workspaceId } };
+  if (action === 'transcribe') {
+    if (typeof b.audio === 'string' && b.audio.length > LIMITS.maxAudioChars) return fail('TOO_LARGE', 'The recording is too long; keep it under about ten minutes.');
+    if (!validAudio(b.audio)) return fail('INVALID_REQUEST', 'audio must be a WebM, Ogg, MP4, MPEG or WAV data URL.');
+    return { ok: true, value: { action, workspaceId: b.workspaceId, audio: b.audio } };
+  }
 
   if (typeof b.task !== 'string' || !tasks[b.task]) return fail('UNKNOWN_TASK', `Unknown task. Known tasks: ${Object.keys(tasks).join(', ')}.`);
   if (tasks[b.task].input === 'image') {

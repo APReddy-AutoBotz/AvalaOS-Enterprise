@@ -171,6 +171,10 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const r = await call('journey-ai', { action: 'run', workspaceId, task: 'readFlowchart', image: dataUrl });
       return r.data;
     },
+    async transcribe(workspaceId, audio) {
+      const r = await call('journey-ai', { action: 'transcribe', workspaceId, audio });
+      return String(r.text ?? '');
+    },
     async startExtraction(workspaceId, processId, sourceIds) {
       const r = await call('journey-extract', { action: 'create', workspaceId, processId, sourceIds });
       return { runId: r.runId };

@@ -9,6 +9,7 @@ import { assessProcess } from '../../domain/assess/process.ts';
 import { GROUP_LABEL, OWNER_LABEL, triage, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
 import { Button, cx } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
+import { AnswerFromNotes, type NotesContext } from './AnswerFromNotes.tsx';
 
 type Op = (m: ProcessModel) => OpResult;
 /** Runs operations in order as one edit. */
@@ -26,7 +27,46 @@ const record = (item: TriageItem, answer: string, status: 'answered' | 'deferred
   return { model: closed.model, patch: [...added.patch, ...closed.patch] };
 };
 
-export function GapsAssistant({ model, editor, canEdit, onClose }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void }) {
+
+/** The edit an answer makes: the value written to its target and the question closed. Null when the answer is not complete. */
+export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: string; text?: string; statuses?: Record<number, AccessStatus> }, sourceNote = ''): { op: Op; summary: string } | null {
+  const t = item.target;
+  const note = (a.text ?? '').trim();
+  const withSource = (s: string) => (sourceNote ? `${s} (${sourceNote})` : s);
+  switch (item.kind) {
+    case 'role':
+    case 'system': {
+      const options = item.kind === 'role' ? model.roles : model.systems;
+      const hit = options.find(o => o.id === a.pick);
+      if (!hit) return null;
+      const write: Op = t.kind === 'exception' ? m => routeException(m, { exceptionId: t.id!, roleId: hit.id }) : m => updateFact(m, { target: t, value: [hit.id] });
+      return { op: all(write, record(item, withSource(note ? `${hit.name}. ${note}` : hit.name))), summary: `Answered: ${item.question}` };
+    }
+    case 'number': {
+      const n = Number(note.replace(/,/g, ''));
+      if (!note || !Number.isFinite(n) || n < 0) return null;
+      return { op: item.questionIds.length === 1 ? m => answerQuestion(m, { questionId: item.questionIds[0], answer: withSource(note), value: n }) : all(m => updateFact(m, { target: t, value: n }), record(item, withSource(note))), summary: `Answered: ${item.question}` };
+    }
+    case 'text':
+      if (!note) return null;
+      return { op: all(m => updateFact(m, { target: t, value: note }), record(item, withSource(note))), summary: `Answered: ${item.question}` };
+    case 'access': {
+      const statuses = a.statuses ?? {};
+      const changed = (item.interfaces ?? []).filter(x => statuses[x.index] && statuses[x.index] !== x.access);
+      if (!changed.length && !note) return null;
+      const settled = (item.interfaces ?? []).every(x => (statuses[x.index] ?? x.access) !== 'unknown');
+      const ops: Op[] = changed.map(x => m => setAccessStatus(m, { systemId: t.id!, index: x.index, access: statuses[x.index] }));
+      if (settled || note) ops.push(record(item, withSource(note || `Settled: ${changed.map(x => `${x.label.split(' (')[0]} ${ACCESS.find(y => y[0] === statuses[x.index])![1].toLowerCase()}`).join('; ')}`)));
+      return { op: all(...ops), summary: `Interfaces of ${model.systems.find(s => s.id === t.id)?.name ?? 'a system'}` };
+    }
+    case 'free':
+      if (!note) return null;
+      return { op: record(item, withSource(note)), summary: `Answered: ${item.question}` };
+  }
+}
+
+export function GapsAssistant({ model, editor, canEdit, onClose, notes }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean } }) {
+  const [mode, setMode] = React.useState<'one' | 'notes'>('one');
   const t = React.useMemo(() => triage(model, assessProcess(model)), [model]);
   const [group, setGroup] = React.useState<QGroup | 'all'>('all');
   const [owner, setOwner] = React.useState<QOwner | 'all'>('all');
@@ -75,7 +115,16 @@ export function GapsAssistant({ model, editor, canEdit, onClose }: { model: Proc
         </label>
         <label className="flex items-center gap-2 text-slate-600"><input type="checkbox" checked={showDeferred} onChange={e => setShowDeferred(e.target.checked)} />Include the ones set aside ({t.items.filter(i => i.deferred).length})</label>
         <span className="ml-auto text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
+        {canEdit && notes?.aiAvailable && (
+          <div role="tablist" aria-label="How to answer" className="inline-flex rounded-xl bg-slate-100 p-1">
+            {([['one', 'One at a time'], ['notes', 'From notes or voice']] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={mode === id} onClick={() => setMode(id)} className={cx('rounded-lg px-3 py-1 text-sm font-semibold', mode === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{label}</button>
+            ))}
+          </div>
+        )}
       </div>
+
+      {mode === 'notes' && notes?.aiAvailable && canEdit ? <AnswerFromNotes model={model} items={list} editor={editor} ctx={notes} /> : <>
 
       {!item ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="gaps-done">
@@ -90,13 +139,14 @@ export function GapsAssistant({ model, editor, canEdit, onClose }: { model: Proc
           <ol className="max-h-[32rem] space-y-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 text-sm" aria-label="Questions">
             {list.map((x, i) => (
               <li key={x.key}><button type="button" onClick={() => setIndex(i)} className={cx('w-full rounded-lg px-3 py-2 text-left', i === at ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50')}>
-                <span className={cx('mr-2 inline-block h-2 w-2 rounded-full align-middle', x.group === 'decides' ? 'bg-[#002C4B]' : x.group === 'signoff' ? 'bg-sky-400' : 'bg-slate-300')} />
-                <span className="line-clamp-2 align-middle">{x.question}</span>{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}
+                <span className="flex items-start gap-2"><span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.group === 'decides' ? 'bg-[#002C4B]' : x.group === 'signoff' ? 'bg-sky-400' : 'bg-slate-300')} />
+                <span className="line-clamp-2">{x.question}{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}</span></span>
               </button></li>
             ))}
           </ol>
         </div>
       )}
+      </>}
     </div>
   );
 }
@@ -113,37 +163,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack 
   const t = item.target;
   const options = item.kind === 'role' ? model.roles : item.kind === 'system' ? model.systems : [];
 
-  const answerOp = (): { op: Op; summary: string } | null => {
-    const note = text.trim();
-    switch (item.kind) {
-      case 'role':
-      case 'system': {
-        if (!pick) return null;
-        const name = options.find(o => o.id === pick)!.name;
-        const write: Op = t.kind === 'exception' ? m => routeException(m, { exceptionId: t.id!, roleId: pick }) : m => updateFact(m, { target: t, value: [pick] });
-        return { op: all(write, record(item, note ? `${name}. ${note}` : name)), summary: `Answered: ${item.question}` };
-      }
-      case 'number': {
-        const n = Number(note.replace(/,/g, ''));
-        if (!note || !Number.isFinite(n) || n < 0) return null;
-        return { op: item.questionIds.length === 1 ? m => answerQuestion(m, { questionId: item.questionIds[0], answer: note, value: n }) : all(m => updateFact(m, { target: t, value: n }), record(item, note)), summary: `Answered: ${item.question}` };
-      }
-      case 'text':
-        if (!note) return null;
-        return { op: all(m => updateFact(m, { target: t, value: note }), record(item, note)), summary: `Answered: ${item.question}` };
-      case 'access': {
-        const changed = (item.interfaces ?? []).filter(x => statuses[x.index] !== x.access);
-        if (!changed.length && !note) return null;
-        const settled = (item.interfaces ?? []).every(x => statuses[x.index] !== 'unknown');
-        const ops: Op[] = changed.map(x => m => setAccessStatus(m, { systemId: t.id!, index: x.index, access: statuses[x.index] }));
-        if (settled || note) ops.push(record(item, note || `Settled: ${changed.map(x => `${x.label.split(' (')[0]} ${ACCESS.find(a => a[0] === statuses[x.index])![1].toLowerCase()}`).join('; ')}`));
-        return { op: all(...ops), summary: `Interfaces of ${model.systems.find(s => s.id === t.id)?.name ?? 'a system'}` };
-      }
-      case 'free':
-        if (!note) return null;
-        return { op: record(item, note), summary: `Answered: ${item.question}` };
-    }
-  };
+  const answerOp = () => buildAnswer(item, model, { pick, text, statuses });
   const ready = answerOp() !== null;
   const save = async () => { const a = answerOp(); if (a) await onApply(a.op, a.summary); };
 

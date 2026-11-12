@@ -75,3 +75,38 @@ test('a gap without a stored question can be deferred: it is recorded as a quest
   const q = next.openQuestions.at(-1)!;
   assert.deepEqual([q.status, q.owner, q.question], ['deferred', 'AP Team Lead', gap.question]);
 });
+
+test('notes: questions and notes become segments; findings become proposals that fit each question, or are dropped', async () => {
+  const { notesSegments, proposalsFrom } = await import('./notes.ts');
+  const m = messy();
+  const t = triage(m, assessProcess(m));
+  const sap = t.items.find(i => i.kind === 'access')!;
+  const free = t.items.find(i => /price tolerance/.test(i.question))!;
+  const items = [sap, free];
+  const { segments, ids } = notesSegments(m, items, 'MIRO can be used by the bot user.\n\nFB60 is not available to us.\n\nWe will align SAP to the 2% policy next month.');
+  assert.deepEqual(segments.map(s => s.id), ['q:1', 'q:2', 'n:1', 'n:2', 'n:3']);
+  assert.match(segments[0].text, /Interface \d+: UI: MIRO/);
+  const miro = sap.interfaces!.find(x => /MIRO/.test(x.label))!.index, fb60 = sap.interfaces!.find(x => /FB60/.test(x.label))!.index;
+  const f = (questionId: string, value: string, iface: string, segmentId: string) => ({ questionId, value, interface: iface, certainty: 'stated' as const, segmentId, excerpt: 'quoted' });
+  const props = proposalsFrom(m, items, ids, [
+    f('1', 'confirmed', String(miro), 'n:1'), f('1', 'confirmed_absent', String(fb60), 'n:2'), f('1', 'maybe', String(miro), 'n:1'),
+    f('2', 'SAP will be aligned to the 2% policy next month.', '', 'n:3'), f('2', 'from the question', '', 'q:2'), f('9', 'x', '', 'n:1'),
+  ]);
+  assert.equal(props.length, 2);
+  const p1 = props.find(p => p.itemKey === sap.key)!;
+  assert.deepEqual([p1.answer.statuses![miro], p1.answer.statuses![fb60]], ['confirmed', 'confirmed_absent']);
+  assert.match(p1.display, /MIRO: can be used; .*FB60: not available/);
+  assert.equal(props.find(p => p.itemKey === free.key)!.answer.text, 'SAP will be aligned to the 2% policy next month.');
+});
+
+test('notes: a role answer must name a role of the process', async () => {
+  const { notesSegments, proposalsFrom } = await import('./notes.ts');
+  const m = gold();
+  const t = triage(m, assessProcess(m));
+  const route = t.items.find(i => i.kind === 'role');
+  if (!route) return;
+  const { ids } = notesSegments(m, [route], 'The AP Team Lead handles those.');
+  const ok = proposalsFrom(m, [route], ids, [{ questionId: '1', value: 'AP Team Lead', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'The AP Team Lead handles those.' }]);
+  assert.equal(ok[0].display, 'AP Team Lead');
+  assert.equal(proposalsFrom(m, [route], ids, [{ questionId: '1', value: 'The night shift', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'x' }]).length, 0);
+});

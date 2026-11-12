@@ -197,6 +197,7 @@ export function createMemoryStore(): JourneyStore {
     },
     aiAvailable: false,
     async readFlowchartImage() { throw new StoreError(501, 'Reading images needs the server; it is not available in local mode.'); },
+    async transcribe() { throw new StoreError(501, 'Transcription needs the server; it is not available in local mode.'); },
     async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
     async latestExtraction() { return null; },
     async runAiTask() { throw new StoreError(501, 'AI tasks need the server; they are not available in local mode.'); },
