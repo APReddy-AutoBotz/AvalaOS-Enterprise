@@ -29,46 +29,74 @@ async function openStep(page: Page, name: string) {
   return page.getByRole('dialog', { name });
 }
 
-test('a rules-only step shows AI unnecessary with its reason; an unknown API is an API-first candidate with a question', async ({ page }) => {
+test('the process gets a ranked outcome; a rules-only step is RPA with AI unnecessary; an unconfirmed API ranks second with a question', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Assessment');
-  await expect(page.getByTestId('headline')).toBeVisible();
+  await expect(page.getByTestId('verdict')).toHaveText('RPA-led automation');
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Keep with a person for now');
+  await expect(row(page, 'Post invoice in SAP').getByTestId('recommendation')).toHaveText('Rule-based RPA');
 
   let panel = await openStep(page, 'Check invoice totals');
   await panel.getByLabel('Rules stated in full and stable for Check invoice totals').selectOption({ label: 'Yes' });
   await panel.getByLabel('Form of the input for Check invoice totals').selectOption({ label: 'Structured data' });
+  await expect(panel.getByTestId('recommendation')).toHaveText('Rule-based RPA');
   await expect(panel.getByTestId('ai-badge')).toHaveText('AI unnecessary');
-  await expect(panel).toContainText('fixed rules or a workflow can do this. AI is unnecessary.');
+  await expect(panel.getByTestId('step-reason')).toContainText('The rules are written down in full and the input is structured data.');
+  // The score is explained: factors, their points, and the limits that applied.
+  await expect(panel.getByTestId('approach-score').first()).toContainText('Clear, complete rules');
+  await expect(panel.getByTestId('approach-score').first()).toContainText('35 of 35');
+  await panel.getByRole('button', { name: /AI-assisted automation/ }).click();
+  await expect(panel).toContainText('Less the fixed complexity penalty for AI');
   await page.keyboard.press('Escape');
-  await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Rules or workflow');
   await expect(row(page, 'Check invoice totals').getByTestId('ai-badge')).toHaveText('AI unnecessary');
 
   panel = await openStep(page, 'Post invoice in SAP');
-  await panel.getByLabel('Form of the input for Post invoice in SAP').selectOption({ label: 'Structured data' });
-  await expect(panel.getByTestId('api-question')).toContainText('Confirm whether SAP S/4HANA has an API that covers "Post invoice in SAP".');
+  await expect(panel.getByTestId('approach-score').nth(1)).toContainText('API integration');
+  await expect(panel.getByTestId('api-question')).toContainText('Confirm whether SAP S/4HANA has an API that covers "Post invoice in SAP". A confirmed API would make integration the first choice here.');
   await page.keyboard.press('Escape');
-  await expect(row(page, 'Post invoice in SAP').getByTestId('recommendation')).toHaveText('API-first candidate');
-  await expect(row(page, 'Post invoice in SAP').getByTestId('ai-badge')).toHaveText('Not decided');
-  await expect(page.getByTestId('composition')).toHaveText('1 of 2 steps need no AI: 1 by rules; 1 wait on an API confirmation.');
+
+  // The final outcome: a ranking with reasons, and the explanation in words.
+  const ranked = page.getByTestId('ranked-approach');
+  await expect(ranked).toHaveCount(4);
+  await expect(ranked.nth(0)).toContainText('1st choice');
+  await expect(ranked.nth(0)).toContainText('Rule-based RPA');
+  await expect(ranked.nth(0)).toContainText('Best fit for 2 of 2 steps');
+  await expect(ranked.nth(1)).toContainText('2nd choice');
+  await expect(ranked.nth(1)).toContainText('API integration');
+  await expect(ranked.nth(1)).toContainText('If the APIs of SAP S/4HANA are confirmed');
+  await expect(page.getByTestId('split')).toHaveText('Of 2 steps people do today: Rule-based RPA for 2.');
+  await expect(page.getByTestId('narrative').first()).toContainText('Rule-based RPA scores');
+  await expect(page.getByTestId('narrative').filter({ hasText: 'Where AI is needed' })).toContainText('AI is not needed for any step.');
   await shot(page, '30-assessment');
   expect(await primaryText(page)).not.toMatch(INTERNAL);
 
   // The API question becomes a linked open question in the model.
   await page.getByRole('button', { name: 'Add 1 API question to open questions' }).click();
   await expect(page.getByRole('button', { name: /API question/ })).toHaveCount(0);
+
+  // The report carries the same outcome.
+  await page.getByRole('button', { name: 'Open the assessment report' }).click();
+  const report = page.getByTestId('assessment-report');
+  await expect(report.getByRole('heading', { name: 'Vendor invoice processing' })).toBeVisible();
+  await expect(report).toContainText('RPA-led automation');
+  await expect(report).toContainText('Ranking of the approaches');
+  await expect(report).toContainText('Why this approach is proposed');
+  await expect(report).toContainText('How the scores are calculated');
+  await shot(page, '31-assessment-report');
+  expect(await primaryText(page)).not.toMatch(INTERNAL);
+  await page.getByRole('button', { name: /Back to the assessment/ }).click();
+
   await stage(page, 'Process');
   await page.getByRole('tab', { name: /^Open questions/ }).click();
-  const q = page.getByTestId('open-question').filter({ hasText: 'Confirm whether SAP S/4HANA has an API' });
-  await expect(q).toContainText('About: SAP S/4HANA');
+  await expect(page.getByTestId('open-question').filter({ hasText: 'Confirm whether SAP S/4HANA has an API' })).toContainText('About: SAP S/4HANA');
 
   // The facts persist with the model.
   await page.reload();
   await stage(page, 'Assessment');
-  await expect(row(page, 'Check invoice totals').getByTestId('ai-badge')).toHaveText('AI unnecessary');
+  await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Rule-based RPA');
 });
 
-test('an override needs a rationale, survives reload and re-evaluation, and keeps the rules answer visible', async ({ page }) => {
+test('an override needs a rationale, survives reload and re-scoring, and keeps the scoring answer visible', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Assessment');
   let panel = await openStep(page, 'Check invoice totals');
@@ -79,7 +107,7 @@ test('an override needs a rationale, survives reload and re-evaluation, and keep
   await panel.getByLabel('Rationale').fill('Auditors require a second person on totals checks.');
   await panel.getByRole('button', { name: 'Override' }).click();
   await expect(panel.getByTestId('override-note')).toContainText('Overridden by');
-  await expect(panel.getByTestId('override-note')).toContainText('The rules recommend rules or workflow.');
+  await expect(panel.getByTestId('override-note')).toContainText('The scoring recommends Rule-based RPA.');
   await page.keyboard.press('Escape');
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Keep with a person');
   await expect(row(page, 'Check invoice totals').getByTestId('overridden')).toBeVisible();
@@ -88,7 +116,7 @@ test('an override needs a rationale, survives reload and re-evaluation, and keep
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Keep with a person');
   await expect(row(page, 'Check invoice totals')).toContainText('Auditors require a second person');
 
-  // Re-evaluation after a fact changes keeps the override.
+  // Re-scoring after a fact changes keeps the override.
   panel = await openStep(page, 'Check invoice totals');
   await panel.getByLabel('Needs a physical action for Check invoice totals').selectOption({ label: 'No' });
   await saved(page);
@@ -96,8 +124,8 @@ test('an override needs a rationale, survives reload and re-evaluation, and keep
   await page.reload();
   await expect(row(page, 'Check invoice totals').getByTestId('overridden')).toBeVisible();
   panel = await openStep(page, 'Check invoice totals');
-  await expect(panel.getByTestId('override-note')).toContainText('The rules recommend rules or workflow.');
+  await expect(panel.getByTestId('override-note')).toContainText('The scoring recommends Rule-based RPA.');
   await panel.getByRole('button', { name: 'Remove override' }).click();
   await page.keyboard.press('Escape');
-  await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Rules or workflow');
+  await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Rule-based RPA');
 });
