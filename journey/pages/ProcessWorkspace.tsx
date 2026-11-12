@@ -11,6 +11,7 @@ import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
 import { SourcesStage } from '../process/SourcesStage.tsx';
+import { AssessmentStage } from '../process/AssessmentStage.tsx';
 import { SourceContext } from '../process/widgets.tsx';
 import { quoteInContext } from '../../domain/workspace/sources.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
@@ -83,6 +84,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   const status = revisionStatus(revisions);
   const working = revisions.find(r => r.state === 'working');
   const approved = revisions.find(r => r.state === 'approved');
+  const current = working ?? approved;
   const canEdit = workspace !== null && workspace.role !== 'viewer';
   const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
 
@@ -130,6 +132,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
           ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          : stage === 'assessment' && model && current
+          ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
+              revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
           : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}

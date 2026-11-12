@@ -2,6 +2,7 @@
 // Uses only the project URL and the publishable key, which are safe in the browser.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
+import { decisionsFromEntries, decisionsToEntries } from '../../domain/assess/decisions.ts';
 import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
@@ -160,6 +161,24 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async startExtraction(workspaceId, processId, sourceIds) {
       const r = await call('journey-extract', { action: 'create', workspaceId, processId, sourceIds });
       return { runId: r.runId };
+    },
+    async runAiTask(workspaceId, task, segments) {
+      const r = await call('journey-ai', { action: 'run', workspaceId, task, segments });
+      return { data: r.data };
+    },
+    async getAssessmentDecisions(processId) {
+      const { data, error } = await db.from('assessments').select('overrides').eq('process_id', processId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+      if (error) fail(error);
+      return decisionsFromEntries(data?.overrides);
+    },
+    async saveAssessment(processId, input) {
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const { error } = await db.from('assessments').upsert({
+        workspace_id: process.workspaceId, process_id: processId, model_revision_id: input.revisionId, model_hash: input.modelHash,
+        rules_version: input.rulesVersion, result: input.result, overrides: decisionsToEntries(input.decisions), is_stale: false,
+      }, { onConflict: 'model_revision_id' });
+      if (error) fail(error);
     },
     async latestExtraction(processId): Promise<ExtractionRow | null> {
       const { data, error } = await db.from('extraction_runs').select('id, status, error, result, created_at, updated_at')

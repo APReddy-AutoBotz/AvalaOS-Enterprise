@@ -4,6 +4,8 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { StoredFormat } from '../../domain/workspace/sources.ts';
+import type { Decisions } from '../../domain/assess/decisions.ts';
+import type { Segment } from '../../domain/ai/gateway.ts';
 
 export interface Me { id: string; email: string }
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean }
@@ -97,4 +99,11 @@ export interface JourneyStore {
   startExtraction(workspaceId: string, processId: string, sourceIds: string[]): Promise<{ runId: string }>;
   /** The latest extraction of a process, with its model once done. */
   latestExtraction(processId: string): Promise<ExtractionRow | null>;
+  /** Runs a registered AI task on segments; quotes in the result are already checked against them. */
+  runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown }>;
+
+  /** Overrides and the cost rate for a process's assessment (the latest saved). */
+  getAssessmentDecisions(processId: string): Promise<Decisions>;
+  /** Saves the decisions with a snapshot of the result for the model revision it was computed on. */
+  saveAssessment(processId: string, input: { revisionId: string; modelHash: string; rulesVersion: string; result: unknown; decisions: Decisions }): Promise<void>;
 }

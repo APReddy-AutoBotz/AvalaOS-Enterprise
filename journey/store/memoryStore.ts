@@ -8,6 +8,7 @@ import { applyPatch } from '../../domain/processModel/jsonPatch.ts';
 import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
 import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
+import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -17,6 +18,7 @@ interface State {
   revisions: StoredRevision[];
   edits: (EditRow & { processId: string })[];
   sources: (SourceRow & { processId: string; segments: IngestSegment[] })[];
+  assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -181,6 +183,20 @@ export function createMemoryStore(): JourneyStore {
     async readFlowchartImage() { throw new StoreError(501, 'Reading images needs the server; it is not available in local mode.'); },
     async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
     async latestExtraction() { return null; },
+    async runAiTask() { throw new StoreError(501, 'AI tasks need the server; they are not available in local mode.'); },
+    async getAssessmentDecisions(processId) {
+      requireMe();
+      workspaceOf(processId);
+      const rows = (state.assessments ?? []).filter(a => a.processId === processId);
+      return rows.length ? structuredClone(rows[rows.length - 1].decisions) : emptyDecisions();
+    },
+    async saveAssessment(processId, input) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Saving the assessment needs the editor or admin role.');
+      state.assessments = (state.assessments ?? []).filter(a => !(a.processId === processId && a.revisionId === input.revisionId));
+      state.assessments.push({ processId, revisionId: input.revisionId, decisions: structuredClone(input.decisions), result: input.result });
+      save();
+    },
     async history(processId) {
       requireMe();
       return {
