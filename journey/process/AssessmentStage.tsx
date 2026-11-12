@@ -352,7 +352,10 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
   const [approach, setApproach] = React.useState<Approach | ''>('');
   const [rationale, setRationale] = React.useState('');
   const [problem, setProblem] = React.useState<string | null>(null);
-  const [expanded, setExpanded] = React.useState<Approach | null>(result.scores[0]?.approach ?? null);
+  // The recommendation's breakdown is open until the person opens or closes one themselves.
+  const [choice, setChoice] = React.useState<Approach | 'none' | null>(null);
+  const expanded = choice === null ? result.scores[0]?.approach ?? null : choice === 'none' ? null : choice;
+  const setExpanded = (a: Approach | null) => setChoice(a ?? 'none');
   const setTrait = (trait: TraitName, v: string) => editor.apply(m => setStepTrait(m, { stepId: step.id, trait, value: parse(trait, v) }), `Assessment fact of "${step.name}"`);
   const systems = step.systemIds.map(id => model.systems.find(s => s.id === id)).filter((s): s is SystemRef => Boolean(s));
 
