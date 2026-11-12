@@ -206,3 +206,14 @@ test('the gold AP model evaluates every step without throwing and never picks an
   assert.ok(results.every(r => r.aiNeeded !== 'yes'));
   assert.ok(results.some(r => r.mechanism === 'api_candidate' && r.questions.length > 0));
 });
+
+test('an API covers a step only through words particular to that step, not words common to the process', () => {
+  const m = build({ name: 'Scan paper invoice', traits: { input: stated('structured') } }, [{ kind: 'email', api: 'confirmed' }]);
+  m.meta.name = 'Vendor invoice processing';
+  m.systems[0].access[0].operations = ['Read invoices from the AP mailbox'];
+  assert.equal(evaluateStep(m, m.steps[0]).mechanism, 'api_candidate', '"invoice" alone does not show coverage');
+  m.systems[0].access[0].operations = ['Scan documents to the mailbox'];
+  assert.equal(evaluateStep(m, m.steps[0]).mechanism, 'api', '"scan" does');
+  m.systems[0].access[0].access = 'unknown';
+  assert.match(evaluateStep(m, m.steps[0]).reasons[0].text, /may have an API \(API_SUPPLIERINVOICE\), but nobody has confirmed it\./);
+});

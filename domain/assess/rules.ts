@@ -134,11 +134,24 @@ const NON_INTEGRABLE: SystemRef['kind'][] = ['scanner'];
 const apiOf = (s: SystemRef): AccessMethod[] => s.access.filter(a => a.method === 'api');
 const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 3));
 
-/** Whether an interface's stated operations mention the work of the step. Unknown when none are listed. */
-function covers(a: AccessMethod, step: Step): boolean | null {
+/** Words too common in this process to show that an operation is about a particular step ("invoice"). */
+function commonWords(model: ProcessModel): Set<string> {
+  const counts = new Map<string, number>();
+  for (const st of model.steps) for (const w of words(st.name)) counts.set(w, (counts.get(w) ?? 0) + 1);
+  const limit = Math.max(3, Math.ceil(model.steps.length * 0.25));
+  return new Set([...words(model.meta.name), ...[...counts].filter(([, n]) => n >= limit).map(([w]) => w)]);
+}
+
+/**
+ * Whether an interface's stated operations mention the work of the step, ignoring words common to
+ * the whole process. Unknown (null) when the interface lists no operations.
+ */
+function covers(a: AccessMethod, step: Step, model: ProcessModel): boolean | null {
   if (!a.operations.length) return null;
-  const stepWords = words(`${step.name} ${step.description}`);
-  return a.operations.some(op => [...words(op)].some(w => stepWords.has(w) || [...stepWords].some(s => s.startsWith(w.slice(0, 5)) && w.length >= 5)));
+  const common = commonWords(model);
+  const stepWords = [...words(`${step.name} ${step.description}`)].filter(w => !common.has(w));
+  const stem = (w: string) => w.slice(0, 5);
+  return a.operations.some(op => [...words(op)].filter(w => !common.has(w)).some(w => stepWords.some(s => s === w || (w.length >= 5 && s.length >= 5 && stem(s) === stem(w)))));
 }
 
 const integrable = (ctx: Ctx) => ctx.systems.filter(s => !NON_INTEGRABLE.includes(s.kind));
@@ -213,7 +226,7 @@ export const LADDER: Rung[] = [
       const systems = integrable(ctx);
       if (!systems.length) return { fires: false, reason: 'The step does not read or write a system.' };
       for (const s of systems) for (const a of apiOf(s)) {
-        if (a.access === 'confirmed' && covers(a, ctx.step) === true) {
+        if (a.access === 'confirmed' && covers(a, ctx.step, ctx.model) === true) {
           return { fires: true, reasons: [{ text: `${s.name} has a confirmed API${a.name ? ` (${a.name})` : ''} covering this work. Integrate through it; AI is unnecessary.`, facts: [accessFact(s, a)] }] };
         }
       }
@@ -227,15 +240,18 @@ export const LADDER: Rung[] = [
       if (skip) return skip;
       const systems = integrable(ctx);
       if (!systems.length) return { fires: false, reason: 'The step does not read or write a system.' };
-      const open = systems.filter(s => !apiOf(s).length || apiOf(s).some(a => a.access === 'reported' || a.access === 'unknown' || (a.access === 'confirmed' && covers(a, ctx.step) !== true)));
+      const open = systems.filter(s => !apiOf(s).length || apiOf(s).some(a => a.access === 'reported' || a.access === 'unknown' || (a.access === 'confirmed' && covers(a, ctx.step, ctx.model) !== true)));
       if (!open.length) return { fires: false, reason: 'Every system involved is confirmed to have no usable API.' };
       const reasons: Reason[] = open.map(s => {
         const apis = apiOf(s);
         if (!apis.length) return { text: `Nobody has said whether ${s.name} has an API for this work.`, facts: [] };
         const a = apis[0];
+        const named = a.name ? ` (${a.name})` : '';
         const text = a.access === 'confirmed'
-          ? `${s.name} has a confirmed API, but it is not known to cover this operation.`
-          : `${s.name} is ${a.access === 'reported' ? 'reported' : 'not known'} to have an API${a.name ? ` (${a.name})` : ''}; it is not confirmed for this work.`;
+          ? `${s.name} has a confirmed API${named}, but it is not known to cover this work.`
+          : a.access === 'reported'
+            ? `${s.name} is reported to have an API${named}, but nobody has confirmed it for this work.`
+            : `${s.name} may have an API${named}, but nobody has confirmed it.`;
         return { text, facts: [accessFact(s, a)] };
       });
       return {
