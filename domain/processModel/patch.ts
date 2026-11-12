@@ -481,3 +481,12 @@ export function setTypicalTrait(model: ProcessModel, args: { trait: keyof Typica
     m.meta.profile = profile;
   });
 }
+
+/** A person states whether robots may drive a system's screens (null clears it). */
+export function setSystemUiAllowed(model: ProcessModel, args: { systemId: string; value: boolean | null }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    sys.uiAllowed = confirmed(args.value);
+  });
+}

@@ -96,7 +96,7 @@ npm run dev              # local dev server on port 3000
 - Portfolio (`domain/assess/portfolio.ts`, `journey/pages/Portfolio.tsx`): every process's own assessment side by side, ordered by placement then hours, with the 80/20 of hours across processes. It reads models through the store and stores nothing.
 - Workspace settings (`domain/assess/settings.ts`, table `workspace_settings`, admins write): hours per full-time person, the value line and the ease line. Pass them to `assessProcess(model, { settings })`; they change value, placement and the portfolio, never the recommended approach.
 - Cost and payback (`domain/assess/payback.ts`): only from the hourly cost, build cost and running cost a person enters (stored as `cost` and `rate` entries in `assessments.overrides`). An upper bound on hours gives only the best-case payback.
-- Change expected and remote desktop are read by the `profileFacts` task (`domain/assess/profileFacts.ts`) from the passages that mention them, alongside the step facts.
+- Change expected, remote desktop and whether robots may drive an application's screens (`uiAllowed`; false caps RPA at 0) are read by the `profileFacts` task (`domain/assess/profileFacts.ts`) from the passages that mention them, alongside the step facts.
 - Next: retire the old assess screens (WP2.4); then Phase 3 documents and flows.
 
 ## Definition of done for a pull request

@@ -200,6 +200,7 @@ export function validateModel(model: ProcessModel): ValidationResult {
     });
     if (s.uiStable !== undefined) typedFact(s.uiStable, `${p}/uiStable`, v => typeof v === 'boolean');
     if (s.remote !== undefined) typedFact(s.remote, `${p}/remote`, v => typeof v === 'boolean');
+    if (s.uiAllowed !== undefined) typedFact(s.uiAllowed, `${p}/uiAllowed`, v => typeof v === 'boolean');
   });
   model.events.forEach((e, i) => {
     const p = `/events/${i}`;
