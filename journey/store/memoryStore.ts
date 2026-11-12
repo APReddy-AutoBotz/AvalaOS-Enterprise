@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, settingsFrom, validateSettings, type AssessmentSettings } from '../../domain/assess/settings.ts';
 // In-memory store with the same rules as the database: one working draft per process, approved
 // revisions never change, a new draft copies the approved model. State is kept in localStorage
 // so a reload keeps it. Used by browser tests and local runs without a backend; it starts empty.
@@ -19,6 +20,7 @@ interface State {
   edits: (EditRow & { processId: string })[];
   sources: (SourceRow & { processId: string; segments: IngestSegment[] })[];
   assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
+  settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -74,6 +76,20 @@ export function createMemoryStore(): JourneyStore {
       return { workspaceId: w.id };
     },
 
+    async getSettings(workspaceId) {
+      requireMe();
+      const row = (state.settings ?? []).find(x => x.workspaceId === workspaceId);
+      return row ? { settings: settingsFrom(row.assessment), custom: true, updatedBy: row.updatedBy, updatedAt: row.updatedAt } : { settings: { ...DEFAULT_SETTINGS }, custom: false, updatedBy: null, updatedAt: null };
+    },
+    async saveSettings(workspaceId, settings) {
+      const me = requireMe();
+      const w = state.workspaces.find(x => x.id === workspaceId);
+      if (!w) throw new StoreError(404, 'Workspace not found.');
+      if (w.role !== 'admin') throw new StoreError(403, 'Only an admin can change the settings.');
+      const valid = validateSettings(settings);
+      state.settings = [...(state.settings ?? []).filter(x => x.workspaceId !== workspaceId), { workspaceId, assessment: valid, updatedBy: me.email, updatedAt: now() }];
+      save();
+    },
     async listProcesses(workspaceId) {
       requireMe();
       return state.processes.filter(p => p.workspaceId === workspaceId).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));

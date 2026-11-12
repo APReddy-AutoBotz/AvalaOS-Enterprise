@@ -282,3 +282,19 @@ test('a scanner is not counted as an application with missing answers', () => {
   m.steps[0].systemIds.push('scan');
   assert.equal(assessProcess(m).priority.inputs.groups.find(g => g.id === 'applications')!.total, 2);
 });
+
+test('the organisation lines change value and placement, and nothing else', async () => {
+  const { settingsFrom, validateSettings, DEFAULT_SETTINGS } = await import('./settings.ts');
+  let m = setProcessMetric(rpaProcess(2), { kind: 'volume', value: 500, period: 'month' }).model;
+  m = withEffort(m, [6, 6]);
+  const base = assessProcess(m).priority;
+  assert.equal(Math.round(base.value.value!.mid), 1200);
+  assert.equal(base.placement.quadrant, 'quick_win');
+  const strict = assessProcess(m, { settings: { ...DEFAULT_SETTINGS, valueHoursPerYear: 2000, hoursPerFte: 1600 } });
+  assert.equal(strict.priority.placement.quadrant, 'fill_in');
+  assert.equal(strict.priority.value.value!.fte, 1200 / 1600);
+  assert.equal(strict.verdict, assessProcess(m).verdict);
+  assert.deepEqual(assessProcess(m, { settings: { ...DEFAULT_SETTINGS, easeLine: 99 } }).priority.placement.possible, ['quick_win', 'major_project'], 'a high ease line puts the unknown facts in play');
+  assert.deepEqual(settingsFrom({ hoursPerFte: 1800, easeLine: 500, other: 1 }), { ...DEFAULT_SETTINGS, hoursPerFte: 1800 });
+  assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, hoursPerFte: 100 }), /800 to 3,000/);
+});

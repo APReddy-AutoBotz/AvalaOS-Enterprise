@@ -96,6 +96,8 @@ export interface Priority {
   /** Steps: the fewest steps that carry 80% of the effort automation could take. */
   focus: Computed<{ stepIds: string[]; of: number; share: number }>;
   inputs: { groups: InputGroup[]; known: number; total: number; share: number };
+  /** The lines this result was calculated with. */
+  settings: { hoursPerFte: number; valueHoursPerYear: number; easeLine: number };
 }
 
 const band = (bands: Bands, n: number) => bands.find(([limit]) => n <= limit)![1];
@@ -183,6 +185,7 @@ const minutesOf = (m: Metric): Range => {
  * spread, averaged or guessed.
  */
 function valueOf(model: ProcessModel, ctx: PriorityContext): Priority['value'] {
+  const S = ctx.settings;
   const rows = ctx.scored.map(s => {
     const t = model.steps.find(x => x.id === s.stepId)?.traits;
     return { effort: knownFact(t?.effortMinutes), share: knownFact(t?.sharePercent), auto: ctx.automationShare(s), assumed: t?.effortMinutes?.status === 'assumed' };
@@ -200,13 +203,13 @@ function valueOf(model: ProcessModel, ctx: PriorityContext): Priority['value'] {
     const perCase = processMetric(model, 'handling_time'), people = processMetric(model, 'fte');
     let today: number;
     if (vol.computable && perCase) { today = vol.value![1] * minutesOf(perCase)[1] / 60; basis = 'time_per_case'; }
-    else if (people) { today = (people.range?.[1] ?? people.value!) * PRIORITY.hoursPerFte; basis = 'people'; }
+    else if (people) { today = (people.range?.[1] ?? people.value!) * S.hoursPerFte; basis = 'people'; }
     else return { computable: false, reason: vol.computable ? 'Add the time per case, the time per step, or the number of people doing the work.' : 'Add the volume with the time per case, or the number of people doing the work.' };
     hours = [0, anyAuto ? today : 0];
   }
   const mid = (hours[0] + hours[1]) / 2;
-  const high = hours[0] >= PRIORITY.valueHoursPerYear ? 'yes' : hours[1] < PRIORITY.valueHoursPerYear ? 'no' : 'either';
-  return { computable: true, value: { hours, exact, basis, mid, fte: (exact ? mid : hours[1]) / PRIORITY.hoursPerFte, high, assumedSteps: rows.filter(r => r.assumed).length } };
+  const high = hours[0] >= S.valueHoursPerYear ? 'yes' : hours[1] < S.valueHoursPerYear ? 'no' : 'either';
+  return { computable: true, value: { hours, exact, basis, mid, fte: (exact ? mid : hours[1]) / S.hoursPerFte, high, assumedSteps: rows.filter(r => r.assumed).length } };
 }
 
 export interface PriorityContext {
@@ -215,9 +218,12 @@ export interface PriorityContext {
   automationShare: (s: StepScore) => Range;
   apiSwitch: { systems: string[]; steps: number };
   keyQuestions: { question: string; steps: number }[];
+  /** The organisation's lines; see `settings.ts`. */
+  settings: { hoursPerFte: number; valueHoursPerYear: number; easeLine: number };
 }
 
 export function prioritise(model: ProcessModel, ctx: PriorityContext): Priority {
+  const S = ctx.settings;
   const automated = ctx.scored.filter(s => s.winner !== 'human');
   const readiness = readinessOf(model, ctx.cautions);
   const ease = easeOf(model, automated);
@@ -228,12 +234,12 @@ export function prioritise(model: ProcessModel, ctx: PriorityContext): Priority 
   let placement: Placement;
   if (!ease) placement = { placed: false, possible: [], reason: 'No step is recommended for automation yet.' };
   else {
-    const easier = ease.range[0] >= PRIORITY.ease ? [true] : ease.range[1] < PRIORITY.ease ? [false] : [true, false];
+    const easier = ease.range[0] >= S.easeLine ? [true] : ease.range[1] < S.easeLine ? [false] : [true, false];
     const high = value.computable && value.value!.high !== 'either' ? [value.value!.high === 'yes'] : [true, false];
     const possible: Quadrant[] = high.flatMap(h => easier.map(e => (h ? (e ? 'quick_win' : 'major_project') : e ? 'fill_in' : 'not_now') as Quadrant));
     const open = ease.factors.filter(f => !f.known).map(f => f.label.toLowerCase());
     const reason = [
-      high.length > 1 ? (value.computable ? `The value could lie on either side of ${PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year.` : `The value is not known. ${value.reason}`) : '',
+      high.length > 1 ? (value.computable ? `The value could lie on either side of ${S.valueHoursPerYear.toLocaleString('en')} hours a year.` : `The value is not known. ${value.reason}`) : '',
       easier.length > 1 ? `The build effort depends on facts not yet known${open.length ? `: ${open.join(', ')}` : ''}.` : '',
     ].filter(Boolean).join(' ');
     placement = { placed: possible.length === 1, possible, reason, ...(possible.length === 1 ? { quadrant: possible[0] } : {}) };
@@ -300,5 +306,5 @@ export function prioritise(model: ProcessModel, ctx: PriorityContext): Priority 
     ...(allEffort && !allShare ? [{ id: 'share', label: 'Share of cases per step', why: 'Turns the upper bound on the value into a calculated range.' }] : []),
   ].slice(0, 4);
 
-  return { readiness, ease, value, placement, nextInputs, standardPath, focus, inputs: { groups, known, total, share: total ? known / total : 0 } };
+  return { settings: S, readiness, ease, value, placement, nextInputs, standardPath, focus, inputs: { groups, known, total, share: total ? known / total : 0 } };
 }

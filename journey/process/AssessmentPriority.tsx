@@ -3,7 +3,7 @@
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
-import { EASE_BANDS, PRIORITY, QUADRANT, type Quadrant, type ReadinessState } from '../../domain/assess/priority.ts';
+import { EASE_BANDS, QUADRANT, type Quadrant, type ReadinessState } from '../../domain/assess/priority.ts';
 import { cx } from '../ui.tsx';
 
 const BASIS = { step_times: 'From the time and share of each step.', time_per_case: 'From the volume and the time per case. Step times would say how much of it automation can take.', people: 'From the people doing the work today. Volume and times would narrow it.' } as const;
@@ -89,10 +89,10 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
           {p.value.computable ? (
             <>
               <p className="mt-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{valueText(p.value.value!)}</span><span className="text-sm text-slate-500"> hours a year</span></p>
-              <p className="mt-1.5 text-sm leading-6 text-slate-700">Hands-on time automation could take, {p.value.value!.exact ? 'about' : 'at most'} {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.</p>
+              <p className="mt-1.5 text-sm leading-6 text-slate-700">Hands-on time automation could take, {p.value.value!.exact ? 'about' : 'at most'} {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {p.settings.hoursPerFte.toLocaleString('en')} hours a year.</p>
               <p className="mt-1.5 text-xs leading-5 text-slate-500" data-testid="value-basis">{BASIS[p.value.value!.basis]}{!p.value.value!.exact && p.value.value!.basis === 'step_times' ? ' The share of cases is missing on some steps, so this is the most it can be.' : ''}</p>
               {p.value.value!.assumedSteps > 0 && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900" data-testid="value-assumed">Rests on an assumption: the time of {p.value.value!.assumedSteps} {p.value.value!.assumedSteps === 1 ? 'step' : 'steps'} is the time per case spread evenly. Confirm the step times to firm this up.</p>}
-              <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">{p.value.value!.high === 'yes' ? 'High value' : p.value.value!.high === 'no' ? 'Lower value' : 'Could be high or lower value'}: the line is {PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year.</p>
+              <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">{p.value.value!.high === 'yes' ? 'High value' : p.value.value!.high === 'no' ? 'Lower value' : 'Could be high or lower value'}: the line is {p.settings.valueHoursPerYear.toLocaleString('en')} hours a year.</p>
             </>
           ) : <NotYet reason={p.value.reason ?? ''} onInputs={onInputs} />}
         </Card>
@@ -108,7 +108,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
               <p className="mt-1 text-sm leading-6 text-slate-700">{p.placement.placed ? QUADRANT[p.placement.quadrant!].text : p.placement.reason}</p>
             </div>
           </div>
-          <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">Value against ease. Top row: {PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year or more. Left column: ease of {PRIORITY.ease} or more.</p>
+          <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">Value against ease. Top row: {p.settings.valueHoursPerYear.toLocaleString('en')} hours a year or more. Left column: ease of {p.settings.easeLine} or more.</p>
           {!p.placement.placed && <button type="button" onClick={onInputs} className="mt-2 self-start text-sm font-semibold text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4">Complete the inputs</button>}
           {p.placement.placed && p.readiness.state !== 'ready' && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">Readiness says “{p.readiness.label}”: settle that before starting.</p>}
         </Card>
