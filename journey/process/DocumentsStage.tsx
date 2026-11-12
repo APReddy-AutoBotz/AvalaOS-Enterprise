@@ -13,6 +13,9 @@ import type { Block, Cell, DocTree, DocType } from '../../domain/docs/tree.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { StatusBadge } from './widgets.tsx';
+import { GapsAssistant } from './GapsAssistant.tsx';
+import { useModelEditor } from './useModelEditor.ts';
+import { triage } from '../../domain/questions/triage.ts';
 
 const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'brd', short: 'BRD', label: 'Business requirements', ready: true },
@@ -59,10 +62,13 @@ function BlockView({ b }: { b: Block; key?: React.Key }) {
   }
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model, revision, sources }: {
-  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel;
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; onSaved: () => void; canEdit: boolean;
   revision: { label: string; state: 'working' | 'approved'; date: string }; sources: SourceRow[];
 }) {
+  const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
+  const model = editor.model;
+  const [answering, setAnswering] = React.useState(false);
   const [type, setType] = React.useState<DocType>('pdd');
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
@@ -85,10 +91,19 @@ export function DocumentsStage({ store, processId, workspaceId, model, revision,
     a.click(); URL.revokeObjectURL(url);
   };
 
+  const toAnswer = React.useMemo(() => (decisions ? triage(model, assessProcess(model, { settings })) : null), [model, decisions, settings]);
+  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} /></>;
+
   return (
     <div className="space-y-5">
       <style>{PRINT_CSS}</style>
-      <ErrorNote message={error} />
+      <ErrorNote message={error ?? editor.error} />
+      {toAnswer && (toAnswer.items.some(i => !i.deferred) || toAnswer.alreadyKnown.length > 0) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4" data-testid="gaps-banner">
+          <p className="text-sm text-amber-950"><span className="font-semibold">{toAnswer.items.filter(i => !i.deferred).length} questions to answer</span> before these documents are complete (from {toAnswer.raw} raised; duplicates merged{toAnswer.alreadyKnown.length ? `, ${toAnswer.alreadyKnown.length} already answered by the model` : ''}).</p>
+          <Button onClick={() => setAnswering(true)}>Answer them</Button>
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Documents" className="inline-flex flex-wrap rounded-xl bg-slate-100 p-1">
           {TYPES.map(t => (

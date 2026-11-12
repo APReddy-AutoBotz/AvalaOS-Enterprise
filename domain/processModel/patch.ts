@@ -490,3 +490,62 @@ export function setSystemUiAllowed(model: ProcessModel, args: { systemId: string
     sys.uiAllowed = confirmed(args.value);
   });
 }
+
+// ---------------------------------------------------------------- answering questions
+
+/** Closes questions with one answer: questions the model already answers, or questions merged into one. */
+export function closeQuestions(model: ProcessModel, args: { questionIds: string[]; answer: string; status?: 'answered' | 'deferred' }): OpResult {
+  return commit(model, m => {
+    for (const id of args.questionIds) {
+      const q = m.openQuestions.find(x => x.id === id);
+      if (!q) throw new ModelOpError('NOT_FOUND', `No question with id ${id}.`);
+      q.status = args.status ?? 'answered';
+      q.answer = args.answer;
+    }
+  });
+}
+
+/** Sets questions aside for someone to answer later. A gap without a stored question is recorded as one first. */
+export function deferQuestion(model: ProcessModel, args: { questionIds: string[]; owner: string | null; gap?: { target: ElementTarget; question: string } }): OpResult {
+  return commit(model, m => {
+    const ids = [...args.questionIds];
+    if (args.gap && ids.length === 0) {
+      const id = newId(m, 'q');
+      m.openQuestions.push({ id, target: args.gap.target, question: args.gap.question, whyItMatters: '', owner: null, status: 'open' });
+      ids.push(id);
+    }
+    for (const id of ids) {
+      const q = m.openQuestions.find(x => x.id === id);
+      if (!q) throw new ModelOpError('NOT_FOUND', `No question with id ${id}.`);
+      q.status = 'deferred';
+      q.owner = args.owner?.trim() || q.owner;
+    }
+  });
+}
+
+/** Reopens deferred questions. */
+export function reopenQuestions(model: ProcessModel, args: { questionIds: string[] }): OpResult {
+  return commit(model, m => { for (const id of args.questionIds) { const q = m.openQuestions.find(x => x.id === id); if (q) q.status = 'open'; } });
+}
+
+/** A person states the status of one interface of a system (by its position in the access list). */
+export function setAccessStatus(model: ProcessModel, args: { systemId: string; index: number; access: AccessStatus }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    const a = sys?.access[args.index];
+    if (!sys || !a) throw new ModelOpError('NOT_FOUND', 'No such interface.');
+    a.access = args.access;
+    a.status = 'user-confirmed';
+  });
+}
+
+/** Routes an exception to the role that handles it. */
+export function routeException(model: ProcessModel, args: { exceptionId: string; roleId: string }): OpResult {
+  return commit(model, m => {
+    const e = m.exceptions.find(x => x.id === args.exceptionId);
+    if (!e) throw new ModelOpError('NOT_FOUND', `No exception with id ${args.exceptionId}.`);
+    if (!m.roles.some(r => r.id === args.roleId)) throw new ModelOpError('NOT_FOUND', `No role with id ${args.roleId}.`);
+    e.routedToRoleId = args.roleId;
+    e.status = 'user-confirmed';
+  });
+}
