@@ -8,7 +8,7 @@
 // - Cautions with named thresholds, hours from stated volume and effort, and money only from a
 //   rate a person entered. Nothing monetary is assumed here.
 import type { ProcessModel } from '../processModel/types.ts';
-import { periodOf, processMetric } from '../processModel/selectors.ts';
+import { periodOf, processMetric, stepTrait } from '../processModel/selectors.ts';
 export { periodOf };
 import { prioritise, type Priority } from './priority.ts';
 import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
@@ -200,8 +200,9 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
 
   // ---- cautions
   const rework = scored.filter(s => s.rework).length;
-  const ruleSteps = model.steps.filter(s => s.traits?.rulesComplete && s.traits.rulesComplete.status !== 'unknown');
-  const unstable = ruleSteps.filter(s => s.traits!.rulesComplete!.value === false).length;
+  const rulesOf = (s: typeof model.steps[number]) => { const f = stepTrait(model, s, 'rulesComplete'); return f && f.status !== 'unknown' ? f.value : null; };
+  const ruleSteps = model.steps.filter(s => rulesOf(s) !== null);
+  const unstable = ruleSteps.filter(s => rulesOf(s) === false).length;
   const hours = hoursOf(model, scored);
   const automatableYear = hours.computable ? hours.value!.automatable[1] : null;
   const cautions: Caution[] = [

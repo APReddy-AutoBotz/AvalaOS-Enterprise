@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { Fact, ProcessModel, StepTraits } from '../processModel/types.ts';
 import { emptyModel } from '../processModel/empty.ts';
 import { validateModel } from '../processModel/validate.ts';
-import { adoptProcessMetric, assumeEvenEffort, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, addSystem } from '../processModel/patch.ts';
+import { addStep, setTypicalTrait, adoptProcessMetric, assumeEvenEffort, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, addSystem } from '../processModel/patch.ts';
 import { processMetric, processMetricCandidates } from '../processModel/selectors.ts';
 import { assessProcess } from './process.ts';
 import { EASE_BANDS, EASE_MULTIPLIERS, EASE_VALUES, EASE_WEIGHTS, PRIORITY } from './priority.ts';
@@ -245,4 +245,40 @@ test('a process with nothing known beyond its steps still gets a result and a li
   assert.ok(r.priority.nextInputs.length >= 3);
   assert.equal(r.priority.readiness.state, 'ready');
   assert.equal(r.priority.inputs.share, 0);
+});
+
+test('answers given for the whole process apply to every step without its own fact, and a step can differ', () => {
+  const bare = emptyModel('Claims intake');
+  let m = addStep(bare, { step: { name: 'Claims intake', taskType: 'user' } }).model;
+  m = addStep(m, { step: { name: 'Decide the payout', taskType: 'user' } }).model;
+  assert.deepEqual(assessProcess(m).steps.map(s => s.winner), ['human', 'human'], 'nothing known: stays with people for now');
+  for (const [trait, value] of [['rulesComplete', true], ['input', 'structured'], ['judgment', false], ['physical', false]] as const) m = setTypicalTrait(m, { trait, value }).model;
+  assert.deepEqual(assessProcess(m).steps.map(s => s.winner), ['rpa', 'rpa']);
+  assert.equal(assessProcess(m).priority.inputs.groups.find(g => g.id === 'facts')!.known, 8);
+  // One step says otherwise; the other keeps the process answer.
+  const second = m.steps[1].id;
+  m = setStepTrait(m, { stepId: second, trait: 'judgment', value: true }).model;
+  assert.deepEqual(assessProcess(m).steps.map(s => s.winner), ['rpa', 'human']);
+  // Clearing the process answer returns the first step to unknown.
+  m = setTypicalTrait(m, { trait: 'rulesComplete', value: null }).model;
+  assert.ok(assessProcess(m).steps[0].unknowns.some(u => u.key === 'trait:rulesComplete'));
+});
+
+test('a process described only as a whole is assessed as one step: fit, bounds and next inputs', () => {
+  let m = addStep(emptyModel('Monthly reconciliation'), { step: { name: 'Monthly reconciliation', taskType: 'user' } }).model;
+  for (const [trait, value] of [['rulesComplete', true], ['input', 'structured'], ['judgment', false], ['physical', false], ['language', false], ['write', 'record']] as const) m = setTypicalTrait(m, { trait, value }).model;
+  m = setProcessMetric(m, { kind: 'volume', value: 12, period: 'year' }).model;
+  m = setProcessMetric(m, { kind: 'handling_time', value: 16, unit: 'hours' }).model;
+  const r = assessProcess(m);
+  assert.equal(r.verdict, 'RPA-led automation');
+  assert.deepEqual([r.priority.value.value!.basis, r.priority.value.value!.hours[1]], ['time_per_case', 192], '12 runs a year of 16 hours');
+  assert.equal(r.priority.value.value!.high, 'no');
+  assert.deepEqual(r.priority.placement.possible, ['fill_in']);
+});
+
+test('a scanner is not counted as an application with missing answers', () => {
+  const m = rpaProcess(1);
+  m.systems.push({ id: 'scan', name: 'Office scanner', kind: 'scanner', inScope: true, access: [], status: 'stated', sources: src });
+  m.steps[0].systemIds.push('scan');
+  assert.equal(assessProcess(m).priority.inputs.groups.find(g => g.id === 'applications')!.total, 2);
 });

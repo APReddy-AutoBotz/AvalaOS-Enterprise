@@ -291,7 +291,7 @@ function Benefit({ result, decisions, canEdit, me, onRate }: { result: ProcessAs
       <p className="mt-1 text-sm text-slate-500">From the volume and the time per step in the inputs, and a cost rate you enter. Nothing is assumed.</p>
       <dl className="mt-4 grid gap-3 md:grid-cols-3">
         {tile('Effort that could be automated', result.potential.computable ? <span className="font-display text-2xl font-semibold">{pct(result.potential.value!)}</span> : missing(result.potential.reason))}
-        {tile('Hands-on hours a year', result.hours.computable ? <><span className="font-display text-2xl font-semibold">{range(result.hours.value!.automatable)}</span> of {range(result.hours.value!.today)}</> : missing(result.hours.reason))}
+        {tile('Hands-on hours a year', result.hours.computable ? <><span className="font-display text-2xl font-semibold">{range(result.hours.value!.automatable)}</span> of {range(result.hours.value!.today)}</> : result.priority.value.computable ? <><span className="font-display text-2xl font-semibold">Up to {Math.round(result.priority.value.value!.hours[1]).toLocaleString('en')}</span><span className="block text-xs text-slate-500">An upper bound. {result.hours.reason}</span></> : missing(result.hours.reason))}
         {tile('Value of those hours', result.money.computable ? <><span className="font-display text-2xl font-semibold">{result.money.value!.currency} {range(result.money.value!.automatable)}</span> a year</> : missing(result.money.reason))}
       </dl>
       {canEdit && (

@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef } from './types.ts';
+import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
 import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 
@@ -399,7 +399,7 @@ export function setSystemApi(model: ProcessModel, args: { systemId: string; acce
 }
 
 /** A person states (or clears, with null) one fact of the process profile. */
-export function setProfileFact(model: ProcessModel, args: { fact: keyof ProcessProfile; value: ChangeLevel | null }): OpResult {
+export function setProfileFact(model: ProcessModel, args: { fact: 'processChange' | 'systemChange'; value: ChangeLevel | null }): OpResult {
   return commit(model, m => {
     m.meta.profile = { ...(m.meta.profile ?? {}), [args.fact]: confirmed(args.value) };
   });
@@ -418,20 +418,20 @@ export const PERIODS = ['day', 'week', 'month', 'quarter', 'year'] as const;
  * size or exception rate. The metric that holds the number (see `processMetricSlot`) is updated, so a figure read
  * from the sources is corrected in place and keeps its quotes; otherwise one is added.
  */
-export function setProcessMetric(model: ProcessModel, args: { kind: keyof typeof PROCESS_METRICS; value: number | null; period?: typeof PERIODS[number] }): OpResult {
+export function setProcessMetric(model: ProcessModel, args: { kind: keyof typeof PROCESS_METRICS; value: number | null; period?: typeof PERIODS[number]; /** For handling time. */ unit?: 'minutes' | 'hours' }): OpResult {
   const def = PROCESS_METRICS[args.kind];
   if (!def) throw new ModelOpError('BAD_INPUT', `${args.kind} is not a whole-process number.`);
   if (args.value !== null && (!Number.isFinite(args.value) || args.value < 0)) throw new ModelOpError('BAD_INPUT', 'Enter a number of zero or more.');
   if (args.kind === 'exception_rate' && args.value !== null && args.value > 100) throw new ModelOpError('BAD_INPUT', 'A percentage is between 0 and 100.');
   return commit(model, m => {
-    const unit = args.kind === 'volume' ? `cases/${args.period ?? 'month'}` : def.unit;
+    const unit = args.kind === 'volume' ? `cases/${args.period ?? 'month'}` : args.kind === 'handling_time' && args.unit ? args.unit : def.unit;
     const existing = processMetricSlot(m, args.kind);
     if (existing) {
       existing.appliesTo = 'process';
       existing.value = args.value;
       delete existing.range;
       existing.status = args.value === null ? 'unknown' : 'user-confirmed';
-      if (args.kind === 'volume') { existing.unit = unit; delete existing.period; } else existing.unit = def.unit;
+      if (args.kind === 'volume') { existing.unit = unit; delete existing.period; } else existing.unit = unit;
     } else if (args.value !== null) {
       m.meta.metrics.push({ id: newId(m, 'metric'), kind: args.kind, label: def.label, value: args.value, unit, appliesTo: 'process', status: 'user-confirmed', sources: [] });
     }
@@ -469,3 +469,15 @@ export function assumeEvenEffort(model: ProcessModel, args: { minutesPerCase: nu
   });
 }
 export { metricNumber };
+
+/**
+ * A person answers (or clears, with null) one step fact for the process as a whole. Steps with a
+ * fact of their own keep it; the others use this answer.
+ */
+export function setTypicalTrait(model: ProcessModel, args: { trait: keyof TypicalTraits; value: unknown }): OpResult {
+  return commit(model, m => {
+    const profile: ProcessProfile = m.meta.profile ?? {};
+    profile.typical = { ...(profile.typical ?? {}), [args.trait]: confirmed(args.value) };
+    m.meta.profile = profile;
+  });
+}

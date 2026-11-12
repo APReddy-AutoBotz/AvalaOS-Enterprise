@@ -177,7 +177,8 @@ export function validateModel(model: ProcessModel): ValidationResult {
     const pr: any = model.meta.profile;
     if (!pr || typeof pr !== 'object' || Array.isArray(pr)) err('PROFILE', '/meta/profile', 'profile must be an object.');
     else for (const k of Object.keys(pr)) {
-      if (!['processChange', 'systemChange'].includes(k)) err('PROFILE', `/meta/profile/${k}`, `Unknown profile fact ${k}.`);
+      if (k === 'typical') traits(pr[k], '/meta/profile/typical');
+      else if (!['processChange', 'systemChange'].includes(k)) err('PROFILE', `/meta/profile/${k}`, `Unknown profile fact ${k}.`);
       else typedFact(pr[k], `/meta/profile/${k}`, v => ['none', 'minor', 'major'].includes(v as string));
     }
   }

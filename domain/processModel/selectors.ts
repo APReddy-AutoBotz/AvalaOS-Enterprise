@@ -1,5 +1,5 @@
 // Read-only views of a Process Model used by the assessment, documents, flows and the review UI.
-import type { Metric, MetricKind, ElementTarget, Flow, ProcessModel, Step } from './types.ts';
+import type { Fact, Metric, MetricKind, ElementTarget, Flow, ProcessModel, Step, TypicalTraits } from './types.ts';
 
 export const outgoing = (m: ProcessModel, id: string): Flow[] => m.flows.filter(f => f.from === id);
 export const incoming = (m: ProcessModel, id: string): Flow[] => m.flows.filter(f => f.to === id);
@@ -158,3 +158,18 @@ export function processMetric(m: ProcessModel, kind: MetricKind): Metric | undef
 }
 /** A metric's value as one number: the value, or the middle of its range. */
 export const metricNumber = (x: Metric): number | null => x.value ?? (x.range ? (x.range[0] + x.range[1]) / 2 : null);
+
+// ---------------------------------------------------------------- step facts answered for the whole process
+
+export const TYPICAL_TRAITS = ['rulesComplete', 'input', 'judgment', 'physical', 'language', 'write'] as const;
+const isKnown = (f: Fact<unknown> | undefined) => Boolean(f) && f!.status !== 'unknown' && f!.value !== null && f!.value !== undefined;
+/** The answer given for the whole process, when there is one. */
+export const typicalTrait = (m: ProcessModel, key: keyof TypicalTraits): Fact<unknown> | undefined => {
+  const f = m.meta.profile?.typical?.[key] as Fact<unknown> | undefined;
+  return isKnown(f) ? f : undefined;
+};
+/** A step's fact: its own where it has one, else the answer given for the whole process. */
+export function stepTrait(m: ProcessModel, step: Step, key: keyof TypicalTraits): Fact<unknown> | undefined {
+  const own = step.traits?.[key] as Fact<unknown> | undefined;
+  return isKnown(own) ? own : typicalTrait(m, key) ?? own;
+}
