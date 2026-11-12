@@ -5,6 +5,7 @@ import { gaps, orderedSteps } from '../processModel/selectors.ts';
 import { paybackOf } from '../assess/payback.ts';
 import { QUADRANT } from '../assess/priority.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
+import { businessRequirementRows } from './frd.ts';
 import { known, metricCell, sourceList, type DocInput } from './common.ts';
 
 const hrs = (n: number) => Math.round(n).toLocaleString('en');
@@ -55,7 +56,10 @@ export function buildBrd(input: DocInput): DocTree {
   b.paragraph(`Today the process has ${steps.length} steps carried out by ${m.roles.filter(r => r.inScope).length} roles across ${m.systems.length} applications. It handles ${metricCell(m, 'volume').text.toLowerCase() === 'not provided' ? 'a volume that is not yet stated' : metricCell(m, 'volume').text}. The step-by-step detail is in the PDD section "Detailed As-Is steps".`);
 
   b.section('7', 'Business requirements', 1);
-  b.callout('Business requirements with IDs, priorities and acceptance measures are derived together with the functional requirements and will appear here.');
+  if (input.requirements) {
+    b.table('Business requirements', ['ID', 'Requirement', 'Priority', 'Acceptance'], businessRequirementRows(input.requirements), 'No business requirements yet: they come from the objective and the business rules.');
+    b.paragraph('What the solution must do to meet them is in the FRD, with a traceability matrix.');
+  } else b.callout('The business requirements are listed once the requirements register is loaded.');
 
   b.section('8', 'Business rules', 1);
   b.table('Business rules', ['ID', 'Rule', 'Condition', 'Action', 'Source'], m.rules.map((r, i) => [`R-${String(i + 1).padStart(2, '0')}`, { text: r.name, status: r.status }, r.condition, r.action, sourceList(r.sources)]), 'No business rules are recorded.');

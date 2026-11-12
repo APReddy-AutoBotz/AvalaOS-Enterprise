@@ -7,6 +7,7 @@ import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { StoredFormat } from '../../domain/workspace/sources.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
+import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 
 export interface Me { id: string; email: string }
@@ -119,4 +120,9 @@ export interface JourneyStore {
   getAssessmentDecisions(processId: string): Promise<Decisions>;
   /** Saves the decisions with a snapshot of the result for the model revision it was computed on. */
   saveAssessment(processId: string, input: { revisionId: string; modelHash: string; rulesVersion: string; result: unknown; decisions: Decisions }): Promise<void>;
+
+  /** The process's requirements register (every requirement ever given an ID). */
+  listRequirements(processId: string): Promise<StoredRequirement[]>;
+  /** Inserts or updates requirements by their ID; editors and admins only. Nothing is deleted. */
+  saveRequirements(processId: string, rows: StoredRequirement[]): Promise<void>;
 }
