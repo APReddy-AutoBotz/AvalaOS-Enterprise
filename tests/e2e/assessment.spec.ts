@@ -148,8 +148,8 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
     await inputs.getByLabel(`Form of the input for ${name}`).selectOption({ label: 'Structured' });
   }
   // The time per case, spread over the steps as an assumption, then one step confirmed by hand.
-  await inputs.getByLabel('Handling time').fill('6');
-  await inputs.getByLabel('Handling time').blur();
+  await inputs.getByLabel('Handling time', { exact: true }).fill('6');
+  await inputs.getByLabel('Handling time', { exact: true }).blur();
   await inputs.getByLabel('Volume', { exact: true }).fill('2000');
   await inputs.getByLabel('Volume', { exact: true }).blur();
   await saved(page);
@@ -185,4 +185,32 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
   await expect(page.getByTestId('readiness')).toContainText('Wait');
   await page.getByRole('button', { name: 'Open the assessment report' }).click();
   await expect(page.getByTestId('report-priority')).toContainText('Quick win');
+});
+
+test('a process known only as a whole is assessed as one step from answers given once', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await stage(page, 'Process');
+  await page.getByRole('button', { name: 'Start the process model' }).click();
+  await expect(page.getByRole('tab', { name: /^Steps/ })).toBeVisible();
+  await stage(page, 'Assessment');
+  await expect(page.getByTestId('verdict')).toHaveText('Nothing to assess yet');
+  await page.getByRole('tab', { name: /^Inputs/ }).click();
+  const inputs = page.getByTestId('assessment-inputs');
+  await inputs.getByRole('button', { name: 'Assess the process as one step' }).click();
+  await inputs.getByLabel('Rules stated in full and stable for the process as a whole').selectOption({ label: 'Yes' });
+  await inputs.getByLabel('Form of the input for the process as a whole').selectOption({ label: 'Structured' });
+  await inputs.getByLabel('Needs a judgment or accountable decision for the process as a whole').selectOption({ label: 'No' });
+  await inputs.getByLabel('Handling time unit').selectOption('hours');
+  await inputs.getByLabel('Handling time', { exact: true }).fill('16');
+  await inputs.getByLabel('Handling time', { exact: true }).blur();
+  await inputs.getByLabel('Volume period').selectOption('year');
+  await inputs.getByLabel('Volume', { exact: true }).fill('12');
+  await inputs.getByLabel('Volume', { exact: true }).blur();
+  await saved(page);
+  await expect(inputs.getByTestId('input-row').getByLabel(/^Rules stated in full and stable for /)).toContainText('As the process: Yes');
+  await shot(page, '35-assessment-whole-process');
+  await page.getByRole('tab', { name: 'Result' }).click();
+  await expect(page.getByTestId('verdict')).toHaveText('RPA-led automation');
+  await expect(page.getByTestId('value')).toContainText('Up to 192');
+  await expect(page.getByTestId('priority-quadrant')).toHaveText('Fill-in');
 });

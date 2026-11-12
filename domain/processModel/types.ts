@@ -83,7 +83,12 @@ export type ChangeLevel = 'none' | 'minor' | 'major';
  * What the assessment needs to know about the process as a whole, beyond its metrics. Each is a
  * Fact: read from the sources where they say it, entered by a person where they do not.
  */
+/** The step facts that can be answered once for the whole process. */
+export type TypicalTraits = Pick<StepTraits, 'rulesComplete' | 'input' | 'judgment' | 'physical' | 'language' | 'write'>;
+
 export interface ProcessProfile {
+  /** Answers given for the process as a whole. A step uses one where it has no fact of its own. */
+  typical?: TypicalTraits;
   /** Change expected to the way the process is done in the next six months. */
   processChange?: Fact<ChangeLevel>;
   /** Change expected to the applications it uses in the next six months. */

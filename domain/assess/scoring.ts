@@ -9,7 +9,8 @@
 // confidence; it never blocks a result.
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
-export const MODEL_VERSION = 'assess-scoring-2026-11.2';
+import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
+export const MODEL_VERSION = 'assess-scoring-2026-11.3';
 
 export type Approach = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human';
 /** Automation approaches. On equal scores the earlier one wins: a confirmed API, then RPA, then AI. */
@@ -152,7 +153,8 @@ const TEXT = {
 const known = (f: Fact<unknown> | undefined): Fact<unknown> | null => (f && f.status !== 'unknown' && f.value !== null && f.value !== undefined ? f : null);
 const yesNo = (f: Fact<unknown> | null): YesNo => (f ? (f.value === true ? 'yes' : 'no') : 'unknown');
 
-const NON_INTEGRABLE: SystemRef['kind'][] = ['scanner'];
+/** Kinds of system that have no interface or screens to automate: a device, not an application. */
+export const NON_INTEGRABLE: SystemRef['kind'][] = ['scanner'];
 const apiOf = (s: SystemRef): AccessMethod[] => s.access.filter(a => a.method === 'api');
 const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter(w => w.length > 3));
 
@@ -196,7 +198,9 @@ const TRAIT_GENERAL: Record<string, string> = {
 };
 
 function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFacts {
-  const t: StepTraits = step.traits ?? {};
+  // A step uses the answer given for the whole process where it has no fact of its own.
+  const t: StepTraits = { ...(step.traits ?? {}) };
+  for (const k of TYPICAL_TRAITS) (t as Record<string, unknown>)[k] = stepTrait(model, step, k);
   const read = <S extends string>(key: string, f: Fact<unknown> | undefined, state: (k: Fact<unknown> | null) => S): Read<S> => {
     const k = known(f);
     return { state: state(k), fact: k, key, question: `${TRAIT_GENERAL[key] ?? key} ("${step.name}")`, general: TRAIT_GENERAL[key] ?? key };

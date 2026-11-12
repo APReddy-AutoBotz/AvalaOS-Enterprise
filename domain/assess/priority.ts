@@ -7,7 +7,8 @@
 // agents, and with the 80/20 rule applied twice: to the cases (standard path first) and to the
 // steps (the few that carry most of the effort first).
 import type { ChangeLevel, Fact, InputForm, Metric, ProcessModel } from '../processModel/types.ts';
-import { metricNumber, processMetric } from '../processModel/selectors.ts';
+import { metricNumber, processMetric, stepTrait } from '../processModel/selectors.ts';
+import { NON_INTEGRABLE } from './scoring.ts';
 import type { StepScore } from './scoring.ts';
 import type { Caution, Computed, Range } from './process.ts';
 
@@ -112,7 +113,7 @@ function easeOf(model: ProcessModel, automated: StepScore[]): Ease | null {
 
   const pc = knownFact(model.meta.profile?.processChange) ?? 'unknown';
   const sc = knownFact(model.meta.profile?.systemChange) ?? 'unknown';
-  const inputs = steps.map(s => (knownFact(s.traits?.input) ?? 'unknown') as InputForm | 'unknown');
+  const inputs = steps.map(s => (knownFact(stepTrait(model, s, 'input')) ?? 'unknown') as InputForm | 'unknown');
   const inputValue = inputs.reduce((t, i) => t + EASE_VALUES.input[i], 0) / inputs.length;
   const structured = inputs.filter(i => i === 'structured').length;
   const inputUnknown = inputs.filter(i => i === 'unknown').length;
@@ -274,12 +275,13 @@ export function prioritise(model: ProcessModel, ctx: PriorityContext): Priority 
   // ---- how complete the inputs are
   const scoredSteps = ctx.scored.map(s => model.steps.find(x => x.id === s.stepId)!).filter(Boolean);
   const FACTS = ['rulesComplete', 'input', 'judgment', 'physical', 'language', 'write'] as const;
-  const systems = model.systems.filter(s => scoredSteps.some(st => st.systemIds.includes(s.id)));
+  // A device such as a scanner has no API or screens to ask about, so it is not counted as missing.
+  const systems = model.systems.filter(s => !NON_INTEGRABLE.includes(s.kind) && scoredSteps.some(st => st.systemIds.includes(s.id)));
   const count = (list: boolean[]) => list.filter(Boolean).length;
   const groups: InputGroup[] = [
     { id: 'profile', label: 'Process profile', total: 4, known: count([Boolean(processMetric(model, 'volume')), Boolean(ex), knownFact(model.meta.profile?.processChange) !== null, knownFact(model.meta.profile?.systemChange) !== null]) },
     { id: 'applications', label: 'Applications', total: systems.length * 2, known: systems.reduce((t, s) => t + count([s.access.some(a => a.method === 'api' && a.access !== 'unknown'), knownFact(s.uiStable) !== null]), 0) },
-    { id: 'facts', label: 'Step facts', total: scoredSteps.length * FACTS.length, known: scoredSteps.reduce((t, s) => t + count(FACTS.map(k => knownFact(s.traits?.[k] as Fact<unknown> | undefined) !== null)), 0) },
+    { id: 'facts', label: 'Step facts', total: scoredSteps.length * FACTS.length, known: scoredSteps.reduce((t, s) => t + count(FACTS.map(k => knownFact(stepTrait(model, s, k)) !== null)), 0) },
     { id: 'effort', label: 'Time and share per step', total: scoredSteps.length * 2, known: scoredSteps.reduce((t, s) => t + count([knownFact(s.traits?.effortMinutes) !== null, knownFact(s.traits?.sharePercent) !== null]), 0) },
   ];
   const known = groups.reduce((t, g) => t + g.known, 0), total = groups.reduce((t, g) => t + g.total, 0);

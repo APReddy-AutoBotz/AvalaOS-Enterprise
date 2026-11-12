@@ -2,9 +2,10 @@
 // of each step. Everything here is a fact in the Process Model: read from the sources where they
 // say it, entered or corrected by a person where they do not. The result recalculates on each edit.
 import React from 'react';
-import type { AccessStatus, ChangeLevel, Fact, FactStatus, Metric, ProcessModel, Step, SystemRef } from '../../domain/processModel/types.ts';
-import { PERIODS, adoptProcessMetric, assumeEvenEffort, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
-import { metricNumber, orderedSteps, processMetricCandidates, processMetricSlot, stepsForSystem } from '../../domain/processModel/selectors.ts';
+import type { AccessStatus, ChangeLevel, Fact, FactStatus, Metric, ProcessModel, Step, SystemRef, TypicalTraits } from '../../domain/processModel/types.ts';
+import { PERIODS, addStep, adoptProcessMetric, assumeEvenEffort, setTypicalTrait, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
+import { metricNumber, orderedSteps, processMetricCandidates, processMetricSlot, stepsForSystem, typicalTrait } from '../../domain/processModel/selectors.ts';
+import { NON_INTEGRABLE } from '../../domain/assess/scoring.ts';
 import { periodOf, type ProcessAssessment } from '../../domain/assess/process.ts';
 import { Button, cx } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
@@ -37,9 +38,9 @@ function NumberInput({ value, onSave, label, disabled, className, placeholder, m
     onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setDraft(text); }} className={className ?? inputCls} />;
 }
 
-function Pick({ value, options, onChange, label, disabled, cell }: { value: string; options: [string, string][]; onChange: (v: string) => void; label: string; disabled?: boolean; cell?: boolean }) {
+function Pick({ value, options, onChange, label, disabled, cell, inherited }: { value: string; options: [string, string][]; onChange: (v: string) => void; label: string; disabled?: boolean; cell?: boolean; /** Empty here, but answered for the whole process. */ inherited?: boolean }) {
   return (
-    <select aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className={cell ? cx(cellCls, value === '' ? unknownCls : knownCls) : inputCls}>
+    <select aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value)} className={cell ? cx(cellCls, value !== '' ? knownCls : inherited ? 'border-sky-200 bg-sky-50 text-sky-900' : unknownCls) : inputCls}>
       {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
     </select>
   );
@@ -100,6 +101,8 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
   const volume = metric('volume'), handling = metric('handling_time'), people = metric('fte'), exceptions = metric('exception_rate');
   const [period, setPeriod] = React.useState<Period>((volume && periodOf(volume) as Period) || 'month');
   React.useEffect(() => { const p = volume && periodOf(volume); if (p) setPeriod(p as Period); }, [volume?.unit, volume?.period]);
+  const [timeUnit, setTimeUnit] = React.useState<'minutes' | 'hours'>(handling && /hour/i.test(handling.unit) ? 'hours' : 'minutes');
+  React.useEffect(() => { if (handling) setTimeUnit(/hour/i.test(handling.unit) ? 'hours' : 'minutes'); }, [handling?.unit]);
   const said = (m: Metric | undefined) => (m?.range && m.value === null ? `Sources say ${m.range[0]} to ${m.range[1]}` : undefined);
   const setMetric = (kind: 'volume' | 'handling_time' | 'fte' | 'exception_rate', value: number | null, p: Period = period) => editor.apply(m => setProcessMetric(m, { kind, value, period: p }), 'Assessment input');
   const profile = model.meta.profile ?? {};
@@ -162,7 +165,11 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
             <div className="flex items-center gap-2"><NumberInput label="Exception rate" max={100} value={exceptions?.status === 'unknown' ? null : exceptions?.value ?? null} placeholder={said(exceptions) ?? 'Percent of cases'} disabled={!canEdit} onSave={v => setMetric('exception_rate', v)} /><span className="text-sm text-slate-500">%</span></div>
           </ProfileField>
           <ProfileField label="Hands-on time per case" hint={stepMinutes > 0 ? `For reference. The step times below add up to ${Math.round(stepMinutes * 10) / 10} minutes a case.` : 'For reference. Hours are calculated from the time on each step below.'} status={statusOf(handling)} quote={quoteOf(handling)} from={handling} candidates={choices('handling_time')} onChoose={choose}>
-            <div className="flex items-center gap-2"><NumberInput label="Handling time" value={handling?.status === 'unknown' ? null : handling?.value ?? null} placeholder={said(handling) ?? 'Minutes'} disabled={!canEdit} onSave={v => setMetric('handling_time', v)} /><span className="text-sm text-slate-500">min</span></div>
+            <div className="flex items-center gap-2"><NumberInput label="Handling time" value={handling?.status === 'unknown' ? null : handling?.value ?? null} placeholder={said(handling) ?? 'Time per case'} disabled={!canEdit} onSave={v => editor.apply(m => setProcessMetric(m, { kind: 'handling_time', value: v, unit: timeUnit }), 'Assessment input')} />
+              <select aria-label="Handling time unit" value={timeUnit} disabled={!canEdit} className={cx(inputCls, 'w-28')}
+                onChange={e => { const u = e.target.value as 'minutes' | 'hours'; setTimeUnit(u); if (handling && handling.value !== null && handling.status !== 'unknown') editor.apply(m => setProcessMetric(m, { kind: 'handling_time', value: handling.value, unit: u }), 'Assessment input'); }}>
+                <option value="minutes">minutes</option><option value="hours">hours</option>
+              </select></div>
           </ProfileField>
           <ProfileField label="People doing this work" hint="For reference: how many full-time people the work takes today." status={statusOf(people)} quote={quoteOf(people)} from={people} candidates={choices('fte')} onChoose={choose}>
             <NumberInput label="People" value={people?.status === 'unknown' ? null : people?.value ?? null} placeholder={said(people) ?? 'Full-time equivalents'} disabled={!canEdit} onSave={v => setMetric('fte', v)} />
@@ -190,6 +197,13 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                   const apis = s.access.filter(a => a.method === 'api');
                   const api: AccessStatus = apis.find(a => a.access === 'confirmed')?.access ?? apis.find(a => a.access === 'reported')?.access ?? (apis.length && apis.every(a => a.access === 'confirmed_absent') ? 'confirmed_absent' : 'unknown');
                   const used = stepsForSystem(model, s.id).length;
+                  if (NON_INTEGRABLE.includes(s.kind)) return (
+                    <tr key={s.id} data-testid="application-row">
+                      <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
+                      <td colSpan={3} className="px-4 py-3 text-xs text-slate-500">Not applicable: a device, with no API or screens to automate.</td>
+                      <td className="px-4 py-3 text-xs text-slate-500">{used} {used === 1 ? 'step' : 'steps'}</td>
+                    </tr>
+                  );
                   return (
                     <tr key={s.id} data-testid="application-row">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.name}{apis[0]?.name ? <span className="block text-xs font-normal text-slate-500">{apis[0].name}</span> : null}</td>
@@ -210,7 +224,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="font-display text-base font-semibold text-slate-900">Steps</h3>
-            <p className="text-sm text-slate-500">The facts each step is scored on, and the time it takes. A dashed time is an assumption to confirm.</p>
+            <p className="text-sm text-slate-500">The facts each step is scored on, and the time it takes. Blue cells follow the answer for the process as a whole. A dashed time is an assumption to confirm.</p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
@@ -218,7 +232,13 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
             {canEdit && blankShares.length > 0 && <Button variant="ghost" onClick={fillShares}>Set blank “% of cases” to 100</Button>}
           </div>
         </div>
-        {steps.length === 0 ? <p className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">No steps yet. Add them in the Process stage or upload sources.</p> : (
+        {steps.length === 0 ? (
+          <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white p-6" data-testid="no-steps">
+            <p className="text-sm font-semibold text-slate-900">No steps yet</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Upload sources or add steps in the Process stage for a step-by-step result. If you only know the process as a whole, assess it as one step now and split it later.</p>
+            {canEdit && <Button className="mt-3" onClick={() => editor.apply(m => addStep(m, { step: { name: model.meta.name, taskType: 'user' } }), 'Assess the process as one step')}>Assess the process as one step</Button>}
+          </div>
+        ) : (
           <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table className="w-full min-w-[980px] text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -231,6 +251,16 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                <tr data-testid="all-steps-row" className="bg-sky-50/50">
+                  <td className="px-3 py-2" />
+                  <td className="max-w-[16rem] px-3 py-2 text-sm font-semibold text-slate-900">The process as a whole<span className="block text-xs font-normal text-slate-500">Applies to every step that has no answer of its own.</span></td>
+                  {STEP_COLUMNS.map(c => {
+                    const key = c.trait as keyof TypicalTraits;
+                    const f = typicalTrait(model, key);
+                    return <td key={c.trait} className="w-28 px-1.5 py-2"><Pick cell inherited label={`${c.title} for the process as a whole`} value={f ? String(f.value) : ''} options={[['', 'Not set'], ...c.options.slice(1)]} disabled={!canEdit} onChange={v => editor.apply(m => setTypicalTrait(m, { trait: key, value: parseTrait(c.trait, v) }), 'Answer for the process as a whole')} /></td>;
+                  })}
+                  <td className="px-1.5 py-2" /><td className="px-1.5 py-2" />
+                </tr>
                 {steps.map((s, i) => {
                   const automated = s.taskType === 'service';
                   const set = (trait: TraitName, value: unknown) => editor.apply(m => setStepTrait(m, { stepId: s.id, trait, value }), `Assessment fact of "${s.name}"`);
@@ -241,7 +271,11 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                       <td className="max-w-[16rem] px-3 py-2 text-sm font-medium text-slate-900">{s.name}{automated && <span className="block text-xs font-normal text-slate-500">Already done by a system</span>}</td>
                       {STEP_COLUMNS.map(c => (
                         <td key={c.trait} className="w-28 px-1.5 py-2">
-                          {!automated && <Pick cell label={`${c.title} for ${s.name}`} value={traitText(s, c.trait)} options={c.options} disabled={!canEdit} onChange={v => set(c.trait, parseTrait(c.trait, v))} />}
+                          {!automated && (() => {
+                            const whole = typicalTrait(model, c.trait as keyof TypicalTraits);
+                            const wholeLabel = whole ? c.options.find(o => o[0] === String(whole.value))?.[1] : undefined;
+                            return <Pick cell inherited={Boolean(whole)} label={`${c.title} for ${s.name}`} value={traitText(s, c.trait)} options={wholeLabel ? [['', `As the process: ${wholeLabel}`], ...c.options.slice(1)] : c.options} disabled={!canEdit} onChange={v => set(c.trait, parseTrait(c.trait, v))} />;
+                          })()}
                         </td>
                       ))}
                       <td className="w-20 px-1.5 py-2">{!automated && <NumberInput label={`Minutes per case for ${s.name}`} value={effort} disabled={!canEdit} onSave={v => set('effortMinutes', v)} className={cx(cellCls, 'tabular-nums', effort === null ? unknownCls : s.traits?.effortMinutes?.status === 'assumed' ? 'border-dashed border-amber-400 bg-white text-slate-800' : knownCls)} />}</td>
