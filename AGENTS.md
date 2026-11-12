@@ -88,8 +88,8 @@ npm run dev              # local dev server on port 3000
 - Sources: the browser parses uploads and stores segments in `process_sources` (archive, never delete). `journey-extract` `create` takes `sourceIds` of that table.
 - Bring an extraction into a model only through `proposeChanges` / `applyChanges` (`domain/extract/rebase.ts`): confirmed elements are never overwritten (a conflict is recorded), removals are opt-in.
 - The journey screens read and write only through `journey/store` (`JourneyStore`); the memory store backs the browser tests and has no AI.
-- Assessment: `evaluateStep` (`domain/assess/rules.ts`) walks the ladder over the step's `traits` and systems; `rollUp` derives the process result. Thresholds live in `THRESHOLDS`; no monetary value may appear under `domain/assess` (a test enforces it). Traits are read from sources by the `stepTraits` task and edited with `setStepTrait`; overrides and the rate are stored in `assessments` (array entries, see `domain/assess/decisions.ts`).
-- Next: WP2.4 retire the old assess screens, then Phase 3 documents and flows.
+- Assessment is one deterministic scoring model (no AI decides anything): `scoreStep` (`domain/assess/scoring.ts`) gives each step a 0-100 score per approach (RPA, API, AI-assisted, agentic, keep with a person) from the `WEIGHTS`, `VALUES`, `CAPS` and `COMPLEXITY_PENALTY` tables; `assessProcess` (`domain/assess/process.ts`) derives the ranking, verdict, the "why" wording and the cautions. RPA is the default where no API is confirmed. Change behaviour only by changing those tables, with a test row. No monetary value may appear under `domain/assess` (a test enforces it). Facts are read from sources by the `stepTraits` task and edited with `setStepTrait`; overrides and the rate are stored in `assessments` (see `domain/assess/decisions.ts`). The report is `journey/process/AssessmentReport.tsx`.
+- Next: retire the old assess screens (WP2.4), then Phase 3 documents and flows.
 
 ## Definition of done for a pull request
 

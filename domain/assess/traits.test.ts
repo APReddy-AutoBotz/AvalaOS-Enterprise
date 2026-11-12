@@ -8,7 +8,7 @@ import { validateModel } from '../processModel/validate.ts';
 import { verifyExcerpts, validateRequest } from '../ai/gateway.ts';
 import { TASKS } from '../ai/tasks.ts';
 import { applyTraitFindings, batches, traitSegments, type TraitFinding } from './traits.ts';
-import { evaluateStep } from './rules.ts';
+import { scoreStep } from './scoring.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const seg = (sourceId: string, n: number, text: string): IngestSegment => ({ id: `${sourceId}:${n}`, sourceId, kind: 'paragraph', text, locator: { section: `6.${n}` } });
@@ -52,7 +52,7 @@ test('verified findings become facts with their quotes, and change the recommend
   assert.equal(t.effortMinutes?.value, 4);
   assert.equal(t.physical, undefined, 'a quote from a step card is not evidence');
   assert.deepEqual(validateModel(model).issues.filter(i => i.severity === 'error'), []);
-  assert.equal(evaluateStep(model, model.steps[0]).mechanism, 'rules');
+  assert.equal(scoreStep(model, model.steps[0]).scores.find(x => x.approach === 'rpa')!.factors.find(x => x.id === 'rules')!.value, 1);
 });
 
 test('a trait a person set is never changed, and disagreeing findings leave a trait unknown', () => {
