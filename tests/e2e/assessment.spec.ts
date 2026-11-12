@@ -160,7 +160,6 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
   await expect(page.getByTestId('priority-quadrant')).toHaveText('Quick win');
   await expect(page.getByTestId('value')).toContainText('2,400');
   await expect(page.getByTestId('readiness')).toContainText('Ready to automate');
-  await expect(page.getByTestId('where-to-start')).toContainText('of the 2 steps to automate');
   await shot(page, '33-assessment-priority');
 
   await page.reload();

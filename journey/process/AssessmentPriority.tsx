@@ -34,6 +34,8 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
   const p = result.priority;
   const [details, setDetails] = React.useState(false);
   const nameOf = (id: string) => model.steps.find(s => s.id === id)?.name ?? id;
+  // Naming the steps to start with only helps when it is fewer than all of them.
+  const showFocus = p.focus.computable && p.focus.value!.stepIds.length < p.focus.value!.of;
   const weakest = p.ease ? [...p.ease.factors].sort((a, b) => a.value - b.value).filter(f => f.value < 0.7).slice(0, 2) : [];
   return (
     <section aria-label="Priority">
@@ -90,7 +92,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
         <Card title="Priority" testid="priority">
           <div className="mt-2 flex gap-4">
             <div className="grid shrink-0 grid-cols-2 gap-1" aria-hidden>
-              {GRID.flat().map(q => <span key={q} className={cx('h-9 w-9 rounded-lg', p.placement.placed && p.placement.quadrant === q ? 'bg-[#002C4B] ring-2 ring-[#FFBC03]' : 'bg-slate-100')} />)}
+              {GRID.flat().map(q => <span key={q} className={cx('h-9 w-9 rounded-lg', p.placement.placed && p.placement.quadrant === q ? 'bg-[#002C4B] ring-2 ring-[#FFBC03]' : 'bg-slate-200')} />)}
             </div>
             <div>
               <p className={cx('font-display text-xl font-semibold', p.placement.placed ? 'text-slate-900' : 'text-slate-400')} data-testid="priority-quadrant">{p.placement.placed ? QUADRANT[p.placement.quadrant!].label : 'Not placed yet'}</p>
@@ -103,7 +105,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
         </Card>
       </div>
 
-      {(p.standardPath.computable || p.focus.computable) && (
+      {(p.standardPath.computable || showFocus) && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2" data-testid="where-to-start">
           {p.standardPath.computable && (
             <div className={cx('rounded-2xl border p-5', p.standardPath.value!.caution ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white')}>
@@ -112,7 +114,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
               <p className="mt-2 text-sm leading-6 text-slate-700">{p.standardPath.value!.text}</p>
             </div>
           )}
-          {p.focus.computable && (
+          {showFocus && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Start with these steps</p>
               <p className="mt-2 text-sm leading-6 text-slate-700"><span className="font-semibold text-slate-900">{p.focus.value!.stepIds.length} of the {p.focus.value!.of} steps to automate</span> carry {Math.round(p.focus.value!.share * 100)}% of the time automation could take.</p>
