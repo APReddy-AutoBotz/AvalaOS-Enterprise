@@ -207,10 +207,21 @@ test('a process known only as a whole is assessed as one step from answers given
   await inputs.getByLabel('Volume', { exact: true }).fill('12');
   await inputs.getByLabel('Volume', { exact: true }).blur();
   await saved(page);
-  await expect(inputs.getByTestId('input-row').getByLabel(/^Rules stated in full and stable for /)).toContainText('As the process: Yes');
+  await expect(inputs.getByTestId('input-row').getByLabel(/^Rules stated in full and stable for /)).toContainText('↑ Yes');
   await shot(page, '35-assessment-whole-process');
   await page.getByRole('tab', { name: 'Result' }).click();
   await expect(page.getByTestId('verdict')).toHaveText('RPA-led automation');
   await expect(page.getByTestId('value')).toContainText('Up to 192');
   await expect(page.getByTestId('priority-quadrant')).toHaveText('Fill-in');
+
+  // The portfolio lists the process with the same result.
+  await page.getByRole('link', { name: 'Processes' }).first().click();
+  await page.getByRole('tab', { name: 'Portfolio' }).click();
+  const prow = page.getByTestId('portfolio-row');
+  await expect(prow).toHaveCount(1);
+  await expect(prow).toContainText('Rule-based RPA');
+  await expect(prow).toContainText('Up to 192');
+  await expect(prow).toContainText('Fill-in');
+  await expect(page.getByTestId('portfolio-chart')).toBeVisible();
+  await shot(page, '36-portfolio');
 });

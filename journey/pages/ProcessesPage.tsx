@@ -1,7 +1,8 @@
 import React from 'react';
 import type { JourneyStore, ProcessRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { Button, EmptyState, ErrorNote, Field, messageOf, Spinner, when } from '../ui.tsx';
+import { Button, cx, EmptyState, ErrorNote, Field, messageOf, Spinner, when } from '../ui.tsx';
+import { Portfolio } from './Portfolio.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
 const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
@@ -60,6 +61,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   const [adding, setAdding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [view, setView] = React.useState<'list' | 'portfolio'>('list');
   const canEdit = workspace.role !== 'viewer';
 
   React.useEffect(() => {
@@ -95,6 +97,13 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
         </EmptyState>
       ) : (
         <>
+          <div role="tablist" aria-label="Views" className="inline-flex rounded-xl bg-slate-100 p-1">
+            {([['list', 'Processes'], ['portfolio', 'Portfolio']] as const).map(([id, label]) => (
+              <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
+                className={cx('rounded-lg px-4 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
+            ))}
+          </div>
+          {view === 'portfolio' ? <Portfolio store={store} nav={nav} processes={processes} /> : <>
           {canEdit && (adding ? <div className="rounded-xl border border-slate-200 bg-white p-4">{addForm}</div> : <Button variant="secondary" onClick={() => setAdding(true)}>Add process</Button>)}
           <ul className="divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
             {processes.map(p => (
@@ -110,6 +119,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
               </li>
             ))}
           </ul>
+          </>}
         </>
       )}
     </section>
