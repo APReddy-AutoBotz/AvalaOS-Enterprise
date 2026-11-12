@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { ElementTarget, Fact, Flow, ProcessModel, Role, Step, StepTraits, SystemRef } from './types.ts';
+import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef } from './types.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 
 export interface OpResult {
@@ -370,5 +370,69 @@ export function setSystemUiStable(model: ProcessModel, args: { systemId: string;
     const sys = m.systems.find(s => s.id === args.systemId);
     if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
     sys.uiStable = confirmed(args.value);
+  });
+}
+
+/** A person states whether a system is reached through a remote desktop (null clears it). */
+export function setSystemRemote(model: ProcessModel, args: { systemId: string; value: boolean | null }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    sys.remote = confirmed(args.value);
+  });
+}
+
+/**
+ * A person states whether a system has an API that can be used for this process. Interfaces read
+ * from the sources keep their names and operations and take the new status; when none is recorded,
+ * one is added. An API a person confirms without listing operations counts for all the system's steps.
+ */
+export function setSystemApi(model: ProcessModel, args: { systemId: string; access: AccessStatus }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    const apis = sys.access.filter(a => a.method === 'api');
+    if (apis.length) for (const a of apis) { a.access = args.access; a.status = 'user-confirmed'; }
+    else if (args.access !== 'unknown') sys.access.push({ method: 'api', operations: [], access: args.access, status: 'user-confirmed', sources: [] });
+  });
+}
+
+/** A person states (or clears, with null) one fact of the process profile. */
+export function setProfileFact(model: ProcessModel, args: { fact: keyof ProcessProfile; value: ChangeLevel | null }): OpResult {
+  return commit(model, m => {
+    m.meta.profile = { ...(m.meta.profile ?? {}), [args.fact]: confirmed(args.value) };
+  });
+}
+
+export const PROCESS_METRICS: Partial<Record<MetricKind, { label: string; unit: string }>> = {
+  volume: { label: 'Cases handled', unit: 'cases' },
+  handling_time: { label: 'Hands-on time per case', unit: 'minutes' },
+  fte: { label: 'People doing this work', unit: 'FTE' },
+  exception_rate: { label: 'Cases that leave the standard path', unit: '%' },
+};
+export const PERIODS = ['day', 'week', 'month', 'quarter', 'year'] as const;
+const isProcessLevel = (x: { appliesTo?: string }) => !x.appliesTo || x.appliesTo === 'process';
+
+/**
+ * A person states (or clears, with null) one whole-process number: volume, handling time, team
+ * size or exception rate. The first process-level metric of that kind is updated, so a figure read
+ * from the sources is corrected in place and keeps its quotes; otherwise one is added.
+ */
+export function setProcessMetric(model: ProcessModel, args: { kind: keyof typeof PROCESS_METRICS; value: number | null; period?: typeof PERIODS[number] }): OpResult {
+  const def = PROCESS_METRICS[args.kind];
+  if (!def) throw new ModelOpError('BAD_INPUT', `${args.kind} is not a whole-process number.`);
+  if (args.value !== null && (!Number.isFinite(args.value) || args.value < 0)) throw new ModelOpError('BAD_INPUT', 'Enter a number of zero or more.');
+  if (args.kind === 'exception_rate' && args.value !== null && args.value > 100) throw new ModelOpError('BAD_INPUT', 'A percentage is between 0 and 100.');
+  return commit(model, m => {
+    const unit = args.kind === 'volume' ? `cases/${args.period ?? 'month'}` : def.unit;
+    const existing = m.meta.metrics.find(x => x.kind === args.kind && isProcessLevel(x));
+    if (existing) {
+      existing.value = args.value;
+      delete existing.range;
+      existing.status = args.value === null ? 'unknown' : 'user-confirmed';
+      if (args.kind === 'volume') { existing.unit = unit; delete existing.period; } else existing.unit = def.unit;
+    } else if (args.value !== null) {
+      m.meta.metrics.push({ id: newId(m, 'metric'), kind: args.kind, label: def.label, value: args.value, unit, appliesTo: 'process', status: 'user-confirmed', sources: [] });
+    }
   });
 }

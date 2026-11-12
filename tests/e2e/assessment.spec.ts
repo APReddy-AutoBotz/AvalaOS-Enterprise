@@ -134,3 +134,42 @@ test('an override needs a rationale, survives reload and re-scoring, and keeps t
   await page.keyboard.press('Escape');
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Rule-based RPA');
 });
+
+test('inputs entered by hand give value and a priority, persist, and a major change means wait', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Assessment');
+  await expect(page.getByTestId('priority-quadrant')).toHaveText('Not placed yet');
+  await page.getByRole('tab', { name: /^Inputs/ }).click();
+  const inputs = page.getByTestId('assessment-inputs');
+  for (const name of ['Check invoice totals', 'Post invoice in SAP']) {
+    await inputs.getByLabel(`Rules stated in full and stable for ${name}`).selectOption({ label: 'Yes' });
+    await inputs.getByLabel(`Form of the input for ${name}`).selectOption({ label: 'Structured' });
+    await inputs.getByLabel(`Minutes per case for ${name}`).fill('3');
+    await inputs.getByLabel(`Minutes per case for ${name}`).blur();
+  }
+  await inputs.getByRole('button', { name: /Set blank/ }).click();
+  await inputs.getByLabel('Volume', { exact: true }).fill('2000');
+  await inputs.getByLabel('Volume', { exact: true }).blur();
+  await inputs.getByLabel('API of SAP S/4HANA').selectOption({ label: 'No API' });
+  await inputs.getByLabel('Screens of SAP S/4HANA stable').selectOption({ label: 'Yes' });
+  await saved(page);
+  await expect(inputs.getByLabel('Share of cases for Post invoice in SAP')).toHaveValue('100');
+  await shot(page, '32-assessment-inputs');
+
+  await page.getByRole('tab', { name: 'Result' }).click();
+  await expect(page.getByTestId('priority-quadrant')).toHaveText('Quick win');
+  await expect(page.getByTestId('value')).toContainText('2,400');
+  await expect(page.getByTestId('readiness')).toContainText('Ready to automate');
+  await shot(page, '33-assessment-priority');
+
+  await page.reload();
+  await expect(page.getByTestId('priority-quadrant')).toHaveText('Quick win');
+  await page.getByRole('tab', { name: /^Inputs/ }).click();
+  await expect(page.getByLabel('Volume', { exact: true })).toHaveValue('2000');
+  await page.getByLabel('Application change expected').selectOption({ label: 'Major change' });
+  await saved(page);
+  await page.getByRole('tab', { name: 'Result' }).click();
+  await expect(page.getByTestId('readiness')).toContainText('Wait');
+  await page.getByRole('button', { name: 'Open the assessment report' }).click();
+  await expect(page.getByTestId('report-priority')).toContainText('Quick win');
+});
