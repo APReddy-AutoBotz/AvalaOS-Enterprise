@@ -83,6 +83,7 @@ test('many steps and exception paths make it difficult', () => {
 test('value needs volume, effort and share; with them the process is placed in a quadrant', () => {
   let m = rpaProcess(3);
   assert.equal(assessProcess(m).priority.placement.placed, false);
+  assert.deepEqual(assessProcess(m).priority.placement.possible, ['quick_win', 'fill_in'], 'ease is settled even at worst; only the value is open');
   m = setProcessMetric(m, { kind: 'volume', value: 2000, period: 'month' }).model;
   m = withEffort(m, [2, 1, 1]);
   const high = assessProcess(m).priority;
@@ -94,6 +95,7 @@ test('value needs volume, effort and share; with them the process is placed in a
   assert.equal(low.placement.quadrant, 'fill_in');
   let long = rpaProcess(24, { ...RULES, input: f('semi_structured') });
   for (let i = 0; i < 12; i++) long.exceptions.push({ id: `ex-${i}`, kind: 'business', name: `Exception ${i}`, trigger: 't', stepIds: [], handling: 'h', status: 'stated', sources: src });
+  long = setProfileFact(setProfileFact(long, { fact: 'processChange', value: 'minor' }).model, { fact: 'systemChange', value: 'minor' }).model;
   long = setSystemRemote(setProcessMetric(long, { kind: 'volume', value: 2000, period: 'month' }).model, { systemId: 'sys', value: true }).model;
   const hard = assessProcess(withEffort(long, long.steps.map(() => 1))).priority;
   assert.ok(hard.ease!.score < PRIORITY.ease, `ease ${hard.ease!.score}`);
@@ -188,10 +190,59 @@ test('spreading the time per case is a recorded assumption: it gives a value and
   m = setStepTrait(m, { stepId: 's-0', trait: 'effortMinutes', value: 2 }).model;
   m = assumeEvenEffort(m, { minutesPerCase: 11 }).model;
   assert.deepEqual(m.steps.map(s => [s.traits!.effortMinutes!.value, s.traits!.effortMinutes!.status]), [[2, 'user-confirmed'], [3, 'assumed'], [3, 'assumed'], [3, 'assumed']]);
-  assert.equal(assessProcess(m).priority.value.computable, false, 'share of cases is still needed');
+  const upper = assessProcess(m).priority.value.value!;
+  assert.deepEqual([upper.exact, upper.hours[0], Math.round(upper.hours[1])], [false, 0, 2200], 'without shares only the upper bound is certain');
   for (const s of m.steps) m = setStepTrait(m, { stepId: s.id, trait: 'sharePercent', value: 100 }).model;
   const v = assessProcess(m).priority.value.value!;
   assert.equal(Math.round(v.mid), 1000 * 12 * 11 / 60);
   assert.equal(v.assumedSteps, 3);
   assert.throws(() => assumeEvenEffort(m, { minutesPerCase: 11 }), /already has a time/);
+});
+
+test('with few inputs the result is bounded, not blank: time per case, then people, then nothing', () => {
+  const base = rpaProcess(3);
+  const none = assessProcess(base).priority;
+  assert.equal(none.value.computable, false);
+  assert.deepEqual(none.nextInputs.slice(0, 2).map(x => x.id), ['volume', 'time']);
+
+  // People only: at most the whole of their time.
+  const people = assessProcess(setProcessMetric(base, { kind: 'fte', value: 0.5 }).model).priority;
+  assert.deepEqual([people.value.value!.basis, people.value.value!.exact, people.value.value!.hours[0], people.value.value!.hours[1]], ['people', false, 0, 0.5 * PRIORITY.hoursPerFte]);
+  assert.equal(people.value.value!.high, 'no', 'under the line even at most, so the row is settled');
+  assert.deepEqual(people.placement.possible, ['fill_in']);
+  assert.equal(people.placement.placed, true);
+
+  // Volume and time per case: an upper bound that could be high or not.
+  let m = setProcessMetric(base, { kind: 'volume', value: 3000, period: 'month' }).model;
+  m = setProcessMetric(m, { kind: 'handling_time', value: 5 }).model;
+  const perCase = assessProcess(m).priority;
+  assert.deepEqual([perCase.value.value!.basis, perCase.value.value!.hours[1], perCase.value.value!.high], ['time_per_case', 3000, 'either']);
+  assert.deepEqual(perCase.placement.possible, ['quick_win', 'fill_in']);
+  assert.match(perCase.placement.reason, /either side of 1,000 hours/);
+  assert.ok(perCase.nextInputs.some(x => x.id === 'step_time'));
+
+  // Step times and shares: both ends calculated, and the placement settles.
+  for (const s of m.steps) { m = setStepTrait(m, { stepId: s.id, trait: 'effortMinutes', value: 1.5 }).model; m = setStepTrait(m, { stepId: s.id, trait: 'sharePercent', value: 100 }).model; }
+  const exact = assessProcess(m).priority;
+  assert.deepEqual([exact.value.value!.basis, exact.value.value!.exact, exact.value.value!.hours[0]], ['step_times', true, 2700]);
+  assert.equal(exact.placement.quadrant, 'quick_win');
+});
+
+test('ease is a range while facts are unknown, and narrows to one number when they are known', () => {
+  const open = assessProcess(rpaProcess(3)).priority.ease!;
+  assert.ok(open.range[0] < open.score && open.score < open.range[1], `${open.range} around ${open.score}`);
+  let m = setProfileFact(setProfileFact(rpaProcess(3), { fact: 'processChange', value: 'none' }).model, { fact: 'systemChange', value: 'none' }).model;
+  m = setSystemRemote(m, { systemId: 'sys', value: false }).model;
+  const known = assessProcess(m).priority.ease!;
+  assert.deepEqual(known.range, [known.score, known.score]);
+});
+
+test('a process with nothing known beyond its steps still gets a result and a list of what to add', () => {
+  const m = emptyModel('Bare');
+  for (let i = 0; i < 4; i++) m.steps.push({ id: `b-${i}`, name: `Do thing ${i + 1}`, description: '', roleIds: [], systemIds: [], taskType: 'user', inputs: [], outputs: [], ruleIds: [], exceptionIds: [], status: 'user-confirmed', sources: [] });
+  const r = assessProcess(m);
+  assert.equal(r.assessed, 4);
+  assert.ok(r.priority.nextInputs.length >= 3);
+  assert.equal(r.priority.readiness.state, 'ready');
+  assert.equal(r.priority.inputs.share, 0);
 });

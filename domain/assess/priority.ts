@@ -6,7 +6,7 @@
 // implementation, then benefit, then a value-against-effort placement), extended to cover AI and
 // agents, and with the 80/20 rule applied twice: to the cases (standard path first) and to the
 // steps (the few that carry most of the effort first).
-import type { ChangeLevel, Fact, InputForm, ProcessModel } from '../processModel/types.ts';
+import type { ChangeLevel, Fact, InputForm, Metric, ProcessModel } from '../processModel/types.ts';
 import { metricNumber, processMetric } from '../processModel/selectors.ts';
 import type { StepScore } from './scoring.ts';
 import type { Caution, Computed, Range } from './process.ts';
@@ -40,9 +40,9 @@ export const PRIORITY = {
 } as const;
 
 export type EaseBand = 'easy' | 'medium' | 'difficult';
-export interface EaseFactor { id: keyof typeof EASE_WEIGHTS; label: string; weight: number; value: number; points: number; known: boolean; text: string }
+export interface EaseFactor { id: keyof typeof EASE_WEIGHTS; label: string; weight: number; value: number; points: number; known: boolean; text: string; /** The value at worst and at best while the fact is not known. */ bounds: Range }
 export interface EaseMultiplier { id: keyof typeof EASE_MULTIPLIERS; factor: number; text: string }
-export interface Ease { score: number; band: EaseBand; factors: EaseFactor[]; multipliers: EaseMultiplier[]; knownShare: number }
+export interface Ease { score: number; band: EaseBand; /** The score if every unknown fact turned out worst, and best. */ range: Range; factors: EaseFactor[]; multipliers: EaseMultiplier[]; knownShare: number }
 
 export type ReadinessState = 'ready' | 'fix_first' | 'wait';
 export interface Readiness { state: ReadinessState; label: string; reasons: string[]; open: string[] }
@@ -55,15 +55,41 @@ export const QUADRANT: Record<Quadrant, { label: string; text: string }> = {
   not_now: { label: 'Not now', text: 'Lower value and harder to build. Leave it unless the volume or the systems change.' },
 };
 
+export type ValueBasis = 'step_times' | 'time_per_case' | 'people';
+export interface ValueEstimate {
+  /** Hands-on hours a year automation could take: at least, and at most. */
+  hours: Range;
+  /** True when both ends are calculated from step times and shares; false when only an upper bound is known. */
+  exact: boolean;
+  basis: ValueBasis;
+  mid: number;
+  fte: number;
+  /** Whether the value is at or above the line: 'either' when the bounds lie on both sides of it. */
+  high: 'yes' | 'no' | 'either';
+  /** Steps whose time is a recorded assumption, not a stated or confirmed fact. */
+  assumedSteps: number;
+}
+export interface Placement {
+  /** True when only one quadrant is possible on what is known. */
+  placed: boolean;
+  quadrant?: Quadrant;
+  /** Every quadrant still possible; empty when no step is recommended for automation. */
+  possible: Quadrant[];
+  /** When not placed: what would decide it. */
+  reason: string;
+}
+export interface NextInput { id: string; label: string; why: string }
+
 export interface InputGroup { id: string; label: string; known: number; total: number }
 
 export interface Priority {
   readiness: Readiness;
   /** Null when no step is recommended for automation. */
   ease: Ease | null;
-  value: Computed<{ hours: Range; mid: number; fte: number; high: boolean; /** Steps whose time is a recorded assumption, not a stated or confirmed fact. */ assumedSteps: number }>;
-  // Both variants name every field, so narrowing on `placed` works without strictNullChecks.
-  placement: { placed: true; quadrant: Quadrant; reason?: undefined } | { placed: false; reason: string; quadrant?: undefined };
+  value: Computed<ValueEstimate>;
+  placement: Placement;
+  /** The inputs that would sharpen the result most, most useful first. */
+  nextInputs: NextInput[];
   /** Cases: the share that follows the standard path, when the exception rate is known. */
   standardPath: Computed<{ share: number; caution: boolean; text: string }>;
   /** Steps: the fewest steps that carry 80% of the effort automation could take. */
@@ -74,13 +100,15 @@ export interface Priority {
 const band = (bands: Bands, n: number) => bands.find(([limit]) => n <= limit)![1];
 const knownFact = <T>(f: Fact<T> | undefined): T | null => (f && f.status !== 'unknown' && f.value !== null ? f.value : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const pcUnknown = (m: ProcessModel) => knownFact(m.meta.profile?.processChange) === null || knownFact(m.meta.profile?.systemChange) === null;
 const CHANGE_TEXT: Record<ChangeLevel | 'unknown', string> = { none: 'no change is expected', minor: 'minor change is expected', major: 'major change is expected', unknown: 'nobody has said whether change is expected' };
 
 function easeOf(model: ProcessModel, automated: StepScore[]): Ease | null {
   if (!automated.length) return null;
   const steps = automated.map(s => model.steps.find(x => x.id === s.stepId)!).filter(Boolean);
-  const factor = (id: keyof typeof EASE_WEIGHTS, label: string, value: number, known: boolean, text: string): EaseFactor =>
-    ({ id, label, weight: EASE_WEIGHTS[id], value, points: EASE_WEIGHTS[id] * value, known, text });
+  const factor = (id: keyof typeof EASE_WEIGHTS, label: string, value: number, known: boolean, text: string, bounds: Range = [value, value]): EaseFactor =>
+    ({ id, label, weight: EASE_WEIGHTS[id], value, points: EASE_WEIGHTS[id] * value, known, text, bounds: known ? [value, value] : bounds });
+  const changeBounds: Range = [EASE_VALUES.change.major, EASE_VALUES.change.none];
 
   const pc = knownFact(model.meta.profile?.processChange) ?? 'unknown';
   const sc = knownFact(model.meta.profile?.systemChange) ?? 'unknown';
@@ -92,14 +120,15 @@ function easeOf(model: ProcessModel, automated: StepScore[]): Ease | null {
   const systemIds = [...new Set(steps.flatMap(s => s.systemIds))].filter(id => model.systems.some(x => x.id === id));
 
   const factors: EaseFactor[] = [
-    factor('processStability', 'The process is stable', EASE_VALUES.change[pc], pc !== 'unknown', `For the process, ${CHANGE_TEXT[pc]} in the next six months.`),
-    factor('systemStability', 'The applications are stable', EASE_VALUES.change[sc], sc !== 'unknown', `For the applications, ${CHANGE_TEXT[sc]} in the next six months.`),
+    factor('processStability', 'The process is stable', EASE_VALUES.change[pc], pc !== 'unknown', `For the process, ${CHANGE_TEXT[pc]} in the next six months.`, changeBounds),
+    factor('systemStability', 'The applications are stable', EASE_VALUES.change[sc], sc !== 'unknown', `For the applications, ${CHANGE_TEXT[sc]} in the next six months.`, changeBounds),
     factor('input', 'The input is structured', inputValue, inputUnknown === 0,
-      `${structured} of the ${plural(steps.length, 'step')} to automate ${structured === 1 ? 'works' : 'work'} on structured data${inputUnknown ? `; the input of ${inputUnknown} is not known` : ''}.`),
+      `${structured} of the ${plural(steps.length, 'step')} to automate ${structured === 1 ? 'works' : 'work'} on structured data${inputUnknown ? `; the input of ${inputUnknown} is not known` : ''}.`,
+      [inputValue - inputUnknown * EASE_VALUES.input.unknown / inputs.length, inputValue + inputUnknown * (1 - EASE_VALUES.input.unknown) / inputs.length]),
     factor('variability', 'Few exception paths', band(EASE_VALUES.exceptionPaths, paths), true, `The process map has ${plural(paths, 'exception path')}.`),
     factor('length', 'Few steps to build', band(EASE_VALUES.steps, steps.length), true, `${plural(steps.length, 'step')} to automate.`),
     factor('applications', 'Few applications to connect', systemIds.length ? band(EASE_VALUES.applications, systemIds.length) : EASE_VALUES.noApplications, systemIds.length > 0,
-      systemIds.length ? `The steps to automate use ${plural(systemIds.length, 'application')}.` : 'No application is recorded on the steps to automate.'),
+      systemIds.length ? `The steps to automate use ${plural(systemIds.length, 'application')}.` : 'No application is recorded on the steps to automate.', [EASE_VALUES.applications[EASE_VALUES.applications.length - 1][1], 1]),
   ];
 
   const multipliers: EaseMultiplier[] = [];
@@ -113,9 +142,14 @@ function easeOf(model: ProcessModel, automated: StepScore[]): Ease | null {
   else if (ai) multipliers.push({ id: 'aiSteps', factor: EASE_MULTIPLIERS.aiSteps, text: `${plural(ai, 'step')} ${ai === 1 ? 'needs' : 'need'} AI, which has to be evaluated and reviewed by a person.` });
 
   const base = factors.reduce((t, x) => t + x.points, 0);
-  const score = Math.round(multipliers.reduce((t, m) => t * m.factor, base));
+  const applied = multipliers.reduce((t, m) => t * m.factor, 1);
+  const score = Math.round(base * applied);
+  // At worst, every application whose access is not known is also reached through a remote desktop.
+  const remoteUnknown = systemIds.filter(id => knownFact(model.systems.find(x => x.id === id)!.remote) === null).length;
+  const worstRemote = systemIds.length ? (1 - (1 - EASE_MULTIPLIERS.remoteDesktop) * ((remote + remoteUnknown) / systemIds.length)) / (remote ? 1 - (1 - EASE_MULTIPLIERS.remoteDesktop) * (remote / systemIds.length) : 1) : 1;
+  const bound = (i: 0 | 1) => Math.round(factors.reduce((t, x) => t + x.weight * x.bounds[i], 0) * applied * (i === 0 ? worstRemote : 1));
   const knownWeight = factors.filter(x => x.known).reduce((t, x) => t + x.weight, 0);
-  return { score, band: score >= EASE_BANDS.easy ? 'easy' : score >= EASE_BANDS.medium ? 'medium' : 'difficult', factors, multipliers, knownShare: knownWeight / 100 };
+  return { score, band: score >= EASE_BANDS.easy ? 'easy' : score >= EASE_BANDS.medium ? 'medium' : 'difficult', range: [bound(0), bound(1)], factors, multipliers, knownShare: knownWeight / 100 };
 }
 
 function readinessOf(model: ProcessModel, cautions: Caution[]): Readiness {
@@ -135,25 +169,73 @@ function readinessOf(model: ProcessModel, cautions: Caution[]): Readiness {
   return { state: 'ready', label: 'Ready to automate', reasons: [open.length ? 'Nothing known stands in the way.' : 'No major change is expected, and the rules are stable enough to build on.'], open };
 }
 
-export function prioritise(model: ProcessModel, ctx: { scored: StepScore[]; cautions: Caution[]; hours: Computed<{ today: Range; automatable: Range }>; automationShare: (s: StepScore) => number }): Priority {
+const minutesOf = (m: Metric): Range => {
+  const k = /hour/i.test(m.unit) ? 60 : /sec/i.test(m.unit) ? 1 / 60 : 1;
+  const [lo, hi] = m.range ?? [m.value!, m.value!];
+  return [lo * k, hi * k];
+};
+
+/**
+ * The hours automation could take, from the best inputs there are. With time and share on every
+ * step both ends are calculated. With less, only what is certain is stated: an upper bound from the
+ * step times, else from volume and time per case, else from the people doing the work. Nothing is
+ * spread, averaged or guessed.
+ */
+function valueOf(model: ProcessModel, ctx: PriorityContext): Priority['value'] {
+  const rows = ctx.scored.map(s => {
+    const t = model.steps.find(x => x.id === s.stepId)?.traits;
+    return { effort: knownFact(t?.effortMinutes), share: knownFact(t?.sharePercent), auto: ctx.automationShare(s), assumed: t?.effortMinutes?.status === 'assumed' };
+  });
+  if (!rows.length) return { computable: false, reason: 'There are no steps yet.' };
+  const anyAuto = rows.some(r => r.auto[1] > 0);
+  const vol = ctx.volume;
+  let hours: Range, exact = false, basis: ValueBasis;
+  if (vol.computable && rows.every(r => r.effort !== null)) {
+    exact = rows.every(r => r.share !== null);
+    basis = 'step_times';
+    const per = (i: 0 | 1) => rows.reduce((t, r) => t + r.effort! * ((r.share ?? 100) / 100) * r.auto[i], 0) / 60;
+    hours = [exact ? vol.value![0] * per(0) : 0, vol.value![1] * per(1)];
+  } else {
+    const perCase = processMetric(model, 'handling_time'), people = processMetric(model, 'fte');
+    let today: number;
+    if (vol.computable && perCase) { today = vol.value![1] * minutesOf(perCase)[1] / 60; basis = 'time_per_case'; }
+    else if (people) { today = (people.range?.[1] ?? people.value!) * PRIORITY.hoursPerFte; basis = 'people'; }
+    else return { computable: false, reason: vol.computable ? 'Add the time per case, the time per step, or the number of people doing the work.' : 'Add the volume with the time per case, or the number of people doing the work.' };
+    hours = [0, anyAuto ? today : 0];
+  }
+  const mid = (hours[0] + hours[1]) / 2;
+  const high = hours[0] >= PRIORITY.valueHoursPerYear ? 'yes' : hours[1] < PRIORITY.valueHoursPerYear ? 'no' : 'either';
+  return { computable: true, value: { hours, exact, basis, mid, fte: (exact ? mid : hours[1]) / PRIORITY.hoursPerFte, high, assumedSteps: rows.filter(r => r.assumed).length } };
+}
+
+export interface PriorityContext {
+  scored: StepScore[]; cautions: Caution[]; volume: Computed<Range>;
+  /** The share of a step's time its recommended approach takes off people, at least and at most. */
+  automationShare: (s: StepScore) => Range;
+  apiSwitch: { systems: string[]; steps: number };
+  keyQuestions: { question: string; steps: number }[];
+}
+
+export function prioritise(model: ProcessModel, ctx: PriorityContext): Priority {
   const automated = ctx.scored.filter(s => s.winner !== 'human');
   const readiness = readinessOf(model, ctx.cautions);
   const ease = easeOf(model, automated);
 
-  let value: Priority['value'] = { computable: false, reason: ctx.hours.reason ?? '' };
-  if (ctx.hours.computable) {
-    const hours = ctx.hours.value!.automatable;
-    const mid = (hours[0] + hours[1]) / 2;
-    const assumedSteps = ctx.scored.filter(x => model.steps.find(st => st.id === x.stepId)?.traits?.effortMinutes?.status === 'assumed').length;
-    value = { computable: true, value: { hours, mid, fte: mid / PRIORITY.hoursPerFte, high: mid >= PRIORITY.valueHoursPerYear, assumedSteps } };
-  }
+  const value = valueOf(model, ctx);
 
-  let placement: Priority['placement'];
-  if (!ease) placement = { placed: false, reason: 'No step is recommended for automation yet.' };
-  else if (!value.computable) placement = { placed: false, reason: `The value is not known yet. ${value.reason}` };
+  // Every quadrant the bounds still allow. One left means the process is placed.
+  let placement: Placement;
+  if (!ease) placement = { placed: false, possible: [], reason: 'No step is recommended for automation yet.' };
   else {
-    const easier = ease.score >= PRIORITY.ease;
-    placement = { placed: true, quadrant: value.value!.high ? (easier ? 'quick_win' : 'major_project') : easier ? 'fill_in' : 'not_now' };
+    const easier = ease.range[0] >= PRIORITY.ease ? [true] : ease.range[1] < PRIORITY.ease ? [false] : [true, false];
+    const high = value.computable && value.value!.high !== 'either' ? [value.value!.high === 'yes'] : [true, false];
+    const possible: Quadrant[] = high.flatMap(h => easier.map(e => (h ? (e ? 'quick_win' : 'major_project') : e ? 'fill_in' : 'not_now') as Quadrant));
+    const open = ease.factors.filter(f => !f.known).map(f => f.label.toLowerCase());
+    const reason = [
+      high.length > 1 ? (value.computable ? `The value could lie on either side of ${PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year.` : `The value is not known. ${value.reason}`) : '',
+      easier.length > 1 ? `The build effort depends on facts not yet known${open.length ? `: ${open.join(', ')}` : ''}.` : '',
+    ].filter(Boolean).join(' ');
+    placement = { placed: possible.length === 1, possible, reason, ...(possible.length === 1 ? { quadrant: possible[0] } : {}) };
   }
 
   // ---- 80/20 on the cases
@@ -173,7 +255,7 @@ export function prioritise(model: ProcessModel, ctx: { scored: StepScore[]; caut
   const rows = automated.map(s => {
     const t = model.steps.find(x => x.id === s.stepId)?.traits;
     const effort = knownFact(t?.effortMinutes), share = knownFact(t?.sharePercent);
-    return { id: s.stepId, weight: effort === null ? null : effort * ((share ?? 100) / 100) * ctx.automationShare(s) };
+    return { id: s.stepId, weight: effort === null ? null : effort * ((share ?? 100) / 100) * ctx.automationShare(s)[1] };
   });
   if (!rows.length) focus = { computable: false, reason: 'No step is recommended for automation yet.' };
   else if (rows.some(r => r.weight === null)) focus = { computable: false, reason: `Effort is missing on ${rows.filter(r => r.weight === null).length} of the ${plural(rows.length, 'step')} to automate.` };
@@ -202,5 +284,19 @@ export function prioritise(model: ProcessModel, ctx: { scored: StepScore[]; caut
   ];
   const known = groups.reduce((t, g) => t + g.known, 0), total = groups.reduce((t, g) => t + g.total, 0);
 
-  return { readiness, ease, value, placement, standardPath, focus, inputs: { groups, known, total, share: total ? known / total : 0 } };
+  // ---- what to fill in next, most useful first
+  const stepFacts = scoredSteps.map(s => ({ effort: knownFact(s.traits?.effortMinutes) !== null, share: knownFact(s.traits?.sharePercent) !== null }));
+  const hasVolume = ctx.volume.computable, hasCase = Boolean(processMetric(model, 'handling_time')), hasPeople = Boolean(processMetric(model, 'fte'));
+  const allEffort = stepFacts.length > 0 && stepFacts.every(x => x.effort), allShare = stepFacts.every(x => x.share);
+  const nextInputs: NextInput[] = [
+    ...(!hasVolume ? [{ id: 'volume', label: 'Volume', why: 'Gives the hours a year, and with them the value.' }] : []),
+    ...(!allEffort && !hasCase ? [{ id: 'time', label: hasPeople ? 'Time per case' : 'Time per case, or the people doing the work', why: 'Bounds the value even when step times are not known.' }] : []),
+    ...(pcUnknown(model) ? [{ id: 'change', label: 'Change expected in the next six months', why: 'Settles readiness and a quarter of the build effort score.' }] : []),
+    ...(ctx.apiSwitch.steps > 0 ? [{ id: 'api', label: `API of ${ctx.apiSwitch.systems.join(', ')}`, why: `Confirming it would move ${plural(ctx.apiSwitch.steps, 'step')} to API integration.` }] : []),
+    ...(ctx.keyQuestions[0] ? [{ id: 'fact', label: ctx.keyQuestions[0].question, why: `Not known for ${plural(ctx.keyQuestions[0].steps, 'step')}.` }] : []),
+    ...(!allEffort && (hasCase || hasPeople) ? [{ id: 'step_time', label: 'Time per step', why: 'Turns the upper bound on the value into a calculated range.' }] : []),
+    ...(allEffort && !allShare ? [{ id: 'share', label: 'Share of cases per step', why: 'Turns the upper bound on the value into a calculated range.' }] : []),
+  ].slice(0, 4);
+
+  return { readiness, ease, value, placement, nextInputs, standardPath, focus, inputs: { groups, known, total, share: total ? known / total : 0 } };
 }

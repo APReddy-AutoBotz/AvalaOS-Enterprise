@@ -267,7 +267,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   } else if (options.rate && !hours.computable) money = { computable: false, reason: hours.reason ?? '' };
 
   const questions = scored.flatMap(s => s.questions).filter((q, i, all) => all.findIndex(x => x.question === q.question) === i);
-  const priority = prioritise(model, { scored, cautions, hours, automationShare: s => AUTOMATION_SHARE[s.winner][1] });
+  const priority = prioritise(model, { scored, cautions, volume: yearlyVolume(model), automationShare: s => AUTOMATION_SHARE[s.winner], apiSwitch: { systems: systemsToConfirm, steps: apiIfConfirmed }, keyQuestions });
   return {
     priority,
     steps, assessed: n, candidates: open.length, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,

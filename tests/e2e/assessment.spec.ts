@@ -138,7 +138,9 @@ test('an override needs a rationale, survives reload and re-scoring, and keeps t
 test('inputs entered by hand give value and a priority, persist, and a major change means wait', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Assessment');
+  // With nothing entered the result is bounded, not blank: what is possible, and what to add first.
   await expect(page.getByTestId('priority-quadrant')).toHaveText('Not placed yet');
+  await expect(page.getByTestId('next-inputs')).toContainText('Volume');
   await page.getByRole('tab', { name: /^Inputs/ }).click();
   const inputs = page.getByTestId('assessment-inputs');
   for (const name of ['Check invoice totals', 'Post invoice in SAP']) {
@@ -148,11 +150,18 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
   // The time per case, spread over the steps as an assumption, then one step confirmed by hand.
   await inputs.getByLabel('Handling time').fill('6');
   await inputs.getByLabel('Handling time').blur();
+  await inputs.getByLabel('Volume', { exact: true }).fill('2000');
+  await inputs.getByLabel('Volume', { exact: true }).blur();
+  await saved(page);
+  // Volume and time per case alone give an upper bound on the value.
+  await page.getByRole('tab', { name: 'Result' }).click();
+  await expect(page.getByTestId('value')).toContainText('Up to 2,400');
+  await expect(page.getByTestId('priority-possible')).toHaveText('Quick win or Fill-in');
+  await shot(page, '34-assessment-partial-inputs');
+  await page.getByRole('tab', { name: /^Inputs/ }).click();
   await inputs.getByRole('button', { name: 'Spread 6 min evenly over 2 steps' }).click();
   await expect(inputs.getByLabel('Minutes per case for Post invoice in SAP')).toHaveValue('3');
   await inputs.getByRole('button', { name: /Set blank/ }).click();
-  await inputs.getByLabel('Volume', { exact: true }).fill('2000');
-  await inputs.getByLabel('Volume', { exact: true }).blur();
   await inputs.getByLabel('API of SAP S/4HANA').selectOption({ label: 'No API' });
   await inputs.getByLabel('Screens of SAP S/4HANA stable').selectOption({ label: 'Yes' });
   await saved(page);
