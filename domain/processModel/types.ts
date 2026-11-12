@@ -76,6 +76,20 @@ export interface Metric extends Provenance {
   period?: string;
 }
 
+/** How much change is expected in the next six months. */
+export type ChangeLevel = 'none' | 'minor' | 'major';
+
+/**
+ * What the assessment needs to know about the process as a whole, beyond its metrics. Each is a
+ * Fact: read from the sources where they say it, entered by a person where they do not.
+ */
+export interface ProcessProfile {
+  /** Change expected to the way the process is done in the next six months. */
+  processChange?: Fact<ChangeLevel>;
+  /** Change expected to the applications it uses in the next six months. */
+  systemChange?: Fact<ChangeLevel>;
+}
+
 export interface ProcessMeta {
   name: string;
   objective: Fact<string>;
@@ -83,6 +97,7 @@ export interface ProcessMeta {
   scopeIn: ScopeItem[];
   scopeOut: ScopeItem[];
   metrics: Metric[];
+  profile?: ProcessProfile;
 }
 
 export type RoleKind = 'person_role' | 'team' | 'external' | 'system_actor';
@@ -130,6 +145,8 @@ export interface SystemRef extends Provenance {
   access: AccessMethod[];
   /** Whether the screens are stable enough for UI automation; absent means unknown. */
   uiStable?: Fact<boolean>;
+  /** Reached through a remote desktop (Citrix or similar), where a robot sees only an image of the screen. */
+  remote?: Fact<boolean>;
 }
 
 export type TaskType = 'user' | 'manual' | 'service' | 'business_rule' | 'send' | 'receive';

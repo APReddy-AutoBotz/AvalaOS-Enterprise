@@ -173,6 +173,14 @@ export function validateModel(model: ProcessModel): ValidationResult {
     if (!isNonEmpty(r.name)) err('NAME', `${p}/name`, 'A role needs a name.');
     if (!ROLE_KINDS.includes(r.kind)) err('ENUM', `${p}/kind`, `Unknown role kind ${String(r.kind)}.`);
   });
+  if (model.meta.profile !== undefined) {
+    const pr: any = model.meta.profile;
+    if (!pr || typeof pr !== 'object' || Array.isArray(pr)) err('PROFILE', '/meta/profile', 'profile must be an object.');
+    else for (const k of Object.keys(pr)) {
+      if (!['processChange', 'systemChange'].includes(k)) err('PROFILE', `/meta/profile/${k}`, `Unknown profile fact ${k}.`);
+      else typedFact(pr[k], `/meta/profile/${k}`, v => ['none', 'minor', 'major'].includes(v as string));
+    }
+  }
   model.systems.forEach((s, i) => {
     const p = `/systems/${i}`;
     provenance(s, p);
@@ -190,6 +198,7 @@ export function validateModel(model: ProcessModel): ValidationResult {
       }
     });
     if (s.uiStable !== undefined) typedFact(s.uiStable, `${p}/uiStable`, v => typeof v === 'boolean');
+    if (s.remote !== undefined) typedFact(s.remote, `${p}/remote`, v => typeof v === 'boolean');
   });
   model.events.forEach((e, i) => {
     const p = `/events/${i}`;

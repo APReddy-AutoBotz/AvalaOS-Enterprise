@@ -9,7 +9,7 @@
 // confidence; it never blocks a result.
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
-export const MODEL_VERSION = 'assess-scoring-2026-11';
+export const MODEL_VERSION = 'assess-scoring-2026-11.2';
 
 export type Approach = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human';
 /** Automation approaches. On equal scores the earlier one wins: a confirmed API, then RPA, then AI. */
@@ -166,6 +166,8 @@ function commonWords(model: ProcessModel): Set<string> {
 
 /** Whether an interface's stated operations mention the work of the step, ignoring words common to the process. */
 function covers(a: AccessMethod, step: Step, common: Set<string>): boolean {
+  // A person who confirms an API without listing its operations has confirmed it for this process.
+  if (a.status === 'user-confirmed' && a.operations.length === 0) return true;
   const stepWords = [...words(`${step.name} ${step.description}`)].filter(w => !common.has(w));
   const stem = (w: string) => w.slice(0, 5);
   return a.operations.some(op => [...words(op)].filter(w => !common.has(w)).some(w => stepWords.some(s => s === w || (w.length >= 5 && s.length >= 5 && stem(s) === stem(w)))));

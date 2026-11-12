@@ -18,6 +18,8 @@ import { coarsePatch } from './SourcesStage.tsx';
 import { Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
 import { AssessmentReport } from './AssessmentReport.tsx';
 import { AssessmentWhy } from './AssessmentWhy.tsx';
+import { AssessmentInputs } from './AssessmentInputs.tsx';
+import { AssessmentPriority } from './AssessmentPriority.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
 
 const APPROACHES = Object.keys(APPROACH_LABEL) as Approach[];
@@ -42,7 +44,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState<string | null>(null);
   const [reading, setReading] = React.useState<string | null>(null);
-  const [view, setView] = React.useState<'assessment' | 'report'>('assessment');
+  const [view, setView] = React.useState<'assessment' | 'inputs' | 'report'>('assessment');
 
   React.useEffect(() => { store.getAssessmentDecisions(processId).then(setDecisions).catch(e => setError(messageOf(e))); }, [store, processId]);
 
@@ -116,11 +118,31 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   if (view === 'report') return <AssessmentReport model={editor.model} result={result} decisions={d} onBack={() => setView('assessment')} />;
 
+  const known = Math.round(result.priority.inputs.share * 100);
+  const tabs = (
+    <div role="tablist" aria-label="Assessment views" className="inline-flex rounded-xl bg-slate-100 p-1">
+      {([['assessment', 'Result'], ['inputs', `Inputs · ${known}% known`]] as const).map(([id, label]) => (
+        <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
+          className={cx('rounded-lg px-4 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
+      ))}
+    </div>
+  );
+
+  if (view === 'inputs') return (
+    <div className="space-y-6">
+      {tabs}
+      <ErrorNote message={error ?? editor.error} />
+      <AssessmentInputs model={editor.model} result={result} editor={editor} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits} />
+    </div>
+  );
+
   return (
     <div className="space-y-6">
+      {tabs}
       <ErrorNote message={error ?? editor.error} />
       <Hero result={result} onReport={() => setView('report')} />
       {result.assessed > 0 && <Ranking result={result} />}
+      {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
       {result.assessed > 0 && (
         <AssessmentWhy model={editor.model} result={result} onOpenStep={setOpen} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits}
           newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} />
@@ -266,7 +288,7 @@ function Benefit({ result, decisions, canEdit, me, onRate }: { result: ProcessAs
   return (
     <section aria-label="Benefit" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h3 className="font-display text-base font-semibold text-slate-900">Benefit</h3>
-      <p className="mt-1 text-sm text-slate-500">Only from volume and effort stated in the sources, and a cost rate you enter. Nothing is assumed.</p>
+      <p className="mt-1 text-sm text-slate-500">From the volume and the time per step in the inputs, and a cost rate you enter. Nothing is assumed.</p>
       <dl className="mt-4 grid gap-3 md:grid-cols-3">
         {tile('Effort that could be automated', result.potential.computable ? <span className="font-display text-2xl font-semibold">{pct(result.potential.value!)}</span> : missing(result.potential.reason))}
         {tile('Hands-on hours a year', result.hours.computable ? <><span className="font-display text-2xl font-semibold">{range(result.hours.value!.automatable)}</span> of {range(result.hours.value!.today)}</> : missing(result.hours.reason))}

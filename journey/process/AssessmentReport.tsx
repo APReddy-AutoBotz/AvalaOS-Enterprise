@@ -7,6 +7,8 @@ import { APPROACH_LABEL, CAPS, COMPLEXITY_PENALTY, FIT, HUMAN_FLOOR, WEIGHTS, ty
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { effectiveApproach, type Decisions } from '../../domain/assess/decisions.ts';
 import { Button, cx } from '../ui.tsx';
+import { EASE_BANDS, EASE_WEIGHTS, PRIORITY, QUADRANT } from '../../domain/assess/priority.ts';
+import { EASE_LABEL, people as asPeople } from './AssessmentPriority.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
 
 const FACTOR_LABEL: Record<string, string> = {
@@ -40,6 +42,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
   const people = result.steps.filter(s => !s.alreadyAutomated && (s.winner === 'human' || s.human !== 'none'));
   const nameOf = (id: string) => model.steps.find(s => s.id === id)?.name ?? id;
   const fired = result.cautions.filter(c => c.fired);
+  const pr = result.priority;
 
   return (
     <div>
@@ -86,8 +89,23 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
           </table>
         </section>
 
+        <section data-testid="report-priority">
+          <H n={3}>Readiness, effort and value</H>
+          <table className="mt-4 w-full border-collapse">
+            <tbody>
+              <tr><td className={cx(td, 'w-48 font-semibold')}>Readiness</td><td className={td}>{pr.readiness.label}. {pr.readiness.reasons.join(' ')}{pr.readiness.open.length ? ` Not confirmed yet: ${pr.readiness.open.join(' ')}` : ''}</td></tr>
+              <tr><td className={cx(td, 'font-semibold')}>Ease of implementation</td><td className={td}>{pr.ease ? `${pr.ease.score} out of 100 (${EASE_LABEL[pr.ease.band]}). ${[...pr.ease.factors].sort((a, b) => a.value - b.value).slice(0, 2).map(f => f.text).join(' ')} ${pr.ease.multipliers.map(m => m.text).join(' ')}` : 'Not scored: no step is recommended for automation.'}</td></tr>
+              <tr><td className={cx(td, 'font-semibold')}>Value</td><td className={td}>{pr.value.computable ? `${range(pr.value.value!.hours)} hands-on hours a year, about ${asPeople(pr.value.value!.fte)} full-time people at ${PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.` : `Not known yet. ${pr.value.reason}`}</td></tr>
+              <tr><td className={cx(td, 'font-semibold')}>Priority</td><td className={td}>{pr.placement.placed ? `${QUADRANT[pr.placement.quadrant!].label}. ${QUADRANT[pr.placement.quadrant!].text}` : `Not placed yet. ${pr.placement.reason}`}</td></tr>
+              {pr.standardPath.computable && <tr><td className={cx(td, 'font-semibold')}>Standard path</td><td className={td}>{pr.standardPath.value!.text}</td></tr>}
+              {pr.focus.computable && <tr><td className={cx(td, 'font-semibold')}>Where to start</td><td className={td}>{pr.focus.value!.stepIds.length} of the {pr.focus.value!.of} steps to automate carry {Math.round(pr.focus.value!.share * 100)}% of the time automation could take: {pr.focus.value!.stepIds.map(nameOf).join(', ')}.</td></tr>}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs leading-5 text-slate-500">Ease of implementation is a weighted sum (process stable {EASE_WEIGHTS.processStability}, applications stable {EASE_WEIGHTS.systemStability}, structured input {EASE_WEIGHTS.input}, few exception paths {EASE_WEIGHTS.variability}, few steps {EASE_WEIGHTS.length}, few applications {EASE_WEIGHTS.applications}), reduced for paper or scans, remote desktops and AI steps. {EASE_BANDS.easy} or more is easy, below {EASE_BANDS.medium} is difficult. Priority compares value (line at {PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year) with ease (line at {PRIORITY.ease}).</p>
+        </section>
+
         <section>
-          <H n={3}>Why this approach is proposed</H>
+          <H n={4}>Why this approach is proposed</H>
           {result.narrative.map(p => (
             <div key={p.title} className="mt-4">
               <h3 className="text-sm font-semibold text-slate-900">{p.title}</h3>
@@ -97,7 +115,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
         </section>
 
         <section>
-          <H n={4}>Step by step</H>
+          <H n={5}>Step by step</H>
           <table className="mt-4 w-full border-collapse">
             <thead><tr>{['#', 'Step', 'Recommendation', 'Score', 'Next best', 'Person', 'Reason'].map(h => <th key={h} className={th}>{h}</th>)}</tr></thead>
             <tbody>
@@ -123,7 +141,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
         </section>
 
         <section>
-          <H n={5}>People in the automated process</H>
+          <H n={6}>People in the automated process</H>
           {people.length === 0 ? <p className="mt-4 text-sm text-slate-700">No step needs a person on what is known.</p> : (
             <ul className="mt-4 space-y-1.5 text-sm text-slate-700">
               {people.map(s => <li key={s.stepId}><span className="font-medium text-slate-900">{nameOf(s.stepId)}:</span> a person {{ none: '', review: 'reviews the AI output', approve: 'approves before it takes effect', decide: 'makes the decision', does_it: s.forNow ? 'does it for now, until more is known' : 'does the work' }[s.human]}.</li>)}
@@ -133,7 +151,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
         </section>
 
         <section>
-          <H n={6}>Benefit</H>
+          <H n={7}>Benefit</H>
           <table className="mt-4 w-full border-collapse">
             <tbody>
               <tr><td className={td}>Effort that could be automated</td><td className={td}>{result.potential.computable ? pct(result.potential.value!) : `Not computed. ${result.potential.reason}`}</td></tr>
@@ -145,7 +163,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
         </section>
 
         <section>
-          <H n={7}>Open points</H>
+          <H n={8}>Open points</H>
           {result.keyQuestions.length === 0 && result.questions.length === 0 ? <p className="mt-4 text-sm text-slate-700">Every fact the scores rest on is known.</p> : (
             <>
               {result.keyQuestions.length > 0 && <>
@@ -161,7 +179,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
         </section>
 
         <section>
-          <H n={8}>How the scores are calculated</H>
+          <H n={9}>How the scores are calculated</H>
           <p className="mt-4 text-sm leading-6 text-slate-700">
             Each step a person does today is scored from 0 to 100 for every approach. A score is the sum of the weighted factors below, read from the facts recorded for the step.
             A fact that is not known gets a middle value and lowers confidence. Some facts limit a score: a step that needs judgment or a physical action stays with a person (at least {HUMAN_FLOOR});
