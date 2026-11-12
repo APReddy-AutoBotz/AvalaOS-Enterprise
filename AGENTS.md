@@ -98,7 +98,8 @@ npm run dev              # local dev server on port 3000
 - Cost and payback (`domain/assess/payback.ts`): only from the hourly cost, build cost and running cost a person enters (stored as `cost` and `rate` entries in `assessments.overrides`). An upper bound on hours gives only the best-case payback.
 - Change expected, remote desktop and whether robots may drive an application's screens (`uiAllowed`; false caps RPA at 0) are read by the `profileFacts` task (`domain/assess/profileFacts.ts`) from the passages that mention them, alongside the step facts.
 - WP2.4 done: only the journey is built and routed; the earlier app (`App.tsx`, `components/`, `services/`) is no longer an entry point. Its code stays until the parts the plan keeps (the Delivery board, renderers) are carried over in their own work packages; then it is deleted.
-- Next: Phase 3 documents and flows (WP3.1 onwards).
+- Documents (WP3.2, in progress): `domain/docs/tree.ts` (document tree, `DocBuilder`: a missing fact is a "Not provided" cell or an open item, and every open item is listed again at the end), `pdd.ts` and `brd.ts` (sections as in plan section 4, derived only from the model, the assessment and entered decisions), `markdown.ts`. Shown read-only in `journey/process/DocumentsStage.tsx`.
+- Next: requirements derivation and the FRD (WP3.1), then the SDD, then editing (WP3.4; TipTap needs approval as a new dependency), narrative drafting with grounding (WP3.3), flows (WP3.6), Word export (WP3.7).
 
 ## Definition of done for a pull request
 

@@ -254,3 +254,25 @@ test('a process known only as a whole is assessed as one step from answers given
   await page.getByRole('tab', { name: 'Settings' }).click();
   await expect(page.getByLabel('High value starts at')).toHaveValue('100');
 });
+
+test('the documents follow the model: PDD with one row per step, BRD, open items and Markdown download', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Documents');
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Process Definition Document');
+  const steps = doc.locator('[data-caption="Detailed As-Is steps"] tbody tr');
+  await expect(steps).toHaveCount(2);
+  await expect(steps.nth(1)).toContainText('Post invoice in SAP');
+  await expect(doc.locator('[data-caption="Delivery model"] tbody tr').nth(1)).toContainText('Rule-based RPA');
+  await expect(doc.getByTestId('open-item').first()).toContainText('objective');
+  await expect(doc).not.toContainText(/TBD|placeholder|lorem/i);
+  await shot(page, '39-documents-pdd');
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Markdown' }).click()]);
+  expect(download.suggestedFilename()).toMatch(/PDD\.md$/);
+
+  await page.getByRole('tab', { name: /BRD/ }).click();
+  await expect(doc).toContainText('Business Requirements Document');
+  await expect(doc).toContainText('PDD, section 2.4');
+  await page.getByRole('tab', { name: /FRD/ }).click();
+  await expect(page.getByTestId('doc-not-ready')).toContainText('requirements');
+});
