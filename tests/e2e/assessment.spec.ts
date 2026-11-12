@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { INTERNAL, primaryText, shot, signInAndCreateProcess } from './helpers.ts';
 
 const saved = (page: Page) => expect(page.getByTestId('save-state').first()).not.toHaveText('Saving…');
@@ -267,8 +268,13 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   await expect(doc.getByTestId('open-item').first()).toContainText('objective');
   await expect(doc).not.toContainText(/TBD|placeholder|lorem/i);
   await shot(page, '39-documents-pdd');
-  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Markdown' }).click()]);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Markdown' }).click()]);
   expect(download.suggestedFilename()).toMatch(/PDD\.md$/);
+  const [word] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
+  expect(word.suggestedFilename()).toMatch(/PDD\.docx$/);
+  const bytes = readFileSync(await word.path());
+  expect(bytes.subarray(0, 2).toString()).toBe('PK');
+  expect(bytes.length).toBeGreaterThan(5000);
 
   await page.getByRole('tab', { name: /BRD/ }).click();
   await expect(doc).toContainText('Business Requirements Document');

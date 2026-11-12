@@ -84,6 +84,19 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     return type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : null;
   }, [type, model, decisions, settings, sources, revision]);
 
+  const [wordBusy, setWordBusy] = React.useState(false);
+  const downloadWord = async () => {
+    if (!doc) return;
+    setWordBusy(true);
+    try {
+      // Loaded on demand: the Word library is only needed when someone downloads.
+      const { toDocxBlob } = await import('../../domain/docs/docx.ts');
+      const blob = await toDocxBlob(doc, { draft: revision.state !== 'approved' });
+      const url = URL.createObjectURL(blob);
+      const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${doc.type.toUpperCase()}.docx` });
+      a.click(); URL.revokeObjectURL(url);
+    } catch (e) { setError(messageOf(e)); } finally { setWordBusy(false); }
+  };
   const download = () => {
     if (!doc) return;
     const url = URL.createObjectURL(new Blob([toMarkdown(doc)], { type: 'text/markdown' }));
@@ -113,7 +126,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             </button>
           ))}
         </div>
-        {doc && <div className="flex gap-2"><Button variant="ghost" onClick={download}>Download Markdown</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button></div>}
+        {doc && <div className="flex flex-wrap gap-2"><Button onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
       </div>
 
       {!decisions ? (error ? null : <Spinner label="Writing the document" />) : !doc ? (
