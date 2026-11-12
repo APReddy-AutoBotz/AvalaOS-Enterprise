@@ -97,7 +97,8 @@ npm run dev              # local dev server on port 3000
 - Workspace settings (`domain/assess/settings.ts`, table `workspace_settings`, admins write): hours per full-time person, the value line and the ease line. Pass them to `assessProcess(model, { settings })`; they change value, placement and the portfolio, never the recommended approach.
 - Cost and payback (`domain/assess/payback.ts`): only from the hourly cost, build cost and running cost a person enters (stored as `cost` and `rate` entries in `assessments.overrides`). An upper bound on hours gives only the best-case payback.
 - Change expected, remote desktop and whether robots may drive an application's screens (`uiAllowed`; false caps RPA at 0) are read by the `profileFacts` task (`domain/assess/profileFacts.ts`) from the passages that mention them, alongside the step facts.
-- Next: retire the old assess screens (WP2.4); then Phase 3 documents and flows.
+- WP2.4 done: only the journey is built and routed; the earlier app (`App.tsx`, `components/`, `services/`) is no longer an entry point. Its code stays until the parts the plan keeps (the Delivery board, renderers) are carried over in their own work packages; then it is deleted.
+- Next: Phase 3 documents and flows (WP3.1 onwards).
 
 ## Definition of done for a pull request
 

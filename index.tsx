@@ -11,16 +11,12 @@ if (!rootElement) {
 }
 
 // The process journey (/signin, /processes, /process/:id/:stage) is the application. Any other
-// path goes to the process list, so no route reaches the earlier screens (including the earlier
-// assessment versions). They load only when a developer sets VITE_LEGACY_APP=on, until their code
-// is deleted.
-const legacy = import.meta.env.VITE_LEGACY_APP === 'on';
-if (!legacy && !parseJourneyPath(window.location.pathname)) {
+// path goes to the process list, so no route reaches the earlier screens, including the earlier
+// assessment versions; they are no longer part of the build.
+if (!parseJourneyPath(window.location.pathname)) {
   window.history.replaceState(null, '', `/processes${window.location.hash}`);
 }
-const Root = parseJourneyPath(window.location.pathname)
-  ? React.lazy(() => import('./journey/JourneyApp'))
-  : React.lazy(() => import('./legacyRoot'));
+const Root = React.lazy(() => import('./journey/JourneyApp'));
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
