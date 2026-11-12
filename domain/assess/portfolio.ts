@@ -3,6 +3,7 @@
 import type { ProcessAssessment } from './process.ts';
 import { PRIORITY, type Quadrant, type ReadinessState } from './priority.ts';
 import type { Approach } from './scoring.ts';
+import { paybackOf, type Costs } from './payback.ts';
 
 export interface PortfolioRow {
   id: string;
@@ -21,6 +22,8 @@ export interface PortfolioRow {
   possible: Quadrant[];
   readiness: ReadinessState;
   inputsKnown: number;
+  /** Months to pay back the build, at best and at worst, when the costs are entered. */
+  payback: { best: number; worst: number | 'never' | null } | null;
 }
 
 export interface Portfolio {
@@ -36,14 +39,16 @@ export interface Portfolio {
 /** Quick wins first, then major projects, fill-ins, not-now; processes not yet placed come last. */
 export const QUADRANT_ORDER: Quadrant[] = ['quick_win', 'major_project', 'fill_in', 'not_now'];
 
-export function buildPortfolio(items: { id: string; name: string; assessment: ProcessAssessment }[]): Portfolio {
-  const rows = items.filter(i => i.assessment.assessed > 0).map(({ id, name, assessment: a }) => {
+export function buildPortfolio(items: { id: string; name: string; assessment: ProcessAssessment; rate?: { amount: number; currency: string } | null; costs?: Costs | null }[]): Portfolio {
+  const rows = items.filter(i => i.assessment.assessed > 0).map(({ id, name, assessment: a, rate, costs }) => {
     const p = a.priority;
+    const pb = paybackOf(p.value, rate ?? null, costs ?? null);
+    const months = pb.computable && pb.value!.months.best !== null ? { best: pb.value!.months.best, worst: pb.value!.months.worst } : null;
     return {
       id, name, rank: 0, lead: a.lead, verdict: a.verdict, fit: a.automationFit, ease: p.ease?.score ?? null,
       hours: p.value.computable ? p.value.value!.hours[1] : null, exact: p.value.computable ? p.value.value!.exact : false,
       quadrant: p.placement.placed ? p.placement.quadrant! : null, possible: p.placement.possible,
-      readiness: p.readiness.state, inputsKnown: p.inputs.share,
+      readiness: p.readiness.state, inputsKnown: p.inputs.share, payback: months,
     } as PortfolioRow;
   });
   const place = (r: PortfolioRow) => (r.quadrant ? QUADRANT_ORDER.indexOf(r.quadrant) : QUADRANT_ORDER.length);

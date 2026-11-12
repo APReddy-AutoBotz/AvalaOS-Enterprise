@@ -142,8 +142,8 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
         </dl>
         {canEdit && aiAvailable && (
           <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-slate-100 pt-4">
-            <Button variant="secondary" onClick={onRead} disabled={Boolean(reading) && !reading!.startsWith('Done')}>Read step facts from the sources</Button>
-            <p className="text-xs text-slate-500" role="status">{reading ?? 'Reads rules, input, judgment, time and share for each step, each with its quote. What you confirmed is never changed.'}</p>
+            <Button variant="secondary" onClick={onRead} disabled={Boolean(reading) && !reading!.startsWith('Done')}>Read facts from the sources</Button>
+            <p className="text-xs text-slate-500" role="status">{reading ?? 'Reads rules, input, judgment, time and share for each step, and any change expected or remote desktop use, each with its quote. What you confirmed is never changed.'}</p>
           </div>
         )}
       </section>
