@@ -1,3 +1,4 @@
+import { documentSettingsFrom, validateBranding, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings, type AssessmentSettings } from '../../domain/assess/settings.ts';
 // In-memory store with the same rules as the database: one working draft per process, approved
 // revisions never change, a new draft copies the approved model. State is kept in localStorage
@@ -21,6 +22,7 @@ interface State {
   sources: (SourceRow & { processId: string; segments: IngestSegment[] })[];
   assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
   settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
+  documentSettings?: { workspaceId: string; settings: DocumentSettings }[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -88,6 +90,19 @@ export function createMemoryStore(): JourneyStore {
       if (w.role !== 'admin') throw new StoreError(403, 'Only an admin can change the settings.');
       const valid = validateSettings(settings);
       state.settings = [...(state.settings ?? []).filter(x => x.workspaceId !== workspaceId), { workspaceId, assessment: valid, updatedBy: me.email, updatedAt: now() }];
+      save();
+    },
+    async getDocumentSettings(workspaceId) {
+      requireMe();
+      return documentSettingsFrom((state.documentSettings ?? []).find(x => x.workspaceId === workspaceId)?.settings);
+    },
+    async saveDocumentSettings(workspaceId, settings) {
+      requireMe();
+      const w = state.workspaces.find(x => x.id === workspaceId);
+      if (!w) throw new StoreError(404, 'Workspace not found.');
+      if (w.role !== 'admin') throw new StoreError(403, 'Only an admin can change how documents look.');
+      const valid = { branding: validateBranding(settings.branding), layouts: settings.layouts };
+      state.documentSettings = [...(state.documentSettings ?? []).filter(x => x.workspaceId !== workspaceId), { workspaceId, settings: valid }];
       save();
     },
     async listProcesses(workspaceId) {

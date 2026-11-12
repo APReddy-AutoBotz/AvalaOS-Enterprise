@@ -1,4 +1,5 @@
 import type { AssessmentSettings, SettingsRecord } from '../../domain/assess/settings.ts';
+import type { DocumentSettings } from '../../domain/docs/branding.ts';
 // Everything the journey screens read and write goes through this interface. The Supabase store is
 // the real one; the memory store backs browser tests and local runs without a backend.
 import type { ProcessModel } from '../../domain/processModel/types.ts';
@@ -77,6 +78,10 @@ export interface JourneyStore {
   getSettings(workspaceId: string): Promise<SettingsRecord>;
   /** Admins only. */
   saveSettings(workspaceId: string, settings: AssessmentSettings): Promise<void>;
+  /** How the workspace's documents look and are laid out; the defaults when none are set. */
+  getDocumentSettings(workspaceId: string): Promise<DocumentSettings>;
+  /** Admins only. */
+  saveDocumentSettings(workspaceId: string, settings: DocumentSettings): Promise<void>;
 
   listProcesses(workspaceId: string): Promise<ProcessRow[]>;
   createProcess(workspaceId: string, name: string): Promise<ProcessRow>;
