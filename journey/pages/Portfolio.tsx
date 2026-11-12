@@ -10,6 +10,8 @@ import { APPROACH_LABEL } from '../../domain/assess/scoring.ts';
 import { cx, EmptyState, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 
 const hrs = (n: number) => Math.round(n).toLocaleString('en');
+const mo = (n: number) => `${n.toLocaleString('en', { maximumFractionDigits: 1 })} mo`;
+const months = (p: NonNullable<PortfolioRow['payback']>) => (p.worst === null ? `From ${mo(p.best)}` : p.worst === 'never' ? `${mo(p.best)} at best` : p.worst === p.best ? mo(p.best) : `${mo(p.best)} – ${mo(p.worst)}`);
 const READY = { ready: ['Ready', 'bg-emerald-100 text-emerald-900'], fix_first: ['Fix first', 'bg-amber-100 text-amber-900'], wait: ['Wait', 'bg-rose-100 text-rose-900'] } as const;
 const QUAD_TONE: Record<Quadrant, string> = { quick_win: 'bg-[#002C4B] text-white', major_project: 'bg-sky-100 text-sky-900', fill_in: 'bg-slate-100 text-slate-700', not_now: 'bg-slate-100 text-slate-500' };
 
@@ -60,7 +62,9 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
     return Promise.all(processes.map(async p => {
       const rev = (await store.listRevisions(p.id))[0];
       const model = rev ? await store.getModel(rev.id) : null;
-      return model ? { id: p.id, name: p.name, assessment: assessProcess(model, { settings: rec.settings }) } : null;
+      if (!model) return null;
+      const decisions = await store.getAssessmentDecisions(p.id).catch(() => null);
+      return { id: p.id, name: p.name, assessment: assessProcess(model, { settings: rec.settings }), rate: decisions?.rate ?? null, costs: decisions?.costs ?? null };
     }));
     }).then(items => { if (live) setData(buildPortfolio(items.filter((i): i is NonNullable<typeof i> => i !== null))); }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
@@ -93,9 +97,9 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-            <tr>{['#', 'Process', 'Recommended approach', 'Steps that fit', 'Ease', 'Hours a year', 'Priority', 'Readiness', 'Inputs known'].map(h => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
+            <tr>{['#', 'Process', 'Recommended approach', 'Steps that fit', 'Ease', 'Hours a year', 'Payback', 'Priority', 'Readiness', 'Inputs known'].map(h => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {data.rows.map(r => (
@@ -106,6 +110,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
                 <td className="px-4 py-3 tabular-nums text-slate-700">{Math.round(r.fit * 100)}%</td>
                 <td className="px-4 py-3 tabular-nums text-slate-700">{r.ease ?? '–'}</td>
                 <td className="px-4 py-3 tabular-nums text-slate-700">{r.hours === null ? <span className="text-slate-400">Not known</span> : `${r.exact ? '' : 'Up to '}${hrs(r.hours)}`}</td>
+                <td className="px-4 py-3 tabular-nums text-slate-700" data-testid="portfolio-payback">{r.payback ? months(r.payback) : <span className="text-slate-400">No costs</span>}</td>
                 <td className="px-4 py-3">{r.quadrant ? <span className={cx('whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold', QUAD_TONE[r.quadrant])}>{QUADRANT[r.quadrant].label}</span> : <span className="text-xs text-slate-500">{r.possible.length > 0 && r.possible.length < 4 ? r.possible.map(q => QUADRANT[q].label).join(' or ') : 'Not placed yet'}</span>}</td>
                 <td className="px-4 py-3"><span className={cx('whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold', READY[r.readiness][1])}>{READY[r.readiness][0]}</span></td>
                 <td className="px-4 py-3 tabular-nums text-slate-700">{Math.round(r.inputsKnown * 100)}%</td>

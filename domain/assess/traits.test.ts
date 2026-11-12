@@ -101,3 +101,27 @@ test('a finding may only quote a passage of its own step, and reading again repl
   assert.deepEqual(again.changes, [{ stepId: b.id, trait: 'physical', from: true, to: null }]);
   assert.deepEqual(validateModel(again.model).issues.filter(i => i.severity === 'error'), []);
 });
+
+test('process-level facts: only cued passages are sent, findings need a passage, people keep their answers, disagreement is ignored', async () => {
+  const { profileSegments, applyProfileFindings } = await import('./profileFacts.ts');
+  const { emptyModel } = await import('../processModel/empty.ts');
+  const { setProfileFact } = await import('../processModel/patch.ts');
+  const m = emptyModel('Invoices');
+  m.systems.push({ id: 'sap', name: 'SAP', kind: 'erp', inScope: true, access: [], status: 'user-confirmed', sources: [] });
+  m.systems.push({ id: 'scan', name: 'Scanner', kind: 'scanner', inScope: true, access: [], status: 'user-confirmed', sources: [] });
+  const seg = (id: string, text: string) => ({ id, sourceId: 'call', kind: 'paragraph', text, locator: { lineStart: 1 } }) as any;
+  const sources = [{ key: 'call', segments: [seg('c1', 'We log invoices daily.'), seg('c2', 'Finance plans to migrate to S/4HANA Cloud in March.'), seg('c3', 'Nothing else.'), seg('c4', 'SAP is opened through Citrix.')] }];
+  const { segments, ingest } = profileSegments(m, sources);
+  assert.deepEqual(segments.map(s => s.id), ['systems', 'c1', 'c2', 'c3', 'c4']);
+  assert.doesNotMatch(segments[0].text, /Scanner/);
+  assert.equal(profileSegments(m, [{ key: 'x', segments: [seg('x1', 'We log invoices daily.')] }]).segments.length, 0);
+  const f = (fact: any, value: string, segmentId: string, systemId = '') => ({ fact, systemId, value, certainty: 'stated' as const, segmentId, excerpt: 'q' });
+  const r = applyProfileFindings(m, [f('systemChange', 'major', 'c2'), f('remote', 'true', 'c4', 'sap'), f('remote', 'true', 'c4', 'scan'), f('processChange', 'minor', 'c1'), f('processChange', 'none', 'c3'), f('systemChange', 'major', 'nope')], ingest);
+  assert.equal(r.model.meta.profile!.systemChange!.value, 'major');
+  assert.equal(r.model.meta.profile!.systemChange!.sources[0].sourceId, 'call');
+  assert.equal(r.model.systems[0].remote!.value, true);
+  assert.equal(r.model.systems[1].remote, undefined);
+  assert.equal(r.model.meta.profile!.processChange, undefined, 'disagreeing findings leave it unknown');
+  const mine = setProfileFact(m, { fact: 'systemChange', value: 'none' }).model;
+  assert.equal(applyProfileFindings(mine, [f('systemChange', 'major', 'c2')], ingest).model.meta.profile!.systemChange!.value, 'none');
+});

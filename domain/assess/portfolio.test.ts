@@ -36,3 +36,12 @@ test('80/20 across the portfolio: the fewest processes that carry 80% of the hou
   assert.ok(p.pareto.share >= 0.8);
   assert.deepEqual(buildPortfolio([item('Only', 5000, 6)]).pareto.ids, []);
 });
+
+test('payback shows in the portfolio only where the costs are entered', () => {
+  const rate = { amount: 10, currency: 'XYZ' };
+  const p = buildPortfolio([
+    { ...item('Costed', 1000, 6), rate, costs: { build: 6000, running: 0, enteredBy: 'x' } },
+    { ...item('No costs', 1000, 6), rate },
+  ]);
+  assert.deepEqual(p.rows.map(r => [r.name, r.payback]), [['Costed', { best: 6, worst: 6 }], ['No costs', null]]);
+});

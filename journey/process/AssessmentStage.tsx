@@ -13,6 +13,7 @@ import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
+import { applyProfileFindings, profileFacts, profileSegments, type ProfileFinding } from '../../domain/assess/profileFacts.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import { Button, cx, ErrorNote, messageOf } from '../ui.tsx';
 import { useModelEditor, type ModelEditor } from './useModelEditor.ts';
@@ -79,6 +80,11 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       setReading(`Reading the sources for ${steps.length} steps…`);
       const loaded = await Promise.all(sources.filter(s => !s.archived).map(async s => ({ key: s.key, segments: await store.getSourceSegments(s.id) })));
       const groups = batches(steps, 5);
+      // The process-level facts (change expected, remote desktop) are read in parallel, from the passages that mention them.
+      const profile = profileSegments(editor.model, loaded);
+      const profileRun: Promise<ProfileFinding[]> = profile.segments.length
+        ? store.runAiTask(workspaceId, profileFacts.id, profile.segments).then(r => ((r.data as { findings?: ProfileFinding[] })?.findings) ?? []).catch(() => [])
+        : Promise.resolve([]);
       let done = 0;
       const findings: TraitFinding[] = [];
       const ingest = new Map();
@@ -92,11 +98,13 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
         done++;
         setReading(`Reading the sources: ${done} of ${groups.length} groups of steps done…`);
       }));
+      const profileFound = await profileRun;
       const count = { n: 0 };
       await editor.apply(m => {
-        const { model: next, changes } = applyTraitFindings(m, findings, ingest, { owners, replace: true });
-        count.n = changes.length;
-        return { model: next, patch: changes.length ? coarsePatch(m, next) : [] };
+        const { model: withTraits, changes } = applyTraitFindings(m, findings, ingest, { owners, replace: true });
+        const { model: next, changes: more } = applyProfileFindings(withTraits, profileFound, profile.ingest);
+        count.n = changes.length + more.length;
+        return { model: next, patch: count.n ? coarsePatch(m, next) : [] };
       }, 'Read assessment facts from the sources');
       setReading(count.n ? `Done: ${count.n} facts read from the sources, each with its quote.` : 'Done: the sources settle no further facts.');
     } catch (e) {

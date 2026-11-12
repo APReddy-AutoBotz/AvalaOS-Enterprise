@@ -3,6 +3,7 @@
 import type { TaskDefinition } from './gateway.ts';
 import { readFlowchart } from '../flowchart/vision.ts';
 import { stepTraits } from '../assess/traits.ts';
+import { profileFacts } from '../assess/profileFacts.ts';
 
 const str = { type: 'string' } as const;
 
@@ -46,4 +47,5 @@ export const TASKS: Record<string, TaskDefinition> = {
   [participants.id]: participants,
   [readFlowchart.id]: readFlowchart,
   [stepTraits.id]: stepTraits,
+  [profileFacts.id]: profileFacts,
 };
