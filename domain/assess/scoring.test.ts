@@ -202,6 +202,13 @@ test('the summary says in plain words why the approach is proposed', () => {
   assert.match(r.narrative[4].text, /the same facts always give the same result\.$/);
   for (const p of r.narrative) assert.doesNotMatch(p.text, /undefined|NaN|\.\.|\s\./, p.text);
 
+  // The same explanation as data, for the screen.
+  assert.match(r.takeaway, /^Rule-based RPA is the best fit for 2 of the 4 steps open to automation, mainly because /);
+  assert.ok(r.drivers.length >= 2 && r.drivers.every(d => d.steps === 2 && !d.text.endsWith('.')));
+  assert.deepEqual(r.apiSwitch, { systems: ['System 1', 'System 2'], steps: 2 });
+  assert.deepEqual([r.aiStepIds, r.mustStayStepIds, r.forNowStepIds], [['s-3'], ['s-4'], []]);
+  assert.equal(r.ranking[1].heldBack?.steps !== undefined && r.ranking[0].strength !== null, true);
+
   const none = assessProcess(build([rpaStep(), apiStep]));
   assert.match(none.narrative.find(x => x.title === 'Where AI is needed')!.text, /^AI is not needed for any step\./);
   const stuck = assessProcess(build([{}, {}]));

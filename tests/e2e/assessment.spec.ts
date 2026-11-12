@@ -60,13 +60,17 @@ test('the process gets a ranked outcome; a rules-only step is RPA with AI unnece
   await expect(ranked).toHaveCount(4);
   await expect(ranked.nth(0)).toContainText('1st choice');
   await expect(ranked.nth(0)).toContainText('Rule-based RPA');
-  await expect(ranked.nth(0)).toContainText('Best fit for 2 of 2 steps');
+  await expect(ranked.nth(0)).toContainText('Best for 2 steps');
   await expect(ranked.nth(1)).toContainText('2nd choice');
   await expect(ranked.nth(1)).toContainText('API integration');
-  await expect(ranked.nth(1)).toContainText('If the APIs of SAP S/4HANA are confirmed');
   await expect(page.getByTestId('split')).toHaveText('Of 2 steps people do today: Rule-based RPA for 2.');
-  await expect(page.getByTestId('narrative').first()).toContainText('Rule-based RPA scores');
-  await expect(page.getByTestId('narrative').filter({ hasText: 'Where AI is needed' })).toContainText('AI is not needed for any step.');
+  // Why, at a glance: one sentence, the split, and short cards with numbers.
+  await expect(page.getByTestId('takeaway')).toContainText('Rule-based RPA is the best fit for 2 of the 2 steps open to automation, mainly because');
+  await expect(page.getByTestId('step-split')).toContainText('2 Rule-based RPA');
+  await expect(page.getByTestId('why-switch')).toContainText('1 step moves to API integration');
+  await expect(page.getByTestId('why-switch')).toContainText('SAP S/4HANA');
+  await expect(page.getByTestId('why-ai')).toContainText('Rules on structured data do the work.');
+  await expect(page.getByTestId('why-firm')).toContainText('of the facts are known');
   await shot(page, '30-assessment');
   expect(await primaryText(page)).not.toMatch(INTERNAL);
 
@@ -74,13 +78,14 @@ test('the process gets a ranked outcome; a rules-only step is RPA with AI unnece
   await page.getByRole('button', { name: 'Add 1 API question to open questions' }).click();
   await expect(page.getByRole('button', { name: /API question/ })).toHaveCount(0);
 
-  // The report carries the same outcome.
+  // The report carries the same outcome, with the reasons in full sentences.
   await page.getByRole('button', { name: 'Open the assessment report' }).click();
   const report = page.getByTestId('assessment-report');
   await expect(report.getByRole('heading', { name: 'Vendor invoice processing' })).toBeVisible();
   await expect(report).toContainText('RPA-led automation');
   await expect(report).toContainText('Ranking of the approaches');
   await expect(report).toContainText('Why this approach is proposed');
+  await expect(report).toContainText('AI is not needed for any step.');
   await expect(report).toContainText('How the scores are calculated');
   await shot(page, '31-assessment-report');
   expect(await primaryText(page)).not.toMatch(INTERNAL);
