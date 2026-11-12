@@ -150,7 +150,7 @@ export function SourcesButton({ count, onClick, what }: { count: number; onClick
 }
 
 /** A side panel for details and sources. */
-export function SidePanel({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+export function SidePanel({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     addEventListener('keydown', onKey);
@@ -158,7 +158,7 @@ export function SidePanel({ title, onClose, children }: { title: string; onClose
   }, [onClose]);
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/20" onClick={onClose}>
-      <aside role="dialog" aria-label={title} className="h-full w-full max-w-md overflow-y-auto bg-slate-50 p-5 shadow-xl" onClick={e => e.stopPropagation()}>
+      <aside role="dialog" aria-label={title} className={cx('h-full w-full overflow-y-auto bg-slate-50 p-5 shadow-xl', wide ? 'max-w-2xl' : 'max-w-md')} onClick={e => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-display text-base font-semibold text-slate-900">{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="rounded px-2 text-lg text-slate-500 hover:bg-slate-200">×</button>
