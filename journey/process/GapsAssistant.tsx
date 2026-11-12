@@ -9,7 +9,9 @@ import { assessProcess } from '../../domain/assess/process.ts';
 import { GROUP_LABEL, OWNER_LABEL, triage, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
 import { Button, cx } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
-import { AnswerFromNotes, type NotesContext } from './AnswerFromNotes.tsx';
+import { AnswerBox, SeveralAnswers, type NotesContext } from './AnswerFromNotes.tsx';
+import { answerFromNotes, notesSegments, proposalsFrom, type NoteFinding } from '../../domain/questions/notes.ts';
+import { messageOf } from '../ui.tsx';
 
 type Op = (m: ProcessModel) => OpResult;
 /** Runs operations in order as one edit. */
@@ -66,7 +68,8 @@ export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: s
 }
 
 export function GapsAssistant({ model, editor, canEdit, onClose, notes }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean } }) {
-  const [mode, setMode] = React.useState<'one' | 'notes'>('one');
+  const [scope, setScope] = React.useState<'one' | 'several'>('one');
+  const ai = Boolean(notes?.aiAvailable && canEdit);
   const t = React.useMemo(() => triage(model, assessProcess(model)), [model]);
   const [group, setGroup] = React.useState<QGroup | 'all'>('all');
   const [owner, setOwner] = React.useState<QOwner | 'all'>('all');
@@ -115,16 +118,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes }: { mode
         </label>
         <label className="flex items-center gap-2 text-slate-600"><input type="checkbox" checked={showDeferred} onChange={e => setShowDeferred(e.target.checked)} />Include the ones set aside ({t.items.filter(i => i.deferred).length})</label>
         <span className="ml-auto text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
-        {canEdit && notes?.aiAvailable && (
-          <div role="tablist" aria-label="How to answer" className="inline-flex rounded-xl bg-slate-100 p-1">
-            {([['one', 'One at a time'], ['notes', 'From notes or voice']] as const).map(([id, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={mode === id} onClick={() => setMode(id)} className={cx('rounded-lg px-3 py-1 text-sm font-semibold', mode === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{label}</button>
-            ))}
-          </div>
-        )}
       </div>
-
-      {mode === 'notes' && notes?.aiAvailable && canEdit ? <AnswerFromNotes model={model} items={list} editor={editor} ctx={notes} /> : <>
 
       {!item ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="gaps-done">
@@ -132,27 +126,50 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes }: { mode
           <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : 'Change the filters to see the rest.'}</p>
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <QuestionCard key={item.key} item={item} model={model} canEdit={canEdit} position={`${at + 1} of ${list.length}`}
-            onApply={(op, summary) => editor.apply(op, summary)}
-            onSkip={() => setIndex((at + 1) % list.length)} onBack={at > 0 ? () => setIndex(at - 1) : undefined} />
-          <ol className="max-h-[32rem] space-y-1 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-2 text-sm" aria-label="Questions">
-            {list.map((x, i) => (
-              <li key={x.key}><button type="button" onClick={() => setIndex(i)} className={cx('w-full rounded-lg px-3 py-2 text-left', i === at ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50')}>
-                <span className="flex items-start gap-2"><span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.group === 'decides' ? 'bg-[#002C4B]' : x.group === 'signoff' ? 'bg-sky-400' : 'bg-slate-300')} />
-                <span className="line-clamp-2">{x.question}{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}</span></span>
-              </button></li>
-            ))}
-          </ol>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-label="Your answer">
+            {ai && (
+              <div role="tablist" aria-label="Answer" className="mb-5 inline-flex rounded-xl bg-slate-100 p-1">
+                {([['one', 'This question'], ['several', `Several at once (${list.length})`]] as const).map(([id, label]) => (
+                  <button key={id} type="button" role="tab" aria-selected={scope === id} onClick={() => setScope(id)}
+                    className={cx('rounded-lg px-3.5 py-1.5 text-sm font-semibold transition', scope === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
+                ))}
+              </div>
+            )}
+            {scope === 'several' && ai ? (
+              <>
+                <h4 className="font-display text-lg font-semibold text-slate-900">Answer any of the {list.length} questions listed</h4>
+                <p className="mb-4 mt-1 text-sm leading-6 text-slate-600">Speak or type freely, in any order. You will see which questions it answers, with your words for each, before anything is saved.</p>
+                <SeveralAnswers model={model} items={list} editor={editor} ctx={notes!} />
+              </>
+            ) : (
+              <QuestionCard key={item.key} item={item} model={model} canEdit={canEdit} position={`${at + 1} of ${list.length}`} notes={ai ? notes : undefined}
+                onApply={(op, summary) => editor.apply(op, summary)}
+                onSkip={() => setIndex((at + 1) % list.length)} onBack={at > 0 ? () => setIndex(at - 1) : undefined} />
+            )}
+          </section>
+          <div className="rounded-2xl border border-slate-200 bg-white p-2">
+            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{scope === 'several' && ai ? 'Questions you can answer now' : 'Questions'}</p>
+            <ol className="max-h-[34rem] space-y-0.5 overflow-y-auto text-sm" aria-label="Questions">
+              {list.map((x, i) => (
+                <li key={x.key}><button type="button" onClick={() => { setIndex(i); setScope('one'); }} className={cx('w-full rounded-lg px-3 py-2 text-left', scope === 'one' && i === at ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50')}>
+                  <span className="flex items-start gap-2">
+                    <span className="w-5 shrink-0 text-right tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.group === 'decides' ? 'bg-[#002C4B]' : x.group === 'signoff' ? 'bg-sky-400' : 'bg-slate-300')} />
+                    <span className="line-clamp-2">{x.question}{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}</span>
+                  </span>
+                </button></li>
+              ))}
+            </ol>
+          </div>
         </div>
       )}
-      </>}
     </div>
   );
 }
 
-function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack }: {
-  key?: React.Key; item: TriageItem; model: ProcessModel; canEdit: boolean; position: string;
+function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack, notes }: {
+  key?: React.Key; item: TriageItem; model: ProcessModel; canEdit: boolean; position: string; notes?: NotesContext;
   onApply: (op: Op, summary: string) => Promise<boolean>; onSkip: () => void; onBack?: () => void;
 }) {
   const [text, setText] = React.useState('');
@@ -163,12 +180,30 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack 
   const t = item.target;
   const options = item.kind === 'role' ? model.roles : item.kind === 'system' ? model.systems : [];
 
-  const answerOp = () => buildAnswer(item, model, { pick, text, statuses });
+  const [said, setSaid] = React.useState('');
+  const [filling, setFilling] = React.useState<string | null>(null);
+  const structured = item.kind !== 'free' && item.kind !== 'text';
+  // A spoken or typed answer to a question that needs a choice (a role, a number, interface statuses) is read by the AI into that choice, for the person to check.
+  const fill = async () => {
+    if (!notes) return;
+    setFilling('Reading your answer…');
+    try {
+      const { segments, ids } = notesSegments(model, [item], said);
+      const r = await notes.store.runAiTask(notes.workspaceId, answerFromNotes.id, segments);
+      const [p] = proposalsFrom(model, [item], ids, ((r.data as { answers?: NoteFinding[] })?.answers) ?? []);
+      if (!p) { setFilling('Your answer does not settle this question. Choose below, or say it differently.'); return; }
+      if (p.answer.pick) setPick(p.answer.pick);
+      if (p.answer.statuses) setStatuses(p.answer.statuses);
+      if (item.kind === 'number' && p.answer.text) setText(p.answer.text);
+      setFilling(`Filled in from “${p.quote}”. Check it, then save.`);
+    } catch (e) { setFilling(messageOf(e)); }
+  };
+  const answerOp = () => buildAnswer(item, model, { pick, text: structured ? (item.kind === 'number' ? text : said || text) : text, statuses });
   const ready = answerOp() !== null;
   const save = async () => { const a = answerOp(); if (a) await onApply(a.op, a.summary); };
 
   return (
-    <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-testid="gap-question">
+    <article data-testid="gap-question">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold tabular-nums text-slate-500">Question {position}</span>
         <span className={cx('rounded-full px-2.5 py-0.5 font-semibold', GROUP_TONE[item.group])}>{GROUP_LABEL[item.group]}</span>
@@ -198,10 +233,17 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack 
               ))}
             </ul>
           )}
-          {item.kind === 'number'
-            ? <input aria-label="Answer" inputMode="decimal" value={text} onChange={e => setText(e.target.value)} placeholder="A number" className={input} />
-            : <textarea aria-label={item.kind === 'free' || item.kind === 'text' ? 'Answer' : 'Note (optional)'} rows={item.kind === 'free' ? 4 : 2} value={text} onChange={e => setText(e.target.value)}
-                placeholder={item.kind === 'free' || item.kind === 'text' ? 'Type the answer as you would say it' : 'Anything worth recording with the answer'} className={input} />}
+          {item.kind === 'number' && <input aria-label="Answer" inputMode="decimal" value={text} onChange={e => setText(e.target.value)} placeholder="A number" className={input} />}
+          {structured ? (
+            <div>
+              <AnswerBox label={notes ? 'Or say it' : 'Note (optional)'} value={said} onChange={setSaid} rows={2} transcribe={notes ? audio => notes.store.transcribe(notes.workspaceId, audio) : undefined}
+                placeholder={notes ? 'Or type or say the answer in your own words, then press Fill in' : 'Anything worth recording with the answer'} />
+              {notes && <div className="-mt-1 flex flex-wrap items-center gap-2"><Button variant="secondary" disabled={!said.trim() || filling === 'Reading your answer…'} onClick={fill}>Fill in from my answer</Button><span className="text-xs text-slate-600" role="status">{filling ?? ''}</span></div>}
+            </div>
+          ) : (
+            <AnswerBox label="Answer" value={text} onChange={setText} rows={4} transcribe={notes ? audio => notes.store.transcribe(notes.workspaceId, audio) : undefined}
+              placeholder="Type the answer as you would say it, or press the microphone and speak" />
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <Button disabled={!ready} onClick={save}>Save answer</Button>
             <Button variant="ghost" onClick={onSkip}>Skip</Button>
