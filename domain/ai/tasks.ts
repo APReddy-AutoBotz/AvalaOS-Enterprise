@@ -2,6 +2,7 @@
 // Phase 1 adds the extraction passes here (inventory, steps and flow, rules and exceptions, metrics).
 import type { TaskDefinition } from './gateway.ts';
 import { readFlowchart } from '../flowchart/vision.ts';
+import { stepTraits } from '../assess/traits.ts';
 
 const str = { type: 'string' } as const;
 
@@ -44,4 +45,5 @@ const participants: TaskDefinition = {
 export const TASKS: Record<string, TaskDefinition> = {
   [participants.id]: participants,
   [readFlowchart.id]: readFlowchart,
+  [stepTraits.id]: stepTraits,
 };
