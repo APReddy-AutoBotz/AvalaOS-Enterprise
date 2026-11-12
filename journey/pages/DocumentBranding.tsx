@@ -4,6 +4,7 @@ import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
 import { BrandingError, FONTS, readWordTemplate, validateBranding, type Branding, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
+import { DocumentSections } from './DocumentSections.tsx';
 
 const input = 'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20 disabled:bg-slate-50 disabled:text-slate-600';
 const readDataUrl = (f: File) => new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => bad(r.error); r.readAsDataURL(f); });
@@ -44,6 +45,7 @@ export function DocumentBranding({ store, workspace }: { store: JourneyStore; wo
   };
 
   return (
+    <>
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-testid="document-branding">
       <h2 className="font-display text-lg font-semibold text-slate-900">How documents look</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">Your organisation's look for the BRD, PDD, FRD and SDD, on screen and in Word. Upload your company's Word template to use its fonts and heading styles.{isAdmin ? '' : ' Only an admin can change it.'}</p>
@@ -102,5 +104,7 @@ export function DocumentBranding({ store, workspace }: { store: JourneyStore; wo
         </figure>
       </div>
     </div>
+    <DocumentSections store={store} workspace={workspace} settings={settings} onSaved={setSettings} />
+    </>
   );
 }
