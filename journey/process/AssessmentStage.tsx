@@ -71,13 +71,15 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       const steps = orderedSteps(editor.model);
       setReading(`Reading the sources for ${steps.length} steps…`);
       const loaded = await Promise.all(sources.filter(s => !s.archived).map(async s => ({ key: s.key, segments: await store.getSourceSegments(s.id) })));
-      const groups = batches(steps, 7);
+      const groups = batches(steps, 5);
       let done = 0;
       const findings: TraitFinding[] = [];
       const ingest = new Map();
+      const owners = new Map<string, Set<string>>();
       await Promise.all(groups.map(async group => {
-        const { segments, ingest: map } = traitSegments(editor.model, group, loaded);
+        const { segments, ingest: map, owners: own } = traitSegments(editor.model, group, loaded);
         for (const [k, v] of map) ingest.set(k, v);
+        for (const [k, v] of own) owners.set(k, v);
         const r = await store.runAiTask(workspaceId, stepTraits.id, segments);
         findings.push(...(((r.data as { findings?: TraitFinding[] })?.findings) ?? []));
         done++;
@@ -85,7 +87,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       }));
       const count = { n: 0 };
       await editor.apply(m => {
-        const { model: next, changes } = applyTraitFindings(m, findings, ingest);
+        const { model: next, changes } = applyTraitFindings(m, findings, ingest, { owners, replace: true });
         count.n = changes.length;
         return { model: next, patch: changes.length ? coarsePatch(m, next) : [] };
       }, 'Read assessment facts from the sources');
@@ -226,7 +228,7 @@ function Ranking({ result }: { result: ProcessAssessment }) {
   return (
     <section aria-label="Ranking of approaches">
       <h3 className="font-display text-base font-semibold text-slate-900">How the approaches rank for this process</h3>
-      <p className="text-sm text-slate-500">Average fit across the {result.assessed} steps people do today, from fixed weights. The same facts always give the same ranking.</p>
+      <p className="text-sm text-slate-500">Average fit across the {result.candidates} {result.candidates === 1 ? 'step' : 'steps'} open to automation (not needing a person's judgment or hands), from fixed weights. The same facts always give the same ranking.</p>
       <ol className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {result.ranking.map((r, i) => (
           <li key={r.approach} data-testid="ranked-approach" className={cx('flex flex-col rounded-2xl border bg-white p-5 shadow-sm', i === 0 && result.lead === r.approach ? 'border-[#FFBC03] ring-2 ring-[#FFBC03]/30' : 'border-slate-200')}>
@@ -286,7 +288,7 @@ function Firmness({ result, canEdit, aiAvailable, reading, onRead, newApiQuestio
           {newApiQuestions > 0 && <Button variant="secondary" onClick={onAddQuestions}>Add {newApiQuestions} API question{newApiQuestions === 1 ? '' : 's'} to open questions</Button>}
         </div>
       )}
-      {aiAvailable && canEdit && <p className="mt-2 text-xs text-slate-500">AI only collects facts with their quotes for you to check. It does not score or recommend.</p>}
+      {aiAvailable && canEdit && <p className="mt-2 text-xs text-slate-500">AI only collects facts with their quotes for you to check; it does not score or recommend. Reading again replaces what was read before and keeps what you confirmed.</p>}
       {reading && <p role="status" className="mt-2 text-sm text-slate-700">{reading}</p>}
     </section>
   );

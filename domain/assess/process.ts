@@ -1,7 +1,7 @@
 // The process-level result, derived from the step scores; never typed in and never written by AI.
 //
 // - A ranking of the automation approaches (1st, 2nd, 3rd, 4th) by their average fit across the
-//   steps people do today, with how many steps each wins and why.
+//   steps open to automation (those that do not need a person's judgment or hands), with how many steps each wins and why.
 // - A verdict and a plain-words explanation of why the first approach is proposed, built from the
 //   counts and facts behind the scores.
 // - The facts that, once known, would firm up or change the ranking.
@@ -54,6 +54,8 @@ export interface ProcessAssessment {
   steps: StepScore[];
   /** Steps people do today (already-automated steps are not scored). */
   assessed: number;
+  /** Of those, the steps that do not need a person's judgment or hands: what the ranking is averaged over. */
+  candidates: number;
   alreadyAutomated: number;
   counts: Record<Approach, number>;
   ranking: RankedApproach[];
@@ -117,13 +119,15 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   const weights = effort.every(e => e.effort !== null) && effort.some(e => e.effort! > 0)
     ? new Map(effort.map(e => [e.id, e.effort! * (e.share ?? 1)])) : null;
   const weightOf = (s: StepScore) => weights?.get(s.stepId) ?? 1;
-  const total = scored.reduce((t, s) => t + weightOf(s), 0) || 1;
+  // The ranking compares approaches on the steps that are open to automation at all.
+  const open = scored.filter(s => !s.mustStayHuman);
+  const total = open.reduce((t, s) => t + weightOf(s), 0) || 1;
 
   // ---- ranking
   const order = [...AUTOMATION];
   const rows = order.map(approach => ({
     approach,
-    score: n ? Math.round(scored.reduce((t, s) => t + scoreOf(s, approach) * weightOf(s), 0) / total) : 0,
+    score: open.length ? Math.round(open.reduce((t, s) => t + scoreOf(s, approach) * weightOf(s), 0) / total) : 0,
     stepsWon: counts[approach],
     stepsFit: scored.filter(s => scoreOf(s, approach) >= FIT.possible).length,
   })).sort((a, b) => b.score - a.score || b.stepsWon - a.stepsWon || order.indexOf(a.approach) - order.indexOf(b.approach));
@@ -197,7 +201,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     const first = ranking[0], second = ranking[1], third = ranking[2];
     if (lead) {
       const l = ranking.find(r => r.approach === lead)!;
-      narrative.push({ title: `Why ${lower(LEAD_TITLE[lead])}`, text: `${APPROACH_LABEL[lead]} scores ${l.score} out of 100 across the process, the highest of the four approaches. ${l.why} ${automatedSteps === n ? 'Every step can be automated.' : `${plural(automatedSteps, 'step')} of ${n} can be automated on what is known.`}` });
+      narrative.push({ title: `Why ${lower(LEAD_TITLE[lead])}`, text: `${APPROACH_LABEL[lead]} scores ${l.score} out of 100 across the ${plural(open.length, 'step')} open to automation, the highest of the four approaches. ${l.why} ${automatedSteps === n ? 'Every step can be automated.' : `${plural(automatedSteps, 'step')} of ${n} can be automated on what is known.`}` });
     } else {
       narrative.push({ title: 'Why not automate yet', text: `No approach reaches ${FIT.possible} out of 100 on any step with what is known. The closest is ${APPROACH_LABEL[first.approach]} at ${first.score}. ${first.why}` });
     }
@@ -237,7 +241,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
 
   const questions = scored.flatMap(s => s.questions).filter((q, i, all) => all.findIndex(x => x.question === q.question) === i);
   return {
-    steps, assessed: n, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,
+    steps, assessed: n, candidates: open.length, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,
     automationFit: n ? automatedSteps / n : 0, aiSteps, approvalSteps, knownShare, confidence, keyQuestions, cautions, potential, hours, money, questions,
   };
 }

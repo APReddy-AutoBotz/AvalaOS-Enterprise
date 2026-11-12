@@ -167,7 +167,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
             A fact that is not known gets a middle value and lowers confidence. Some facts limit a score: a step that needs judgment or a physical action stays with a person (at least {HUMAN_FLOOR});
             paper or unstructured input limits RPA and API to {CAPS.inputMustBeRead}; an API that is not confirmed limits integration to {CAPS.apiNotConfirmed}; an agent needs all five of its conditions.
             AI-assisted automation carries a fixed penalty of {COMPLEXITY_PENALTY.ai_assist} points and agentic AI {COMPLEXITY_PENALTY.agent}, for cost, risk and governance, so they are proposed only where simpler automation cannot do the work.
-            An approach is recommended for a step from {FIT.possible} points and is a strong fit from {FIT.strong}. The process score of an approach is its average across the steps. No AI takes part in the scoring: the same facts always give the same result.
+            An approach is recommended for a step from {FIT.possible} points and is a strong fit from {FIT.strong}. The process score of an approach is its average across the steps open to automation, that is, those that do not need a person's judgment or hands. No AI takes part in the scoring: the same facts always give the same result.
           </p>
           <table className="mt-4 w-full border-collapse">
             <thead><tr><th className={th}>Approach</th><th className={th}>Factors and their weights</th></tr></thead>
