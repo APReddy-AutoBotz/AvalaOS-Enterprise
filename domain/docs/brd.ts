@@ -52,7 +52,7 @@ export function buildBrd(input: DocInput): DocTree {
 
   b.section('6', 'Current-state summary', 1);
   const steps = orderedSteps(m);
-  b.paragraph(`Today the process has ${steps.length} steps carried out by ${m.roles.filter(r => r.inScope).length} roles across ${m.systems.length} applications. It handles ${metricCell(m, 'volume').text.toLowerCase() === 'not provided' ? 'a volume that is not yet stated' : metricCell(m, 'volume').text}. The step-by-step detail is in the PDD, section 2.4.`);
+  b.paragraph(`Today the process has ${steps.length} steps carried out by ${m.roles.filter(r => r.inScope).length} roles across ${m.systems.length} applications. It handles ${metricCell(m, 'volume').text.toLowerCase() === 'not provided' ? 'a volume that is not yet stated' : metricCell(m, 'volume').text}. The step-by-step detail is in the PDD section "Detailed As-Is steps".`);
 
   b.section('7', 'Business requirements', 1);
   b.callout('Business requirements with IDs, priorities and acceptance measures are derived together with the functional requirements and will appear here.');

@@ -17,6 +17,7 @@ import { GapsAssistant } from './GapsAssistant.tsx';
 import { useModelEditor } from './useModelEditor.ts';
 import { triage } from '../../domain/questions/triage.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
+import { applyLayout } from '../../domain/docs/layout.ts';
 
 const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'brd', short: 'BRD', label: 'Business requirements', ready: true },
@@ -83,8 +84,9 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const doc = React.useMemo<DocTree | null>(() => {
     if (!decisions) return null;
     const input = { model, assessment: assessProcess(model, { rate: decisions.rate, settings }), decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision };
-    return type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : null;
-  }, [type, model, decisions, settings, sources, revision]);
+    const built = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : null;
+    return built && applyLayout(built, docSettings.layouts[type]);
+  }, [type, model, decisions, settings, sources, revision, docSettings]);
 
   const [wordBusy, setWordBusy] = React.useState(false);
   const downloadWord = async () => {

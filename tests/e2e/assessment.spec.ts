@@ -278,7 +278,7 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
 
   await page.getByRole('tab', { name: /BRD/ }).click();
   await expect(doc).toContainText('Business Requirements Document');
-  await expect(doc).toContainText('PDD, section 2.4');
+  await expect(doc).toContainText('PDD section "Detailed As-Is steps"');
   await page.getByRole('tab', { name: /FRD/ }).click();
   await expect(page.getByTestId('doc-not-ready')).toContainText('requirements');
 });
@@ -345,4 +345,34 @@ test('an admin sets how documents look: organisation, colour and logo show on th
   const bytes = readFileSync(await word.path());
   expect(bytes.subarray(0, 2).toString()).toBe('PK');
   expect(bytes.includes(Buffer.from('word/media/'))).toBe(true);
+});
+
+test('an admin uses the company\'s section structure: renamed, hidden and own sections show in the PDD, renumbered', async ({ page }) => {
+  await buildProcess(page);
+  const processUrl = page.url();
+  await page.getByRole('link', { name: 'Processes' }).first().click();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const box = page.getByTestId('document-sections');
+  await box.getByLabel('Title of section 2.4').fill('Current procedure');
+  await box.getByLabel('Hide section 1.4').check();
+  await expect(box.getByLabel('Hide section 6')).toHaveCount(0);
+  await box.getByTestId('layout-section').filter({ has: page.getByLabel('Title of section 1', { exact: true }) }).getByRole('button', { name: '+ Add after' }).click();
+  await box.getByLabel('Title of your section').fill('Approval and sign-off');
+  await box.getByLabel('Text of Approval and sign-off').fill('Approved by the Process Owner and the Head of Finance Operations.');
+  await box.getByRole('button', { name: 'Move section 1 down' }).click();
+  await box.getByRole('button', { name: 'Save PDD sections' }).click();
+  await expect(box.getByRole('status')).toContainText('Saved');
+  await shot(page, '46-document-sections');
+
+  await page.goto(processUrl);
+  await stage(page, 'Documents');
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Current procedure');
+  await expect(doc).not.toContainText('Minimum prerequisites for automation');
+  await expect(doc).toContainText('Approved by the Process Owner and the Head of Finance Operations.');
+  // As-Is moved first, so it is now section 1 and the steps are 1.4.
+  await expect(doc.locator('[data-caption="Detailed As-Is steps"] tbody tr')).toHaveCount(2);
+  await expect(page.getByRole('link', { name: /^1\.4 Current procedure$/ })).toBeVisible();
+  const [word] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
+  expect(readFileSync(await word.path()).subarray(0, 2).toString()).toBe('PK');
 });

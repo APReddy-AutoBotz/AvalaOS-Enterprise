@@ -56,7 +56,7 @@ test('an empty model renders "Not provided" and open items, never filler', () =>
 
 test('BRD summarises and links rather than repeating the step table; benefit only from entered figures', () => {
   const d = buildBrd(input(gold));
-  assert.match(toMarkdown(d), /PDD, section 2.4/);
+  assert.match(toMarkdown(d), /PDD section "Detailed As-Is steps"/);
   assert.equal(d.sections.some(s => s.blocks.some(b => b.kind === 'table' && b.caption === 'Detailed As-Is steps')), false);
   const benefits = section(d, '11').blocks[0] as any;
   assert.equal(benefits.rows.find((r: any) => r.key === 'Value a year').value.missing, true);
