@@ -82,3 +82,12 @@ test('retry and budget helpers', () => {
   assert.equal(monthlyBudgetExceeded(10, 2_000_000), false);
   assert.equal(monthlyBudgetExceeded(10, 0), false);
 });
+
+test('validateRequest accepts a transcribe request with recorded audio and rejects other content', async () => {
+  const { validateRequest } = await import('./gateway.ts');
+  const ws = '00000000-0000-4000-8000-000000000000';
+  const ok = validateRequest({ action: 'transcribe', workspaceId: ws, audio: 'data:audio/webm;codecs=opus;base64,GkXfo0AAAA==' }, {});
+  assert.equal(ok.ok, true);
+  assert.equal(validateRequest({ action: 'transcribe', workspaceId: ws, audio: 'data:image/png;base64,AAAA' }, {}).ok, false);
+  assert.equal(validateRequest({ action: 'transcribe', workspaceId: ws }, {}).ok, false);
+});

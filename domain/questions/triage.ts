@@ -71,7 +71,7 @@ function classify(m: ProcessModel, t: ElementTarget, text: string, open: Set<str
   switch (t.kind) {
     case 'system': {
       const used = stepsForSystem(m, t.id!).filter(s => open.has(s.id)).length;
-      return { group: used ? 'decides' : 'detail', owner: 'it', affects: [`Assessment: ${used} ${used === 1 ? 'step' : 'steps'} use it`, 'PDD 2.2 Applications'] };
+      return { group: used ? 'decides' : 'detail', owner: 'it', affects: [`Assessment: ${used} ${used === 1 ? 'step uses' : 'steps use'} it`, 'PDD 2.2 Applications'] };
     }
     case 'step': return { group: 'signoff', owner: 'business', affects: ['PDD 2.4 Detailed steps', 'BRD stakeholders'] };
     case 'exception': return { group: 'signoff', owner: 'business', affects: ['PDD 3.6 Exception handling'] };

@@ -102,6 +102,8 @@ export interface JourneyStore {
   readonly aiAvailable: boolean;
   /** Reads a flowchart image with the AI; returns the raw reading for readingToGraph. */
   readFlowchartImage(workspaceId: string, dataUrl: string): Promise<unknown>;
+  /** The text of a recorded answer (a data URL of audio). */
+  transcribe(workspaceId: string, audioDataUrl: string): Promise<string>;
   startExtraction(workspaceId: string, processId: string, sourceIds: string[]): Promise<{ runId: string }>;
   /** The latest extraction of a process, with its model once done. */
   latestExtraction(processId: string): Promise<ExtractionRow | null>;

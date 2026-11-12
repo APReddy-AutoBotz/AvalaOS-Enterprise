@@ -3,6 +3,7 @@
 // POST { action: 'health', workspaceId }                    -> checks sign-in, membership, key and model
 // POST { action: 'run', workspaceId, task, segments[] }     -> runs a registered task with strict output
 // POST { action: 'run', workspaceId, task, image }          -> the same, for tasks that read an image (a data URL)
+// POST { action: 'transcribe', workspaceId, audio }         -> the text of a recorded answer (a data URL)
 //
 // The caller's own token decides access (RLS). A caller presenting the project's secret key is a
 // trusted server (it already has full database access): membership is not checked and no user is
@@ -170,6 +171,35 @@ Deno.serve(async (req: Request) => {
   }
 
   const budget = Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000);
+  if (request.action === 'transcribe') {
+    try {
+      if (monthlyBudgetExceeded(await tokensUsedThisMonth(request.workspaceId), budget)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
+    } catch (e) { return fail(500, 'BUDGET_UNAVAILABLE', (e as Error).message); }
+    const [head, data] = request.audio!.split(',');
+    const mime = head.slice(5).split(';')[0];
+    const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
+    const ext = ({ 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-m4a': 'm4a' } as Record<string, string>)[mime] ?? 'webm';
+    const form = new FormData();
+    form.append('file', new Blob([bytes], { type: mime }), `answer.${ext}`);
+    const tmodel = env('OPENAI_TRANSCRIBE_MODEL') || 'gpt-4o-transcribe';
+    form.append('model', tmodel);
+    const started = Date.now();
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
+    let ok = false, text = '', code = 'PROVIDER_ERROR', usage = { input: 0, output: 0 };
+    try {
+      const res = await fetch(`${OPENAI_URL}/audio/transcriptions`, { method: 'POST', body: form, signal: ctl.signal, headers: { Authorization: `Bearer ${env('OPENAI_API_KEY')}` } });
+      const json = await res.json().catch(() => ({}));
+      ok = res.ok && typeof json.text === 'string';
+      text = ok ? json.text : '';
+      usage = { input: Number(json?.usage?.input_tokens ?? 0) || 0, output: Number(json?.usage?.output_tokens ?? 0) || 0 };
+      if (!ok) code = res.status === 401 ? 'PROVIDER_AUTH' : 'PROVIDER_ERROR';
+    } catch { ok = false; } finally { clearTimeout(timer); }
+    await logUsage({ workspace_id: request.workspaceId, user_id: userId, task: 'transcribe', model: tmodel, status: ok ? 'ok' : 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : code, duration_ms: Date.now() - started });
+    if (!ok) return fail(502, code, 'The recording could not be transcribed. Try again, or type the answer.');
+    return reply(200, { ok: true, text, model: tmodel });
+  }
+
   try {
     if (monthlyBudgetExceeded(await tokensUsedThisMonth(request.workspaceId), budget)) {
       return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');

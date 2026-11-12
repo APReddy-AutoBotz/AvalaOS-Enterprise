@@ -137,7 +137,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
               revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
           : stage === 'documents' && model && current && model.steps.length > 0
-          ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load}
+          ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources}
               revision={{ label: `Revision ${current.revNo}${current.state === 'working' ? ', working draft' : ''}`, state: current.state === 'approved' ? 'approved' : 'working', date: new Date(current.approvedAt ?? current.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }} />
           : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
