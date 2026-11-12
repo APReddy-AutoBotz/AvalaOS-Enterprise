@@ -5,6 +5,11 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { EASE_BANDS, PRIORITY, QUADRANT, type Quadrant, type ReadinessState } from '../../domain/assess/priority.ts';
 import { cx } from '../ui.tsx';
+
+const BASIS = { step_times: 'From the time and share of each step.', time_per_case: 'From the volume and the time per case. Step times would say how much of it automation can take.', people: 'From the people doing the work today. Volume and times would narrow it.' } as const;
+const hrs = (n: number) => Math.round(n).toLocaleString('en');
+export const valueText = (v: { hours: [number, number]; exact: boolean }) => (v.exact ? range(v.hours) : `Up to ${hrs(v.hours[1])}`);
+export const orList = (labels: string[]) => (labels.length <= 2 ? labels.join(' or ') : `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`);
 import { range } from './assessmentShared.tsx';
 
 const READY_TONE: Record<ReadinessState, string> = { ready: 'bg-emerald-100 text-emerald-900 ring-emerald-200', fix_first: 'bg-amber-100 text-amber-900 ring-amber-200', wait: 'bg-rose-100 text-rose-900 ring-rose-200' };
@@ -61,6 +66,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
                 <div className={cx('h-full rounded-full', EASE_TONE[p.ease.band])} style={{ width: `${p.ease.score}%` }} />
                 {[EASE_BANDS.medium, EASE_BANDS.easy].map(b => <span key={b} className="absolute top-[-3px] h-[14px] w-px bg-slate-400" style={{ left: `${b}%` }} />)}
               </div>
+              {p.ease.range[0] !== p.ease.range[1] && <p className="mt-2 text-xs leading-5 text-slate-500" data-testid="ease-range">Between {p.ease.range[0]} and {p.ease.range[1]}, depending on facts not yet known.</p>}
               <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-700">
                 {weakest.length === 0 && p.ease.multipliers.length === 0 && <li>Short, stable and structured: nothing makes this build hard.</li>}
                 {weakest.map(f => <li key={f.id}>{f.text}</li>)}
@@ -82,10 +88,11 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
         <Card title="Value" testid="value">
           {p.value.computable ? (
             <>
-              <p className="mt-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{range(p.value.value!.hours)}</span><span className="text-sm text-slate-500"> hours a year</span></p>
-              <p className="mt-1.5 text-sm leading-6 text-slate-700">Hands-on time automation could take, about {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.</p>
+              <p className="mt-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{valueText(p.value.value!)}</span><span className="text-sm text-slate-500"> hours a year</span></p>
+              <p className="mt-1.5 text-sm leading-6 text-slate-700">Hands-on time automation could take, {p.value.value!.exact ? 'about' : 'at most'} {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.</p>
+              <p className="mt-1.5 text-xs leading-5 text-slate-500" data-testid="value-basis">{BASIS[p.value.value!.basis]}{!p.value.value!.exact && p.value.value!.basis === 'step_times' ? ' The share of cases is missing on some steps, so this is the most it can be.' : ''}</p>
               {p.value.value!.assumedSteps > 0 && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900" data-testid="value-assumed">Rests on an assumption: the time of {p.value.value!.assumedSteps} {p.value.value!.assumedSteps === 1 ? 'step' : 'steps'} is the time per case spread evenly. Confirm the step times to firm this up.</p>}
-              <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">{p.value.value!.high ? 'High' : 'Lower'} value: the line is {PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year.</p>
+              <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">{p.value.value!.high === 'yes' ? 'High value' : p.value.value!.high === 'no' ? 'Lower value' : 'Could be high or lower value'}: the line is {PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year.</p>
             </>
           ) : <NotYet reason={p.value.reason ?? ''} onInputs={onInputs} />}
         </Card>
@@ -93,10 +100,11 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
         <Card title="Priority" testid="priority">
           <div className="mt-2 flex gap-4">
             <div className="grid shrink-0 grid-cols-2 gap-1" aria-hidden>
-              {GRID.flat().map(q => <span key={q} className={cx('h-9 w-9 rounded-lg', p.placement.placed && p.placement.quadrant === q ? 'bg-[#002C4B] ring-2 ring-[#FFBC03]' : 'bg-slate-200')} />)}
+              {GRID.flat().map(q => <span key={q} className={cx('h-9 w-9 rounded-lg', p.placement.placed && p.placement.quadrant === q ? 'bg-[#002C4B] ring-2 ring-[#FFBC03]' : !p.placement.placed && p.placement.possible.length < 4 && p.placement.possible.includes(q) ? 'bg-[#002C4B]/40' : 'bg-slate-200')} />)}
             </div>
             <div>
               <p className={cx('font-display text-xl font-semibold', p.placement.placed ? 'text-slate-900' : 'text-slate-400')} data-testid="priority-quadrant">{p.placement.placed ? QUADRANT[p.placement.quadrant!].label : 'Not placed yet'}</p>
+              {!p.placement.placed && p.placement.possible.length > 0 && p.placement.possible.length < 4 && <p className="mt-1 text-sm font-semibold text-slate-900" data-testid="priority-possible">{orList(p.placement.possible.map(q => QUADRANT[q].label))}</p>}
               <p className="mt-1 text-sm leading-6 text-slate-700">{p.placement.placed ? QUADRANT[p.placement.quadrant!].text : p.placement.reason}</p>
             </div>
           </div>
@@ -105,6 +113,23 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
           {p.placement.placed && p.readiness.state !== 'ready' && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900">Readiness says “{p.readiness.label}”: settle that before starting.</p>}
         </Card>
       </div>
+
+      {p.nextInputs.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5" data-testid="next-inputs">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">What would sharpen this most</p>
+            <button type="button" onClick={onInputs} className="text-sm font-semibold text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4">Open the inputs</button>
+          </div>
+          <ol className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {p.nextInputs.map((x, i) => (
+              <li key={x.id} className="flex gap-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#002C4B] text-xs font-semibold text-white">{i + 1}</span>
+                <span><span className="block text-sm font-semibold text-slate-900">{x.label}</span><span className="block text-xs leading-5 text-slate-500">{x.why}</span></span>
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
 
       {(p.standardPath.computable || showFocus) && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2" data-testid="where-to-start">

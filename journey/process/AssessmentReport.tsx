@@ -8,7 +8,7 @@ import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { effectiveApproach, type Decisions } from '../../domain/assess/decisions.ts';
 import { Button, cx } from '../ui.tsx';
 import { EASE_BANDS, EASE_WEIGHTS, PRIORITY, QUADRANT } from '../../domain/assess/priority.ts';
-import { EASE_LABEL, people as asPeople } from './AssessmentPriority.tsx';
+import { EASE_LABEL, orList, people as asPeople, valueText } from './AssessmentPriority.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
 
 const FACTOR_LABEL: Record<string, string> = {
@@ -94,9 +94,9 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
           <table className="mt-4 w-full border-collapse">
             <tbody>
               <tr><td className={cx(td, 'w-48 font-semibold')}>Readiness</td><td className={td}>{pr.readiness.label}. {pr.readiness.reasons.join(' ')}{pr.readiness.open.length ? ` Not confirmed yet: ${pr.readiness.open.join(' ')}` : ''}</td></tr>
-              <tr><td className={cx(td, 'font-semibold')}>Ease of implementation</td><td className={td}>{pr.ease ? `${pr.ease.score} out of 100 (${EASE_LABEL[pr.ease.band]}). ${[...pr.ease.factors].sort((a, b) => a.value - b.value).slice(0, 2).map(f => f.text).join(' ')} ${pr.ease.multipliers.map(m => m.text).join(' ')}` : 'Not scored: no step is recommended for automation.'}</td></tr>
-              <tr><td className={cx(td, 'font-semibold')}>Value</td><td className={td}>{pr.value.computable ? `${range(pr.value.value!.hours)} hands-on hours a year, about ${asPeople(pr.value.value!.fte)} full-time people at ${PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.` : `Not known yet. ${pr.value.reason}`}</td></tr>
-              <tr><td className={cx(td, 'font-semibold')}>Priority</td><td className={td}>{pr.placement.placed ? `${QUADRANT[pr.placement.quadrant!].label}. ${QUADRANT[pr.placement.quadrant!].text}` : `Not placed yet. ${pr.placement.reason}`}</td></tr>
+              <tr><td className={cx(td, 'font-semibold')}>Ease of implementation</td><td className={td}>{pr.ease ? `${pr.ease.score} out of 100 (${EASE_LABEL[pr.ease.band]}${pr.ease.range[0] !== pr.ease.range[1] ? `; between ${pr.ease.range[0]} and ${pr.ease.range[1]} depending on facts not yet known` : ''}). ${[...pr.ease.factors].sort((a, b) => a.value - b.value).slice(0, 2).map(f => f.text).join(' ')} ${pr.ease.multipliers.map(m => m.text).join(' ')}` : 'Not scored: no step is recommended for automation.'}</td></tr>
+              <tr><td className={cx(td, 'font-semibold')}>Value</td><td className={td}>{pr.value.computable ? `${valueText(pr.value.value!)} hands-on hours a year, ${pr.value.value!.exact ? 'about' : 'at most'} ${asPeople(pr.value.value!.fte)} full-time people at ${PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.${pr.value.value!.exact ? '' : ' This is an upper bound: step times and shares would turn it into a calculated range.'}` : `Not known yet. ${pr.value.reason}`}</td></tr>
+              <tr><td className={cx(td, 'font-semibold')}>Priority</td><td className={td}>{pr.placement.placed ? `${QUADRANT[pr.placement.quadrant!].label}. ${QUADRANT[pr.placement.quadrant!].text}` : `Not placed yet${pr.placement.possible.length > 0 && pr.placement.possible.length < 4 ? `: ${orList(pr.placement.possible.map(q => QUADRANT[q].label))}` : ''}. ${pr.placement.reason}`}</td></tr>
               {pr.standardPath.computable && <tr><td className={cx(td, 'font-semibold')}>Standard path</td><td className={td}>{pr.standardPath.value!.text}</td></tr>}
               {pr.focus.computable && <tr><td className={cx(td, 'font-semibold')}>Where to start</td><td className={td}>{pr.focus.value!.stepIds.length} of the {pr.focus.value!.of} steps to automate carry {Math.round(pr.focus.value!.share * 100)}% of the time automation could take: {pr.focus.value!.stepIds.map(nameOf).join(', ')}.</td></tr>}
             </tbody>
