@@ -294,7 +294,7 @@ test('closing the gaps: answers in a guided session update the model and the doc
   }
   // The objective: free text written to the process.
   await assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /objective/i }).click();
-  await assistant.getByLabel('Answer').fill('Post supplier invoices correctly within five working days.');
+  await assistant.getByLabel('Answer', { exact: true }).fill('Post supplier invoices correctly within five working days.');
   await assistant.getByRole('button', { name: 'Save answer' }).click();
   await saved(page);
   await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 1} `));
