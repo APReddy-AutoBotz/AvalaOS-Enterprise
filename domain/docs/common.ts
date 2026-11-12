@@ -5,6 +5,7 @@ import { effectiveApproach, type Decisions } from '../assess/decisions.ts';
 import { APPROACH_LABEL, type Approach, type StepScore } from '../assess/scoring.ts';
 import { orderedSteps, processMetric } from '../processModel/selectors.ts';
 import { missing, NOT_PROVIDED, type Cell } from './tree.ts';
+import type { Requirement } from '../requirements/register.ts';
 
 export interface DocInput {
   model: ProcessModel;
@@ -12,6 +13,8 @@ export interface DocInput {
   decisions: Decisions;
   /** Source keys and titles, for attribution. */
   sources: { key: string; title: string }[];
+  /** The requirements register, when loaded (FRD, BRD section on business requirements). */
+  requirements?: Requirement[];
   /** The revision the document is built from. */
   revision: { label: string; state: 'working' | 'approved'; date: string };
 }

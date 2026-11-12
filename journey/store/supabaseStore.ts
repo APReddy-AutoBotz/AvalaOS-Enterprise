@@ -5,6 +5,10 @@ import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/a
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { decisionsFromEntries, decisionsToEntries } from '../../domain/assess/decisions.ts';
+import type { StoredRequirement } from '../../domain/requirements/register.ts';
+
+const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
+const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
 import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
@@ -208,6 +212,25 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
         workspace_id: process.workspaceId, process_id: processId, model_revision_id: input.revisionId, model_hash: input.modelHash,
         rules_version: input.rulesVersion, result: input.result, overrides: decisionsToEntries(input.decisions), is_stale: false,
       }, { onConflict: 'model_revision_id' });
+      if (error) fail(error);
+    },
+    async listRequirements(processId) {
+      const { data, error } = await db.from('requirements').select('code, requirement_type, statement, rationale, priority, acceptance_criteria, links, origin, derivation_key, state, user_edited, sort_order').eq('process_id', processId).order('sort_order');
+      if (error) fail(error);
+      return (data ?? []).map((r: any): StoredRequirement => {
+        const l = r.links ?? {};
+        return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order };
+      });
+    },
+    async saveRequirements(processId, rows) {
+      if (!rows.length) return;
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const { error } = await db.from('requirements').upsert(rows.map(r => ({
+        workspace_id: process.workspaceId, process_id: processId, code: r.code, requirement_type: REQ_TYPE[r.kind], statement: r.statement, rationale: r.rationale,
+        priority: r.priority, acceptance_criteria: r.acceptance, links: { title: r.title, category: r.category, stepIds: r.stepIds, ruleIds: r.ruleIds, exceptionIds: r.exceptionIds, traces: r.traces, gaps: r.gaps },
+        origin: r.origin, derivation_key: r.key, state: r.state, user_edited: r.edited, sort_order: r.order,
+      })), { onConflict: 'process_id,code' });
       if (error) fail(error);
     },
     async latestExtraction(processId): Promise<ExtractionRow | null> {

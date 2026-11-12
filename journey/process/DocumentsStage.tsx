@@ -18,11 +18,15 @@ import { useModelEditor } from './useModelEditor.ts';
 import { triage } from '../../domain/questions/triage.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
+import { buildFrd } from '../../domain/docs/frd.ts';
+import { deriveRequirements } from '../../domain/requirements/derive.ts';
+import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
+import { RequirementsPanel } from './RequirementsPanel.tsx';
 
 const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'brd', short: 'BRD', label: 'Business requirements', ready: true },
   { id: 'pdd', short: 'PDD', label: 'Process definition', ready: true },
-  { id: 'frd', short: 'FRD', label: 'Functional requirements', ready: false },
+  { id: 'frd', short: 'FRD', label: 'Functional requirements', ready: true },
   { id: 'sdd', short: 'SDD', label: 'Solution design', ready: false },
 ];
 
@@ -76,17 +80,30 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   const [error, setError] = React.useState<string | null>(null);
+  const [stored, setStored] = React.useState<StoredRequirement[] | null>(null);
   React.useEffect(() => {
-    Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId)])
-      .then(([d, s, ds]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); }).catch(e => setError(messageOf(e)));
+    Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId)])
+      .then(([d, s, ds, r]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
 
+  const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings }) : null), [model, decisions, settings]);
+  // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
+  const register = React.useMemo(() => (assessment && stored ? reconcile(deriveRequirements(model, assessment), stored) : null), [model, assessment, stored]);
+  React.useEffect(() => {
+    if (!register?.changed.length || !canEdit) return;
+    store.saveRequirements(processId, register.changed).then(() => setStored(register.requirements)).catch(e => setError(messageOf(e)));
+  }, [register, canEdit, store, processId]);
+  const saveRequirement = async (r: StoredRequirement) => {
+    await store.saveRequirements(processId, [r]);
+    setStored(cur => (cur ?? []).some(x => x.code === r.code) ? (cur ?? []).map(x => (x.code === r.code ? r : x)) : [...(cur ?? []), r]);
+  };
+
   const doc = React.useMemo<DocTree | null>(() => {
-    if (!decisions) return null;
-    const input = { model, assessment: assessProcess(model, { rate: decisions.rate, settings }), decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision };
-    const built = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : null;
+    if (!decisions || !assessment) return null;
+    const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
+    const built = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : null;
     return built && applyLayout(built, docSettings.layouts[type]);
-  }, [type, model, decisions, settings, sources, revision, docSettings]);
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register]);
 
   const [wordBusy, setWordBusy] = React.useState(false);
   const downloadWord = async () => {
@@ -137,10 +154,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="doc-not-ready">
           <p className="font-display text-lg font-semibold text-slate-900">{TYPES.find(t => t.id === type)!.label} ({type.toUpperCase()})</p>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">{type === 'frd'
-            ? 'The FRD needs the requirements derived from the To-Be steps, rules and exceptions, each with acceptance criteria. That comes next.'
+            ? ''
             : 'The SDD is written from an approved PDD and the confirmed design facts. It comes after the FRD.'}</p>
         </div>
       ) : (
+        <>
+        {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
             <div className="sticky top-4 max-h-[80vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-sm">
@@ -167,6 +186,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             ))}
           </article>
         </div>
+        </>
       )}
     </div>
   );

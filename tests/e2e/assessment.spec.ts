@@ -279,8 +279,8 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   await page.getByRole('tab', { name: /BRD/ }).click();
   await expect(doc).toContainText('Business Requirements Document');
   await expect(doc).toContainText('PDD section "Detailed As-Is steps"');
-  await page.getByRole('tab', { name: /FRD/ }).click();
-  await expect(page.getByTestId('doc-not-ready')).toContainText('requirements');
+  await page.getByRole('tab', { name: /SDD/ }).click();
+  await expect(page.getByTestId('doc-not-ready')).toContainText('approved PDD');
 });
 
 test('closing the gaps: answers in a guided session update the model and the documents', async ({ page }) => {
@@ -397,4 +397,46 @@ test('question packs: one file per owner to download, and a returned pack is rea
   await packs.getByLabel(`Read replies for ${owner}`).setInputFiles({ name: 'reply.md', mimeType: 'text/markdown', buffer: Buffer.from(answered) });
   await expect(page.getByTestId('pack-reply-count')).toContainText('1 answered row');
   await expect(page.getByTestId('pack-reply')).toContainText('The AP Team Lead decides.');
+});
+
+test('the FRD: requirements derived from the process with IDs; an edit is kept after a reload and a change to the process', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Documents');
+  await page.getByRole('tab', { name: /FRD/ }).click();
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Functional Requirements Document');
+  await expect(doc).toContainText(/FR-\d{3} Post invoice in SAP/);
+  await expect(doc).toContainText('The solution shall post invoice in SAP in SAP S/4HANA.');
+  await expect(doc).toContainText('Traceability matrix');
+  await expect(doc).not.toContainText(/TBD|placeholder|lorem/i);
+  const panel = page.getByTestId('requirements-panel');
+  await panel.getByRole('button', { name: /Requirements register/ }).click();
+  const fr = panel.getByTestId('requirement').filter({ hasText: 'Post invoice in SAP' });
+  const code = (await fr.locator('span.font-mono').textContent())!;
+  await fr.getByRole('button', { name: `Edit ${code}` }).click();
+  await panel.getByLabel(`Statement of ${code}`).fill('The solution shall post the invoice in SAP S/4HANA with the PDF attached.');
+  await panel.getByLabel(`Priority of ${code}`).selectOption('must');
+  await panel.getByRole('button', { name: '+ Add a criterion' }).click();
+  await panel.getByLabel(`Given 1 of ${code}`).fill('a checked invoice');
+  await panel.getByLabel(`When 1 of ${code}`).fill('it is posted');
+  await panel.getByLabel(`Then 1 of ${code}`).fill('SAP returns a document number');
+  await panel.getByRole('button', { name: 'Save requirement' }).click();
+  await expect(doc).toContainText('The solution shall post the invoice in SAP S/4HANA with the PDF attached.');
+  await shot(page, '48-frd');
+
+  // A change to the process does not undo the edit, and the ID stays.
+  await stage(page, 'Process');
+  await page.getByRole('tab', { name: /^Steps/ }).click();
+  await page.getByLabel('New step', { exact: true }).fill('Archive invoice');
+  await page.getByLabel('Type of new step').selectOption({ label: 'Person using a system' });
+  await page.getByRole('button', { name: 'Add step' }).click();
+  await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+  await page.reload();
+  await stage(page, 'Documents');
+  await page.getByRole('tab', { name: /FRD/ }).click();
+  await expect(doc).toContainText(`${code} Post invoice in SAP`);
+  await expect(doc).toContainText('The solution shall post the invoice in SAP S/4HANA with the PDF attached.');
+  await expect(doc).toContainText('Edited by a person');
+  const [word] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
+  expect(word.suggestedFilename()).toMatch(/FRD\.docx$/);
 });

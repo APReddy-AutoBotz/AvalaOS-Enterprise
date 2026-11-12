@@ -11,6 +11,7 @@ import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
 import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
+import type { StoredRequirement } from '../../domain/requirements/register.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -21,6 +22,7 @@ interface State {
   edits: (EditRow & { processId: string })[];
   sources: (SourceRow & { processId: string; segments: IngestSegment[] })[];
   assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
+  requirements?: Record<string, StoredRequirement[]>;
   settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
   documentSettings?: { workspaceId: string; settings: DocumentSettings }[];
 }
@@ -216,6 +218,20 @@ export function createMemoryStore(): JourneyStore {
     async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
     async latestExtraction() { return null; },
     async runAiTask() { throw new StoreError(501, 'AI tasks need the server; they are not available in local mode.'); },
+    async listRequirements(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return structuredClone((state.requirements ?? {})[processId] ?? []).sort((a, b) => a.order - b.order);
+    },
+    async saveRequirements(processId, rows) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Saving requirements needs the editor or admin role.');
+      state.requirements ??= {};
+      const list = state.requirements[processId] ?? [];
+      for (const r of rows) { const i = list.findIndex(x => x.code === r.code); if (i >= 0) list[i] = structuredClone(r); else list.push(structuredClone(r)); }
+      state.requirements[processId] = list;
+      save();
+    },
     async getAssessmentDecisions(processId) {
       requireMe();
       workspaceOf(processId);
