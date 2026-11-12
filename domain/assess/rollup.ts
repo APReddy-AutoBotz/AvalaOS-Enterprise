@@ -100,7 +100,7 @@ export function rollUp(model: ProcessModel, options: { rate?: Rate | null; resul
   const ruleSteps = model.steps.filter(s => s.traits?.rulesComplete && s.traits.rulesComplete.status !== 'unknown');
   const unstable = ruleSteps.filter(s => s.traits!.rulesComplete!.value === false).length;
   const hours = hoursOf(model, steps);
-  const automatableYear = hours.computable ? hours.value.automatable[1] : null;
+  const automatableYear = hours.computable ? hours.value!.automatable[1] : null;
   const gates: Gate[] = [
     {
       id: 'discovery_needed', label: 'Discovery needed', fired: n > 0 && low / n > THRESHOLDS.discoveryLowConfidenceShare,
@@ -116,7 +116,7 @@ export function rollUp(model: ProcessModel, options: { rate?: Rate | null; resul
     },
     {
       id: 'not_worth_automating', label: 'Not worth automating at this volume', fired: automatableYear !== null && automatableYear < THRESHOLDS.minimumAutomatableHoursPerYear,
-      reason: automatableYear === null ? `Not decided: ${hours.computable ? '' : hours.reason}` : `At most ${Math.round(automatableYear)} hands-on hours a year could be automated (threshold: ${THRESHOLDS.minimumAutomatableHoursPerYear}).`,
+      reason: automatableYear === null ? `Not decided: ${hours.reason ?? ''}` : `At most ${Math.round(automatableYear)} hands-on hours a year could be automated (threshold: ${THRESHOLDS.minimumAutomatableHoursPerYear}).`,
     },
   ];
 
@@ -133,8 +133,8 @@ export function rollUp(model: ProcessModel, options: { rate?: Rate | null; resul
   let money: ProcessResult['money'] = { computable: false, reason: 'No cost rate has been entered.' };
   if (options.rate && hours.computable) {
     const r = options.rate.amount;
-    money = { computable: true, value: { automatable: [hours.value.automatable[0] * r, hours.value.automatable[1] * r], currency: options.rate.currency }, note: `At ${options.rate.currency} ${r} an hour, entered by ${options.rate.enteredBy}.` };
-  } else if (options.rate && !hours.computable) money = { computable: false, reason: hours.reason };
+    money = { computable: true, value: { automatable: [hours.value!.automatable[0] * r, hours.value!.automatable[1] * r], currency: options.rate.currency }, note: `At ${options.rate.currency} ${r} an hour, entered by ${options.rate.enteredBy}.` };
+  } else if (options.rate && !hours.computable) money = { computable: false, reason: hours.reason ?? '' };
 
   const questions = steps.flatMap(s => s.questions).filter((q, i, all) => all.findIndex(x => x.question === q.question) === i);
   return { steps, composition, summary, noAiSteps: noAi, gates, headline, potential, hours, money, questions };
@@ -167,7 +167,7 @@ function potentialOf(model: ProcessModel, steps: StepResult[]): Computed<Range> 
 
 function hoursOf(model: ProcessModel, steps: StepResult[]): Computed<{ today: Range; automatable: Range }> {
   const vol = yearlyVolume(model);
-  if (!vol.computable) return vol;
+  if (!vol.computable) return { computable: false, reason: vol.reason ?? '' };
   const rows = effortOf(model);
   const noEffort = rows.filter(r => r.effort === null).length;
   if (noEffort) return { computable: false, reason: `Effort is missing on ${noEffort} of ${rows.length} steps.` };
@@ -175,6 +175,6 @@ function hoursOf(model: ProcessModel, steps: StepResult[]): Computed<{ today: Ra
   if (noShare) return { computable: false, reason: `The share of cases is missing on ${noShare} of ${rows.length} steps.` };
   const minutesPerCase = rows.reduce((t, r) => t + r.effort! * r.share!, 0);
   const auto = (i: 0 | 1) => rows.reduce((t, r) => t + r.effort! * r.share! * AUTOMATION_SHARE[steps.find(x => x.stepId === r.step.id)!.mechanism][i], 0);
-  const [lo, hi] = vol.value;
+  const [lo, hi] = vol.value!;
   return { computable: true, value: { today: [lo * minutesPerCase / 60, hi * minutesPerCase / 60], automatable: [lo * auto(0) / 60, hi * auto(1) / 60] } };
 }

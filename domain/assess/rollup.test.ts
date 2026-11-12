@@ -45,15 +45,15 @@ test('hours come from volume, effort and share; AI steps count as a range', () =
   // minutes per case: 10 + 1.2 + 10 = 21.2; automatable: rules 10 (+ extraction 1.2 at most)
   assert.ok(r.hours.computable);
   if (r.hours.computable) {
-    assert.deepEqual(r.hours.value.today.map(Math.round), [Math.round(108000 * 21.2 / 60), Math.round(120000 * 21.2 / 60)]);
-    assert.deepEqual(r.hours.value.automatable.map(Math.round), [Math.round(108000 * 10 / 60), Math.round(120000 * 11.2 / 60)]);
+    assert.deepEqual(r.hours.value!.today.map(Math.round), [Math.round(108000 * 21.2 / 60), Math.round(120000 * 21.2 / 60)]);
+    assert.deepEqual(r.hours.value!.automatable.map(Math.round), [Math.round(108000 * 10 / 60), Math.round(120000 * 11.2 / 60)]);
   }
   assert.ok(r.potential.computable);
-  if (r.potential.computable) assert.deepEqual(r.potential.value.map(x => Math.round(x * 1000)), [Math.round(10 / 21.2 * 1000), Math.round(11.2 / 21.2 * 1000)]);
+  if (r.potential.computable) assert.deepEqual(r.potential.value!.map(x => Math.round(x * 1000)), [Math.round(10 / 21.2 * 1000), Math.round(11.2 / 21.2 * 1000)]);
   assert.equal(r.money.computable, false);
   const priced = rollUp(model([rules(10, 100), extract(6, 20), human(20, 50)], { volume: [9000, 10000] }), { rate: { amount: 2, currency: 'EUR', enteredBy: 'ap@example.com' } });
   assert.ok(priced.money.computable);
-  if (priced.money.computable) { assert.equal(priced.money.value.currency, 'EUR'); assert.match(priced.money.note ?? '', /entered by ap@example.com/); }
+  if (priced.money.computable) { assert.equal(priced.money.value!.currency, 'EUR'); assert.match(priced.money.note ?? '', /entered by ap@example.com/); }
 });
 
 test('share missing blocks hours but not potential', () => {
@@ -107,4 +107,20 @@ test('no monetary literal appears in the assessment code', () => {
     const text = readFileSync(new URL(file, dir), 'utf8');
     assert.doesNotMatch(text, money, `${file} contains a monetary literal`);
   }
+});
+
+test('overrides need a rationale, survive storage, and leave the rules answer visible', async () => {
+  const { withOverride, withoutOverride, withRate, decisionsFromEntries, decisionsToEntries, effectiveMechanism, emptyDecisions, DecisionError } = await import('./decisions.ts');
+  const r = rollUp(model([rules()])).steps[0];
+  assert.throws(() => withOverride(emptyDecisions(), r, { mechanism: 'keep_human', rationale: '  ', by: 'a' }), DecisionError);
+  let d = withOverride(emptyDecisions(), r, { mechanism: 'keep_human', rationale: 'Audit wants a person', by: 'lead@example.com', at: '2026-11-12T00:00:00Z' });
+  d = withRate(d, { amount: 30, currency: 'EUR', enteredBy: 'lead@example.com' });
+  const back = decisionsFromEntries(JSON.parse(JSON.stringify(decisionsToEntries(d))));
+  assert.deepEqual(back, d);
+  assert.deepEqual(effectiveMechanism(r, back), { mechanism: 'keep_human', override: back.overrides[r.stepId] });
+  assert.equal(r.mechanism, 'rules', 'the rules answer is unchanged');
+  assert.deepEqual(withOverride(back, r, { mechanism: 'rules', rationale: '', by: 'a' }).overrides, {}, 'choosing the rules answer removes the override');
+  assert.deepEqual(withoutOverride(back, r.stepId).overrides, {});
+  assert.throws(() => withRate(d, { amount: 0, currency: 'EUR', enteredBy: 'x' }), DecisionError);
+  assert.deepEqual(decisionsFromEntries('nonsense'), emptyDecisions());
 });
