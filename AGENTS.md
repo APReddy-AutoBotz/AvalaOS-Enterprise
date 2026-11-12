@@ -105,7 +105,8 @@ npm run dev              # local dev server on port 3000
 - Agreed order (Nov 2026): triage and guided answers; then typed notes and voice through `journey-ai` (an answer session is saved as a source); Word export with the `docx` library (approved); company templates (branding, then structure); question packs per owner; then FRD and SDD.
 - Branding: `domain/docs/branding.ts` (organisation, font, accent, logo, company Word template read by `readWordTemplate`); stored per workspace in `document_settings` (admins write, members read); edited in Settings → "How documents look"; applied on screen and to the Word download (`docxStyleFrom`).
 - Section structure: `domain/docs/layout.ts` applies a per-type `DocLayout` (rename, hide, reorder top-level sections, add the company's own sections) after the builder and renumbers; the open-items list cannot be hidden and keeps every item. `suggestLayout` matches a Word template's headings to sections by rule; a person reviews it in Settings → "Document sections" before saving. Cross-references between documents use section titles, not numbers.
-- Next (approved Nov 2026: new tables, TipTap, deleting the old app): question packs per owner, requirements and the FRD, the SDD, flows, delete the old app code, editing with TipTap.
+- Question packs: `domain/questions/packs.ts` builds one pack per owner from the triage (refs B1, T1, F1…), renders it as a document tree (`type: 'questions'`, Word or Markdown), and `replyNotes` reads a returned pack's answered rows; the reply goes through the `answerFromNotes` review in `journey/process/QuestionPacks.tsx` and `GapsAssistant`.
+- Next (approved Nov 2026: new tables, TipTap, deleting the old app): requirements and the FRD, the SDD, flows, delete the old app code, editing with TipTap.
 
 ## Definition of done for a pull request
 

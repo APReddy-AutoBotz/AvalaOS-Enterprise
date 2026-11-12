@@ -109,7 +109,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   };
 
   const toAnswer = React.useMemo(() => (decisions ? triage(model, assessProcess(model, { settings })) : null), [model, decisions, settings]);
-  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} /></>;
+  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} branding={docSettings.branding} /></>;
 
   return (
     <div className="space-y-5">

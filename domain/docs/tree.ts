@@ -4,7 +4,8 @@
 // item is listed again at the end of the document.
 import type { ElementTarget, FactStatus } from '../processModel/types.ts';
 
-export type DocType = 'brd' | 'pdd' | 'frd' | 'sdd';
+/** 'questions' is a question pack sent to one owner; it has no layout of its own. */
+export type DocType = 'brd' | 'pdd' | 'frd' | 'sdd' | 'questions';
 
 export interface Cell { text: string; status?: FactStatus; missing?: boolean }
 export type CellInput = string | Cell;

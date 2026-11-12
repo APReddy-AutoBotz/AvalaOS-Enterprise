@@ -113,11 +113,11 @@ export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxS
       new TableCell({ width: { size: 32, type: WidthType.PERCENTAGE }, shading: { type: ShadingType.CLEAR, fill: 'F1F5F9', color: 'auto' }, children: [new Paragraph({ children: [new TextRun({ text: c.key, bold: true })] })] }),
       new TableCell({ children: [new Paragraph(c.value)] }),
     ] })) }),
-    new Paragraph({ spacing: { before: 240 }, children: [new TextRun({ text: `${doc.openItems.length} open ${doc.openItems.length === 1 ? 'item is' : 'items are'} listed at the end of this document.`, italics: true, color: GREY })] }),
+    ...(doc.type === 'questions' ? [] : [new Paragraph({ spacing: { before: 240 }, children: [new TextRun({ text: `${doc.openItems.length} open ${doc.openItems.length === 1 ? 'item is' : 'items are'} listed at the end of this document.`, italics: true, color: GREY })] }),
     new Paragraph({ children: [new PageBreak()] }),
     new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Contents')] }),
     new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-2' }),
-    new Paragraph({ children: [new TextRun({ text: 'If the contents are empty, right-click here and choose Update Field.', italics: true, color: GREY, size: PT(8) })] }),
+    new Paragraph({ children: [new TextRun({ text: 'If the contents are empty, right-click here and choose Update Field.', italics: true, color: GREY, size: PT(8) })] })]),
     new Paragraph({ children: [new PageBreak()] }),
   ];
   const body = doc.sections.flatMap(sec => [
