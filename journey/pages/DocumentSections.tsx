@@ -31,7 +31,8 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
   const [note, setNote] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const isAdmin = workspace.role === 'admin';
-  React.useEffect(() => { setDraft(settings.layouts[type] ?? EMPTY_LAYOUT); setMatches(null); setError(null); setNote(null); }, [type, settings]);
+  // A save or another type reloads the draft; the saved note stays until the next change.
+  React.useEffect(() => { setDraft(settings.layouts[type] ?? EMPTY_LAYOUT); setMatches(null); setError(null); }, [type, settings]);
 
   const tops = outline.filter(o => o.level === 1).map(o => o.number);
   const order = draft.order?.length ? [...draft.order, ...tops.filter(n => !draft.order!.includes(n))] : tops;
@@ -100,7 +101,7 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Use your company's headings and order. Renaming, hiding or moving a section changes where things appear, never what the facts say; open items from a hidden section are still listed at the end.</p>
         </div>
         <div role="tablist" aria-label="Document type" className="flex rounded-lg bg-slate-100 p-0.5">
-          {TYPES.map(t => <button key={t.type} role="tab" aria-selected={type === t.type} onClick={() => setType(t.type)} className={cx('rounded-md px-3 py-1 text-sm font-semibold', type === t.type ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{t.label}</button>)}
+          {TYPES.map(t => <button key={t.type} role="tab" aria-selected={type === t.type} onClick={() => { setType(t.type); setNote(null); }} className={cx('rounded-md px-3 py-1 text-sm font-semibold', type === t.type ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{t.label}</button>)}
         </div>
       </div>
       {isAdmin && settings.branding.template && <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-inset ring-slate-200">
