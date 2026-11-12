@@ -3,10 +3,20 @@
 // page numbers, and a draft marking until the revision is approved. The look (font, accent colour,
 // organisation name) comes from a style, so a company's own branding can be applied.
 import {
-  AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, LevelFormat, PageBreak, PageNumber, Packer, Paragraph,
+  AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, LevelFormat, PageBreak, PageNumber, Packer, Paragraph,
   ShadingType, Table, TableCell, TableOfContents, TableRow, TextRun, WidthType, type IStylesOptions,
 } from 'docx';
 import type { Block, Cell, DocTree } from './tree.ts';
+import { imageSize } from './branding.ts';
+
+function logoRun(dataUrl: string | null | undefined, height: number): ImageRun | null {
+  if (!dataUrl) return null;
+  const size = imageSize(dataUrl);
+  if (!size || !size.width || !size.height) return null;
+  const bin = atob(dataUrl.slice(dataUrl.indexOf(',') + 1));
+  const data = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new ImageRun({ type: size.type, data, transformation: { height, width: Math.round((size.width / size.height) * height) } });
+}
 
 export interface DocxStyle {
   /** Body and heading font. */
@@ -15,6 +25,15 @@ export interface DocxStyle {
   accent: string;
   /** Shown in the header before the document type, for example the organisation name. */
   organisation?: string;
+  /** A PNG or JPEG data URL, shown on the cover and in the header. */
+  logo?: string | null;
+  /** styles.xml of the company's Word template; when given, its fonts and heading styles are used. */
+  stylesXml?: string;
+}
+
+/** Branding settings as a Word style. */
+export function docxStyleFrom(b: { organisation: string; font: string; accent: string; logo: string | null; template: { stylesXml: string } | null }): DocxStyle {
+  return { font: b.font, accent: b.accent, organisation: b.organisation || undefined, logo: b.logo, stylesXml: b.template?.stylesXml };
 }
 export const DEFAULT_DOCX_STYLE: DocxStyle = { font: 'Calibri', accent: '002C4B' };
 
@@ -81,8 +100,11 @@ export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxS
       { id: 'Title', name: 'Title', basedOn: 'Normal', run: { font: s.font, size: PT(30), bold: true, color: s.accent } },
     ],
   };
+  const coverLogo = logoRun(s.logo, 56);
+  const headerLogo = logoRun(s.logo, 22);
   const cover = [
-    new Paragraph({ spacing: { before: 2400 }, children: [new TextRun({ text: (s.organisation ?? '').toUpperCase(), bold: true, color: GREY, size: PT(10) })] }),
+    ...(coverLogo ? [new Paragraph({ spacing: { before: 1200 }, children: [coverLogo] })] : []),
+    new Paragraph({ spacing: { before: coverLogo ? 960 : 2400 }, children: [new TextRun({ text: (s.organisation ?? '').toUpperCase(), bold: true, color: GREY, size: PT(10) })] }),
     new Paragraph({ style: 'Title', spacing: { before: 120, after: 120 }, children: [new TextRun(doc.title)] }),
     new Paragraph({ spacing: { after: 480 }, border: { bottom: { style: BorderStyle.SINGLE, size: 24, color: s.accent, space: 8 } }, children: [new TextRun({ text: doc.subtitle, size: PT(18), color: '0F172A' })] }),
     ...(opts.draft ? [new Paragraph({ spacing: { after: 240 }, children: [new TextRun({ text: 'DRAFT: not approved', bold: true, color: 'B91C1C', size: PT(12) })] })] : []),
@@ -106,11 +128,13 @@ export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxS
   return new Document({
     creator: 'AvalaOS', title: `${doc.title}: ${doc.subtitle}`, description: `${kind} for ${doc.subtitle}`,
     features: { updateFields: true },
-    styles,
+    // A company template's styles replace ours, so its fonts and heading look apply throughout.
+    ...(s.stylesXml ? { externalStyles: s.stylesXml } : { styles }),
     numbering: { config: [{ reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 240 } } } }] }] },
     sections: [{
       properties: { page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }, titlePage: true },
       headers: { default: new Header({ children: [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1', space: 4 } }, children: [
+        ...(headerLogo ? [headerLogo, new TextRun({ text: '   ' })] : []),
         new TextRun({ text: `${s.organisation ? `${s.organisation} · ` : ''}${kind} · ${doc.subtitle}`, ...small }),
         ...(opts.draft ? [new TextRun({ text: '    DRAFT: not approved', bold: true, size: PT(8), color: 'B91C1C' })] : []),
       ] })] }) },

@@ -119,3 +119,48 @@ test('Word export: cover and control, contents, numbered headings, every table r
   const approved = await zipEntry(await Packer.toBuffer(docxDocument(d, { draft: false })), 'word/document.xml');
   assert.doesNotMatch(approved, /DRAFT/);
 });
+
+// A 2x1 PNG, for the logo.
+const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAAD0lEQVR4nGNg0PH+v4cZAAaHAjZXokpKAAAAAElFTkSuQmCC';
+
+test('branding: validation, image size, and stored settings falling back to defaults', async () => {
+  const { validateBranding, documentSettingsFrom, imageSize, DEFAULT_BRANDING } = await import('./branding.ts');
+  assert.deepEqual(imageSize(PNG), { width: 2, height: 1, type: 'png' });
+  assert.equal(validateBranding({ ...DEFAULT_BRANDING, accent: '#7a1f5c' }).accent, '7A1F5C');
+  assert.throws(() => validateBranding({ ...DEFAULT_BRANDING, accent: 'red' }), /six hex digits/);
+  assert.throws(() => validateBranding({ ...DEFAULT_BRANDING, logo: 'data:image/gif;base64,AAAA' }), /PNG or JPEG/);
+  assert.deepEqual(documentSettingsFrom({ branding: { accent: 'nope' } }).branding, DEFAULT_BRANDING);
+  assert.equal(documentSettingsFrom({ branding: { organisation: 'Acme', accent: '112233' } }).branding.organisation, 'Acme');
+});
+
+test('a company Word template: its headings, font and heading colour are read, and its styles and the logo go into the download', async () => {
+  const { Document, Packer, Paragraph, HeadingLevel, TextRun } = await import('docx');
+  const { readWordTemplate } = await import('./branding.ts');
+  const { docxDocument, docxStyleFrom } = await import('./docx.ts');
+  const company = new Document({
+    styles: {
+      default: { document: { run: { font: 'Georgia' } } },
+      paragraphStyles: [{ id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', run: { color: '7A1F5C', bold: true, font: 'Georgia' } }, { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', run: { color: '333333' } }],
+    },
+    sections: [{ children: [
+      new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Document control')] }),
+      new Paragraph({ text: 'Body text' }),
+      new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun('Process overview')] }),
+      new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun('Systems & applications')] }),
+    ] }],
+  });
+  const bytes = new Uint8Array(await Packer.toBuffer(company));
+  const read = await readWordTemplate('Acme PDD template.docx', bytes);
+  assert.deepEqual(read.template.headings, [{ level: 1, text: 'Document control' }, { level: 1, text: 'Process overview' }, { level: 2, text: 'Systems & applications' }]);
+  assert.equal(read.font, 'Georgia');
+  assert.equal(read.accent, '7A1F5C');
+  await assert.rejects(readWordTemplate('notes.txt', new TextEncoder().encode('hello')), /not a Word document/);
+
+  const style = docxStyleFrom({ organisation: 'Acme', font: read.font!, accent: read.accent!, logo: PNG, template: read.template });
+  const buf = await Packer.toBuffer(docxDocument(buildPdd(input(gold)), { draft: false, style }));
+  const styles = await zipEntry(buf, 'word/styles.xml');
+  assert.match(styles, /Georgia/);
+  assert.match(styles, /7A1F5C/);
+  const names = buf.toString('latin1').match(/word\/media\/[^\s"]+?\.png/g) ?? [];
+  assert.ok(names.length > 0, 'the logo is embedded');
+});

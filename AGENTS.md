@@ -103,7 +103,8 @@ npm run dev              # local dev server on port 3000
 - Answers from notes or voice: `journey-ai` has a `transcribe` action (audio data URL, `OPENAI_TRANSCRIBE_MODEL`, default `gpt-4o-transcribe`) and the `answerFromNotes` task (`domain/questions/notes.ts`); proposals are confirmed by a person, and the notes are saved as a source `ans-N` before the answers are written.
 - Word export: `domain/docs/docx.ts` renders a document tree with the `docx` library (loaded on demand in the browser); `DocxStyle` carries font, accent colour and organisation name for branding.
 - Agreed order (Nov 2026): triage and guided answers; then typed notes and voice through `journey-ai` (an answer session is saved as a source); Word export with the `docx` library (approved); company templates (branding, then structure); question packs per owner; then FRD and SDD.
-- Next: requirements derivation and the FRD (WP3.1), then the SDD, then editing (WP3.4; TipTap needs approval as a new dependency), narrative drafting with grounding (WP3.3), flows (WP3.6), Word export (WP3.7).
+- Branding: `domain/docs/branding.ts` (organisation, font, accent, logo, company Word template read by `readWordTemplate`); stored per workspace in `document_settings` (admins write, members read); edited in Settings → "How documents look"; applied on screen and to the Word download (`docxStyleFrom`).
+- Next (approved Nov 2026: new tables, TipTap, deleting the old app): template structure (rename, reorder, hide, add sections), question packs per owner, requirements and the FRD, the SDD, flows, delete the old app code, editing with TipTap.
 
 ## Definition of done for a pull request
 

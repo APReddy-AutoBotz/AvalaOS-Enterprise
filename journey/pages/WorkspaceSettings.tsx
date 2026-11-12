@@ -3,6 +3,7 @@ import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
 import { DEFAULT_SETTINGS, SETTING_LIMITS, SettingsError, validateSettings, type AssessmentSettings, type SettingsRecord } from '../../domain/assess/settings.ts';
 import { Button, ErrorNote, messageOf, Spinner, when } from '../ui.tsx';
+import { DocumentBranding } from './DocumentBranding.tsx';
 
 const KEYS = Object.keys(SETTING_LIMITS) as (keyof AssessmentSettings)[];
 
@@ -66,6 +67,7 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
           )}
         </form>
       </div>
+      <DocumentBranding store={store} workspace={workspace} />
     </section>
   );
 }

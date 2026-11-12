@@ -315,3 +315,34 @@ test('closing the gaps: answers in a guided session update the model and the doc
   await assistant.getByRole('button', { name: 'Back to the document' }).click();
   await expect(page.getByTestId('document')).toContainText('Post supplier invoices correctly within five working days.');
 });
+
+test('an admin sets how documents look: organisation, colour and logo show on the document and the Word download still works', async ({ page }) => {
+  await buildProcess(page);
+  const processUrl = page.url();
+  await page.getByRole('link', { name: 'Processes' }).first().click();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const brand = page.getByTestId('document-branding');
+  await brand.getByLabel('Organisation name').fill('Northwind Shared Services');
+  await brand.getByLabel('Accent colour hex').fill('#7A1F5C');
+  // A 1x1 PNG.
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==', 'base64');
+  await brand.getByLabel('Upload logo').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: png });
+  await expect(brand.getByRole('img', { name: 'Logo' })).toBeVisible();
+  await brand.getByLabel('Accent colour hex').fill('not a colour');
+  await brand.getByRole('button', { name: 'Save how documents look' }).click();
+  await expect(brand.getByRole('alert')).toContainText('six hex digits');
+  await brand.getByLabel('Accent colour hex').fill('#7A1F5C');
+  await brand.getByRole('button', { name: 'Save how documents look' }).click();
+  await expect(brand.getByRole('status')).toContainText('Saved');
+  await shot(page, '45-document-branding');
+
+  await page.goto(processUrl);
+  await stage(page, 'Documents');
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Northwind Shared Services');
+  await expect(doc.locator('header').first()).toHaveCSS('border-bottom-color', 'rgb(122, 31, 92)');
+  const [word] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
+  const bytes = readFileSync(await word.path());
+  expect(bytes.subarray(0, 2).toString()).toBe('PK');
+  expect(bytes.includes(Buffer.from('word/media/'))).toBe(true);
+});

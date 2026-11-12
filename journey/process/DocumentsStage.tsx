@@ -16,6 +16,7 @@ import { StatusBadge } from './widgets.tsx';
 import { GapsAssistant } from './GapsAssistant.tsx';
 import { useModelEditor } from './useModelEditor.ts';
 import { triage } from '../../domain/questions/triage.ts';
+import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 
 const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'brd', short: 'BRD', label: 'Business requirements', ready: true },
@@ -72,10 +73,11 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [type, setType] = React.useState<DocType>('pdd');
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
+  const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
-    Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId)])
-      .then(([d, s]) => { setDecisions(d); setSettings(s.settings); }).catch(e => setError(messageOf(e)));
+    Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId)])
+      .then(([d, s, ds]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
 
   const doc = React.useMemo<DocTree | null>(() => {
@@ -90,8 +92,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     setWordBusy(true);
     try {
       // Loaded on demand: the Word library is only needed when someone downloads.
-      const { toDocxBlob } = await import('../../domain/docs/docx.ts');
-      const blob = await toDocxBlob(doc, { draft: revision.state !== 'approved' });
+      const { toDocxBlob, docxStyleFrom } = await import('../../domain/docs/docx.ts');
+      const blob = await toDocxBlob(doc, { draft: revision.state !== 'approved', style: docxStyleFrom(docSettings.branding) });
       const url = URL.createObjectURL(blob);
       const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${doc.type.toUpperCase()}.docx` });
       a.click(); URL.revokeObjectURL(url);
@@ -145,9 +147,10 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{doc.openItems.length} open {doc.openItems.length === 1 ? 'item' : 'items'}</p>
             </div>
           </nav>
-          <article id="document-print" data-testid="document" className="min-w-0 rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10">
-            <header className="border-b-4 border-[#002C4B] pb-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#B58500]">{doc.title}</p>
+          <article id="document-print" data-testid="document" className="min-w-0 rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10" style={{ fontFamily: `${docSettings.branding.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${docSettings.branding.accent}` }}>
+            <header className="border-b-4 pb-5" style={{ borderColor: 'var(--doc-accent)' }}>
+              {docSettings.branding.logo && <img src={docSettings.branding.logo} alt="" className="mb-3 h-8 object-contain" />}
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{docSettings.branding.organisation ? `${docSettings.branding.organisation} · ` : ''}{doc.title}</p>
               <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-slate-900">{doc.subtitle}</h2>
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">{doc.control.slice(1).map(c => <div key={c.key}><dt className="inline font-semibold">{c.key}: </dt><dd className="inline">{c.value}</dd></div>)}</dl>
               {revision.state === 'working' && <p className="mt-3 inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-slate-600">Draft until the revision is approved</p>}
@@ -155,7 +158,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             {doc.sections.map(s => (
               <section key={s.id} id={s.id} className="scroll-mt-4">
                 {s.level === 1
-                  ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900"><span className="mr-2 tabular-nums text-[#B58500]">{s.number}</span>{s.title}</h3>
+                  ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900"><span className="mr-2 tabular-nums" style={{ color: 'var(--doc-accent)' }}>{s.number}</span>{s.title}</h3>
                   : <h4 className="mt-6 font-display text-base font-semibold text-slate-900"><span className="mr-2 tabular-nums text-slate-400">{s.number}</span>{s.title}</h4>}
                 <div className="mt-3 space-y-3">{s.blocks.map((b, i) => <BlockView key={i} b={b} />)}</div>
               </section>

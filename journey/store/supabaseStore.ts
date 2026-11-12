@@ -1,3 +1,4 @@
+import { documentSettingsFrom, validateBranding } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
 // The real store: Supabase auth, row level security for reads, and the model RPCs for writes.
 // Uses only the project URL and the publishable key, which are safe in the browser.
@@ -92,6 +93,18 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data: auth } = await db.auth.getUser();
       if (!auth.user) throw new StoreError(401, 'Sign in again.');
       const { error } = await db.from('workspace_settings').upsert({ workspace_id: workspaceId, assessment: valid, updated_by: auth.user.id, updated_at: new Date().toISOString() }, { onConflict: 'workspace_id' });
+      if (error) fail(error);
+    },
+    async getDocumentSettings(workspaceId) {
+      const { data, error } = await db.from('document_settings').select('settings').eq('workspace_id', workspaceId).maybeSingle();
+      if (error) fail(error);
+      return documentSettingsFrom(data?.settings);
+    },
+    async saveDocumentSettings(workspaceId, settings) {
+      const valid = { branding: validateBranding(settings.branding), layouts: settings.layouts };
+      const { data: auth } = await db.auth.getUser();
+      if (!auth.user) throw new StoreError(401, 'Sign in again.');
+      const { error } = await db.from('document_settings').upsert({ workspace_id: workspaceId, settings: valid, updated_by: auth.user.id, updated_at: new Date().toISOString() }, { onConflict: 'workspace_id' });
       if (error) fail(error);
     },
     async listProcesses(workspaceId) {
