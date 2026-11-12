@@ -224,7 +224,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="font-display text-base font-semibold text-slate-900">Steps</h3>
-            <p className="text-sm text-slate-500">The facts each step is scored on, and the time it takes. Blue cells follow the answer for the process as a whole. A dashed time is an assumption to confirm.</p>
+            <p className="text-sm text-slate-500">The facts each step is scored on, and the time it takes. Blue cells marked ↑ follow the answer for the process as a whole. A dashed time is an assumption to confirm.</p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
@@ -274,7 +274,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                           {!automated && (() => {
                             const whole = typicalTrait(model, c.trait as keyof TypicalTraits);
                             const wholeLabel = whole ? c.options.find(o => o[0] === String(whole.value))?.[1] : undefined;
-                            return <Pick cell inherited={Boolean(whole)} label={`${c.title} for ${s.name}`} value={traitText(s, c.trait)} options={wholeLabel ? [['', `As the process: ${wholeLabel}`], ...c.options.slice(1)] : c.options} disabled={!canEdit} onChange={v => set(c.trait, parseTrait(c.trait, v))} />;
+                            return <Pick cell inherited={Boolean(whole)} label={`${c.title} for ${s.name}`} value={traitText(s, c.trait)} options={wholeLabel ? [['', `↑ ${wholeLabel}`], ...c.options.slice(1)] : c.options} disabled={!canEdit} onChange={v => set(c.trait, parseTrait(c.trait, v))} />;
                           })()}
                         </td>
                       ))}
