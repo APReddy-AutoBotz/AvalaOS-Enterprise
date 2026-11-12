@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
 // The real store: Supabase auth, row level security for reads, and the model RPCs for writes.
 // Uses only the project URL and the publishable key, which are safe in the browser.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
@@ -81,6 +82,18 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       return { workspaceId: (data as any).workspaceId };
     },
 
+    async getSettings(workspaceId) {
+      const { data, error } = await db.from('workspace_settings').select('assessment, updated_at').eq('workspace_id', workspaceId).maybeSingle();
+      if (error) fail(error);
+      return data ? { settings: settingsFrom(data.assessment), custom: true, updatedBy: null, updatedAt: data.updated_at } : { settings: { ...DEFAULT_SETTINGS }, custom: false, updatedBy: null, updatedAt: null };
+    },
+    async saveSettings(workspaceId, settings) {
+      const valid = validateSettings(settings);
+      const { data: auth } = await db.auth.getUser();
+      if (!auth.user) throw new StoreError(401, 'Sign in again.');
+      const { error } = await db.from('workspace_settings').upsert({ workspace_id: workspaceId, assessment: valid, updated_by: auth.user.id, updated_at: new Date().toISOString() }, { onConflict: 'workspace_id' });
+      if (error) fail(error);
+    },
     async listProcesses(workspaceId) {
       const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at')
         .eq('workspace_id', workspaceId).is('archived_at', null).order('updated_at', { ascending: false });

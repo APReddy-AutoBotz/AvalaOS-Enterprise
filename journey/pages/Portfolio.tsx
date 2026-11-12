@@ -4,7 +4,8 @@ import type { JourneyStore, ProcessRow } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { buildPortfolio, type Portfolio as PortfolioData, type PortfolioRow } from '../../domain/assess/portfolio.ts';
-import { PRIORITY, QUADRANT, type Quadrant } from '../../domain/assess/priority.ts';
+import { QUADRANT, type Quadrant } from '../../domain/assess/priority.ts';
+import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { APPROACH_LABEL } from '../../domain/assess/scoring.ts';
 import { cx, EmptyState, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 
@@ -12,7 +13,8 @@ const hrs = (n: number) => Math.round(n).toLocaleString('en');
 const READY = { ready: ['Ready', 'bg-emerald-100 text-emerald-900'], fix_first: ['Fix first', 'bg-amber-100 text-amber-900'], wait: ['Wait', 'bg-rose-100 text-rose-900'] } as const;
 const QUAD_TONE: Record<Quadrant, string> = { quick_win: 'bg-[#002C4B] text-white', major_project: 'bg-sky-100 text-sky-900', fill_in: 'bg-slate-100 text-slate-700', not_now: 'bg-slate-100 text-slate-500' };
 
-function Chart({ rows }: { rows: PortfolioRow[] }) {
+function Chart({ rows, settings }: { rows: PortfolioRow[]; settings: AssessmentSettings }) {
+  const PRIORITY = { valueHoursPerYear: settings.valueHoursPerYear, ease: settings.easeLine };
   const plotted = rows.filter(r => r.hours !== null && r.ease !== null);
   const W = 640, H = 340, L = 56, R = 16, T = 16, B = 40;
   const top = Math.max(PRIORITY.valueHoursPerYear * 2, ...plotted.map(r => r.hours!)) * 1.1;
@@ -47,21 +49,25 @@ function Chart({ rows }: { rows: PortfolioRow[] }) {
   );
 }
 
-export function Portfolio({ store, nav, processes }: { store: JourneyStore; nav: Nav; processes: ProcessRow[] }) {
+export function Portfolio({ store, nav, processes, workspaceId }: { store: JourneyStore; nav: Nav; processes: ProcessRow[]; workspaceId: string }) {
   const [data, setData] = React.useState<PortfolioData | null>(null);
+  const [settings, setSettings] = React.useState<AssessmentSettings | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     let live = true;
-    Promise.all(processes.map(async p => {
+    store.getSettings(workspaceId).then(async rec => {
+    if (live) setSettings(rec.settings);
+    return Promise.all(processes.map(async p => {
       const rev = (await store.listRevisions(p.id))[0];
       const model = rev ? await store.getModel(rev.id) : null;
-      return model ? { id: p.id, name: p.name, assessment: assessProcess(model) } : null;
-    })).then(items => { if (live) setData(buildPortfolio(items.filter((i): i is NonNullable<typeof i> => i !== null))); }).catch(e => { if (live) setError(messageOf(e)); });
+      return model ? { id: p.id, name: p.name, assessment: assessProcess(model, { settings: rec.settings }) } : null;
+    }));
+    }).then(items => { if (live) setData(buildPortfolio(items.filter((i): i is NonNullable<typeof i> => i !== null))); }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
-  }, [store, processes]);
+  }, [store, processes, workspaceId]);
 
   if (error) return <ErrorNote message={error} />;
-  if (!data) return <Spinner label="Assessing the processes" />;
+  if (!data || !settings) return <Spinner label="Assessing the processes" />;
   if (data.assessed === 0) return <EmptyState title="Nothing to compare yet">A process appears here once it has steps to assess. Open a process and add its sources, or assess it as one step from the Inputs tab.</EmptyState>;
   const name = (id: string) => data.rows.find(r => r.id === id)?.name ?? id;
   const open = (id: string) => nav.go({ page: 'process', processId: id, stage: 'assessment' });
@@ -69,12 +75,12 @@ export function Portfolio({ store, nav, processes }: { store: JourneyStore; nav:
   return (
     <div className="space-y-5" data-testid="portfolio">
       <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <Chart rows={data.rows} />
+        <Chart rows={data.rows} settings={settings} />
         <div className="space-y-4">
           <div className="rounded-2xl bg-[#002C4B] p-6 text-white shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#FFBC03]">Across {data.assessed} {data.assessed === 1 ? 'process' : 'processes'}</p>
             <p className="mt-2 font-display text-3xl font-semibold">{data.totalHours > 0 ? `Up to ${hrs(data.totalHours)}` : 'Not known yet'}</p>
-            <p className="mt-1 text-sm text-slate-200">{data.totalHours > 0 ? `hands-on hours a year automation could take, about ${(data.totalHours / PRIORITY.hoursPerFte).toFixed(1)} full-time people.` : 'Add volume and time to the processes to see the hours.'}</p>
+            <p className="mt-1 text-sm text-slate-200">{data.totalHours > 0 ? `hands-on hours a year automation could take, about ${(data.totalHours / settings.hoursPerFte).toFixed(1)} full-time people.` : 'Add volume and time to the processes to see the hours.'}</p>
           </div>
           {data.pareto.ids.length > 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="portfolio-pareto">

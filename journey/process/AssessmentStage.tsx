@@ -9,6 +9,7 @@ import { hashModel } from '../../domain/processModel/hash.ts';
 import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type ApproachScore, type FactorScore, type StepScore } from '../../domain/assess/scoring.ts';
 import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
+import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
@@ -46,9 +47,11 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   const [reading, setReading] = React.useState<string | null>(null);
   const [view, setView] = React.useState<'assessment' | 'inputs' | 'report'>('assessment');
 
+  const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
   React.useEffect(() => { store.getAssessmentDecisions(processId).then(setDecisions).catch(e => setError(messageOf(e))); }, [store, processId]);
+  React.useEffect(() => { store.getSettings(workspaceId).then(r => setSettings(r.settings)).catch(e => setError(messageOf(e))); }, [store, workspaceId]);
 
-  const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null }), [editor.model, decisions?.rate]);
+  const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
 
   const save = async (next: Decisions) => {

@@ -11,6 +11,7 @@ import type { ProcessModel } from '../processModel/types.ts';
 import { periodOf, processMetric, stepTrait } from '../processModel/selectors.ts';
 export { periodOf };
 import { prioritise, type Priority } from './priority.ts';
+import { DEFAULT_SETTINGS, type AssessmentSettings } from './settings.ts';
 import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
 
 export const THRESHOLDS = {
@@ -125,7 +126,7 @@ export function yearlyVolume(m: ProcessModel): Computed<Range> {
   return { computable: true, value: [lo * PER_YEAR[per], hi * PER_YEAR[per]] };
 }
 
-export function assessProcess(model: ProcessModel, options: { rate?: Rate | null } = {}): ProcessAssessment {
+export function assessProcess(model: ProcessModel, options: { rate?: Rate | null; settings?: AssessmentSettings } = {}): ProcessAssessment {
   const steps = scoreSteps(model);
   const scored = steps.filter(s => !s.alreadyAutomated);
   const n = scored.length;
@@ -268,7 +269,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   } else if (options.rate && !hours.computable) money = { computable: false, reason: hours.reason ?? '' };
 
   const questions = scored.flatMap(s => s.questions).filter((q, i, all) => all.findIndex(x => x.question === q.question) === i);
-  const priority = prioritise(model, { scored, cautions, volume: yearlyVolume(model), automationShare: s => AUTOMATION_SHARE[s.winner], apiSwitch: { systems: systemsToConfirm, steps: apiIfConfirmed }, keyQuestions });
+  const priority = prioritise(model, { scored, cautions, volume: yearlyVolume(model), automationShare: s => AUTOMATION_SHARE[s.winner], apiSwitch: { systems: systemsToConfirm, steps: apiIfConfirmed }, keyQuestions, settings: options.settings ?? DEFAULT_SETTINGS });
   return {
     priority,
     steps, assessed: n, candidates: open.length, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,

@@ -224,4 +224,23 @@ test('a process known only as a whole is assessed as one step from answers given
   await expect(prow).toContainText('Fill-in');
   await expect(page.getByTestId('portfolio-chart')).toBeVisible();
   await shot(page, '36-portfolio');
+
+  // An admin lowers the value line: up to 192 hours could now be on either side of it; the approach is unchanged.
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByTestId('settings-state')).toContainText('defaults apply');
+  await page.getByLabel('High value starts at').fill('100');
+  await page.getByLabel('Hours a full-time person works in a year').fill('100');
+  await expect(page.getByRole('button', { name: 'Save settings' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByText(/enter a number from 800 to 3,000/)).toBeVisible();
+  await page.getByLabel('Hours a full-time person works in a year').fill('1800');
+  await page.getByRole('button', { name: 'Save settings' }).click();
+  await expect(page.getByRole('status')).toContainText('Saved');
+  await shot(page, '37-settings');
+  await page.getByRole('tab', { name: 'Portfolio' }).click();
+  await expect(prow).toContainText('Rule-based RPA');
+  await expect(prow).toContainText('Quick win or Fill-in');
+  await page.reload();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  await expect(page.getByLabel('High value starts at')).toHaveValue('100');
 });
