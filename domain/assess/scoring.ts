@@ -37,8 +37,9 @@ export const VALUES = {
   screens: { stable: 1, unknown: 0.7, none: 0.3, unstable: 0.1 },
   noJudgment: { no: 1, unknown: 0.6, yes: 0 },
   interfacePerSystem: { covered: 1, confirmed_other: 0.5, reported: 0.45, unknown: 0.25, absent: 0 },
-  readingByInput: { unstructured: 1, paper: 1, semi_structured: 0.6, unknown: 0.3, structured: 0 },
-  readingByLanguage: { yes: 1, unknown: 0.3, no: 0 },
+  // The need for AI has to be shown: unknown counts for little here, unlike the middle value elsewhere.
+  readingByInput: { unstructured: 1, paper: 1, semi_structured: 0.6, unknown: 0.15, structured: 0 },
+  readingByLanguage: { yes: 1, unknown: 0.15, no: 0 },
   aiRulesGap: { incomplete: 1, unknown: 0.5, complete: 0.3 },
   reviewable: { none: 1, record: 1, unknown: 0.7, financial: 0.6, irreversible: 0.4 },
   judgment: { yes: 1, unknown: 0.35, no: 0 },
