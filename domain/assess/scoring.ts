@@ -10,7 +10,7 @@
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
-export const MODEL_VERSION = 'assess-scoring-2026-11.3';
+export const MODEL_VERSION = 'assess-scoring-2026-11.4';
 
 export type Approach = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human';
 /** Automation approaches. On equal scores the earlier one wins: a confirmed API, then RPA, then AI. */
@@ -59,6 +59,8 @@ export const CAPS = {
   inputMustBeRead: 35,
   rulesIncomplete: 45,
   screensUnstable: 40,
+  /** Robots are not allowed on the screens of a system the step uses: RPA cannot be planned on. */
+  screensBlocked: 0,
   /** Where a confirmed API covers the work, automating the screens is the more fragile route. */
   rpaWhenApiConfirmed: 75,
   apiAbsent: 0,
@@ -189,6 +191,8 @@ interface StepFacts {
   systems: SystemRef[];
   apis: SystemApi[];
   screens: 'stable' | 'unstable' | 'unknown' | 'none';
+  /** Systems of the step whose screens robots may not drive. */
+  blocked: SystemRef[];
 }
 
 const TRAIT_GENERAL: Record<string, string> = {
@@ -232,7 +236,7 @@ function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFa
     language: read('language', t.language, yesNo),
     write: read('write', t.write, k => (k ? (k.value as WriteImpact) : 'unknown')),
     agent: { ambiguity: agentRead('ambiguity'), adaptive: agentRead('adaptive'), toolChoice: agentRead('toolChoice'), value: agentRead('value'), controllable: agentRead('controllable') },
-    systems, apis, screens,
+    systems, apis, screens, blocked: systems.filter(s => known(s.uiAllowed as Fact<unknown> | undefined)?.value === false),
   };
 }
 
@@ -295,6 +299,7 @@ function scoreApproaches(f: StepFacts, assumeApi: boolean): Record<Approach, App
   const rpa = finishScore('rpa', [rulesF(WEIGHTS.rpa.rules), inputF(WEIGHTS.rpa.input), screensFactor(f, WEIGHTS.rpa.screens), noJudgmentF(WEIGHTS.rpa.noJudgment)], [
     ...commonCaps('rpa'),
     ...(f.screens === 'unstable' ? [{ to: CAPS.screensUnstable, reason: 'The screens are not stable enough to automate.' }] : []),
+    ...(f.blocked.length ? [{ to: CAPS.screensBlocked, reason: `Robots are not allowed on the screens of ${f.blocked.map(s => s.name).join(' and ')}.` }] : []),
     ...(f.apis.length && (assumeApi || f.apis.every(a => a.state === 'covered')) ? [{ to: CAPS.rpaWhenApiConfirmed, reason: 'A confirmed API covers this work, so automating the screens would be the more fragile route.' }] : []),
   ]);
 

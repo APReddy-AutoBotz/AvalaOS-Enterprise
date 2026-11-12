@@ -20,7 +20,9 @@ export const profileFacts: TaskDefinition = {
     'Facts:',
     '- processChange: change expected to how the process is done in the next six months or so. "major" for a redesign, a new operating model, outsourcing, a move to another team or centre, or a new policy that changes the steps; "minor" for small adjustments; "none" only when a passage says no change is planned. Past changes and wishes without a plan do not count.',
     '- systemChange: change expected to the applications used in the next six months or so. "major" for a migration, replacement, new system or a large upgrade with a date or plan; "minor" for a small upgrade or patch; "none" only when a passage says no change is planned. A system that might be considered some day does not count.',
-    '- remote: for one application (give its systemId), "true" when it is used through Citrix, a remote desktop, VDI or a terminal server, "false" when a passage says it is used directly. Leave systemId empty for the two change facts.',
+    '- remote: for one application (give its systemId), "true" when it is used through Citrix, a remote desktop, VDI or a terminal server, "false" when a passage says it is used directly.',
+    '- uiAllowed: for one application (give its systemId), "false" when a passage says robots or scripts may not drive its screens (UI automation, GUI scripting or bots disabled or forbidden by policy or security), "true" when a passage says UI automation of it is allowed or already in use.',
+    'Leave systemId empty for the two change facts.',
   ].join('\n'),
   schema: {
     type: 'object', additionalProperties: false, required: ['findings'],
@@ -31,7 +33,7 @@ export const profileFacts: TaskDefinition = {
           type: 'object', additionalProperties: false,
           required: ['fact', 'systemId', 'value', 'certainty', 'segmentId', 'excerpt'],
           properties: {
-            fact: { type: 'string', enum: ['processChange', 'systemChange', 'remote'] },
+            fact: { type: 'string', enum: ['processChange', 'systemChange', 'remote', 'uiAllowed'] },
             systemId: str, value: str,
             certainty: { type: 'string', enum: ['stated', 'inferred'] },
             segmentId: str, excerpt: str,
@@ -44,10 +46,10 @@ export const profileFacts: TaskDefinition = {
   verifyArrays: ['findings'],
 };
 
-export interface ProfileFinding { fact: 'processChange' | 'systemChange' | 'remote'; systemId: string; value: string; certainty: 'stated' | 'inferred'; segmentId: string; excerpt: string }
+export interface ProfileFinding { fact: 'processChange' | 'systemChange' | 'remote' | 'uiAllowed'; systemId: string; value: string; certainty: 'stated' | 'inferred'; segmentId: string; excerpt: string }
 
 /** Words that mark a passage as possibly about change or remote access. */
-export const PROFILE_CUES = /\b(chang|upgrad|migrat|replac|implement|roll ?out|go[- ]live|transition|transform|moving to|move to|outsourc|centrali[sz]|new (system|tool|process|erp|platform|policy)|next (quarter|year|month)|plan(ned|s)? to|citrix|remote desktop|\bvdi\b|virtual desktop|terminal server|rdp\b|jump ?host)/i;
+export const PROFILE_CUES = /\b(chang|upgrad|migrat|replac|implement|roll ?out|go[- ]live|transition|transform|moving to|move to|outsourc|centrali[sz]|new (system|tool|process|erp|platform|policy)|next (quarter|year|month)|plan(ned|s)? to|citrix|remote desktop|scripting|ui automation|gui|bots?\b|robot|\bvdi\b|virtual desktop|terminal server|rdp\b|jump ?host)/i;
 
 /** The passages to read (those with a cue, and their neighbours), at most `limit`. Empty when no passage has a cue. */
 export function profileSegments(model: ProcessModel, sources: { key: string; segments: IngestSegment[] }[], limit = 80): { segments: Segment[]; ingest: Map<string, IngestSegment> } {
@@ -76,9 +78,9 @@ export function applyProfileFindings(model: ProcessModel, findings: ProfileFindi
     if (!seg) continue;
     const v = f.value.trim().toLowerCase();
     let value: unknown, key: string;
-    if (f.fact === 'remote') {
+    if (f.fact === 'remote' || f.fact === 'uiAllowed') {
       if (!next.systems.some(s => s.id === f.systemId && !NON_INTEGRABLE.includes(s.kind)) || !['true', 'false'].includes(v)) continue;
-      value = v === 'true'; key = `remote|${f.systemId}`;
+      value = v === 'true'; key = `${f.fact}|${f.systemId}`;
     } else if (f.fact === 'processChange' || f.fact === 'systemChange') {
       if (!CHANGE.includes(v as ChangeLevel)) continue;
       value = v; key = f.fact;
@@ -89,12 +91,14 @@ export function applyProfileFindings(model: ProcessModel, findings: ProfileFindi
   for (const [key, list] of groups) {
     if (new Set(list.map(x => JSON.stringify(x.value))).size !== 1) continue;
     const fact: Fact<unknown> = { value: list[0].value, status: list.some(x => x.certainty === 'stated') ? 'stated' : 'inferred', sources: list.map(x => x.ref).filter((r, i, all) => all.findIndex(y => y.excerpt === r.excerpt && y.sourceId === r.sourceId) === i) };
-    if (key.startsWith('remote|')) {
-      const sys = next.systems.find(s => s.id === key.slice(7))!;
-      if (sys.remote?.status === 'user-confirmed') continue;
-      if (sys.remote && JSON.stringify(sys.remote.value) === JSON.stringify(fact.value)) continue;
-      changes.push({ fact: `Remote desktop for ${sys.name}`, from: sys.remote?.value ?? null, to: fact.value });
-      sys.remote = fact as Fact<boolean>;
+    if (key.startsWith('remote|') || key.startsWith('uiAllowed|')) {
+      const [field, id] = key.split('|') as ['remote' | 'uiAllowed', string];
+      const sys = next.systems.find(s => s.id === id)!;
+      const cur = sys[field];
+      if (cur?.status === 'user-confirmed') continue;
+      if (cur && JSON.stringify(cur.value) === JSON.stringify(fact.value)) continue;
+      changes.push({ fact: `${field === 'remote' ? 'Remote desktop for' : 'Robots allowed on'} ${sys.name}`, from: cur?.value ?? null, to: fact.value });
+      sys[field] = fact as Fact<boolean>;
     } else {
       const k = key as 'processChange' | 'systemChange';
       const profile = next.meta.profile ?? {};

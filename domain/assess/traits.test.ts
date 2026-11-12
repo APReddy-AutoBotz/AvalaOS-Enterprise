@@ -116,11 +116,12 @@ test('process-level facts: only cued passages are sent, findings need a passage,
   assert.doesNotMatch(segments[0].text, /Scanner/);
   assert.equal(profileSegments(m, [{ key: 'x', segments: [seg('x1', 'We log invoices daily.')] }]).segments.length, 0);
   const f = (fact: any, value: string, segmentId: string, systemId = '') => ({ fact, systemId, value, certainty: 'stated' as const, segmentId, excerpt: 'q' });
-  const r = applyProfileFindings(m, [f('systemChange', 'major', 'c2'), f('remote', 'true', 'c4', 'sap'), f('remote', 'true', 'c4', 'scan'), f('processChange', 'minor', 'c1'), f('processChange', 'none', 'c3'), f('systemChange', 'major', 'nope')], ingest);
+  const r = applyProfileFindings(m, [f('systemChange', 'major', 'c2'), f('remote', 'true', 'c4', 'sap'), f('remote', 'true', 'c4', 'scan'), f('uiAllowed', 'false', 'c4', 'sap'), f('processChange', 'minor', 'c1'), f('processChange', 'none', 'c3'), f('systemChange', 'major', 'nope')], ingest);
   assert.equal(r.model.meta.profile!.systemChange!.value, 'major');
   assert.equal(r.model.meta.profile!.systemChange!.sources[0].sourceId, 'call');
   assert.equal(r.model.systems[0].remote!.value, true);
   assert.equal(r.model.systems[1].remote, undefined);
+  assert.equal(r.model.systems[0].uiAllowed!.value, false);
   assert.equal(r.model.meta.profile!.processChange, undefined, 'disagreeing findings leave it unknown');
   const mine = setProfileFact(m, { fact: 'systemChange', value: 'none' }).model;
   assert.equal(applyProfileFindings(mine, [f('systemChange', 'major', 'c2')], ingest).model.meta.profile!.systemChange!.value, 'none');

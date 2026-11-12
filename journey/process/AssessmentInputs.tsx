@@ -3,7 +3,7 @@
 // say it, entered or corrected by a person where they do not. The result recalculates on each edit.
 import React from 'react';
 import type { AccessStatus, ChangeLevel, Fact, FactStatus, Metric, ProcessModel, Step, SystemRef, TypicalTraits } from '../../domain/processModel/types.ts';
-import { PERIODS, addStep, adoptProcessMetric, assumeEvenEffort, setTypicalTrait, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
+import { PERIODS, addStep, adoptProcessMetric, assumeEvenEffort, setSystemUiAllowed, setTypicalTrait, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
 import { metricNumber, orderedSteps, processMetricCandidates, processMetricSlot, stepsForSystem, typicalTrait } from '../../domain/processModel/selectors.ts';
 import { NON_INTEGRABLE } from '../../domain/assess/scoring.ts';
 import { periodOf, type ProcessAssessment } from '../../domain/assess/process.ts';
@@ -185,12 +185,12 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
 
       <section aria-label="Applications">
         <h3 className="font-display text-base font-semibold text-slate-900">Applications</h3>
-        <p className="text-sm text-slate-500">Where no API is confirmed, the assessment plans on rule-based RPA through the screens.</p>
+        <p className="text-sm text-slate-500">Where no API is confirmed, the assessment plans on rule-based RPA through the screens, unless robots are not allowed on them.</p>
         {model.systems.length === 0 ? <p className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">No applications yet. Add them in the Process stage.</p> : (
           <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
             <table className="w-full text-left text-sm">
               <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                <tr>{['Application', 'API for this work', 'Screens stable', 'Remote desktop', 'Used in'].map(h => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
+                <tr>{['Application', 'API for this work', 'Robots allowed on screens', 'Screens stable', 'Remote desktop', 'Used in'].map(h => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {model.systems.map((s: SystemRef) => {
@@ -200,7 +200,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                   if (NON_INTEGRABLE.includes(s.kind)) return (
                     <tr key={s.id} data-testid="application-row">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.name}</td>
-                      <td colSpan={3} className="px-4 py-3 text-xs text-slate-500">Not applicable: a device, with no API or screens to automate.</td>
+                      <td colSpan={4} className="px-4 py-3 text-xs text-slate-500">Not applicable: a device, with no API or screens to automate.</td>
                       <td className="px-4 py-3 text-xs text-slate-500">{used} {used === 1 ? 'step' : 'steps'}</td>
                     </tr>
                   );
@@ -208,6 +208,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                     <tr key={s.id} data-testid="application-row">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.name}{apis[0]?.name ? <span className="block text-xs font-normal text-slate-500">{apis[0].name}</span> : null}</td>
                       <td className="w-56 px-4 py-3"><Pick cell label={`API of ${s.name}`} value={api === 'unknown' ? '' : api} options={API.map(([v, l]) => [v === 'unknown' ? '' : v, l])} disabled={!canEdit} onChange={v => editor.apply(m => setSystemApi(m, { systemId: s.id, access: (v || 'unknown') as AccessStatus }), `API of ${s.name}`)} /></td>
+                      <td className="w-36 px-4 py-3"><Pick cell label={`Robots allowed on the screens of ${s.name}`} value={known(s.uiAllowed) === null ? '' : String(known(s.uiAllowed))} options={YES_NO} disabled={!canEdit} onChange={v => editor.apply(m => setSystemUiAllowed(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Robots on the screens of ${s.name}`)} />{known(s.uiAllowed) === false && <span className="mt-1 block text-[11px] leading-4 text-rose-700">RPA ruled out here</span>}{quoteOf(s.uiAllowed) && <span className="mt-1 block max-w-[14rem] text-[11px] italic leading-4 text-slate-500">“{quoteOf(s.uiAllowed)!.slice(0, 90)}{quoteOf(s.uiAllowed)!.length > 90 ? '…' : ''}”</span>}</td>
                       <td className="w-36 px-4 py-3"><Pick cell label={`Screens of ${s.name} stable`} value={known(s.uiStable) === null ? '' : String(known(s.uiStable))} options={YES_NO} disabled={!canEdit} onChange={v => editor.apply(m => setSystemUiStable(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Screens of ${s.name}`)} /></td>
                       <td className="w-36 px-4 py-3"><Pick cell label={`${s.name} through a remote desktop`} value={known(s.remote) === null ? '' : String(known(s.remote))} options={YES_NO} disabled={!canEdit} onChange={v => editor.apply(m => setSystemRemote(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Remote desktop for ${s.name}`)} /></td>
                       <td className="px-4 py-3 text-xs text-slate-500">{used} {used === 1 ? 'step' : 'steps'}</td>

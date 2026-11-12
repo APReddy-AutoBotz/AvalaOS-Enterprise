@@ -150,6 +150,8 @@ export interface SystemRef extends Provenance {
   access: AccessMethod[];
   /** Whether the screens are stable enough for UI automation; absent means unknown. */
   uiStable?: Fact<boolean>;
+  /** Whether robots may drive its screens. False when policy or security forbids UI automation (for example SAP GUI scripting disabled). */
+  uiAllowed?: Fact<boolean>;
   /** Reached through a remote desktop (Citrix or similar), where a robot sees only an image of the screen. */
   remote?: Fact<boolean>;
 }

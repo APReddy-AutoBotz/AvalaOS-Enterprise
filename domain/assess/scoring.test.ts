@@ -291,3 +291,19 @@ test('no monetary literal appears in the assessment code', () => {
     assert.doesNotMatch(readFileSync(new URL(file, dir), 'utf8'), money, `${file} contains a monetary literal`);
   }
 });
+
+test('robots not allowed on a system\'s screens: RPA is ruled out there, and a confirmed API takes over', async () => {
+  const { setSystemUiAllowed, setSystemApi } = await import('../processModel/patch.ts');
+  const traits: StepTraits = { rulesComplete: f(true), input: f('structured'), judgment: f(false), physical: f(false), language: f(false), write: f('record') };
+  let m = build([{ traits, systems: [{ api: 'unknown', ui: true }] }]);
+  assert.equal(scoreStep(m, m.steps[0]).winner, 'rpa');
+  m = setSystemUiAllowed(m, { systemId: m.systems[0].id, value: false }).model;
+  const blocked = scoreStep(m, m.steps[0]);
+  assert.equal(scoreOf(blocked, 'rpa'), 0);
+  assert.notEqual(blocked.winner, 'rpa');
+  assert.ok(blocked.scores.find(x => x.approach === 'rpa')!.caps.some(c => /not allowed/.test(c.reason)));
+  assert.equal(blocked.winner, 'api', 'with the screens closed, integration is the route');
+  assert.ok(blocked.questions.some(q => /API/.test(q.question)), 'and the API has to be confirmed');
+  m = setSystemApi(m, { systemId: m.systems[0].id, access: 'confirmed' }).model;
+  assert.equal(scoreStep(m, m.steps[0]).winner, 'api');
+});

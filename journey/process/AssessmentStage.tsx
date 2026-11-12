@@ -4,7 +4,7 @@
 // with a rationale; both persist, and the scoring's own answer stays visible.
 import React from 'react';
 import type { ProcessModel, SystemRef } from '../../domain/processModel/types.ts';
-import { addQuestion, setStepTrait, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
+import { addQuestion, setStepTrait, setSystemUiAllowed, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
 import { hashModel } from '../../domain/processModel/hash.ts';
 import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type ApproachScore, type FactorScore, type StepScore } from '../../domain/assess/scoring.ts';
@@ -437,6 +437,13 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
               <label key={c.trait} className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-700">
                 <span>{c.label}</span>
                 <Select value={traitValue(model, step.id, c.trait)} options={c.options} label={`${c.label} for ${step.name}`} disabled={!canEdit} onChange={v => setTrait(c.trait, v)} />
+              </label>
+            ))}
+            {systems.map(s => (
+              <label key={`${s.id}-allowed`} className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-700">
+                <span>Robots allowed on the screens of {s.name}</span>
+                <Select value={s.uiAllowed && s.uiAllowed.status !== 'unknown' && s.uiAllowed.value !== null ? String(s.uiAllowed.value) : ''} options={yesNo()} label={`Robots allowed on the screens of ${s.name}`} disabled={!canEdit}
+                  onChange={v => editor.apply(m => setSystemUiAllowed(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Robots on the screens of ${s.name}`)} />
               </label>
             ))}
             {systems.map(s => (
