@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import type { Fact, ProcessModel, StepTraits } from '../processModel/types.ts';
 import { emptyModel } from '../processModel/empty.ts';
 import { validateModel } from '../processModel/validate.ts';
-import { setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, addSystem } from '../processModel/patch.ts';
+import { adoptProcessMetric, assumeEvenEffort, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, addSystem } from '../processModel/patch.ts';
+import { processMetric, processMetricCandidates } from '../processModel/selectors.ts';
 import { assessProcess } from './process.ts';
 import { EASE_BANDS, EASE_MULTIPLIERS, EASE_VALUES, EASE_WEIGHTS, PRIORITY } from './priority.ts';
 
@@ -154,4 +155,43 @@ test('an API a person confirms for a system makes API integration the recommenda
 test('the same model always gives the same priority', () => {
   const m = withEffort(setProcessMetric(rpaProcess(4), { kind: 'volume', value: 500, period: 'month' }).model, [3, 2, 2, 1]);
   assert.deepEqual(assessProcess(m).priority, assessProcess(JSON.parse(JSON.stringify(m))).priority);
+});
+
+test('figures the sources state in their own words fill the profile: one candidate is used, several wait for a choice', () => {
+  const m = rpaProcess(2);
+  const metric = (id: string, kind: any, label: string, unit: string, value: number | null, range?: [number, number], appliesTo = 'AP invoices') =>
+    ({ id, kind, label, unit, value, ...(range ? { range } : {}), appliesTo, status: 'stated' as const, sources: src });
+  m.meta.metrics.push(
+    metric('v1', 'volume', 'Monthly invoice volume', 'invoices per month', null, [9000, 10000]),
+    metric('v2', 'volume', 'Sample invoices requested', 'invoices', 10),
+    metric('h1', 'handling_time', 'Clean invoice handling time', 'minutes', null, [10, 12]),
+    metric('h2', 'handling_time', 'Exception invoice handling time', 'minutes', null, [35, 40]),
+    metric('h3', 'handling_time', 'Vendor follow-ups', 'hour per day', 1),
+    metric('e1', 'exception_rate', 'Invoices with an exception', 'percent', 28),
+  );
+  assert.equal(processMetric(m, 'volume')!.id, 'v1');
+  assert.deepEqual(assessProcess(m).priority.standardPath.value!.share, 0.72);
+  assert.equal(assessProcess(m).priority.standardPath.value!.caution, true);
+  assert.equal(processMetric(m, 'handling_time'), undefined);
+  assert.deepEqual(processMetricCandidates(m, 'handling_time').map(x => x.id), ['h1', 'h2']);
+  const chosen = adoptProcessMetric(m, { metricId: 'h1' }).model;
+  assert.equal(processMetric(chosen, 'handling_time')!.id, 'h1');
+  assert.equal(processMetric(adoptProcessMetric(chosen, { metricId: 'h2' }).model, 'handling_time')!.id, 'h2');
+  // Correcting the figure keeps its quotes and does not add a second one.
+  const corrected = setProcessMetric(m, { kind: 'volume', value: 9500, period: 'month' }).model;
+  assert.equal(corrected.meta.metrics.filter(x => x.kind === 'volume').length, 2);
+  assert.deepEqual([processMetric(corrected, 'volume')!.id, processMetric(corrected, 'volume')!.sources.length], ['v1', 1]);
+});
+
+test('spreading the time per case is a recorded assumption: it gives a value and is flagged until confirmed', () => {
+  let m = setProcessMetric(rpaProcess(4), { kind: 'volume', value: 1000, period: 'month' }).model;
+  m = setStepTrait(m, { stepId: 's-0', trait: 'effortMinutes', value: 2 }).model;
+  m = assumeEvenEffort(m, { minutesPerCase: 11 }).model;
+  assert.deepEqual(m.steps.map(s => [s.traits!.effortMinutes!.value, s.traits!.effortMinutes!.status]), [[2, 'user-confirmed'], [3, 'assumed'], [3, 'assumed'], [3, 'assumed']]);
+  assert.equal(assessProcess(m).priority.value.computable, false, 'share of cases is still needed');
+  for (const s of m.steps) m = setStepTrait(m, { stepId: s.id, trait: 'sharePercent', value: 100 }).model;
+  const v = assessProcess(m).priority.value.value!;
+  assert.equal(Math.round(v.mid), 1000 * 12 * 11 / 60);
+  assert.equal(v.assumedSteps, 3);
+  assert.throws(() => assumeEvenEffort(m, { minutesPerCase: 11 }), /already has a time/);
 });

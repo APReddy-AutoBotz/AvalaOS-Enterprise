@@ -144,9 +144,12 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
   for (const name of ['Check invoice totals', 'Post invoice in SAP']) {
     await inputs.getByLabel(`Rules stated in full and stable for ${name}`).selectOption({ label: 'Yes' });
     await inputs.getByLabel(`Form of the input for ${name}`).selectOption({ label: 'Structured' });
-    await inputs.getByLabel(`Minutes per case for ${name}`).fill('3');
-    await inputs.getByLabel(`Minutes per case for ${name}`).blur();
   }
+  // The time per case, spread over the steps as an assumption, then one step confirmed by hand.
+  await inputs.getByLabel('Handling time').fill('6');
+  await inputs.getByLabel('Handling time').blur();
+  await inputs.getByRole('button', { name: 'Spread 6 min evenly over 2 steps' }).click();
+  await expect(inputs.getByLabel('Minutes per case for Post invoice in SAP')).toHaveValue('3');
   await inputs.getByRole('button', { name: /Set blank/ }).click();
   await inputs.getByLabel('Volume', { exact: true }).fill('2000');
   await inputs.getByLabel('Volume', { exact: true }).blur();
@@ -160,6 +163,7 @@ test('inputs entered by hand give value and a priority, persist, and a major cha
   await expect(page.getByTestId('priority-quadrant')).toHaveText('Quick win');
   await expect(page.getByTestId('value')).toContainText('2,400');
   await expect(page.getByTestId('readiness')).toContainText('Ready to automate');
+  await expect(page.getByTestId('value-assumed')).toContainText('2 steps');
   await shot(page, '33-assessment-priority');
 
   await page.reload();

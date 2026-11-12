@@ -6,7 +6,8 @@
 // implementation, then benefit, then a value-against-effort placement), extended to cover AI and
 // agents, and with the 80/20 rule applied twice: to the cases (standard path first) and to the
 // steps (the few that carry most of the effort first).
-import type { ChangeLevel, Fact, InputForm, Metric, ProcessModel } from '../processModel/types.ts';
+import type { ChangeLevel, Fact, InputForm, ProcessModel } from '../processModel/types.ts';
+import { metricNumber, processMetric } from '../processModel/selectors.ts';
 import type { StepScore } from './scoring.ts';
 import type { Caution, Computed, Range } from './process.ts';
 
@@ -60,7 +61,7 @@ export interface Priority {
   readiness: Readiness;
   /** Null when no step is recommended for automation. */
   ease: Ease | null;
-  value: Computed<{ hours: Range; mid: number; fte: number; high: boolean }>;
+  value: Computed<{ hours: Range; mid: number; fte: number; high: boolean; /** Steps whose time is a recorded assumption, not a stated or confirmed fact. */ assumedSteps: number }>;
   // Both variants name every field, so narrowing on `placed` works without strictNullChecks.
   placement: { placed: true; quadrant: Quadrant; reason?: undefined } | { placed: false; reason: string; quadrant?: undefined };
   /** Cases: the share that follows the standard path, when the exception rate is known. */
@@ -73,10 +74,6 @@ export interface Priority {
 const band = (bands: Bands, n: number) => bands.find(([limit]) => n <= limit)![1];
 const knownFact = <T>(f: Fact<T> | undefined): T | null => (f && f.status !== 'unknown' && f.value !== null ? f.value : null);
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const isProcessLevel = (x: Metric) => !x.appliesTo || x.appliesTo === 'process';
-export const processMetric = (m: ProcessModel, kind: Metric['kind']): Metric | undefined =>
-  m.meta.metrics.find(x => x.kind === kind && isProcessLevel(x) && x.status !== 'unknown' && (x.value !== null || Boolean(x.range)));
-
 const CHANGE_TEXT: Record<ChangeLevel | 'unknown', string> = { none: 'no change is expected', minor: 'minor change is expected', major: 'major change is expected', unknown: 'nobody has said whether change is expected' };
 
 function easeOf(model: ProcessModel, automated: StepScore[]): Ease | null {
@@ -147,7 +144,8 @@ export function prioritise(model: ProcessModel, ctx: { scored: StepScore[]; caut
   if (ctx.hours.computable) {
     const hours = ctx.hours.value!.automatable;
     const mid = (hours[0] + hours[1]) / 2;
-    value = { computable: true, value: { hours, mid, fte: mid / PRIORITY.hoursPerFte, high: mid >= PRIORITY.valueHoursPerYear } };
+    const assumedSteps = ctx.scored.filter(x => model.steps.find(st => st.id === x.stepId)?.traits?.effortMinutes?.status === 'assumed').length;
+    value = { computable: true, value: { hours, mid, fte: mid / PRIORITY.hoursPerFte, high: mid >= PRIORITY.valueHoursPerYear, assumedSteps } };
   }
 
   let placement: Priority['placement'];
@@ -162,7 +160,7 @@ export function prioritise(model: ProcessModel, ctx: { scored: StepScore[]; caut
   const ex = processMetric(model, 'exception_rate');
   let standardPath: Priority['standardPath'] = { computable: false, reason: 'The share of cases that leave the standard path is not known.' };
   if (ex) {
-    const rate = Math.min(100, Math.max(0, ex.value ?? (ex.range![0] + ex.range![1]) / 2));
+    const rate = Math.min(100, Math.max(0, metricNumber(ex)!));
     const share = 1 - rate / 100;
     const caution = share < PRIORITY.pareto;
     standardPath = { computable: true, value: { share, caution, text: caution

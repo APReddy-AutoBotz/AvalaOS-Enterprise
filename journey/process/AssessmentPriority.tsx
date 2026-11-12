@@ -84,6 +84,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
             <>
               <p className="mt-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{range(p.value.value!.hours)}</span><span className="text-sm text-slate-500"> hours a year</span></p>
               <p className="mt-1.5 text-sm leading-6 text-slate-700">Hands-on time automation could take, about {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {PRIORITY.hoursPerFte.toLocaleString('en')} hours a year.</p>
+              {p.value.value!.assumedSteps > 0 && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900" data-testid="value-assumed">Rests on an assumption: the time of {p.value.value!.assumedSteps} {p.value.value!.assumedSteps === 1 ? 'step' : 'steps'} is the time per case spread evenly. Confirm the step times to firm this up.</p>}
               <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">{p.value.value!.high ? 'High' : 'Lower'} value: the line is {PRIORITY.valueHoursPerYear.toLocaleString('en')} hours a year.</p>
             </>
           ) : <NotYet reason={p.value.reason ?? ''} onInputs={onInputs} />}
