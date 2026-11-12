@@ -99,8 +99,8 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
 }
 
 /** Answers to several questions at once: the AI proposes which of the listed questions the text answers, with the words that answer each; only ticked ones are written. */
-export function SeveralAnswers({ model, items, editor, ctx }: { model: ProcessModel; items: TriageItem[]; editor: ModelEditor; ctx: NotesContext }) {
-  const [notes, setNotes] = React.useState('');
+export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '' }: { model: ProcessModel; items: TriageItem[]; editor: ModelEditor; ctx: NotesContext; initialNotes?: string }) {
+  const [notes, setNotes] = React.useState(initialNotes);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [proposals, setProposals] = React.useState<Proposal[] | null>(null);

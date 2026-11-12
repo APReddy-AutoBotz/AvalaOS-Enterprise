@@ -376,3 +376,25 @@ test('an admin uses the company\'s section structure: renamed, hidden and own se
   const [word] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
   expect(readFileSync(await word.path()).subarray(0, 2).toString()).toBe('PK');
 });
+
+test('question packs: one file per owner to download, and a returned pack is read back for review', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Documents');
+  await page.getByRole('button', { name: 'Answer them' }).click();
+  const packs = page.getByTestId('question-packs');
+  await expect(packs.getByTestId('question-pack').first()).toBeVisible();
+  await shot(page, '47-question-packs');
+  const owner = (await packs.getByTestId('question-pack').first().locator('p').first().textContent())!;
+  const [word] = await Promise.all([page.waitForEvent('download'), packs.getByRole('button', { name: `Word pack for ${owner}` }).click()]);
+  expect(word.suggestedFilename()).toMatch(/questions for .*\.docx$/);
+  expect(readFileSync(await word.path()).subarray(0, 2).toString()).toBe('PK');
+  const [md] = await Promise.all([page.waitForEvent('download'), packs.getByRole('button', { name: `Markdown pack for ${owner}` }).click()]);
+  const text = readFileSync(await md.path(), 'utf8');
+  expect(text).toContain('| Your answer |');
+  // The owner fills in the first row and sends it back.
+  const answered = text.replace(/^(\| [BTF]1 \|.*\|)\s+\|$/m, '$1 The AP Team Lead decides. |');
+  expect(answered).not.toBe(text);
+  await packs.getByLabel(`Read replies for ${owner}`).setInputFiles({ name: 'reply.md', mimeType: 'text/markdown', buffer: Buffer.from(answered) });
+  await expect(page.getByTestId('pack-reply-count')).toContainText('1 answered row');
+  await expect(page.getByTestId('pack-reply')).toContainText('The AP Team Lead decides.');
+});

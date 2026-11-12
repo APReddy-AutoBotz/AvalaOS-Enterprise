@@ -12,6 +12,8 @@ import type { ModelEditor } from './useModelEditor.ts';
 import { AnswerBox, SeveralAnswers, type NotesContext } from './AnswerFromNotes.tsx';
 import { answerFromNotes, notesSegments, proposalsFrom, type NoteFinding } from '../../domain/questions/notes.ts';
 import { messageOf } from '../ui.tsx';
+import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
+import type { Branding } from '../../domain/docs/branding.ts';
 
 type Op = (m: ProcessModel) => OpResult;
 /** Runs operations in order as one edit. */
@@ -67,8 +69,9 @@ export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: s
   }
 }
 
-export function GapsAssistant({ model, editor, canEdit, onClose, notes }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean } }) {
+export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean }; branding?: Branding }) {
   const [scope, setScope] = React.useState<'one' | 'several'>('one');
+  const [reply, setReply] = React.useState<ImportedReply | null>(null);
   const ai = Boolean(notes?.aiAvailable && canEdit);
   const t = React.useMemo(() => triage(model, assessProcess(model)), [model]);
   const [group, setGroup] = React.useState<QGroup | 'all'>('all');
@@ -108,6 +111,22 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes }: { mode
           <p className="text-sm text-emerald-900"><span className="font-semibold">{t.alreadyKnown.length} {t.alreadyKnown.length === 1 ? 'question is' : 'questions are'} already answered by the model</span>, for example: {t.alreadyKnown[0].why}</p>
           {canEdit && <Button variant="secondary" onClick={() => editor.apply(all(...t.alreadyKnown.map(k => (m: ProcessModel) => closeQuestions(m, { questionIds: [k.questionId], answer: `Already recorded: ${k.why}` }))), `Closed ${t.alreadyKnown.length} questions the model already answers`)}>Close them</Button>}
         </div>
+      )}
+
+      <QuestionPacks model={model} t={t} branding={branding} canImport={canEdit} onImported={r => setReply(r)} />
+
+      {reply && (
+        <section className="rounded-2xl border border-[#B58500]/40 bg-white p-6 shadow-sm" aria-label="Replies read" data-testid="pack-reply">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h4 className="font-display text-lg font-semibold text-slate-900">Replies from {reply.label}</h4>
+              <p className="mt-1 text-sm text-slate-600" data-testid="pack-reply-count">{reply.answered ? `${reply.answered} answered ${reply.answered === 1 ? 'row' : 'rows'} read from the file.` : 'No answered rows; the whole reply is read as notes.'} {ai ? 'Check what each answer settles before saving.' : 'Matching answers to questions needs the AI service, which is not available here; the replies are shown so you can answer each question yourself.'}</p>
+            </div>
+            <button type="button" className="text-sm text-slate-600 hover:underline" onClick={() => setReply(null)}>Close</button>
+          </div>
+          {ai ? <div className="mt-4" key={reply.label}><SeveralAnswers model={model} items={reply.items.length ? reply.items : list} editor={editor} ctx={notes!} initialNotes={reply.notes} /></div>
+            : <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{reply.notes}</pre>}
+        </section>
       )}
 
       <div className="flex flex-wrap items-center gap-3 text-sm">
