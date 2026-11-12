@@ -95,6 +95,7 @@ npm run dev              # local dev server on port 3000
 - Step facts can be answered once for the whole process (`meta.profile.typical`, `setTypicalTrait`); read a step's fact with `stepTrait` (`domain/processModel/selectors.ts`), which falls back to that answer, never `step.traits` directly. A process known only as a whole is assessed as one real step named after it.
 - Portfolio (`domain/assess/portfolio.ts`, `journey/pages/Portfolio.tsx`): every process's own assessment side by side, ordered by placement then hours, with the 80/20 of hours across processes. It reads models through the store and stores nothing.
 - Workspace settings (`domain/assess/settings.ts`, table `workspace_settings`, admins write): hours per full-time person, the value line and the ease line. Pass them to `assessProcess(model, { settings })`; they change value, placement and the portfolio, never the recommended approach.
+- Cost and payback (`domain/assess/payback.ts`): only from the hourly cost, build cost and running cost a person enters (stored as `cost` and `rate` entries in `assessments.overrides`). An upper bound on hours gives only the best-case payback.
 - Next: read the profile facts (change expected, remote desktop) from sources; portfolio view across processes; cost and payback; retire the old assess screens (WP2.4); then Phase 3 documents and flows.
 
 ## Definition of done for a pull request

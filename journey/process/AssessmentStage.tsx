@@ -10,7 +10,8 @@ import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type ApproachScore, type FactorScore, type StepScore } from '../../domain/assess/scoring.ts';
 import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
-import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
+import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
+import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import { Button, cx, ErrorNote, messageOf } from '../ui.tsx';
@@ -150,7 +151,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
         <AssessmentWhy model={editor.model} result={result} onOpenStep={setOpen} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits}
           newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} />
       )}
-      <Benefit result={result} decisions={d} canEdit={canEdit && decisions !== null} me={me} onRate={rate => { try { save(withRate(d, rate)); } catch (e) { setError((e as Error).message); } }} />
+      <Benefit result={result} decisions={d} canEdit={canEdit && decisions !== null} me={me} onSave={save} />
 
       <section aria-label="Steps">
         <div className="mb-3 flex items-end justify-between gap-3">
@@ -277,31 +278,60 @@ function Ranking({ result }: { result: ProcessAssessment }) {
   );
 }
 
-function Benefit({ result, decisions, canEdit, me, onRate }: { result: ProcessAssessment; decisions: Decisions; canEdit: boolean; me: string; onRate: (r: Decisions['rate']) => void }) {
-  const [amount, setAmount] = React.useState(decisions.rate ? String(decisions.rate.amount) : '');
+function Benefit({ result, decisions, canEdit, me, onSave }: { result: ProcessAssessment; decisions: Decisions; canEdit: boolean; me: string; onSave: (d: Decisions) => void }) {
+  const text = (n: number | null | undefined) => (n === null || n === undefined ? '' : String(n));
   const [currency, setCurrency] = React.useState(decisions.rate?.currency ?? '');
-  React.useEffect(() => { setAmount(decisions.rate ? String(decisions.rate.amount) : ''); setCurrency(decisions.rate?.currency ?? ''); }, [decisions.rate]);
-  const tile = (label: string, body: React.ReactNode) => (
-    <div className="rounded-xl bg-slate-50 p-4">
+  const [rate, setRate] = React.useState(text(decisions.rate?.amount));
+  const [build, setBuild] = React.useState(text(decisions.costs?.build));
+  const [running, setRunning] = React.useState(text(decisions.costs?.running));
+  const [problem, setProblem] = React.useState<string | null>(null);
+  React.useEffect(() => { setCurrency(decisions.rate?.currency ?? ''); setRate(text(decisions.rate?.amount)); setBuild(text(decisions.costs?.build)); setRunning(text(decisions.costs?.running)); }, [decisions.rate, decisions.costs]);
+  const pb = paybackOf(result.priority.value, decisions.rate, decisions.costs);
+  const v = result.priority.value;
+  const cur = pb.computable ? pb.value!.currency : decisions.rate?.currency ?? '';
+  const money = (n: number) => `${cur} ${Math.round(n).toLocaleString('en')}`;
+  const span = (r: [number, number], exact: boolean) => (exact ? (Math.round(r[0]) === Math.round(r[1]) ? money(r[0]) : `${money(r[0])} – ${Math.round(r[1]).toLocaleString('en')}`) : `Up to ${money(r[1])}`);
+  const months = (m: number) => (m < 1 ? 'under a month' : `${m.toLocaleString('en', { maximumFractionDigits: 1 })} months`);
+  const tile = (label: string, body: React.ReactNode, note?: React.ReactNode, testid?: string) => (
+    <div className="rounded-xl bg-slate-50 p-4" data-testid={testid}>
       <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
       <dd className="mt-1.5 text-sm leading-6 text-slate-900">{body}</dd>
+      {note && <p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>}
     </div>
   );
-  const missing = (reason: string | undefined) => <span className="text-slate-500">Not computed yet. {reason}</span>;
+  const big = (t: string) => <span className="font-display text-2xl font-semibold">{t}</span>;
+  const missing = (t: string) => <span className="text-slate-500">{t}</span>;
+  const num = (t: string) => (t.trim() === '' ? null : Number(t.replace(/,/g, '')));
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault(); setProblem(null);
+    try {
+      const amount = num(rate);
+      let next = withRate(decisions, amount === null ? null : { amount, currency: currency.trim().toUpperCase(), enteredBy: me || 'you' });
+      next = withCosts(next, { build: num(build), running: num(running), enteredBy: me || 'you' });
+      onSave(next);
+    } catch (err) { setProblem((err as Error).message); }
+  };
+  const input = 'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm tabular-nums focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
+  const p = pb.computable ? pb.value! : null;
   return (
     <section aria-label="Benefit" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="font-display text-base font-semibold text-slate-900">Benefit</h3>
-      <p className="mt-1 text-sm text-slate-500">From the volume and the time per step in the inputs, and a cost rate you enter. Nothing is assumed.</p>
-      <dl className="mt-4 grid gap-3 md:grid-cols-3">
-        {tile('Effort that could be automated', result.potential.computable ? <span className="font-display text-2xl font-semibold">{pct(result.potential.value!)}</span> : missing(result.potential.reason))}
-        {tile('Hands-on hours a year', result.hours.computable ? <><span className="font-display text-2xl font-semibold">{range(result.hours.value!.automatable)}</span> of {range(result.hours.value!.today)}</> : result.priority.value.computable ? <><span className="font-display text-2xl font-semibold">Up to {Math.round(result.priority.value.value!.hours[1]).toLocaleString('en')}</span><span className="block text-xs text-slate-500">An upper bound. {result.hours.reason}</span></> : missing(result.hours.reason))}
-        {tile('Value of those hours', result.money.computable ? <><span className="font-display text-2xl font-semibold">{result.money.value!.currency} {range(result.money.value!.automatable)}</span> a year</> : missing(result.money.reason))}
+      <h3 className="font-display text-base font-semibold text-slate-900">Benefit and payback</h3>
+      <p className="mt-1 text-sm text-slate-500">From the hours above and the figures you enter here. Nothing is assumed; where the hours are an upper bound, so is everything that follows.</p>
+      <dl className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        {tile('Hours a year', v.computable ? big(v.value!.exact ? range(v.value!.hours) : `Up to ${Math.round(v.value!.hours[1]).toLocaleString('en')}`) : missing(v.reason ?? ''), v.computable && !v.value!.exact ? 'An upper bound. Step times and shares would make it a calculated range.' : undefined)}
+        {tile('Value a year', p ? big(span(p.value, p.exact)) : missing(pb.reason ?? ''), p ? `At ${cur} ${decisions.rate!.amount.toLocaleString('en')} an hour, entered by ${decisions.rate!.enteredBy}.` : undefined, 'benefit-value')}
+        {tile('Payback', p ? (p.months.best === null ? missing(p.missing.includes('the build cost') ? 'Enter the build cost.' : 'The savings do not cover the running cost.') : big(p.months.worst === null ? `From ${months(p.months.best)}` : p.months.worst === 'never' ? `${months(p.months.best)} at best` : p.months.best === p.months.worst ? months(p.months.best) : `${months(p.months.best)} – ${months(p.months.worst)}`)) : missing('Needs the value a year and the build cost.'),
+          p && p.months.worst === 'never' ? 'At the low end of the hours the savings do not cover the running cost.' : p && p.months.best !== null && p.months.worst === null ? 'The soonest it could be. The latest needs a calculated range of hours.' : undefined, 'benefit-payback')}
+        {tile(`Net over ${PAYBACK_YEARS} years`, p ? big(p.exact ? span(p.net3y, true) : `Up to ${money(p.net3y[1])}`) : missing('Needs the value a year.'), p && p.missing.length ? `Without ${p.missing.join(' and ')}.` : undefined)}
       </dl>
       {canEdit && (
-        <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); const n = Number(amount); onRate(amount.trim() ? { amount: n, currency: currency.trim().toUpperCase(), enteredBy: me || 'you' } : null); }}>
-          <input aria-label="Currency" placeholder="Currency" value={currency} onChange={e => setCurrency(e.target.value)} className="w-24 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-          <input aria-label="Cost per hour" placeholder="Cost per hour" inputMode="decimal" value={amount} onChange={e => setAmount(e.target.value)} className="w-32 rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm" />
-          <Button type="submit" variant="ghost">{decisions.rate ? 'Update rate' : 'Set rate'}</Button>
+        <form className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-2 lg:grid-cols-[6rem_repeat(3,minmax(0,1fr))_auto] lg:items-end" onSubmit={submit}>
+          <label className="text-xs font-semibold text-slate-600">Currency<input aria-label="Currency" placeholder="INR" value={currency} onChange={e => setCurrency(e.target.value)} className={cx(input, 'mt-1 w-full uppercase')} /></label>
+          <label className="text-xs font-semibold text-slate-600">Cost of an hour of this work<input aria-label="Cost per hour" inputMode="decimal" value={rate} onChange={e => setRate(e.target.value)} className={cx(input, 'mt-1 w-full')} /></label>
+          <label className="text-xs font-semibold text-slate-600">Build cost, once<input aria-label="Build cost" inputMode="decimal" value={build} onChange={e => setBuild(e.target.value)} className={cx(input, 'mt-1 w-full')} /></label>
+          <label className="text-xs font-semibold text-slate-600">Running cost a year<input aria-label="Running cost a year" inputMode="decimal" value={running} onChange={e => setRunning(e.target.value)} placeholder="Licences, hosting, support" className={cx(input, 'mt-1 w-full')} /></label>
+          <Button type="submit" variant="secondary">Save figures</Button>
+          {problem && <p className="text-sm text-red-700 sm:col-span-2 lg:col-span-5">{problem}</p>}
         </form>
       )}
     </section>

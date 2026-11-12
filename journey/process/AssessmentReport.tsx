@@ -6,6 +6,7 @@ import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, CAPS, COMPLEXITY_PENALTY, FIT, HUMAN_FLOOR, WEIGHTS, type Approach, type StepScore } from '../../domain/assess/scoring.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { effectiveApproach, type Decisions } from '../../domain/assess/decisions.ts';
+import { paybackOf } from '../../domain/assess/payback.ts';
 import { Button, cx } from '../ui.tsx';
 import { EASE_BANDS, EASE_WEIGHTS, QUADRANT } from '../../domain/assess/priority.ts';
 import { EASE_LABEL, orList, people as asPeople, valueText } from './AssessmentPriority.tsx';
@@ -43,6 +44,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
   const nameOf = (id: string) => model.steps.find(s => s.id === id)?.name ?? id;
   const fired = result.cautions.filter(c => c.fired);
   const pr = result.priority;
+  const pb = paybackOf(pr.value, decisions.rate, decisions.costs);
 
   return (
     <div>
@@ -156,10 +158,12 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
             <tbody>
               <tr><td className={td}>Effort that could be automated</td><td className={td}>{result.potential.computable ? pct(result.potential.value!) : `Not computed. ${result.potential.reason}`}</td></tr>
               <tr><td className={td}>Hands-on hours a year</td><td className={td}>{result.hours.computable ? `${range(result.hours.value!.automatable)} could be automated, of ${range(result.hours.value!.today)} today` : `Not computed. ${result.hours.reason}`}</td></tr>
-              <tr><td className={td}>Value of those hours</td><td className={td}>{result.money.computable ? `${result.money.value!.currency} ${range(result.money.value!.automatable)} a year. ${result.money.note ?? ''}` : `Not computed. ${result.money.reason}`}</td></tr>
+              <tr><td className={td}>Value a year</td><td className={td}>{pb.computable ? `${pb.value!.exact ? '' : 'Up to '}${pb.value!.currency} ${Math.round(pb.value!.value[pb.value!.exact ? 0 : 1]).toLocaleString('en')}${pb.value!.exact && Math.round(pb.value!.value[0]) !== Math.round(pb.value!.value[1]) ? ` – ${Math.round(pb.value!.value[1]).toLocaleString('en')}` : ''}, at ${decisions.rate!.currency} ${decisions.rate!.amount} an hour entered by ${decisions.rate!.enteredBy}.` : `Not computed. ${pb.reason}`}</td></tr>
+              <tr><td className={td}>Build and running cost</td><td className={td}>{decisions.costs ? `Build ${decisions.costs.build === null ? 'not entered' : `${pb.value?.currency ?? ''} ${decisions.costs.build.toLocaleString('en')}`}; running ${decisions.costs.running === null ? 'not entered' : `${pb.value?.currency ?? ''} ${decisions.costs.running.toLocaleString('en')} a year`}; entered by ${decisions.costs.enteredBy}.` : 'Not entered.'}</td></tr>
+              <tr><td className={td}>Payback</td><td className={td}>{pb.computable && pb.value!.months.best !== null ? (pb.value!.months.worst === null ? `From ${pb.value!.months.best} months at best; the latest needs a calculated range of hours.` : pb.value!.months.worst === 'never' ? `${pb.value!.months.best} months at best; at the low end of the hours it does not pay back.` : `${pb.value!.months.best}${pb.value!.months.worst !== pb.value!.months.best ? ` to ${pb.value!.months.worst}` : ''} months.`) : 'Not computed: needs the value a year and the build cost.'}</td></tr>
             </tbody>
           </table>
-          <p className="mt-2 text-xs text-slate-500">Figures come only from volume and effort stated in the sources and a cost rate entered by a person. Build cost is not estimated.</p>
+          <p className="mt-2 text-xs text-slate-500">Figures come only from volume and effort stated in the sources and a cost rate entered by a person. Build and running costs are only those entered by a person; none is estimated.</p>
         </section>
 
         <section>

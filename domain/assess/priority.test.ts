@@ -298,3 +298,24 @@ test('the organisation lines change value and placement, and nothing else', asyn
   assert.deepEqual(settingsFrom({ hoursPerFte: 1800, easeLine: 500, other: 1 }), { ...DEFAULT_SETTINGS, hoursPerFte: 1800 });
   assert.throws(() => validateSettings({ ...DEFAULT_SETTINGS, hoursPerFte: 100 }), /800 to 3,000/);
 });
+
+test('payback comes only from entered figures, and an upper bound gives only the best case', async () => {
+  const { paybackOf } = await import('./payback.ts');
+  const { withCosts, decisionsFromEntries, decisionsToEntries, emptyDecisions } = await import('./decisions.ts');
+  let m = setProcessMetric(rpaProcess(2), { kind: 'volume', value: 500, period: 'month' }).model;
+  m = setProcessMetric(m, { kind: 'handling_time', value: 6 }).model;
+  const bound = assessProcess(m).priority.value; // up to 600 hours
+  const rate = { amount: 20, currency: 'XYZ' };
+  assert.match((paybackOf(bound, null, null) as any).reason, /cost of an hour/);
+  const p1 = paybackOf(bound, rate, { build: 6000, running: 2000, enteredBy: 'x' }).value!;
+  assert.deepEqual([p1.exact, p1.value, p1.savings, p1.months.best, p1.months.worst], [false, [0, 12000], [-2000, 10000], 7.2, null]);
+  const exact = assessProcess(withEffort(m, [3, 3])).priority.value; // 600 hours exactly
+  const p2 = paybackOf(exact, rate, { build: 6000, running: 2000, enteredBy: 'x' }).value!;
+  assert.deepEqual([p2.exact, p2.months.best, p2.months.worst, p2.net3y], [true, 7.2, 7.2, [24000, 24000]]);
+  assert.equal(paybackOf(exact, rate, { build: 6000, running: 13000, enteredBy: 'x' }).value!.months.worst, 'never');
+  assert.deepEqual(paybackOf(exact, rate, null).value!.missing, ['the build cost', 'the running cost a year']);
+  const d = withCosts(emptyDecisions(), { build: 6000, running: null, enteredBy: 'lead' });
+  assert.deepEqual(decisionsFromEntries(decisionsToEntries(d)).costs, { build: 6000, running: null, enteredBy: 'lead' });
+  assert.equal(withCosts(d, { build: null, running: null, enteredBy: 'lead' }).costs, null);
+  assert.throws(() => withCosts(d, { build: -1, running: null, enteredBy: 'x' }), /zero or more/);
+});
