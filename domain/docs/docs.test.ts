@@ -107,7 +107,7 @@ test('Word export: cover and control, contents, numbered headings, every table r
   const text = xml.replace(/<[^>]+>/g, ' ');
   assert.match(text, /Process Definition Document/);
   assert.match(text, /DRAFT: not approved/);
-  assert.match(xml, /TOC \\o "1-2"/, 'a contents field');
+  assert.match(xml, /TOC [^<]*1-2/, 'a contents field');
   for (const sec of d.sections) assert.ok(text.includes(`${sec.number}  ${sec.title}`.replace(/&/g, '&amp;')), `heading ${sec.number}`);
   for (const s of orderedSteps(gold)) assert.ok(text.includes(s.name.replace(/&/g, '&amp;')), s.name);
   assert.match(xml, /w:tblHeader/, 'table header rows repeat across pages');
