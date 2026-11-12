@@ -3,8 +3,8 @@
 // say it, entered or corrected by a person where they do not. The result recalculates on each edit.
 import React from 'react';
 import type { AccessStatus, ChangeLevel, Fact, FactStatus, Metric, ProcessModel, Step, SystemRef } from '../../domain/processModel/types.ts';
-import { PERIODS, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
-import { orderedSteps, stepsForSystem } from '../../domain/processModel/selectors.ts';
+import { PERIODS, adoptProcessMetric, assumeEvenEffort, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
+import { metricNumber, orderedSteps, processMetricCandidates, processMetricSlot, stepsForSystem } from '../../domain/processModel/selectors.ts';
 import { periodOf, type ProcessAssessment } from '../../domain/assess/process.ts';
 import { Button, cx } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
@@ -45,7 +45,13 @@ function Pick({ value, options, onChange, label, disabled, cell }: { value: stri
   );
 }
 
-function ProfileField({ label, hint, status, quote, children }: { label: string; hint: string; status: FactStatus; quote?: string; children: React.ReactNode }) {
+const figure = (m: Metric) => `${m.value !== null ? m.value.toLocaleString('en') : `${m.range![0].toLocaleString('en')} to ${m.range![1].toLocaleString('en')}`} ${m.unit}`;
+
+function ProfileField({ label, hint, status, quote, children, from, candidates, onChoose }: {
+  label: string; hint: string; status: FactStatus; quote?: string; children: React.ReactNode;
+  /** The figure from the sources that fills this field. */ from?: Metric;
+  /** Figures from the sources that could fill it, when there is more than one. */ candidates?: Metric[]; onChoose?: (id: string) => void;
+}) {
   return (
     <div className={cx('rounded-2xl border bg-white p-4', status === 'unknown' ? 'border-amber-200' : 'border-slate-200')} data-testid="profile-field">
       <div className="flex items-start justify-between gap-2">
@@ -53,6 +59,15 @@ function ProfileField({ label, hint, status, quote, children }: { label: string;
         <StatusBadge status={status} />
       </div>
       <div className="mt-2.5">{children}</div>
+      {from && from.sources.length > 0 && <p className="mt-2 text-xs font-medium text-sky-800">From your sources: {from.label}, {figure(from)}</p>}
+      {candidates && candidates.length > 1 && (
+        <div className="mt-2.5 rounded-xl bg-sky-50 p-2.5" data-testid="candidates">
+          <p className="text-xs font-semibold text-sky-900">Your sources give {candidates.length} figures. Which one applies?</p>
+          <ul className="mt-1.5 space-y-1">
+            {candidates.map(c => <li key={c.id}><button type="button" disabled={!onChoose} onClick={() => onChoose?.(c.id)} className="w-full rounded-lg bg-white px-2.5 py-1.5 text-left text-xs text-slate-800 ring-1 ring-inset ring-sky-200 hover:ring-[#002C4B] disabled:opacity-70"><span className="font-semibold">{figure(c)}</span> · {c.label}</button></li>)}
+          </ul>
+        </div>
+      )}
       <p className="mt-2 text-xs leading-5 text-slate-500">{hint}</p>
       {quote && <p className="mt-1.5 border-l-2 border-sky-200 pl-2 text-xs italic leading-5 text-slate-500">“{quote.length > 140 ? `${quote.slice(0, 140)}…` : quote}”</p>}
     </div>
@@ -78,7 +93,10 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
 }) {
   const steps = orderedSteps(model);
   const inputs = result.priority.inputs;
-  const metric = (kind: Metric['kind']) => model.meta.metrics.find(x => x.kind === kind && (!x.appliesTo || x.appliesTo === 'process'));
+  const metric = (kind: Metric['kind']) => processMetricSlot(model, kind);
+  // Offered only while the field is empty and the sources give more than one figure for it.
+  const choices = (kind: Metric['kind']) => (metric(kind) ? undefined : processMetricCandidates(model, kind));
+  const choose = canEdit ? (id: string) => { editor.apply(m => adoptProcessMetric(m, { metricId: id }), 'Chose the figure that applies to the process'); } : undefined;
   const volume = metric('volume'), handling = metric('handling_time'), people = metric('fte'), exceptions = metric('exception_rate');
   const [period, setPeriod] = React.useState<Period>((volume && periodOf(volume) as Period) || 'month');
   React.useEffect(() => { const p = volume && periodOf(volume); if (p) setPeriod(p as Period); }, [volume?.unit, volume?.period]);
@@ -87,6 +105,11 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
   const profile = model.meta.profile ?? {};
   const stepMinutes = steps.reduce((t, s) => t + (known(s.traits?.effortMinutes) ?? 0) * ((known(s.traits?.sharePercent) ?? 100) / 100), 0);
   const blankShares = steps.filter(s => known(s.traits?.sharePercent) === null);
+  const blankEffort = steps.filter(s => s.taskType !== 'service' && known(s.traits?.effortMinutes) === null);
+  const knownMinutes = steps.reduce((t, s) => t + (s.taskType !== 'service' ? known(s.traits?.effortMinutes) ?? 0 : 0), 0);
+  const handlingNumber = handling && handling.status !== 'unknown' ? metricNumber(handling) : null;
+  const perCase = handlingNumber === null ? null : /hour/i.test(handling!.unit) ? handlingNumber * 60 : /sec/i.test(handling!.unit) ? handlingNumber / 60 : handlingNumber;
+  const canSpread = canEdit && perCase !== null && blankEffort.length > 0 && perCase - knownMinutes > 0;
   const fillShares = () => editor.apply(m => {
     let cur = { model: m, patch: [] as ReturnType<typeof setStepTrait>['patch'] };
     for (const s of blankShares) { const r = setStepTrait(cur.model, { stepId: s.id, trait: 'sharePercent', value: 100 }); cur = { model: r.model, patch: [...cur.patch, ...r.patch] }; }
@@ -126,7 +149,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
         <h3 className="font-display text-base font-semibold text-slate-900">Process profile</h3>
         <p className="text-sm text-slate-500">How much work there is, and how stable it is.</p>
         <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <ProfileField label="Volume" hint="How many cases are handled. Needed for hours and value." status={statusOf(volume)} quote={quoteOf(volume)}>
+          <ProfileField label="Volume" hint="How many cases are handled. Needed for hours and value." status={statusOf(volume)} quote={quoteOf(volume)} from={volume} candidates={choices('volume')} onChoose={choose}>
             <div className="flex gap-2">
               <NumberInput label="Volume" value={volume?.status === 'unknown' ? null : volume?.value ?? null} placeholder={said(volume) ?? 'Number of cases'} disabled={!canEdit} onSave={v => setMetric('volume', v)} />
               <select aria-label="Volume period" value={period} disabled={!canEdit} className={cx(inputCls, 'w-32')}
@@ -135,13 +158,13 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
               </select>
             </div>
           </ProfileField>
-          <ProfileField label="Cases that leave the standard path" hint="Share of cases that hit an exception. Sets how much of the work the first automation covers." status={statusOf(exceptions)} quote={quoteOf(exceptions)}>
+          <ProfileField label="Cases that leave the standard path" hint="Share of cases that hit an exception. Sets how much of the work the first automation covers." status={statusOf(exceptions)} quote={quoteOf(exceptions)} from={exceptions} candidates={choices('exception_rate')} onChoose={choose}>
             <div className="flex items-center gap-2"><NumberInput label="Exception rate" max={100} value={exceptions?.status === 'unknown' ? null : exceptions?.value ?? null} placeholder={said(exceptions) ?? 'Percent of cases'} disabled={!canEdit} onSave={v => setMetric('exception_rate', v)} /><span className="text-sm text-slate-500">%</span></div>
           </ProfileField>
-          <ProfileField label="Hands-on time per case" hint={stepMinutes > 0 ? `For reference. The step times below add up to ${Math.round(stepMinutes * 10) / 10} minutes a case.` : 'For reference. Hours are calculated from the time on each step below.'} status={statusOf(handling)} quote={quoteOf(handling)}>
+          <ProfileField label="Hands-on time per case" hint={stepMinutes > 0 ? `For reference. The step times below add up to ${Math.round(stepMinutes * 10) / 10} minutes a case.` : 'For reference. Hours are calculated from the time on each step below.'} status={statusOf(handling)} quote={quoteOf(handling)} from={handling} candidates={choices('handling_time')} onChoose={choose}>
             <div className="flex items-center gap-2"><NumberInput label="Handling time" value={handling?.status === 'unknown' ? null : handling?.value ?? null} placeholder={said(handling) ?? 'Minutes'} disabled={!canEdit} onSave={v => setMetric('handling_time', v)} /><span className="text-sm text-slate-500">min</span></div>
           </ProfileField>
-          <ProfileField label="People doing this work" hint="For reference: how many full-time people the work takes today." status={statusOf(people)} quote={quoteOf(people)}>
+          <ProfileField label="People doing this work" hint="For reference: how many full-time people the work takes today." status={statusOf(people)} quote={quoteOf(people)} from={people} candidates={choices('fte')} onChoose={choose}>
             <NumberInput label="People" value={people?.status === 'unknown' ? null : people?.value ?? null} placeholder={said(people) ?? 'Full-time equivalents'} disabled={!canEdit} onSave={v => setMetric('fte', v)} />
           </ProfileField>
           <ProfileField label="Change to the process" hint="Expected in the next six months. A major change means wait." status={statusOf(profile.processChange)} quote={quoteOf(profile.processChange)}>
@@ -187,10 +210,11 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="font-display text-base font-semibold text-slate-900">Steps</h3>
-            <p className="text-sm text-slate-500">The facts each step is scored on, and the time it takes.</p>
+            <p className="text-sm text-slate-500">The facts each step is scored on, and the time it takes. A dashed time is an assumption to confirm.</p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
+            {canSpread && <Button variant="ghost" onClick={() => editor.apply(m => assumeEvenEffort(m, { minutesPerCase: perCase! }), 'Spread the time per case over the steps as an assumption')}>Spread {Math.round((perCase! - knownMinutes) * 10) / 10} min evenly over {blankEffort.length} {blankEffort.length === 1 ? 'step' : 'steps'}</Button>}
             {canEdit && blankShares.length > 0 && <Button variant="ghost" onClick={fillShares}>Set blank “% of cases” to 100</Button>}
           </div>
         </div>
@@ -220,7 +244,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                           {!automated && <Pick cell label={`${c.title} for ${s.name}`} value={traitText(s, c.trait)} options={c.options} disabled={!canEdit} onChange={v => set(c.trait, parseTrait(c.trait, v))} />}
                         </td>
                       ))}
-                      <td className="w-20 px-1.5 py-2">{!automated && <NumberInput label={`Minutes per case for ${s.name}`} value={effort} disabled={!canEdit} onSave={v => set('effortMinutes', v)} className={cx(cellCls, 'tabular-nums', effort === null ? unknownCls : knownCls)} />}</td>
+                      <td className="w-20 px-1.5 py-2">{!automated && <NumberInput label={`Minutes per case for ${s.name}`} value={effort} disabled={!canEdit} onSave={v => set('effortMinutes', v)} className={cx(cellCls, 'tabular-nums', effort === null ? unknownCls : s.traits?.effortMinutes?.status === 'assumed' ? 'border-dashed border-amber-400 bg-white text-slate-800' : knownCls)} />}</td>
                       <td className="w-20 px-1.5 py-2">{!automated && <NumberInput label={`Share of cases for ${s.name}`} max={100} value={share} disabled={!canEdit} onSave={v => set('sharePercent', v)} className={cx(cellCls, 'tabular-nums', share === null ? unknownCls : knownCls)} />}</td>
                     </tr>
                   );

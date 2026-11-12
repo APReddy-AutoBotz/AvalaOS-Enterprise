@@ -6,6 +6,7 @@
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
 import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef } from './types.ts';
+import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 
 export interface OpResult {
@@ -411,11 +412,10 @@ export const PROCESS_METRICS: Partial<Record<MetricKind, { label: string; unit: 
   exception_rate: { label: 'Cases that leave the standard path', unit: '%' },
 };
 export const PERIODS = ['day', 'week', 'month', 'quarter', 'year'] as const;
-const isProcessLevel = (x: { appliesTo?: string }) => !x.appliesTo || x.appliesTo === 'process';
 
 /**
  * A person states (or clears, with null) one whole-process number: volume, handling time, team
- * size or exception rate. The first process-level metric of that kind is updated, so a figure read
+ * size or exception rate. The metric that holds the number (see `processMetricSlot`) is updated, so a figure read
  * from the sources is corrected in place and keeps its quotes; otherwise one is added.
  */
 export function setProcessMetric(model: ProcessModel, args: { kind: keyof typeof PROCESS_METRICS; value: number | null; period?: typeof PERIODS[number] }): OpResult {
@@ -425,8 +425,9 @@ export function setProcessMetric(model: ProcessModel, args: { kind: keyof typeof
   if (args.kind === 'exception_rate' && args.value !== null && args.value > 100) throw new ModelOpError('BAD_INPUT', 'A percentage is between 0 and 100.');
   return commit(model, m => {
     const unit = args.kind === 'volume' ? `cases/${args.period ?? 'month'}` : def.unit;
-    const existing = m.meta.metrics.find(x => x.kind === args.kind && isProcessLevel(x));
+    const existing = processMetricSlot(m, args.kind);
     if (existing) {
+      existing.appliesTo = 'process';
       existing.value = args.value;
       delete existing.range;
       existing.status = args.value === null ? 'unknown' : 'user-confirmed';
@@ -436,3 +437,35 @@ export function setProcessMetric(model: ProcessModel, args: { kind: keyof typeof
     }
   });
 }
+
+/**
+ * A person chooses which figure from the sources is the whole-process number of its kind. The
+ * figure keeps its value, status and quotes; any other marked for the process goes back to its label.
+ */
+export function adoptProcessMetric(model: ProcessModel, args: { metricId: string }): OpResult {
+  return commit(model, m => {
+    const metric = m.meta.metrics.find(x => x.id === args.metricId);
+    if (!metric) throw new ModelOpError('NOT_FOUND', `No metric with id ${args.metricId}.`);
+    for (const x of m.meta.metrics) if (x.kind === metric.kind && x !== metric && isProcessLevel(x)) x.appliesTo = x.label;
+    metric.appliesTo = 'process';
+  });
+}
+
+/**
+ * A person records a working assumption: the hands-on time per case, less the time already known
+ * on steps, is spread evenly over the steps people do whose time is not known. Each gets status
+ * 'assumed', so it shows as an assumption until someone confirms the real time.
+ */
+export function assumeEvenEffort(model: ProcessModel, args: { minutesPerCase: number }): OpResult {
+  return commit(model, m => {
+    const people = m.steps.filter(s => s.taskType !== 'service');
+    const knownEffort = (s: Step) => { const f = s.traits?.effortMinutes; return f && f.status !== 'unknown' && f.value !== null ? f.value : null; };
+    const blank = people.filter(s => knownEffort(s) === null);
+    const left = args.minutesPerCase - people.reduce((t, s) => t + (knownEffort(s) ?? 0), 0);
+    if (!blank.length) throw new ModelOpError('BAD_INPUT', 'Every step already has a time.');
+    if (!(left > 0)) throw new ModelOpError('BAD_INPUT', 'The step times already add up to the time per case.');
+    const each = Math.round((left / blank.length) * 100) / 100;
+    for (const s of blank) s.traits = { ...(s.traits ?? {}), effortMinutes: { value: each, status: 'assumed', sources: [], note: 'Time per case spread evenly over the steps.' } };
+  });
+}
+export { metricNumber };

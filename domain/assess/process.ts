@@ -7,7 +7,9 @@
 // - The facts that, once known, would firm up or change the ranking.
 // - Cautions with named thresholds, hours from stated volume and effort, and money only from a
 //   rate a person entered. Nothing monetary is assumed here.
-import type { Metric, ProcessModel } from '../processModel/types.ts';
+import type { ProcessModel } from '../processModel/types.ts';
+import { periodOf, processMetric } from '../processModel/selectors.ts';
+export { periodOf };
 import { prioritise, type Priority } from './priority.ts';
 import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
 
@@ -113,14 +115,9 @@ const mostCommon = (items: string[]): { text: string; count: number } | null => 
 };
 
 const PER_YEAR: Record<string, number> = { day: 250, week: 52, month: 12, quarter: 4, year: 1 };
-export function periodOf(v: Metric): string | null {
-  const t = `${v.unit} ${v.period ?? ''}`.toLowerCase();
-  for (const p of Object.keys(PER_YEAR)) if (t.includes(`/${p}`) || t.includes(`per ${p}`) || t.includes(`a ${p}`) || t.includes(`${p}ly`) || (p === 'day' && t.includes('daily'))) return p;
-  return null;
-}
 /** Yearly volume from the process-level volume metric, as a range. */
 export function yearlyVolume(m: ProcessModel): Computed<Range> {
-  const v = m.meta.metrics.find(x => x.kind === 'volume' && (!x.appliesTo || x.appliesTo === 'process') && x.status !== 'unknown' && (x.value !== null || x.range));
+  const v = processMetric(m, 'volume');
   if (!v) return { computable: false, reason: 'The process volume is not known.' };
   const per = periodOf(v);
   if (!per) return { computable: false, reason: `The period of "${v.label}" is not clear.` };

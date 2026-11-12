@@ -1,5 +1,5 @@
 // Read-only views of a Process Model used by the assessment, documents, flows and the review UI.
-import type { ElementTarget, Flow, ProcessModel, Step } from './types.ts';
+import type { Metric, MetricKind, ElementTarget, Flow, ProcessModel, Step } from './types.ts';
 
 export const outgoing = (m: ProcessModel, id: string): Flow[] => m.flows.filter(f => f.from === id);
 export const incoming = (m: ProcessModel, id: string): Flow[] => m.flows.filter(f => f.to === id);
@@ -119,3 +119,42 @@ export function untrackedGaps(m: ProcessModel): Gap[] {
 
 /** Open questions plus untracked gaps: what is still unknown. */
 export const openItemCount = (m: ProcessModel): number => m.openQuestions.filter(q => q.status === 'open').length + untrackedGaps(m).length;
+
+// ---------------------------------------------------------------- whole-process numbers
+
+const PERIOD_NAMES = ['day', 'week', 'month', 'quarter', 'year'] as const;
+/** The period a metric is counted over ("invoices per month" gives "month"), or null when it has none. */
+export function periodOf(v: Metric): string | null {
+  const t = `${v.unit} ${v.period ?? ''}`.toLowerCase();
+  for (const p of PERIOD_NAMES) if (t.includes(`/${p}`) || t.includes(`per ${p}`) || t.includes(`a ${p}`) || t.includes(`${p}ly`) || (p === 'day' && t.includes('daily'))) return p;
+  return null;
+}
+const hasValue = (x: Metric) => x.status !== 'unknown' && (x.value !== null || Boolean(x.range));
+export const isProcessLevel = (x: Metric) => !x.appliesTo || x.appliesTo === 'process';
+const FITS: Partial<Record<MetricKind, (x: Metric) => boolean>> = {
+  volume: x => periodOf(x) !== null,
+  handling_time: x => /min|hour|sec/i.test(x.unit) && periodOf(x) === null,
+  exception_rate: x => /%|percent/i.test(x.unit),
+};
+/**
+ * Figures in the model that could be the whole-process number of a kind. Extraction records what a
+ * figure applies to in the source's own words, so several can qualify (a clean case and an
+ * exception case each have a handling time); a person then chooses.
+ */
+export function processMetricCandidates(m: ProcessModel, kind: MetricKind): Metric[] {
+  return m.meta.metrics.filter(x => x.kind === kind && hasValue(x) && !m.steps.some(s => s.id === x.appliesTo) && (FITS[kind]?.(x) ?? true));
+}
+/** The metric that holds the whole-process number: the one marked for the process, else the only candidate. */
+export function processMetricSlot(m: ProcessModel, kind: MetricKind): Metric | undefined {
+  const explicit = m.meta.metrics.find(x => x.kind === kind && isProcessLevel(x));
+  if (explicit) return explicit;
+  const candidates = processMetricCandidates(m, kind);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+/** The whole-process number of a kind when it is known. */
+export function processMetric(m: ProcessModel, kind: MetricKind): Metric | undefined {
+  const slot = processMetricSlot(m, kind);
+  return slot && hasValue(slot) ? slot : undefined;
+}
+/** A metric's value as one number: the value, or the middle of its range. */
+export const metricNumber = (x: Metric): number | null => x.value ?? (x.range ? (x.range[0] + x.range[1]) / 2 : null);
