@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { ElementTarget, Flow, ProcessModel, Role, Step, SystemRef } from './types.ts';
+import type { ElementTarget, Fact, Flow, ProcessModel, Role, Step, StepTraits, SystemRef } from './types.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 
 export interface OpResult {
@@ -335,4 +335,40 @@ export function addQuestion(model: ProcessModel, args: { target: ElementTarget; 
     m.openQuestions.push({ id: questionId, target: args.target, question, whyItMatters: (args.whyItMatters ?? '').trim(), owner: args.owner ?? null, status: 'open' });
   });
   return { ...result, questionId };
+}
+
+// ---------------------------------------------------------------- assessment facts
+
+export type TraitName = Exclude<keyof StepTraits, 'agent'> | `agent.${keyof NonNullable<StepTraits['agent']>}`;
+
+const confirmed = <T>(value: T | null): Fact<T> => ({ value, status: value === null ? 'unknown' : 'user-confirmed', sources: [] });
+
+/**
+ * A person states (or clears, with null) one assessment trait of a step. Only the trait changes;
+ * the step's own status does not, because the step itself was not edited.
+ */
+export function setStepTrait(model: ProcessModel, args: { stepId: string; trait: TraitName; value: unknown }): OpResult {
+  return commit(model, m => {
+    const step = m.steps.find(s => s.id === args.stepId);
+    if (!step) throw new ModelOpError('NOT_FOUND', `No step with id ${args.stepId}.`);
+    const traits: StepTraits = step.traits ?? {};
+    const [head, sub] = args.trait.split('.') as [keyof StepTraits, string | undefined];
+    if (head === 'agent') {
+      const agent = { ...(traits.agent ?? {}) } as Record<string, Fact<boolean>>;
+      agent[sub!] = confirmed(args.value as boolean | null);
+      traits.agent = agent;
+    } else {
+      (traits as Record<string, unknown>)[head] = confirmed(args.value);
+    }
+    step.traits = traits;
+  });
+}
+
+/** A person states whether a system's screens are stable enough for UI automation (null clears it). */
+export function setSystemUiStable(model: ProcessModel, args: { systemId: string; value: boolean | null }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    sys.uiStable = confirmed(args.value);
+  });
 }

@@ -128,9 +128,52 @@ export interface SystemRef extends Provenance {
   version?: string;
   inScope: boolean;
   access: AccessMethod[];
+  /** Whether the screens are stable enough for UI automation; absent means unknown. */
+  uiStable?: Fact<boolean>;
 }
 
 export type TaskType = 'user' | 'manual' | 'service' | 'business_rule' | 'send' | 'receive';
+
+export type InputForm = 'structured' | 'semi_structured' | 'unstructured' | 'paper';
+export type WriteImpact = 'none' | 'record' | 'financial' | 'irreversible';
+
+/**
+ * What the assessment needs to know about a step. Every trait is a Fact: absent or unknown means
+ * nobody has said, and the assessment reports it as something that could change the result.
+ */
+export interface StepTraits {
+  /** Rework, duplicate entry, or work with no output of its own. */
+  rework?: Fact<boolean>;
+  /** A physical action: handling paper, signing, scanning, moving goods. */
+  physical?: Fact<boolean>;
+  /** Policy or legal judgment, or a decision someone is accountable for. */
+  judgment?: Fact<boolean>;
+  /** The form of the step's main input. */
+  input?: Fact<InputForm>;
+  /** The rules the step follows are stated in full and stable. */
+  rulesComplete?: Fact<boolean>;
+  /** The step drafts, summarises or classifies free text. */
+  language?: Fact<boolean>;
+  /** The most serious thing the step changes. */
+  write?: Fact<WriteImpact>;
+  /** Hands-on effort per case, in minutes. */
+  effortMinutes?: Fact<number>;
+  /** Share of cases that pass through the step, 0 to 100. */
+  sharePercent?: Fact<number>;
+  /** The five conditions that all have to hold before an agent is worth considering. */
+  agent?: {
+    /** The right next action cannot be written down as rules in advance. */
+    ambiguity?: Fact<boolean>;
+    /** The next step depends on what the previous one found. */
+    adaptive?: Fact<boolean>;
+    /** The work needs a choice between tools or lines of investigation. */
+    toolChoice?: Fact<boolean>;
+    /** An agent adds value over rules plus a person. */
+    value?: Fact<boolean>;
+    /** Its actions can be bounded, logged and reversed. */
+    controllable?: Fact<boolean>;
+  };
+}
 
 export interface Step extends Provenance {
   id: string;
@@ -143,6 +186,7 @@ export interface Step extends Provenance {
   outputs: string[];
   ruleIds: string[];
   exceptionIds: string[];
+  traits?: StepTraits;
 }
 
 export interface ProcessEvent extends Provenance {

@@ -111,6 +111,32 @@ export function validateModel(model: ProcessModel): ValidationResult {
     if (f.status === 'unknown' && f.value !== null) err('UNKNOWN_HAS_VALUE', `${path}/value`, 'An unknown fact must have value null.');
     if (f.status !== 'unknown' && (f.value === null || f.value === undefined)) err('KNOWN_WITHOUT_VALUE', `${path}/value`, 'A fact without a value must have status unknown.');
   };
+  /** An optional fact whose value, when known, must pass the check. */
+  const typedFact = (f: any, path: string, ok: (v: unknown) => boolean) => {
+    fact(f, path);
+    if (f && f.value !== null && f.value !== undefined && !ok(f.value)) err('FACT_VALUE', `${path}/value`, 'The value has the wrong type.');
+  };
+  const isBool = (v: unknown) => typeof v === 'boolean';
+  const traits = (t: any, path: string) => {
+    if (!t || typeof t !== 'object' || Array.isArray(t)) return err('TRAITS', path, 'traits must be an object.');
+    const checks: Record<string, (v: unknown) => boolean> = {
+      rework: isBool, physical: isBool, judgment: isBool, rulesComplete: isBool, language: isBool,
+      input: v => ['structured', 'semi_structured', 'unstructured', 'paper'].includes(v as string),
+      write: v => ['none', 'record', 'financial', 'irreversible'].includes(v as string),
+      effortMinutes: v => typeof v === 'number' && v >= 0,
+      sharePercent: v => typeof v === 'number' && v >= 0 && v <= 100,
+    };
+    for (const k of Object.keys(t)) {
+      if (k === 'agent') {
+        if (!t.agent || typeof t.agent !== 'object') { err('TRAITS', `${path}/agent`, 'agent must be an object.'); continue; }
+        for (const a of Object.keys(t.agent)) {
+          if (!['ambiguity', 'adaptive', 'toolChoice', 'value', 'controllable'].includes(a)) err('TRAITS', `${path}/agent/${a}`, `Unknown agent condition ${a}.`);
+          else typedFact(t.agent[a], `${path}/agent/${a}`, isBool);
+        }
+      } else if (!checks[k]) err('TRAITS', `${path}/${k}`, `Unknown trait ${k}.`);
+      else typedFact(t[k], `${path}/${k}`, checks[k]);
+    }
+  };
   const refs = (list: unknown, valid: Set<string>, path: string, what: string) => {
     if (!Array.isArray(list)) return err('NOT_ARRAY', path, `${path} must be an array.`);
     list.forEach((id, i) => { if (!valid.has(id as string)) err('BROKEN_REF', `${path}/${i}`, `No ${what} with id ${String(id)}.`); });
@@ -163,6 +189,7 @@ export function validateModel(model: ProcessModel): ValidationResult {
         err('UNSOURCED_CONFIRMATION', ap, 'An access method marked confirmed needs a source or a user confirmation.');
       }
     });
+    if (s.uiStable !== undefined) typedFact(s.uiStable, `${p}/uiStable`, v => typeof v === 'boolean');
   });
   model.events.forEach((e, i) => {
     const p = `/events/${i}`;
@@ -181,6 +208,7 @@ export function validateModel(model: ProcessModel): ValidationResult {
     refs(s.exceptionIds, exceptionIds, `${p}/exceptionIds`, 'exception');
     strings(s.inputs, `${p}/inputs`);
     strings(s.outputs, `${p}/outputs`);
+    if (s.traits !== undefined) traits(s.traits, `${p}/traits`);
   });
   model.gateways.forEach((g, i) => {
     const p = `/gateways/${i}`;
