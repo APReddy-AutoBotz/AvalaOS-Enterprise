@@ -276,3 +276,36 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   await page.getByRole('tab', { name: /FRD/ }).click();
   await expect(page.getByTestId('doc-not-ready')).toContainText('requirements');
 });
+
+test('closing the gaps: answers in a guided session update the model and the documents', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Documents');
+  await expect(page.getByTestId('gaps-banner')).toBeVisible();
+  await page.getByRole('button', { name: 'Answer them' }).click();
+  const assistant = page.getByTestId('gaps-assistant');
+  const before = Number((await assistant.getByTestId('gaps-count').textContent())!.match(/\d+/)![0]);
+  await shot(page, '40-gaps-assistant');
+
+  // Who does the step: a role picker; the answer writes the step's role.
+  const roleQ = assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /Who does "Check invoice totals"/ });
+  if (await roleQ.count()) {
+    await roleQ.click();
+    await expect(assistant.getByTestId('gap-question')).toContainText('Who does "Check invoice totals"');
+  }
+  // The objective: free text written to the process.
+  await assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /objective/i }).click();
+  await assistant.getByLabel('Answer').fill('Post supplier invoices correctly within five working days.');
+  await assistant.getByRole('button', { name: 'Save answer' }).click();
+  await saved(page);
+  await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 1} `));
+
+  // Set one aside for someone else.
+  await assistant.getByRole('button', { name: 'Ask someone later' }).click();
+  await assistant.getByLabel('Who should answer it').fill('AP Team Lead');
+  await assistant.getByRole('button', { name: 'Set aside' }).click();
+  await saved(page);
+  await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 2} `));
+
+  await assistant.getByRole('button', { name: 'Back to the document' }).click();
+  await expect(page.getByTestId('document')).toContainText('Post supplier invoices correctly within five working days.');
+});
