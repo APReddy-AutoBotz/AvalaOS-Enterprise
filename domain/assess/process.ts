@@ -44,9 +44,15 @@ export interface RankedApproach {
   /** Steps where it scores in the "possible" band or better. */
   stepsFit: number;
   why: string;
+  /** Its most common strength on the steps it wins, and what most often holds it back elsewhere. */
+  strength: Tally | null;
+  heldBack: Tally | null;
   /** What would have to change for this approach to rank higher; empty for the first. */
   toWin: string;
 }
+
+/** A fact sentence and the number of steps it applies to. */
+export interface Tally { text: string; steps: number }
 
 export interface KeyQuestion { key: string; question: string; steps: number }
 
@@ -65,6 +71,17 @@ export interface ProcessAssessment {
   verdict: string;
   /** One sentence with the split of steps. */
   split: string;
+  /** One sentence: what is proposed and the main reason. */
+  takeaway: string;
+  /** The facts that most often make the lead approach the best fit, with the steps they hold for. */
+  drivers: Tally[];
+  /** Confirming these systems' APIs would move this many steps to API integration. */
+  apiSwitch: { systems: string[]; steps: number };
+  /** Step ids behind the headline numbers, for showing names. */
+  aiStepIds: string[];
+  mustStayStepIds: string[];
+  forNowStepIds: string[];
+  approvalStepIds: string[];
   /** Why this approach is proposed, in plain words, one paragraph per entry. */
   narrative: { title: string; text: string }[];
   /** Share of scored steps recommended for automation, 0 to 1. */
@@ -153,7 +170,8 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
       else if (a === 'ai_assist') toWin = 'It ranks higher only where documents or free text have to be read and no complete rules exist.';
       else toWin = 'It is justified only where the path of the work cannot be fixed in advance and all five agent conditions are shown to hold.';
     }
-    return { ...r, rank: i + 1, why, toWin };
+    const tally = (t: { text: string; count: number } | null): Tally | null => (t ? { text: t.text.replace(/\.$/, ''), steps: t.count } : null);
+    return { ...r, rank: i + 1, why, strength: tally(strength), heldBack: tally(held), toWin };
   });
 
   const automatedSteps = n - counts.human;
@@ -231,6 +249,15 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     });
   }
 
+  // ---- the same explanation as data, for showing at a glance
+  const leadSteps = lead ? scored.filter(s => s.winner === lead) : [];
+  const driverCounts = new Map<string, number>();
+  for (const st of leadSteps) for (const f of st.scores[0].factors) if (f.known && f.value >= 0.7) driverCounts.set(f.text, (driverCounts.get(f.text) ?? 0) + 1);
+  const drivers: Tally[] = [...driverCounts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 3).map(([text, steps]) => ({ text, steps }));
+  const takeaway = n === 0 ? 'Add the process steps to assess it.'
+    : !lead ? 'No step can be recommended for automation on what is known so far.'
+      : `${APPROACH_LABEL[lead]} is the best fit for ${counts[lead]} of the ${plural(open.length, 'step')} open to automation${drivers.length ? `, mainly because ${drivers.slice(0, 2).map(d => lower(d.text)).join(' and ')}` : ''}.`;
+
   // ---- benefit
   const potential = potentialOf(model, scored);
   let money: ProcessAssessment['money'] = { computable: false, reason: 'No cost rate has been entered.' };
@@ -242,6 +269,9 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   const questions = scored.flatMap(s => s.questions).filter((q, i, all) => all.findIndex(x => x.question === q.question) === i);
   return {
     steps, assessed: n, candidates: open.length, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,
+    takeaway, drivers, apiSwitch: { systems: systemsToConfirm, steps: apiIfConfirmed },
+    aiStepIds: scored.filter(x => x.aiNeeded).map(x => x.stepId), mustStayStepIds: scored.filter(x => x.winner === 'human' && !x.forNow).map(x => x.stepId),
+    forNowStepIds: scored.filter(x => x.forNow).map(x => x.stepId), approvalStepIds: scored.filter(x => x.winner !== 'human' && x.human === 'approve').map(x => x.stepId),
     automationFit: n ? automatedSteps / n : 0, aiSteps, approvalSteps, knownShare, confidence, keyQuestions, cautions, potential, hours, money, questions,
   };
 }

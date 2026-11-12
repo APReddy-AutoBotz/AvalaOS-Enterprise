@@ -17,6 +17,7 @@ import { useModelEditor, type ModelEditor } from './useModelEditor.ts';
 import { coarsePatch } from './SourcesStage.tsx';
 import { Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
 import { AssessmentReport } from './AssessmentReport.tsx';
+import { AssessmentWhy } from './AssessmentWhy.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
 
 const APPROACHES = Object.keys(APPROACH_LABEL) as Approach[];
@@ -120,12 +121,11 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       <ErrorNote message={error ?? editor.error} />
       <Hero result={result} onReport={() => setView('report')} />
       {result.assessed > 0 && <Ranking result={result} />}
-      {result.narrative.length > 0 && <Narrative result={result} />}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <Firmness result={result} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits} newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} />
-        <Benefit result={result} decisions={d} canEdit={canEdit && decisions !== null} me={me} onRate={rate => { try { save(withRate(d, rate)); } catch (e) { setError((e as Error).message); } }} />
-      </div>
+      {result.assessed > 0 && (
+        <AssessmentWhy model={editor.model} result={result} onOpenStep={setOpen} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits}
+          newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} />
+      )}
+      <Benefit result={result} decisions={d} canEdit={canEdit && decisions !== null} me={me} onRate={rate => { try { save(withRate(d, rate)); } catch (e) { setError((e as Error).message); } }} />
 
       <section aria-label="Steps">
         <div className="mb-3 flex items-end justify-between gap-3">
@@ -239,57 +239,15 @@ function Ranking({ result }: { result: ProcessAssessment }) {
             <p className="mt-3 font-display text-lg font-semibold text-slate-900">{APPROACH_LABEL[r.approach]}</p>
             <p className="mt-1"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{r.score}</span><span className="text-sm text-slate-400"> / 100</span></p>
             <ScoreBar score={r.score} approach={r.approach} className="mt-2" />
-            <p className="mt-3 text-xs font-medium text-slate-700">Best for {r.stepsWon} {r.stepsWon === 1 ? 'step' : 'steps'}{r.stepsFit > r.stepsWon ? ` · could do ${r.stepsFit}` : ''}</p>
-            <p className="mt-2 text-xs leading-5 text-slate-600">{r.why}</p>
-            {r.toWin && <p className="mt-2 border-t border-slate-100 pt-2 text-xs leading-5 text-slate-500">{r.toWin}</p>}
+            <p className="mt-3 text-sm font-medium text-slate-800">Best for <span className="tabular-nums">{r.stepsWon}</span> {r.stepsWon === 1 ? 'step' : 'steps'}{r.stepsFit > r.stepsWon ? <span className="font-normal text-slate-500"> · could do {r.stepsFit}</span> : null}</p>
+            <dl className="mt-3 space-y-2.5 border-t border-slate-100 pt-3 text-xs leading-5">
+              {r.strength && <div><dt className="font-semibold uppercase tracking-wider text-emerald-700">Strongest where</dt><dd className="text-slate-600">{r.strength.text} <span className="text-slate-400">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+              {r.heldBack && <div><dt className="font-semibold uppercase tracking-wider text-amber-700">Held back where</dt><dd className="text-slate-600">{r.heldBack.text} <span className="text-slate-400">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+              {r.toWin && !(r.approach === 'api' && result.apiSwitch.steps > 0) && <div><dt className="font-semibold uppercase tracking-wider text-slate-500">Would rank higher</dt><dd className="text-slate-600">{r.toWin.replace(/^It (would rank|ranks) higher (only )?/, '').replace(/^It is justified only /, 'only ').replace(/^./, c => c.toUpperCase())}</dd></div>}
+            </dl>
           </li>
         ))}
       </ol>
-    </section>
-  );
-}
-
-function Narrative({ result }: { result: ProcessAssessment }) {
-  return (
-    <section aria-label="Why this approach" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="font-display text-base font-semibold text-slate-900">Why this approach is proposed</h3>
-      <div className="mt-4 grid gap-x-10 gap-y-5 md:grid-cols-2">
-        {result.narrative.map(p => (
-          <div key={p.title} data-testid="narrative">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-[#002C4B]">{p.title}</h4>
-            <p className="mt-1.5 text-sm leading-6 text-slate-700">{p.text}</p>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-function Firmness({ result, canEdit, aiAvailable, reading, onRead, newApiQuestions, onAddQuestions }: {
-  result: ProcessAssessment; canEdit: boolean; aiAvailable: boolean; reading: string | null; onRead: () => void; newApiQuestions: number; onAddQuestions: () => void;
-}) {
-  return (
-    <section aria-label="What would firm this up" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h3 className="font-display text-base font-semibold text-slate-900">What would firm this up</h3>
-      <p className="mt-1 text-sm text-slate-500">The scores use what is known. These open facts affect the most steps.</p>
-      {result.keyQuestions.length === 0 ? <p className="mt-4 text-sm text-emerald-800">Every fact the scores rest on is known.</p> : (
-        <ul className="mt-4 space-y-2">
-          {result.keyQuestions.map(q => (
-            <li key={q.key} className="flex items-start justify-between gap-3 text-sm">
-              <span className="text-slate-700">{q.question}</span>
-              <span className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{q.steps} {q.steps === 1 ? 'step' : 'steps'}</span>
-            </li>
-          ))}
-        </ul>
-      )}
-      {canEdit && (aiAvailable || newApiQuestions > 0) && (
-        <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-          {aiAvailable && <Button variant="secondary" disabled={Boolean(reading && reading.endsWith('…'))} onClick={onRead}>Read these facts from the sources</Button>}
-          {newApiQuestions > 0 && <Button variant="secondary" onClick={onAddQuestions}>Add {newApiQuestions} API question{newApiQuestions === 1 ? '' : 's'} to open questions</Button>}
-        </div>
-      )}
-      {aiAvailable && canEdit && <p className="mt-2 text-xs text-slate-500">AI only collects facts with their quotes for you to check; it does not score or recommend. Reading again replaces what was read before and keeps what you confirmed.</p>}
-      {reading && <p role="status" className="mt-2 text-sm text-slate-700">{reading}</p>}
     </section>
   );
 }
@@ -298,21 +256,21 @@ function Benefit({ result, decisions, canEdit, me, onRate }: { result: ProcessAs
   const [amount, setAmount] = React.useState(decisions.rate ? String(decisions.rate.amount) : '');
   const [currency, setCurrency] = React.useState(decisions.rate?.currency ?? '');
   React.useEffect(() => { setAmount(decisions.rate ? String(decisions.rate.amount) : ''); setCurrency(decisions.rate?.currency ?? ''); }, [decisions.rate]);
-  const row = (label: string, body: React.ReactNode) => (
-    <div className="flex items-baseline justify-between gap-4 border-b border-slate-100 py-3 last:border-0">
-      <dt className="text-sm text-slate-600">{label}</dt>
-      <dd className="text-right text-sm text-slate-900">{body}</dd>
+  const tile = (label: string, body: React.ReactNode) => (
+    <div className="rounded-xl bg-slate-50 p-4">
+      <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dd className="mt-1.5 text-sm leading-6 text-slate-900">{body}</dd>
     </div>
   );
-  const missing = (reason: string | undefined) => <span className="text-slate-400">Not computed. {reason}</span>;
+  const missing = (reason: string | undefined) => <span className="text-slate-500">Not computed yet. {reason}</span>;
   return (
     <section aria-label="Benefit" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <h3 className="font-display text-base font-semibold text-slate-900">Benefit</h3>
       <p className="mt-1 text-sm text-slate-500">Only from volume and effort stated in the sources, and a cost rate you enter. Nothing is assumed.</p>
-      <dl className="mt-3">
-        {row('Effort that could be automated', result.potential.computable ? <span className="font-semibold">{pct(result.potential.value!)}</span> : missing(result.potential.reason))}
-        {row('Hands-on hours a year', result.hours.computable ? <><span className="font-semibold">{range(result.hours.value!.automatable)}</span> of {range(result.hours.value!.today)}</> : missing(result.hours.reason))}
-        {row('Value of those hours', result.money.computable ? <><span className="font-semibold">{result.money.value!.currency} {range(result.money.value!.automatable)}</span> a year</> : missing(result.money.reason))}
+      <dl className="mt-4 grid gap-3 md:grid-cols-3">
+        {tile('Effort that could be automated', result.potential.computable ? <span className="font-display text-2xl font-semibold">{pct(result.potential.value!)}</span> : missing(result.potential.reason))}
+        {tile('Hands-on hours a year', result.hours.computable ? <><span className="font-display text-2xl font-semibold">{range(result.hours.value!.automatable)}</span> of {range(result.hours.value!.today)}</> : missing(result.hours.reason))}
+        {tile('Value of those hours', result.money.computable ? <><span className="font-display text-2xl font-semibold">{result.money.value!.currency} {range(result.money.value!.automatable)}</span> a year</> : missing(result.money.reason))}
       </dl>
       {canEdit && (
         <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={e => { e.preventDefault(); const n = Number(amount); onRate(amount.trim() ? { amount: n, currency: currency.trim().toUpperCase(), enteredBy: me || 'you' } : null); }}>
