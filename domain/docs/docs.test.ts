@@ -84,3 +84,38 @@ test('a figure given as a range is not reported as unknown', () => {
   const d = buildPdd(input(gold));
   assert.equal(d.openItems.some(o => /Monthly invoice volume is unknown/i.test(o.text)), false);
 });
+
+/** The text of one entry of a zip file (Word files are zip archives). */
+async function zipEntry(buf: Buffer, name: string): Promise<string> {
+  const { inflateRawSync } = await import('node:zlib');
+  for (let i = 0; i < buf.length - 30; i++) {
+    if (buf.readUInt32LE(i) !== 0x04034b50) continue;
+    const method = buf.readUInt16LE(i + 8), size = buf.readUInt32LE(i + 18), nameLen = buf.readUInt16LE(i + 26), extra = buf.readUInt16LE(i + 28);
+    const entry = buf.toString('utf8', i + 30, i + 30 + nameLen);
+    const start = i + 30 + nameLen + extra;
+    if (entry === name) { const data = buf.subarray(start, start + size); return (method === 8 ? inflateRawSync(data) : data).toString('utf8'); }
+  }
+  throw new Error(`${name} not found`);
+}
+
+test('Word export: cover and control, contents, numbered headings, every table row, draft marking, branding', async () => {
+  const { docxDocument } = await import('./docx.ts');
+  const { Packer } = await import('docx');
+  const d = buildPdd(input(gold));
+  const buf = await Packer.toBuffer(docxDocument(d, { draft: true, style: { font: 'Arial', accent: '7A1F5C', organisation: 'Acme Corp' } }));
+  const xml = await zipEntry(buf, 'word/document.xml');
+  const text = xml.replace(/<[^>]+>/g, ' ');
+  assert.match(text, /Process Definition Document/);
+  assert.match(text, /DRAFT: not approved/);
+  assert.match(xml, /TOC [^<]*1-2/, 'a contents field');
+  for (const sec of d.sections) assert.ok(text.includes(`${sec.number}  ${sec.title}`.replace(/&/g, '&amp;')), `heading ${sec.number}`);
+  for (const s of orderedSteps(gold)) assert.ok(text.includes(s.name.replace(/&/g, '&amp;')), s.name);
+  assert.match(xml, /w:tblHeader/, 'table header rows repeat across pages');
+  const styles = await zipEntry(buf, 'word/styles.xml');
+  assert.match(styles, /Arial/);
+  assert.match(styles, /7A1F5C/i);
+  const header = await zipEntry(buf, 'word/header1.xml').catch(() => zipEntry(buf, 'word/header2.xml'));
+  assert.match(header, /Acme Corp/);
+  const approved = await zipEntry(await Packer.toBuffer(docxDocument(d, { draft: false })), 'word/document.xml');
+  assert.doesNotMatch(approved, /DRAFT/);
+});
