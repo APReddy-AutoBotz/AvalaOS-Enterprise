@@ -36,6 +36,21 @@ export const metricCell = (m: ProcessModel, kind: Metric['kind']): Cell => {
 };
 
 export const ACCESS_TEXT: Record<string, string> = { confirmed: 'confirmed', reported: 'reported, not confirmed', unknown: 'unknown', confirmed_absent: 'not available' };
+const METHOD: Record<string, string> = { api: 'API', ui: 'Screens', file: 'File', database: 'Database', event: 'Events', email: 'Email' };
+const ORDER = ['confirmed', 'reported', 'unknown', 'confirmed_absent'] as const;
+/** One line per access method with counts by status: "API: 2 confirmed, 2 not available. Screens: 11 confirmed". */
+export function accessSummary(s: SystemRef): string {
+  if (!s.access.length) return NOT_PROVIDED;
+  const methods = [...new Set(s.access.map(a => a.method))];
+  return methods.map(m => {
+    const list = s.access.filter(a => a.method === m);
+    const counts = ORDER.map(st => [st, list.filter(a => a.access === st).length] as const).filter(([, n]) => n > 0);
+    if (list.length === 1) return `${METHOD[m]}: ${ACCESS_TEXT[list[0].access]}`;
+    const COUNT: Record<string, string> = { confirmed: 'confirmed', reported: 'reported', unknown: 'unknown', confirmed_absent: 'not available' };
+    return `${METHOD[m]}: ${counts.map(([st, n]) => `${n} ${COUNT[st]}`).join(', ')}`;
+  }).join('. ');
+}
+
 export function accessText(s: SystemRef): string {
   if (!s.access.length) return NOT_PROVIDED;
   return s.access.map(a => `${a.method.toUpperCase()}${a.name ? ` (${a.name})` : ''}: ${ACCESS_TEXT[a.access]}`).join('; ');

@@ -5,7 +5,7 @@ import type { AccessMethod, Fact, ProcessModel, Step, StepTraits, SystemRef } fr
 import { emptyModel } from '../processModel/empty.ts';
 import { validateModel } from '../processModel/validate.ts';
 import { setStepTrait, setSystemUiStable } from '../processModel/patch.ts';
-import { CAPS, COMPLEXITY_PENALTY, FIT, HUMAN_FLOOR, WEIGHTS, scoreOf, scoreStep, type Approach, type HumanPoint } from './scoring.ts';
+import { CAPS, COMPLEXITY_PENALTY, FIT, HUMAN_FLOOR, WEIGHTS, robotsBlocked, scoreOf, scoreStep, type Approach, type HumanPoint } from './scoring.ts';
 import { assessProcess, yearlyVolume } from './process.ts';
 import { DecisionError, decisionsFromEntries, decisionsToEntries, effectiveApproach, emptyDecisions, withOverride, withoutOverride, withRate } from './decisions.ts';
 
@@ -256,16 +256,20 @@ test('cautions fire at their named thresholds', () => {
   assert.equal(assessProcess(build([rpaStep(5, 100)], { volume: 1000, unit: 'cases/week' })).cautions.some(c => c.fired), false);
 });
 
-test('the gold AP model: RPA-led, no agent anywhere, API second with the systems to confirm', () => {
+test('the gold AP model: SAP GUI scripting is not available, so SAP steps are not RPA; API-led with RPA on the other systems, no agent', () => {
   const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
   const r = assessProcess(gold);
-  assert.equal(r.lead, 'rpa');
-  assert.equal(r.ranking[0].approach, 'rpa');
-  assert.equal(r.ranking[1].approach, 'api');
+  const sap = gold.systems.find(x => /SAP/.test(x.name))!;
+  assert.equal(robotsBlocked(sap), true, 'the recorded scripting ban counts as robots not allowed');
+  for (const st of r.steps.filter(x => !x.alreadyAutomated && gold.steps.find(y => y.id === x.stepId)!.systemIds.includes(sap.id))) assert.equal(scoreOf(st, 'rpa'), 0);
+  assert.equal(r.lead, 'api');
+  assert.equal(r.ranking[0].approach, 'api');
+  assert.equal(r.ranking[1].approach, 'rpa');
+  assert.ok(r.counts.rpa > 0, 'RPA still does the work on the other systems');
   assert.equal(r.counts.agent, 0);
   assert.equal(r.aiSteps, 0);
-  assert.match(r.ranking[1].toWin, /SAP S\/4HANA/);
-  assert.equal(scoreOf(r.steps.find(s => !s.alreadyAutomated)!, 'agent') <= CAPS.agentConditionUnknown, true);
+  // A person's answer wins over the recorded method.
+  assert.equal(robotsBlocked({ ...sap, uiAllowed: { value: true, status: 'user-confirmed', sources: [] } }), false);
 });
 
 test('overrides need a rationale, survive storage, and leave the scoring answer visible', () => {

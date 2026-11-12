@@ -71,7 +71,7 @@ export function gaps(m: ProcessModel): Gap[] {
   if (m.meta.objective.status === 'unknown') out.push({ target: { kind: 'meta', field: 'objective' }, kind: 'unknown_value', label: 'Process objective is unknown.' });
   if (m.meta.owner.status === 'unknown') out.push({ target: { kind: 'meta', field: 'owner' }, kind: 'unknown_value', label: 'Process owner is unknown.' });
   for (const x of m.meta.metrics) {
-    if (x.value === null) out.push({ target: { kind: 'metric', id: x.id, field: 'value' }, kind: 'unknown_value', label: `${x.label} is unknown.` });
+    if (x.value === null && !x.range) out.push({ target: { kind: 'metric', id: x.id, field: 'value' }, kind: 'unknown_value', label: `${x.label} is unknown.` });
   }
   for (const s of m.steps) {
     if (s.roleIds.length === 0) out.push({ target: { kind: 'step', id: s.id, field: 'roleIds' }, kind: 'step_without_role', label: `Who does "${s.name}"?` });

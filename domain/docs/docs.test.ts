@@ -68,3 +68,19 @@ test('the same model gives the same documents', () => {
   assert.equal(toMarkdown(buildPdd(input(gold))), toMarkdown(buildPdd(input(JSON.parse(JSON.stringify(gold))))));
   assert.equal(toMarkdown(buildBrd(input(gold))), toMarkdown(buildBrd(input(JSON.parse(JSON.stringify(gold))))));
 });
+
+test('PDD applications: one summary line per application, every interface in its own table, robots from the recorded ban', () => {
+  const d = buildPdd(input(gold));
+  const apps = table(d, '2.2', 'Applications used');
+  const sap = apps.rows.find(r => /SAP/.test(r[0].text))!;
+  assert.ok(sap[3].text.length < 120, sap[3].text);
+  assert.match(sap[3].text, /^Screens: .*API: /);
+  assert.match(sap[4].text, /^No \(SAP GUI scripting: not available\)/);
+  const ifaces = table(d, '2.2', 'Interfaces and transactions');
+  assert.equal(ifaces.rows.length, gold.systems.reduce((t, s) => t + s.access.length, 0));
+});
+
+test('a figure given as a range is not reported as unknown', () => {
+  const d = buildPdd(input(gold));
+  assert.equal(d.openItems.some(o => /Monthly invoice volume is unknown/i.test(o.text)), false);
+});
