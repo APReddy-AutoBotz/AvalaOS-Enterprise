@@ -555,6 +555,49 @@ test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and 
   await expect(page.getByLabel('Name of step 1')).toHaveValue('Post invoice in SAP S/4HANA');
 });
 
+test('work items: two items merge into one, one item splits into two, and a reload keeps both', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Work items');
+  const items = page.getByTestId('work-items');
+  const access = 'Set up access to SAP S/4HANA for the solution';
+  const testEnv = 'Prepare a test environment and test data for SAP S/4HANA';
+  const total = await items.getByTestId('proposal').count();
+
+  // Merge: the originals are set aside with a reason, the new item carries all four criteria and is selected.
+  await items.getByLabel(`Select ${access}`).check();
+  await expect(items.getByRole('button', { name: /^Merge 1 selected/ })).toHaveCount(0);
+  await items.getByLabel(`Select ${testEnv}`).check();
+  await items.getByRole('button', { name: 'Merge 2 selected into one' }).click();
+  await expect(items.getByTestId('rejected-reason')).toHaveCount(2);
+  await expect(items.getByTestId('rejected-reason').first()).toContainText('Merged into');
+  const merged = items.getByTestId('proposal').filter({ hasText: access }).filter({ hasText: 'Edited' });
+  await expect(merged).toContainText('4 acceptance criteria');
+  await expect(items.getByTestId('proposal')).toHaveCount(total + 1);
+  await expect(page.getByTestId('confirm-panel')).toContainText('1 selected');
+  await shot(page, '56-merged');
+
+  // Split: two of the four criteria move to a new item with its own title.
+  await merged.getByRole('button', { name: access }).click();
+  await items.getByRole('button', { name: 'Split into two items' }).click();
+  const form = items.getByTestId('split-form');
+  await form.getByRole('button', { name: 'Split item' }).click();
+  await expect(form.getByRole('alert')).toContainText('Give the new item a title');
+  await form.getByLabel('Title of the new item').fill('Prepare the SAP test environment');
+  await form.getByRole('checkbox').nth(2).check();
+  await form.getByRole('checkbox').nth(3).check();
+  await form.getByRole('button', { name: 'Split item' }).click();
+  const second = items.getByTestId('proposal').filter({ hasText: 'Prepare the SAP test environment' });
+  await expect(second).toContainText('2 acceptance criteria');
+  await expect(items.getByTestId('proposal').filter({ hasText: access }).filter({ hasText: 'Edited' })).toContainText('2 acceptance criteria');
+  await expect(items.getByTestId('proposal')).toHaveCount(total + 2);
+
+  // A reload keeps both, in place and not flagged as removed.
+  await page.reload();
+  await expect(items.getByTestId('proposal')).toHaveCount(total + 2);
+  await expect(items.getByTestId('proposal').filter({ hasText: 'Prepare the SAP test environment' })).toBeVisible();
+  await expect(items).not.toContainText('Source removed');
+});
+
 test('work items: proposals reviewed (edit, reject, select), confirmed to the board once; the board keeps moves and edits and shows upstream changes', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Work items');
