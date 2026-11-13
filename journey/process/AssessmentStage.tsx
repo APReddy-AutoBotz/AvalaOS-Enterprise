@@ -263,24 +263,30 @@ function Ranking({ result }: { result: ProcessAssessment }) {
     <section aria-label="Ranking of approaches">
       <h3 className="font-display text-base font-semibold text-slate-900">How the approaches rank for this process</h3>
       <p className="text-sm text-slate-500">Average fit across the {result.candidates} {result.candidates === 1 ? 'step' : 'steps'} open to automation (not needing a person's judgment or hands), from fixed weights. The same facts always give the same ranking.</p>
-      <ol className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {result.ranking.map((r, i) => (
-          <li key={r.approach} data-testid="ranked-approach" className={cx('flex flex-col rounded-xl border bg-white p-5', i === 0 && result.lead === r.approach ? 'border-[#FFBC03] ring-2 ring-[#FFBC03]/30' : 'border-slate-200')}>
-            <div className="flex items-center justify-between">
-              <span className={cx('rounded-full px-2.5 py-0.5 text-[11px] font-bold', i === 0 ? 'bg-[#002C4B] text-white' : 'bg-slate-100 text-slate-600')}>{RANK_LABEL[i]}</span>
-              <span className={cx('h-2.5 w-2.5 rounded-full', APPROACH_TONE[r.approach].dot)} aria-hidden />
-            </div>
-            <p className="mt-3 font-display text-lg font-semibold text-slate-900">{APPROACH_LABEL[r.approach]}</p>
-            <p className="mt-1"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{r.score}</span><span className="text-sm text-slate-400"> / 100</span></p>
-            <ScoreBar score={r.score} approach={r.approach} className="mt-2" />
-            <p className="mt-3 text-sm font-medium text-slate-800">Best for <span className="tabular-nums">{r.stepsWon}</span> {r.stepsWon === 1 ? 'step' : 'steps'}{r.stepsFit > r.stepsWon ? <span className="font-normal text-slate-500"> · could do {r.stepsFit}</span> : null}</p>
-            <dl className="mt-3 space-y-2.5 border-t border-slate-100 pt-3 text-xs leading-5">
-              {r.strength && <div><dt className="font-semibold text-emerald-700">Strongest where</dt><dd className="text-slate-600">{r.strength.text} <span className="text-slate-400">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
-              {r.heldBack && <div><dt className="font-semibold text-amber-700">Held back where</dt><dd className="text-slate-600">{r.heldBack.text} <span className="text-slate-400">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
-              {r.toWin && !(r.approach === 'api' && result.apiSwitch.steps > 0) && <div><dt className="font-semibold text-slate-500">Would rank higher</dt><dd className="text-slate-600">{r.toWin.replace(/^It (would rank|ranks) higher (only )?/, '').replace(/^It is justified only /, 'only ').replace(/^./, c => c.toUpperCase())}</dd></div>}
-            </dl>
-          </li>
-        ))}
+      {/* A ranking is a list: one row per approach, the scores on one scale so they can be compared at a glance. */}
+      <ol className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+        {result.ranking.map((r, i) => {
+          const lead = i === 0 && result.lead === r.approach;
+          return (
+            <li key={r.approach} data-testid="ranked-approach" className={cx('relative grid items-start gap-x-6 gap-y-3 px-5 py-4 md:grid-cols-[minmax(12rem,15rem)_minmax(9rem,13rem)_minmax(0,1fr)]', i > 0 && 'border-t border-slate-100', lead && 'bg-[#FFFBEB]')}>
+              {lead && <span className="absolute inset-y-0 left-0 w-1 bg-[#FFBC03]" aria-hidden />}
+              <div>
+                <p className={cx('text-xs font-semibold', i === 0 ? 'text-[#002C4B]' : 'text-slate-500')}>{RANK_LABEL[i]}</p>
+                <p className="mt-0.5 flex items-center gap-2 font-display text-[17px] font-semibold text-slate-900"><span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', APPROACH_TONE[r.approach].dot)} aria-hidden />{APPROACH_LABEL[r.approach]}</p>
+                <p className="mt-1 text-sm text-slate-700">Best for <span className="tabular-nums">{r.stepsWon}</span> {r.stepsWon === 1 ? 'step' : 'steps'}{r.stepsFit > r.stepsWon ? <span className="text-slate-500">, could do {r.stepsFit}</span> : null}</p>
+              </div>
+              <div>
+                <p><span className="font-display text-2xl font-semibold tabular-nums text-slate-900">{r.score}</span><span className="text-sm text-slate-400"> / 100</span></p>
+                <ScoreBar score={r.score} approach={r.approach} className="mt-1.5" />
+              </div>
+              <dl className="space-y-1.5 text-[13px] leading-5">
+                {r.strength && <div><dt className="inline font-semibold text-emerald-700">Strongest where: </dt><dd className="inline text-slate-700">{r.strength.text} <span className="text-slate-400">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+                {r.heldBack && <div><dt className="inline font-semibold text-amber-700">Held back where: </dt><dd className="inline text-slate-700">{r.heldBack.text} <span className="text-slate-400">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+                {r.toWin && !(r.approach === 'api' && result.apiSwitch.steps > 0) && <div><dt className="inline font-semibold text-slate-600">Would rank higher: </dt><dd className="inline text-slate-700">{r.toWin.replace(/^It (would rank|ranks) higher (only )?/, '').replace(/^It is justified only /, 'only ').replace(/^./, c => c.toUpperCase())}</dd></div>}
+              </dl>
+            </li>
+          );
+        })}
       </ol>
     </section>
   );
