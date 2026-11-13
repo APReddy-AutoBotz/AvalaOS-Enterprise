@@ -10,8 +10,9 @@ declare
   ws uuid; proj uuid; item uuid; n int; r jsonb; passed int := 0;
   late_email text := 'late-' || gen_random_uuid() || '@example.test';
 begin
-  insert into auth.users (id, email) values
-    (admin_u, 'a-' || admin_u || '@example.test'), (dev_u, 'd-' || dev_u || '@example.test'), (outsider_u, 'o-' || outsider_u || '@example.test');
+  -- Made as the dashboard makes them (invited_at, confirmed), since sign-up is by invitation.
+  insert into auth.users (id, email, invited_at, email_confirmed_at) values
+    (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (dev_u, 'd-' || dev_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   ws := (public.create_organization('People test', 'AP') ->> 'workspaceId')::uuid;
@@ -33,7 +34,7 @@ begin
   begin perform public.invite_member(ws, 'not-an-email', 'viewer'); raise exception 'FAILED 2b: accepted a bad email';
   exception when invalid_parameter_value then null; end;
   execute 'reset role';
-  insert into auth.users (id, email) values (late_u, late_email);
+  insert into auth.users (id, email, email_confirmed_at) values (late_u, late_email, now());
   select count(*) into n from public.workspace_members where workspace_id = ws and user_id = late_u and role = 'viewer' and can_approve and job = 'approver';
   if n <> 1 then raise exception 'FAILED 2c: invitation not claimed'; end if;
   select count(*) into n from public.workspace_invites where workspace_id = ws;

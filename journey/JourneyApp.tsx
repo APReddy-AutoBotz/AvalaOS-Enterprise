@@ -3,6 +3,7 @@
 import React from 'react';
 import { journeyPath, parseJourneyPath, type JourneyRoute } from '../domain/workspace/route.ts';
 import { createJourneyStore } from './store/index.ts';
+import { redirectError, withoutRedirectError } from '../domain/auth/providers.ts';
 import type { JourneyStore, Me } from './store/types.ts';
 import { SignInPage } from './pages/SignInPage.tsx';
 import { BoardPage } from './pages/BoardPage.tsx';
@@ -10,6 +11,11 @@ import { ProcessesPage } from './pages/ProcessesPage.tsx';
 import { MyWorkPage } from './pages/MyWorkPage.tsx';
 import { ProcessWorkspace } from './pages/ProcessWorkspace.tsx';
 import { Button, Spinner } from './ui.tsx';
+
+// A provider (Google, Microsoft) that could not sign the person in sends them back with the reason in
+// the address. Read it before the store's client starts, then take it out of the address.
+const signInRedirectError = redirectError(location.search, location.hash);
+if (signInRedirectError) history.replaceState(null, '', withoutRedirectError(location.pathname, location.search, location.hash));
 
 const store = createJourneyStore();
 
@@ -101,7 +107,7 @@ function Journey({ store }: { store: JourneyStore }) {
         </div>
       )}
       <main className={`mx-auto px-6 py-8 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
-        {!me || nav.route.page === 'signin' ? <SignInPage store={store} /> :
+        {!me || nav.route.page === 'signin' ? <SignInPage store={store} initialError={signInRedirectError} /> :
           nav.route.page === 'work' ? <MyWorkPage store={store} nav={nav} /> :
           nav.route.page === 'processes' ? <ProcessesPage store={store} nav={nav} /> :
           nav.route.page === 'board' ? <BoardPage store={store} nav={nav} projectId={nav.route.projectId} itemId={nav.route.itemId} /> :
