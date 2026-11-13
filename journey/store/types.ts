@@ -9,6 +9,8 @@ import type { StoredFormat } from '../../domain/workspace/sources.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
+import type { Proposal } from '../../domain/workitems/register.ts';
+import type { Project, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 
 export interface Me { id: string; email: string }
@@ -133,4 +135,17 @@ export interface JourneyStore {
   saveDocumentEdit(processId: string, edit: SectionEdit): Promise<void>;
   /** Removes an edit, so the section shows the generated text again ("take update"). */
   removeDocumentEdit(processId: string, docType: SectionEdit['docType'], sectionKey: string): Promise<void>;
+
+  /** The process's work proposals, every one ever derived (by derivation key). */
+  listProposals(processId: string): Promise<Proposal[]>;
+  /** Inserts or updates proposals by derivation key; editors and admins only. Nothing is deleted. */
+  saveProposals(processId: string, rows: Proposal[]): Promise<void>;
+
+  /** Delivery board projects of the workspace. */
+  listProjects(workspaceId: string): Promise<Project[]>;
+  createProject(workspaceId: string, name: string): Promise<Project>;
+  /** Puts the selected proposals on the board once: a repeat creates nothing. */
+  confirmProposals(processId: string, projectId: string, keys: string[]): Promise<{ created: number; skipped: number }>;
+  listWorkItems(projectId: string): Promise<WorkItem[]>;
+  updateWorkItem(id: string, edit: WorkItemEdit): Promise<WorkItem>;
 }

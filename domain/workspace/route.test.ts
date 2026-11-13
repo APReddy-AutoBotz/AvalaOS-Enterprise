@@ -32,3 +32,12 @@ test('revision status covers every combination', () => {
     assert.doesNotMatch(s.label, /12|seq|hash|schema|v\d/i, 'edit counts and internal versions stay out of the header');
   }
 });
+
+test('board routes: /board, /board/:project and /board/:project/:item', () => {
+  const id = '3f2a9c1e-1b2c-4d5e-8f90-a1b2c3d4e5f6', it = '0a1b2c3d-1111-4222-8333-444455556666';
+  assert.deepEqual(parseJourneyPath('/board'), { page: 'board' });
+  assert.deepEqual(parseJourneyPath(`/board/${id}`), { page: 'board', projectId: id });
+  assert.deepEqual(parseJourneyPath(`/board/${id}/${it}`), { page: 'board', projectId: id, itemId: it });
+  assert.equal(parseJourneyPath('/board/not-a-uuid'), null);
+  assert.equal(journeyPath({ page: 'board', projectId: id, itemId: it }), `/board/${id}/${it}`);
+});

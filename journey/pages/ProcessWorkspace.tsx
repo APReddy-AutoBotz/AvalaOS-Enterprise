@@ -13,6 +13,7 @@ import { ProcessEditor } from '../process/ProcessEditor.tsx';
 import { SourcesStage } from '../process/SourcesStage.tsx';
 import { AssessmentStage } from '../process/AssessmentStage.tsx';
 import { FlowsStage } from '../process/FlowsStage.tsx';
+import { WorkItemsStage } from '../process/WorkItemsStage.tsx';
 import { DocumentsStage } from '../process/DocumentsStage.tsx';
 import { SourceContext } from '../process/widgets.tsx';
 import { quoteInContext } from '../../domain/workspace/sources.ts';
@@ -140,6 +141,8 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           : stage === 'documents' && model && current && model.steps.length > 0
           ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources} approvedRevision={approved ? approved.revNo : null}
               revision={{ label: `Revision ${current.revNo}${current.state === 'working' ? ', working draft' : ''}`, state: current.state === 'approved' ? 'approved' : 'working', date: new Date(current.approvedAt ?? current.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }} />
+          : stage === 'work-items' && model && model.steps.length > 0
+          ? <WorkItemsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} canEdit={canEdit} onOpenBoard={id => nav.go({ page: 'board', projectId: id })} />
           : stage === 'flows' && model && model.steps.length > 0
           ? <FlowsStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
           : stage === 'process' && model

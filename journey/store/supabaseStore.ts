@@ -7,6 +7,15 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { decisionsFromEntries, decisionsToEntries } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
+import type { Proposal } from '../../domain/workitems/register.ts';
+import type { WorkItem } from '../../domain/workitems/board.ts';
+
+const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at';
+const itemFrom = (r: any): WorkItem => ({
+  id: r.id, projectId: r.project_id, parentId: r.parent_id, type: r.item_type, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [],
+  status: r.status, priority: r.priority, ownerId: r.owner_id, estimateHours: r.estimate_hours === null ? null : Number(r.estimate_hours), startDate: r.start_date, dueDate: r.due_date,
+  processId: r.process_id, stepIds: r.step_ids ?? [], requirements: r.details?.requirements ?? [], snapshot: r.details?.snapshot ?? {}, updatedAt: r.updated_at,
+});
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
@@ -222,6 +231,64 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
         const l = r.links ?? {};
         return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order };
       });
+    },
+    async listProjects(workspaceId) {
+      const { data, error } = await db.from('delivery_projects').select('id, name, description').eq('workspace_id', workspaceId).is('archived_at', null).order('created_at');
+      if (error) fail(error);
+      return (data ?? []) as any;
+    },
+    async createProject(workspaceId, name) {
+      const { data, error } = await db.from('delivery_projects').insert({ workspace_id: workspaceId, name }).select('id, name, description').single();
+      if (error) fail(error);
+      return data as any;
+    },
+    async confirmProposals(processId, projectId, keys) {
+      const { data, error } = await db.rpc('confirm_proposals', { target_process: processId, target_project: projectId, proposal_keys: keys });
+      if (error) fail(error);
+      return data as { created: number; skipped: number };
+    },
+    async listWorkItems(projectId) {
+      const { data, error } = await db.from('delivery_work_items').select(ITEM_COLUMNS).eq('project_id', projectId).order('sort_order');
+      if (error) fail(error);
+      return (data ?? []).map(itemFrom);
+    },
+    async updateWorkItem(id, e) {
+      const row: Record<string, unknown> = {};
+      if (e.title !== undefined) row.title = e.title;
+      if (e.description !== undefined) row.description = e.description;
+      if (e.status !== undefined) row.status = e.status;
+      if (e.priority !== undefined) row.priority = e.priority;
+      if (e.estimateHours !== undefined) row.estimate_hours = e.estimateHours;
+      if (e.startDate !== undefined) row.start_date = e.startDate;
+      if (e.dueDate !== undefined) row.due_date = e.dueDate;
+      const { data, error } = await db.from('delivery_work_items').update(row).eq('id', id).select(ITEM_COLUMNS).single();
+      if (error) fail(error);
+      return itemFrom(data);
+    },
+    async listProposals(processId) {
+      const { data, error } = await db.from('work_item_proposals').select('derivation_key, item_type, parent_key, title, description, acceptance_criteria, step_ids, requirement_codes, state, rejected_reason, user_edited, sort_order, confirmed_work_item_id').eq('process_id', processId).not('derivation_key', 'is', null).order('sort_order');
+      if (error) fail(error);
+      return (data ?? []).map((r: any): Proposal => ({
+        key: r.derivation_key, type: r.item_type, parentKey: r.parent_key, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [], stepIds: r.step_ids ?? [],
+        requirements: r.requirement_codes ?? [], state: r.state === 'edited' ? 'proposed' : r.state, rejectedReason: r.rejected_reason, edited: r.user_edited, order: r.sort_order, workItemId: r.confirmed_work_item_id,
+      }));
+    },
+    async saveProposals(processId, rows) {
+      if (!rows.length) return;
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const { data: existing, error: e1 } = await db.from('work_item_proposals').select('id, derivation_key, batch_id').eq('process_id', processId).in('derivation_key', rows.map(r => r.key));
+      if (e1) fail(e1);
+      const idOf = new Map((existing ?? []).map((x: any) => [x.derivation_key, x]));
+      const batch = crypto.randomUUID();
+      const row = (r: Proposal) => ({
+        workspace_id: process.workspaceId, process_id: processId, derivation_key: r.key, item_type: r.type, parent_key: r.parentKey, title: r.title, description: r.description,
+        acceptance_criteria: r.acceptance, step_ids: r.stepIds, requirement_codes: r.requirements, state: r.state, rejected_reason: r.rejectedReason, user_edited: r.edited, sort_order: r.order,
+      });
+      const updates = rows.filter(r => idOf.has(r.key)).map(r => ({ ...row(r), id: (idOf.get(r.key) as any).id, batch_id: (idOf.get(r.key) as any).batch_id }));
+      const inserts = rows.filter(r => !idOf.has(r.key)).map(r => ({ ...row(r), batch_id: batch }));
+      if (updates.length) { const { error } = await db.from('work_item_proposals').upsert(updates, { onConflict: 'id' }); if (error) fail(error); }
+      if (inserts.length) { const { error } = await db.from('work_item_proposals').insert(inserts); if (error) fail(error); }
     },
     async listDocumentEdits(processId) {
       const { data, error } = await db.from('document_edits').select('doc_type, section_key, html, base_hash, updated_by, updated_at').eq('process_id', processId);
