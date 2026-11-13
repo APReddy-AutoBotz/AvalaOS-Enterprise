@@ -46,7 +46,8 @@ const privacy: TrustPage = {
       body: [
         {
           list: [
-            'Account details: your email address, your display name, your password (kept by our sign-in provider as a one-way hash, never as text), the workspaces you belong to and your role in each.',
+            'Account details: your email address, your display name, your password if you set one (kept by our sign-in provider as a one-way hash, never as text), the workspaces you belong to and your role in each.',
+            'If you sign in with Google or Microsoft: your name, your email address and whether that provider has verified it. We never see your Google or Microsoft password, and we ask for nothing else from those accounts.',
             'Invitations: the email address and role an admin enters to invite someone.',
             'Workspace content: the text read from the files you add as sources, with each file\'s name and size; process models, assessments, requirements, documents and your edits to them; flows; work items and the Delivery board; document branding, including any logo you upload; and answers you give to open questions. Files are read in your browser, and only the text read from them is stored, not the file itself.',
             'Voice answers: when you answer by speaking, the recording is sent to be turned into text. Only the text is kept.',
@@ -92,12 +93,13 @@ const privacy: TrustPage = {
         'These companies process data for us to run Avala OS:',
         {
           list: [
-            'Supabase: the database, sign-in, sign-in emails and the server functions.',
+            'Supabase: the database, sign-in, sign-in emails and the server functions. The database is hosted in Sydney, Australia.',
             'OpenAI: the AI requests described above.',
             'Netlify: hosting of the website.',
+            'Google and Microsoft: only when you choose to sign in with them, to confirm who you are.',
           ],
         },
-        'They may process data outside India, including in the United States. We will update this list before adding a provider that handles workspace content.',
+        'They may process data outside India, including in Australia and the United States. We will update this list before adding a provider that handles workspace content.',
       ],
     },
     {
@@ -244,7 +246,7 @@ const security: TrustPage = {
     {
       id: 'hosting', title: 'Where data lives',
       body: [
-        'Workspace data is stored in a PostgreSQL database run by Supabase, which states that customer data is encrypted at rest with AES-256 and in transit with TLS. The website is served by Netlify over HTTPS.',
+        'Workspace data is stored in a PostgreSQL database run by Supabase in its Sydney, Australia region. Supabase states that customer data is encrypted at rest with AES-256 and in transit with TLS. The website is served by Netlify over HTTPS.',
         'Files you add as sources are read in your browser. Only the text read from them is sent to the server and stored.',
       ],
     },
@@ -253,7 +255,8 @@ const security: TrustPage = {
       body: [
         {
           list: [
-            'Sign-up is by invitation only. The database refuses any new account whose email address has not been invited.',
+            'Sign-up is by invitation only. The database refuses any new account whose email address has not been invited, and an invitation is used only once the account\'s email address is confirmed, whether by email or by Google or Microsoft.',
+            'You can sign in with an email and password, or with Google or Microsoft. For Microsoft we ask Microsoft to say whether it has verified the email address, so an address nobody has verified cannot take up someone else\'s invitation.',
             'Every table in the database has row-level security: a person can read or change a workspace\'s data only if they are a member of it, and only as far as their role allows.',
             'Roles are Admin, Business analyst, Solution architect, Developer, Approver and Viewer. Viewers can read but not change. Only people with approval rights can approve a revision.',
             'Only admins can invite, change or remove members. The last admin of a workspace cannot be removed.',
