@@ -637,6 +637,25 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   await page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
   await expect(page.getByTestId('item-panel').getByLabel('Description')).toHaveValue('Ask the SAP basis team which OData services are released.');
 
+  // The board exports as files Jira and Azure DevOps import.
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Export' }).click();
+  const saved = async (name: string) => {
+    const [d] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-panel').getByRole('button', { name }).click()]);
+    return { file: d.suggestedFilename(), text: (await (await import('node:fs/promises')).readFile(await d.path(), 'utf8')) };
+  };
+  const jira = await saved('Download for Jira (CSV)');
+  expect(jira.file).toBe('AP-automation-jira.csv');
+  expect(jira.text).toContain('Issue ID,Parent,Issue Type,Summary');
+  expect(jira.text).toMatch(/\r\n1,,Epic,Rule-based RPA in SAP S\/4HANA/);
+  expect(jira.text).toContain('spike');
+  const azure = await saved('Download for Azure DevOps (CSV)');
+  expect(azure.text).toContain('Work Item Type,Title 1,Title 2,Title 3');
+  expect(azure.text).toMatch(/\r\nFeature,Rule-based RPA in SAP S\/4HANA/);
+  await shot(page, '55c-export');
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
+
   // Change the linked requirement in the FRD: the board item shows "Upstream changed" and is not edited.
   const epicCard = page.getByTestId('epic-lane').filter({ hasText: 'Rule-based RPA in SAP S/4HANA' });
   await page.keyboard.press('Escape');
