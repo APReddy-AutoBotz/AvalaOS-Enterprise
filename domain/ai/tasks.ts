@@ -5,6 +5,7 @@ import { readFlowchart } from '../flowchart/vision.ts';
 import { stepTraits } from '../assess/traits.ts';
 import { profileFacts } from '../assess/profileFacts.ts';
 import { answerFromNotes } from '../questions/notes.ts';
+import { draftNarrative } from '../docs/narrative.ts';
 
 const str = { type: 'string' } as const;
 
@@ -50,4 +51,5 @@ export const TASKS: Record<string, TaskDefinition> = {
   [stepTraits.id]: stepTraits,
   [profileFacts.id]: profileFacts,
   [answerFromNotes.id]: answerFromNotes,
+  [draftNarrative.id]: draftNarrative,
 };
