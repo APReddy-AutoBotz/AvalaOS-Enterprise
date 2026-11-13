@@ -87,7 +87,14 @@ export function richParas(html: string): RichPara[] {
 }
 
 export function richMarkdown(html: string): string {
-  const runMd = (r: Run) => { const t = r.text.replace(/\n/g, '  \n'); return r.bold && r.italic ? `***${t}***` : r.bold ? `**${t}**` : r.italic ? `*${t}*` : t; };
+  // Spaces stay outside the markers ("a **b**", not "a** b**"), or Markdown does not read them as emphasis.
+  const runMd = (r: Run) => {
+    const t = r.text.replace(/\n/g, '  \n');
+    const mark = r.bold && r.italic ? '***' : r.bold ? '**' : r.italic ? '*' : '';
+    if (!mark || !t.trim()) return t;
+    const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(t)!;
+    return `${lead}${mark}${core}${mark}${trail}`;
+  };
   let n = 0;
   return richParas(html).map(p => {
     const text = p.runs.map(runMd).join('');

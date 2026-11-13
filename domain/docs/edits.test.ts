@@ -27,6 +27,7 @@ test('edited HTML reads back as paragraphs, list items and runs for Word and Mar
   assert.deepEqual(p[0].runs, [{ text: 'We ' }, { text: 'always', bold: true }, { text: ' post ' }, { text: 'same day', italic: true }, { text: '.' }]);
   assert.equal(p[3].ordered, true);
   assert.equal(richMarkdown(html), 'We **always** post *same day*.\n\n- First\n- Second\n1. One');
+  assert.equal(richMarkdown('<p>Cut it.<strong> Always.</strong></p>'), 'Cut it. **Always.**');
 });
 
 test('an edit replaces the narrative, keeps the tables, survives a rebuild and a layout, and needs review when the generated text changes', () => {
