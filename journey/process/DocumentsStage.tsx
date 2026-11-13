@@ -54,7 +54,7 @@ function FigureView({ b }: { b: Extract<Block, { kind: 'figure' }> }) {
   return (
     <figure className="flow-figure" data-testid="flow-figure" data-caption={b.caption}>
       <figcaption className="mb-1.5 flex items-center justify-between gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--doc-accent)' }}>{b.caption}</span>
+        <span className="text-xs font-semibold" style={{ color: 'var(--doc-accent)' }}>{b.caption}</span>
         <button type="button" className="no-print text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => setFull(!full)} aria-pressed={full}>{full ? 'Fit to width' : 'Full size'}</button>
       </figcaption>
       <div className={cx('flow-svg rounded-lg border border-slate-200 bg-white', full ? 'max-h-[80vh] overflow-auto' : '[&_svg]:h-auto [&_svg]:max-w-full')} dangerouslySetInnerHTML={{ __html: b.svg }} />
@@ -83,8 +83,8 @@ function BlockView({ b }: { b: Block; key?: React.Key }) {
     case 'table': return b.rows.length === 0 ? <p className="text-sm italic text-slate-500">{b.caption}: {b.empty}</p> : (
       <div className="overflow-x-auto">
         <table className="w-full border-collapse text-sm" data-testid="doc-table" data-caption={b.caption}>
-          <caption className="caption-top pb-1.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">{b.caption}</caption>
-          <thead><tr>{b.columns.map(c => <th key={c} className="border-b-2 border-slate-300 px-2.5 py-2 text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500">{c}</th>)}</tr></thead>
+          <caption className="caption-top pb-1.5 text-left text-xs font-semibold text-slate-500">{b.caption}</caption>
+          <thead><tr>{b.columns.map(c => <th key={c} className="border-b-2 border-slate-300 px-2.5 py-2 text-left align-bottom text-xs font-semibold text-slate-600">{c}</th>)}</tr></thead>
           <tbody>{b.rows.map((r, i) => <tr key={i} className="border-b border-slate-100 align-top">{r.map((c, j) => <td key={j} className="px-2.5 py-2 text-slate-800"><CellView c={c} /></td>)}</tr>)}</tbody>
         </table>
       </div>
@@ -304,13 +304,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
-            <div className="sticky top-4 max-h-[80vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-sm">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Contents</p>
+            <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-sm">
+              <p className="text-xs font-semibold text-slate-500">Contents</p>
               <ol className="mt-2 space-y-1">{doc.sections.map(s => <li key={s.id} className={s.level === 2 ? 'pl-3' : 'mt-2 font-semibold'}><a href={`#${s.id}`} className="text-slate-700 hover:text-[#002C4B] hover:underline"><span className="tabular-nums text-slate-400">{s.number}</span> {s.title}</a></li>)}</ol>
               <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{doc.openItems.length} open {doc.openItems.length === 1 ? 'item' : 'items'}</p>
             </div>
           </nav>
-          <article id="document-print" data-testid="document" className="min-w-0 rounded-xl border border-slate-200 bg-white px-6 py-8 sm:px-10" style={{ fontFamily: `${docSettings.branding.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${docSettings.branding.accent}` }}>
+          <article id="document-print" data-testid="document" className="min-w-0 rounded-xl border border-slate-200 bg-white px-6 py-8 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_16px_40px_-24px_rgba(15,23,42,0.18)] sm:px-12 sm:py-10" style={{ fontFamily: `${docSettings.branding.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${docSettings.branding.accent}` }}>
             <header className="border-b-4 pb-5" style={{ borderColor: 'var(--doc-accent)' }}>
               {docSettings.branding.logo && <img src={docSettings.branding.logo} alt="" className="mb-3 h-8 object-contain" />}
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{docSettings.branding.organisation ? `${docSettings.branding.organisation} · ` : ''}{doc.title}</p>
@@ -329,7 +329,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {st?.state === 'edited' && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-edited">Edited by you</span>}
                   {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
                   {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}
-                  {editable && editing !== s.id && <button type="button" className="no-print ml-auto font-sans text-xs font-semibold text-[#002C4B] opacity-70 hover:underline hover:opacity-100" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
+                  {editable && editing !== s.id && <button type="button" className="no-print ml-auto font-sans text-xs font-medium text-slate-400 hover:text-[#002C4B] hover:underline focus-visible:text-[#002C4B]" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
                 </span>
               );
               return (
