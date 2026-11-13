@@ -10,8 +10,9 @@ declare
   ws uuid; proj uuid; item uuid; n int; r jsonb; passed int := 0;
   late_email text := 'late-' || gen_random_uuid() || '@example.test';
 begin
-  insert into auth.users (id, email) values
-    (admin_u, 'a-' || admin_u || '@example.test'), (dev_u, 'd-' || dev_u || '@example.test'), (outsider_u, 'o-' || outsider_u || '@example.test');
+  -- Made as the dashboard makes them (invited_at, confirmed), since sign-up is by invitation.
+  insert into auth.users (id, email, invited_at, email_confirmed_at) values
+    (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (dev_u, 'd-' || dev_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   ws := (public.create_organization('People test', 'AP') ->> 'workspaceId')::uuid;
