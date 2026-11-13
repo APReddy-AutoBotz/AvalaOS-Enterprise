@@ -25,7 +25,7 @@ function Icon({ name, className }: { name: keyof typeof ICONS; className?: strin
 
 function Card({ icon, tone, title, children, testid }: { icon: keyof typeof ICONS; tone: string; title: string; children: React.ReactNode; testid: string }) {
   return (
-    <div data-testid={testid} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div data-testid={testid} className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex items-center gap-2.5">
         <span className={cx('flex h-8 w-8 items-center justify-center rounded-lg', tone)}><Icon name={icon} /></span>
         <h4 className="font-display text-sm font-semibold text-slate-900">{title}</h4>
@@ -79,7 +79,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
       </div>
 
       {/* How the steps split */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="step-split">
+      <div className="rounded-xl border border-slate-200 bg-white p-5" data-testid="step-split">
         <div className="flex items-baseline justify-between gap-3">
           <h4 className="font-display text-sm font-semibold text-slate-900">How the {n} steps split</h4>
           {result.alreadyAutomated > 0 && <p className="text-xs text-slate-500">{result.alreadyAutomated} more {result.alreadyAutomated === 1 ? 'is' : 'are'} already done by a system</p>}
@@ -141,11 +141,11 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
           <Big value={people} of={n} label={people === 1 ? 'step' : 'steps'} />
           {people === 0 && <p className="mt-2 text-sm text-slate-600">No step needs a person on what is known.</p>}
           {result.mustStayStepIds.length > 0 && <>
-            <p className="mb-2 mt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Judgment, accountability or physical work</p>
+            <p className="mb-2 mt-3 text-xs font-semibold text-slate-500">Judgment, accountability or physical work</p>
             <StepChips ids={result.mustStayStepIds} model={model} onOpen={onOpenStep} max={4} />
           </>}
           {result.forNowStepIds.length > 0 && <>
-            <p className="mb-2 mt-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Only until more is known</p>
+            <p className="mb-2 mt-3 text-xs font-semibold text-slate-500">Only until more is known</p>
             <StepChips ids={result.forNowStepIds} model={model} onOpen={onOpenStep} max={3} />
           </>}
           {result.approvalStepIds.length > 0 && <p className="mt-3 border-t border-slate-100 pt-3 text-sm text-slate-600"><span className="font-semibold text-slate-900">{result.approvalStepIds.length}</span> automated {result.approvalStepIds.length === 1 ? 'step keeps' : 'steps keep'} a person's approval (money or irreversible changes).</p>}
@@ -165,7 +165,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
               <div>
                 {result.keyQuestions.length === 0 ? <p className="text-sm text-emerald-800">Every fact the scores rest on is known.</p> : (
                   <>
-                    <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Answers that would firm it up most</p>
+                    <p className="text-xs font-semibold text-slate-500">Answers that would firm it up most</p>
                     <ul className="mt-2 divide-y divide-slate-100">
                       {result.keyQuestions.slice(0, 5).map(q => (
                         <li key={q.key} className="flex items-start justify-between gap-3 py-1.5 text-sm">

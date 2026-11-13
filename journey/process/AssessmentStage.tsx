@@ -169,9 +169,9 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
           </div>
           <span className="text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
         </div>
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-500">
               <tr>{['#', 'Step', 'Recommendation', 'Score', 'Next best', 'AI', 'Person', 'Confidence'].map(h => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -227,12 +227,12 @@ function Hero({ result, onReport }: { result: ProcessAssessment; onReport: () =>
     [CONFIDENCE_LABEL[result.confidence], 'confidence', `${Math.round(result.knownShare * 100)}% of the facts are known`],
   ];
   return (
-    <section aria-label="Recommended approach" className="relative overflow-hidden rounded-3xl bg-[#002C4B] p-7 text-white shadow-lg sm:p-9">
+    <section aria-label="Recommended approach" className="relative overflow-hidden rounded-xl bg-[#002C4B] p-7 text-white shadow-lg sm:p-9">
       <div aria-hidden className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-[#FFBC03]/15 blur-3xl" />
       <div aria-hidden className="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-sky-400/10 blur-3xl" />
       <div className="relative flex flex-wrap items-start justify-between gap-6">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#FFBC03]">Recommended approach</p>
+          <p className="text-xs font-semibold text-[#FFBC03]">Recommended approach</p>
           <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="verdict">{result.verdict}</h2>
           <p className="mt-3 text-base leading-7 text-slate-200" data-testid="split">{result.split}</p>
         </div>
@@ -241,7 +241,7 @@ function Hero({ result, onReport }: { result: ProcessAssessment; onReport: () =>
       {result.assessed > 0 && (
         <dl className="relative mt-7 grid gap-3 sm:grid-cols-3">
           {stats.map(([value, label, sub]) => (
-            <div key={label} className="rounded-2xl bg-white/[0.07] p-4 ring-1 ring-inset ring-white/10">
+            <div key={label} className="rounded-xl bg-white/[0.07] p-4 ring-1 ring-inset ring-white/10">
               <dd className="font-display text-2xl font-semibold">{value}</dd>
               <dt className="mt-0.5 text-sm text-slate-200">{label}</dt>
               <p className="mt-1 text-xs text-slate-400">{sub}</p>
@@ -265,9 +265,9 @@ function Ranking({ result }: { result: ProcessAssessment }) {
       <p className="text-sm text-slate-500">Average fit across the {result.candidates} {result.candidates === 1 ? 'step' : 'steps'} open to automation (not needing a person's judgment or hands), from fixed weights. The same facts always give the same ranking.</p>
       <ol className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         {result.ranking.map((r, i) => (
-          <li key={r.approach} data-testid="ranked-approach" className={cx('flex flex-col rounded-2xl border bg-white p-5 shadow-sm', i === 0 && result.lead === r.approach ? 'border-[#FFBC03] ring-2 ring-[#FFBC03]/30' : 'border-slate-200')}>
+          <li key={r.approach} data-testid="ranked-approach" className={cx('flex flex-col rounded-xl border bg-white p-5', i === 0 && result.lead === r.approach ? 'border-[#FFBC03] ring-2 ring-[#FFBC03]/30' : 'border-slate-200')}>
             <div className="flex items-center justify-between">
-              <span className={cx('rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider', i === 0 ? 'bg-[#002C4B] text-white' : 'bg-slate-100 text-slate-600')}>{RANK_LABEL[i]}</span>
+              <span className={cx('rounded-full px-2.5 py-0.5 text-[11px] font-bold', i === 0 ? 'bg-[#002C4B] text-white' : 'bg-slate-100 text-slate-600')}>{RANK_LABEL[i]}</span>
               <span className={cx('h-2.5 w-2.5 rounded-full', APPROACH_TONE[r.approach].dot)} aria-hidden />
             </div>
             <p className="mt-3 font-display text-lg font-semibold text-slate-900">{APPROACH_LABEL[r.approach]}</p>
@@ -275,9 +275,9 @@ function Ranking({ result }: { result: ProcessAssessment }) {
             <ScoreBar score={r.score} approach={r.approach} className="mt-2" />
             <p className="mt-3 text-sm font-medium text-slate-800">Best for <span className="tabular-nums">{r.stepsWon}</span> {r.stepsWon === 1 ? 'step' : 'steps'}{r.stepsFit > r.stepsWon ? <span className="font-normal text-slate-500"> · could do {r.stepsFit}</span> : null}</p>
             <dl className="mt-3 space-y-2.5 border-t border-slate-100 pt-3 text-xs leading-5">
-              {r.strength && <div><dt className="font-semibold uppercase tracking-wider text-emerald-700">Strongest where</dt><dd className="text-slate-600">{r.strength.text} <span className="text-slate-400">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
-              {r.heldBack && <div><dt className="font-semibold uppercase tracking-wider text-amber-700">Held back where</dt><dd className="text-slate-600">{r.heldBack.text} <span className="text-slate-400">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
-              {r.toWin && !(r.approach === 'api' && result.apiSwitch.steps > 0) && <div><dt className="font-semibold uppercase tracking-wider text-slate-500">Would rank higher</dt><dd className="text-slate-600">{r.toWin.replace(/^It (would rank|ranks) higher (only )?/, '').replace(/^It is justified only /, 'only ').replace(/^./, c => c.toUpperCase())}</dd></div>}
+              {r.strength && <div><dt className="font-semibold text-emerald-700">Strongest where</dt><dd className="text-slate-600">{r.strength.text} <span className="text-slate-400">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+              {r.heldBack && <div><dt className="font-semibold text-amber-700">Held back where</dt><dd className="text-slate-600">{r.heldBack.text} <span className="text-slate-400">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+              {r.toWin && !(r.approach === 'api' && result.apiSwitch.steps > 0) && <div><dt className="font-semibold text-slate-500">Would rank higher</dt><dd className="text-slate-600">{r.toWin.replace(/^It (would rank|ranks) higher (only )?/, '').replace(/^It is justified only /, 'only ').replace(/^./, c => c.toUpperCase())}</dd></div>}
             </dl>
           </li>
         ))}
@@ -302,7 +302,7 @@ function Benefit({ result, decisions, canEdit, me, onSave }: { result: ProcessAs
   const months = (m: number) => (m < 1 ? 'under a month' : `${m.toLocaleString('en', { maximumFractionDigits: 1 })} months`);
   const tile = (label: string, body: React.ReactNode, note?: React.ReactNode, testid?: string) => (
     <div className="rounded-xl bg-slate-50 p-4" data-testid={testid}>
-      <dt className="text-xs font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
+      <dt className="text-xs font-semibold text-slate-500">{label}</dt>
       <dd className="mt-1.5 text-sm leading-6 text-slate-900">{body}</dd>
       {note && <p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>}
     </div>
@@ -322,7 +322,7 @@ function Benefit({ result, decisions, canEdit, me, onSave }: { result: ProcessAs
   const input = 'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm tabular-nums focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
   const p = pb.computable ? pb.value! : null;
   return (
-    <section aria-label="Benefit" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <section aria-label="Benefit" className="rounded-xl border border-slate-200 bg-white p-6">
       <h3 className="font-display text-base font-semibold text-slate-900">Benefit and payback</h3>
       <p className="mt-1 text-sm text-slate-500">From the hours above and the figures you enter here. Nothing is assumed; where the hours are an upper bound, so is everything that follows.</p>
       <dl className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -384,7 +384,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
 
   return (
     <div className="space-y-6" data-testid="step-assessment">
-      <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+      <div className="rounded-xl bg-white p-4 ring-1 ring-slate-200">
         <div className="flex flex-wrap items-center gap-2">
           <ApproachChip approach={result.winner} label={stepLabel(result)} />
           <AiBadge s={result} approach={result.winner} />
@@ -395,7 +395,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
       </div>
 
       {override && (
-        <div className="rounded-2xl border border-slate-300 bg-white p-4 text-sm" data-testid="override-note">
+        <div className="rounded-xl border border-slate-300 bg-white p-4 text-sm" data-testid="override-note">
           <p><span className="font-semibold">Overridden by {override.by}:</span> {APPROACH_LABEL[override.approach]}. {override.rationale}</p>
           <p className="mt-1 text-xs text-slate-500">The scoring recommends {stepLabel(result)}.</p>
           {canEdit && <Button variant="ghost" className="mt-1 px-2 py-1 text-xs" onClick={onClearOverride}>Remove override</Button>}
@@ -404,7 +404,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
 
       {result.scores.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Scores for this step</h3>
+          <h3 className="text-xs font-semibold text-slate-500">Scores for this step</h3>
           <ul className="mt-2 space-y-2">
             {result.scores.map((a, i) => (
               <li key={a.approach} className="rounded-xl bg-white ring-1 ring-slate-200" data-testid="approach-score">
@@ -424,14 +424,14 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
 
       {result.questions.length > 0 && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">To confirm</h3>
+          <h3 className="text-xs font-semibold text-slate-500">To confirm</h3>
           <ul className="mt-2 space-y-1 text-sm text-slate-700" data-testid="api-question">{result.questions.map(q => <li key={q.question}>{q.question}{result.apiWouldWin ? ' A confirmed API would make integration the first choice here.' : ''}</li>)}</ul>
         </section>
       )}
 
       {!result.alreadyAutomated && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Facts about this step</h3>
+          <h3 className="text-xs font-semibold text-slate-500">Facts about this step</h3>
           <div className="mt-2 divide-y divide-slate-100 rounded-xl bg-white px-4 ring-1 ring-slate-200">
             {TRAIT_CONTROLS.map(c => (
               <label key={c.trait} className="flex items-center justify-between gap-3 py-2.5 text-sm text-slate-700">
@@ -460,7 +460,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
 
       {canEdit && !override && !result.alreadyAutomated && (
         <section>
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Override</h3>
+          <h3 className="text-xs font-semibold text-slate-500">Override</h3>
           <form className="mt-2 space-y-2" onSubmit={e => { e.preventDefault(); if (!approach) return; const r = onOverride(approach, rationale); if (r === true) { setRationale(''); setApproach(''); setProblem(null); } else if (typeof r === 'string') setProblem(r); }}>
             <Select value={approach} label="Override recommendation" onChange={setApproach} options={[{ value: '', label: 'Choose an approach' }, ...APPROACHES.filter(m => m !== result.winner).map(m => ({ value: m, label: APPROACH_LABEL[m] }))]} />
             <textarea aria-label="Rationale" required placeholder="Why the recommendation should be different" value={rationale} onChange={e => setRationale(e.target.value)} rows={3}

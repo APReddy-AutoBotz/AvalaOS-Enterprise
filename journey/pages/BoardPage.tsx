@@ -8,7 +8,7 @@ import type { JourneyStore, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
 import { BoardError, COLUMNS, criterionParts, joinStory, lanesOf, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateProjectName, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
-import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, when } from '../ui.tsx';
+import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
 const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
@@ -17,31 +17,11 @@ const TRACK = 'grid grid-cols-[repeat(6,minmax(13.5rem,1fr))] gap-[3px]';
 
 // One colour per status and per type, used the same way on the board and in the panel.
 const STATUS_DOT: Record<WorkStatus, string> = { todo: 'bg-slate-400', in_progress: 'bg-sky-600', in_review: 'bg-violet-500', testing: 'bg-amber-500', ready_for_release: 'bg-teal-500', done: 'bg-emerald-600', blocked: 'bg-red-600', on_hold: 'bg-slate-500' };
-const TYPE: Record<WorkItem['type'], { label: string; cls: string; glyph: React.ReactNode }> = {
-  epic: { label: 'Epic', cls: 'bg-violet-600', glyph: <path d="M7 1 3 7h3l-1 4 4-6H6l1-4z" fill="currentColor" /> },
-  story: { label: 'Story', cls: 'bg-emerald-600', glyph: <path d="M3.5 2h5v8L6 8.2 3.5 10z" fill="currentColor" /> },
-  task: { label: 'Task', cls: 'bg-blue-600', glyph: <path d="M2.8 6.3 5 8.4l4.2-4.7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /> },
-  spike: { label: 'Spike', cls: 'bg-amber-600', glyph: <><circle cx="5.2" cy="5.2" r="2.6" fill="none" stroke="currentColor" strokeWidth="1.5" /><path d="m7.3 7.3 2.4 2.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></> },
-  decision: { label: 'Decision', cls: 'bg-rose-600', glyph: <path d="M6 10.2V6.6M6 6.6 3 3.2M6 6.6l3-3.4" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /> },
-  bug: { label: 'Bug', cls: 'bg-red-600', glyph: <circle cx="6" cy="6" r="2.4" fill="currentColor" /> },
-  subtask: { label: 'Sub-task', cls: 'bg-sky-600', glyph: <rect x="3" y="3" width="6" height="6" rx="1" fill="none" stroke="currentColor" strokeWidth="1.5" /> },
-};
-const TypeGlyph = ({ type }: { type: WorkItem['type'] }) => (
-  <span className={cx('inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] text-white', TYPE[type].cls)} aria-hidden>
-    <svg viewBox="0 0 12 12" className="h-3 w-3">{TYPE[type].glyph}</svg>
-  </span>
-);
+const TYPE = WORK_TYPE;
 const StatusLabel = ({ status, className }: { status: WorkStatus; className?: string }) => (
   <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-slate-600', className)}><span className={cx('h-1.5 w-1.5 rounded-full', STATUS_DOT[status])} aria-hidden />{STATUS_LABEL[status]}</span>
 );
-const ChangedTag = () => <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-medium text-amber-900">Upstream changed</span>;
-const Progress = ({ done, total, className }: { done: number; total: number; className?: string }) => (
-  <span className={cx('flex items-center gap-2 whitespace-nowrap text-xs tabular-nums text-slate-500', className)}>
-    {done} of {total} done
-    <span className="h-1 w-20 overflow-hidden rounded-full bg-slate-200" aria-hidden><span className="block h-full rounded-full bg-emerald-600" style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></span>
-  </span>
-);
-
+const ChangedTag = () => <Tag tone="warn">Upstream changed</Tag>;
 export function BoardPage({ store, nav, projectId, itemId }: { store: JourneyStore; nav: Nav; projectId?: string; itemId?: string }) {
   const [workspace, setWorkspace] = React.useState<Workspace | null>(null);
   const [projects, setProjects] = React.useState<Project[] | null>(null);
@@ -229,11 +209,12 @@ function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSav
   const { story, rest } = splitStory(item.description);
   const [title, setTitle] = React.useState(item.title);
   const [description, setDescription] = React.useState(rest);
+  const [line, setLine] = React.useState(story ?? '');
   const [estimate, setEstimate] = React.useState(item.estimateHours === null ? '' : String(item.estimateHours));
   const [due, setDue] = React.useState(item.dueDate ?? '');
-  const dirty = title !== item.title || description !== rest || estimate !== (item.estimateHours === null ? '' : String(item.estimateHours)) || due !== (item.dueDate ?? '');
-  const reset = () => { setTitle(item.title); setDescription(rest); setEstimate(item.estimateHours === null ? '' : String(item.estimateHours)); setDue(item.dueDate ?? ''); };
-  const titleRef = useAutosize(title), descRef = useAutosize(description);
+  const dirty = title !== item.title || description !== rest || line !== (story ?? '') || estimate !== (item.estimateHours === null ? '' : String(item.estimateHours)) || due !== (item.dueDate ?? '');
+  const reset = () => { setTitle(item.title); setDescription(rest); setLine(story ?? ''); setEstimate(item.estimateHours === null ? '' : String(item.estimateHours)); setDue(item.dueDate ?? ''); };
+  const titleRef = useAutosize(title), descRef = useAutosize(description), storyRef = useAutosize(line);
   const parent = item.parentId ? items.find(i => i.id === item.parentId) ?? null : null;
   const children = item.type === 'epic' ? lanesOf(items).find(l => l.epic?.id === item.id)?.items ?? [] : items.filter(i => i.parentId === item.id);
   // Escape closes the panel, unless there is typing that would be lost.
@@ -274,7 +255,7 @@ function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSav
             </div>
           )}
           <textarea ref={titleRef} aria-label="Title" rows={1} value={title} disabled={!canEdit} onChange={e => setTitle(e.target.value.replace(/\n/g, ' '))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }} className={cx(quiet, 'font-display text-[1.35rem] font-semibold leading-8 tracking-[-0.01em]')} />
-          {story && <p className="mt-2 border-l-2 border-[#FFBC03] pl-3.5 text-[15px] leading-6 text-slate-700" data-testid="story-line">{story}</p>}
+          {story !== null && <div className="mt-2 border-l-2 border-[#FFBC03] pl-3.5" data-testid="story-line"><textarea ref={storyRef} aria-label="User story" rows={1} value={line} disabled={!canEdit} onChange={e => setLine(e.target.value.replace(/\n/g, ' '))} className={cx(quiet, 'text-[15px] leading-6 text-slate-700')} /></div>}
 
           <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-4">
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Status
@@ -329,7 +310,7 @@ function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSav
         {canEdit && dirty && (
           <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-3">
             <span className="text-sm text-slate-600">You have changes that are not saved.</span>
-            <span className="flex gap-2"><Button variant="ghost" onClick={reset}>Discard</Button><Button onClick={() => onSave({ title, description: joinStory(story, description), estimateHours: estimate.trim() ? Number(estimate) : null, dueDate: due || null })}>Save</Button></span>
+            <span className="flex gap-2"><Button variant="ghost" onClick={reset}>Discard</Button><Button onClick={() => onSave({ title, description: joinStory(story === null ? null : line.trim() || null, description), estimateHours: estimate.trim() ? Number(estimate) : null, dueDate: due || null })}>Save</Button></span>
           </footer>
         )}
       </aside>

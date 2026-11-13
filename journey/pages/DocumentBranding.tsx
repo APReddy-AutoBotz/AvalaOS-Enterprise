@@ -46,7 +46,7 @@ export function DocumentBranding({ store, workspace }: { store: JourneyStore; wo
 
   return (
     <>
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-testid="document-branding">
+    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="document-branding">
       <h2 className="font-display text-lg font-semibold text-slate-900">How documents look</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">Your organisation's look for the BRD, PDD, FRD and SDD, on screen and in Word. Upload your company's Word template to use its fonts and heading styles.{isAdmin ? '' : ' Only an admin can change it.'}</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -89,10 +89,10 @@ export function DocumentBranding({ store, workspace }: { store: JourneyStore; wo
           {isAdmin && <Button onClick={save} disabled={busy}>{busy ? 'Saving…' : 'Save how documents look'}</Button>}
         </div>
         <figure aria-label="Preview" className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <figcaption className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Preview</figcaption>
+          <figcaption className="text-xs font-semibold text-slate-500">Preview</figcaption>
           <div className="mt-2 aspect-[1/1.3] rounded-md bg-white p-4 shadow-sm" style={{ fontFamily: `${draft.font}, Calibri, sans-serif` }}>
             {draft.logo && <img src={draft.logo} alt="" className="mb-3 h-6 object-contain" />}
-            <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">{draft.organisation || 'Organisation'}</p>
+            <p className="text-[9px] font-bold text-slate-500">{draft.organisation || 'Organisation'}</p>
             <p className="mt-1 text-base font-bold leading-tight" style={{ color: `#${draft.accent}` }}>Process Definition Document</p>
             <p className="mt-1 border-b-2 pb-2 text-[11px] text-slate-800" style={{ borderColor: `#${draft.accent}` }}>Vendor invoice processing</p>
             <p className="mt-3 text-[10px] font-bold" style={{ color: `#${draft.accent}` }}>2.4  Detailed As-Is steps</p>

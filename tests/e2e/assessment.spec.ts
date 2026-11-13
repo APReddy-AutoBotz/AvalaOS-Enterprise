@@ -561,7 +561,8 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   const items = page.getByTestId('work-items');
   const card = (title: string | RegExp) => items.getByTestId('proposal').filter({ hasText: title });
   await expect(card(/Rule-based RPA in SAP S\/4HANA/)).toBeVisible();
-  await expect(items).toContainText('Unassigned · Not estimated · No date');
+  await expect(items).toContainText('Nothing is assigned, estimated or dated for you.');
+  await expect(items).not.toContainText('Not estimated');
   const total = await items.getByTestId('proposal').count();
   expect(total).toBeGreaterThanOrEqual(4);
   await shot(page, '54-work-items');

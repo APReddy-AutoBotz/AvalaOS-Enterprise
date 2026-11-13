@@ -233,7 +233,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       <style>{PRINT_CSS}</style>
       <ErrorNote message={error ?? editor.error} />
       {toAnswer && (toAnswer.items.some(i => !i.deferred) || toAnswer.alreadyKnown.length > 0) && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4" data-testid="gaps-banner">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4" data-testid="gaps-banner">
           <p className="text-sm text-amber-950"><span className="font-semibold">{toAnswer.items.filter(i => !i.deferred).length} questions to answer</span> before these documents are complete (from {toAnswer.raw} raised; duplicates merged{toAnswer.alreadyKnown.length ? `, ${toAnswer.alreadyKnown.length} already answered by the model` : ''}).</p>
           <Button onClick={() => setAnswering(true)}>Answer them</Button>
         </div>
@@ -251,7 +251,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       </div>
 
       {!decisions ? (error ? null : <Spinner label="Writing the document" />) : !doc ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="doc-not-ready">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="doc-not-ready">
           <p className="font-display text-lg font-semibold text-slate-900">{TYPES.find(t => t.id === type)!.label} ({type.toUpperCase()})</p>
           <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">The SDD is written from an approved PDD: approve this revision of the process first, so the design rests on agreed steps. Design facts that are not in the sources become open design decisions.</p>
           <div className="mt-4"><Button variant="secondary" onClick={() => setPreviewSdd(true)}>Preview the SDD from this draft</Button></div>
@@ -259,7 +259,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       ) : (
         <>
         {showChecks && all && (
-          <section aria-label="Hand-over checklist" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="handoff-checklist">
+          <section aria-label="Hand-over checklist" className="rounded-xl border border-slate-200 bg-white p-5" data-testid="handoff-checklist">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="font-display text-base font-semibold text-slate-900">Ready to hand over?</h3>
               <p className="text-xs text-slate-500">Checks on the process and all four documents before they go to the delivery team.</p>
@@ -304,13 +304,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
-            <div className="sticky top-4 max-h-[80vh] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 text-sm">
+            <div className="sticky top-4 max-h-[80vh] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-sm">
               <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Contents</p>
               <ol className="mt-2 space-y-1">{doc.sections.map(s => <li key={s.id} className={s.level === 2 ? 'pl-3' : 'mt-2 font-semibold'}><a href={`#${s.id}`} className="text-slate-700 hover:text-[#002C4B] hover:underline"><span className="tabular-nums text-slate-400">{s.number}</span> {s.title}</a></li>)}</ol>
               <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{doc.openItems.length} open {doc.openItems.length === 1 ? 'item' : 'items'}</p>
             </div>
           </nav>
-          <article id="document-print" data-testid="document" className="min-w-0 rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-10" style={{ fontFamily: `${docSettings.branding.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${docSettings.branding.accent}` }}>
+          <article id="document-print" data-testid="document" className="min-w-0 rounded-xl border border-slate-200 bg-white px-6 py-8 sm:px-10" style={{ fontFamily: `${docSettings.branding.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${docSettings.branding.accent}` }}>
             <header className="border-b-4 pb-5" style={{ borderColor: 'var(--doc-accent)' }}>
               {docSettings.branding.logo && <img src={docSettings.branding.logo} alt="" className="mb-3 h-8 object-contain" />}
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{docSettings.branding.organisation ? `${docSettings.branding.organisation} · ` : ''}{doc.title}</p>

@@ -36,7 +36,7 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
 
   return (
     <section className="max-w-3xl space-y-4" data-testid="workspace-settings">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="font-display text-lg font-semibold text-slate-900">Assessment settings</h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">The lines every assessment in <span className="font-medium">{workspace.name}</span> is measured against. They change the value in people, the priority and the portfolio, never the recommended approach.</p>
         <p className="mt-2 text-xs text-slate-500" data-testid="settings-state">{record.custom ? `Set for this workspace${record.updatedAt ? `, last changed ${when(record.updatedAt)}` : ''}.` : 'The defaults apply until an admin sets these.'}{isAdmin ? '' : ' Only an admin can change them.'}</p>
