@@ -1,9 +1,10 @@
-// Settings → AI provider: a workspace uses Avala OS's AI (within a monthly allowance) or its own OpenAI or
-// Azure OpenAI key. Admins set the key once; it is kept encrypted on the server and only its last four
-// characters are ever shown. Rules in domain/ai/providers.ts.
+// Settings → AI provider: a workspace uses Avala OS's AI (within a monthly allowance) or its own OpenAI,
+// Azure OpenAI or Anthropic key. Admins set the key once; it is kept encrypted on the server and only its
+// last four characters are ever shown. A provider not yet checked by the extraction eval is listed only for
+// the platform owner (the person who may create organizations). Rules in domain/ai/providers.ts.
 import React from 'react';
 import type { JourneyStore, Workspace, WorkspaceAi } from '../store/types.ts';
-import { AI_PROVIDERS, AiSettingsError, validateAiChoice, validateApiKey, type AiNeed, type AiProvider } from '../../domain/ai/providers.ts';
+import { AI_PROVIDERS, AiSettingsError, selectableProviders, validateAiChoice, validateApiKey, type AiNeed, type AiProvider } from '../../domain/ai/providers.ts';
 import { Button, ErrorNote, Field, messageOf, Spinner, when } from '../ui.tsx';
 
 const NEEDS: [AiNeed, string][] = [['transcription', 'Turning speech into text']];
@@ -19,6 +20,8 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
+  const [owner, setOwner] = React.useState(false);
+  React.useEffect(() => { if (isAdmin) store.canCreateOrganization().then(setOwner).catch(() => setOwner(false)); }, [store, isAdmin]);
 
   const load = React.useCallback(async () => {
     const ai = await store.getWorkspaceAi(workspace.id);
@@ -32,6 +35,10 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
 
   if (current === undefined) return error ? <ErrorNote message={error} /> : <Spinner />;
   const info = AI_PROVIDERS[provider];
+  const choices = selectableProviders(owner);
+  if (current && !choices.includes(current.provider)) choices.push(current.provider);
+  const offered = selectableProviders(false).map(p => AI_PROVIDERS[p].label);
+  const offeredWords = offered.length > 1 ? `${offered.slice(0, -1).join(', ')} or ${offered[offered.length - 1]}` : offered[0];
   const keepsKey = Boolean(current && current.provider === provider);
 
   const act = async (fn: () => Promise<void>) => {
@@ -77,7 +84,7 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
         </div>
       ) : (
         <p className="mt-2 text-sm leading-6 text-slate-700" data-testid="ai-provider-state">
-          {workspace.name} uses Avala OS's AI, within a monthly allowance. {isAdmin ? 'You can connect your organization\'s own OpenAI or Azure OpenAI key instead: then all AI work here runs on that key, and the allowance no longer applies.' : 'An admin can connect your organization\'s own key instead.'}
+          {workspace.name} uses Avala OS's AI, within a monthly allowance. {isAdmin ? `You can connect your organization's own ${offeredWords} key instead: then all AI work here runs on that key, and the allowance no longer applies.` : 'An admin can connect your organization\'s own key instead.'}
         </p>
       )}
 
@@ -87,8 +94,9 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
             <span className="block text-sm font-semibold text-slate-900">Provider</span>
             <select aria-label="Provider" value={provider} disabled={busy} onChange={e => setProvider(e.target.value as AiProvider)}
               className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20">
-              {(Object.keys(AI_PROVIDERS) as AiProvider[]).map(p => <option key={p} value={p}>{AI_PROVIDERS[p].label}</option>)}
+              {choices.map(p => <option key={p} value={p}>{AI_PROVIDERS[p].label}{AI_PROVIDERS[p].checked ? '' : ' (being checked)'}</option>)}
             </select>
+            {!info.checked && <span className="mt-1 block text-xs text-slate-500" data-testid="ai-provider-unchecked">{owner ? 'Only you see this provider: it is offered to workspaces once the extraction check has been run with it.' : 'This provider has not been checked for extraction quality yet.'}</span>}
           </label>
           <Field label={info.modelLabel} value={model} onChange={e => setModel(e.target.value)} hint={info.modelHint} autoComplete="off" spellCheck={false} />
           {info.needsEndpoint && <Field label="Endpoint" value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder="https://my-resource.openai.azure.com" hint="From Keys and Endpoint in the Azure portal." autoComplete="off" spellCheck={false} />}

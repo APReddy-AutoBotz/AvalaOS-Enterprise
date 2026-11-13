@@ -1,4 +1,4 @@
--- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (6 groups)";
+-- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (7 groups)";
 -- any other error names the failed check.
 do $test$
 declare
@@ -8,6 +8,7 @@ declare
   ws uuid; n int; r jsonb; t text; passed int := 0;
   key1 text := 'sk-proj-test-' || replace(gen_random_uuid()::text, '-', '') || 'AB12';
   key2 text := 'azure-test-' || replace(gen_random_uuid()::text, '-', '') || 'CD34';
+  key3 text := 'ant-test-' || replace(gen_random_uuid()::text, '-', '') || 'EF56';
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
@@ -96,6 +97,21 @@ begin
   insert into public.ai_usage (workspace_id, user_id, task, model, status, input_tokens, output_tokens, key_source) values
     (ws, admin_u, 't', 'm', 'ok', 100, 10, 'platform'), (ws, admin_u, 't', 'm', 'ok', 5000, 500, 'workspace');
   if public.ai_tokens_used_this_month(ws) <> 110 then raise exception 'FAILED 6: allowance counted %', public.ai_tokens_used_this_month(ws); end if;
+  passed := passed + 1;
+
+  -- 7. Anthropic takes a model id and no endpoint, and needs its own key; an unknown provider is refused.
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  r := public.set_workspace_ai(ws, 'openai', 'gpt-5.5', null, key1);
+  begin perform public.set_workspace_ai(ws, 'anthropic', 'claude-sonnet-5-5', null, null); raise exception 'FAILED 7a: provider changed without a key';
+  exception when invalid_parameter_value then null; end;
+  r := public.set_workspace_ai(ws, 'anthropic', 'claude-sonnet-5-5', 'https://ignored.example', key3);
+  if r ->> 'provider' <> 'anthropic' or r ->> 'keyHint' <> 'EF56' or r ->> 'endpoint' is not null then raise exception 'FAILED 7b: %', r; end if;
+  begin perform public.set_workspace_ai(ws, 'bedrock', 'x', null, key3); raise exception 'FAILED 7c: unknown provider accepted';
+  exception when invalid_parameter_value then null; end;
+  execute 'reset role';
+  r := public.workspace_ai_connection(ws);
+  if r ->> 'provider' <> 'anthropic' or r ->> 'apiKey' <> key3 then raise exception 'FAILED 7d: %', r ->> 'provider'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;

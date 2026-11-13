@@ -14,13 +14,14 @@
 // Deployed with verify_jwt = false because the function authenticates the caller itself.
 
 import {
-  validateRequest, buildOpenAIRequest, buildImageRequest, parseOpenAIResponse, verifyExcerpts,
+  validateRequest, buildOpenAIRequest, buildImageRequest, verifyExcerpts,
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
+import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
 import {
-  chooseConnection, responsesTarget, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget, unsupported,
-  usesPlatformAllowance, validateAiChoice, type AiConnection,
+  chooseConnection, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
+  unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
 } from '../../../domain/ai/providers.ts';
 
 const TIMEOUT_MS = 120_000;
@@ -134,15 +135,16 @@ async function post(url: string, headers: Record<string, string>, body: BodyInit
   }
 }
 
-/** One provider call with retries on transient statuses. */
+/** One provider call with retries on transient statuses. The body is a Responses API body; providerRequest translates it for Anthropic. */
 async function callResponses(conn: AiConnection, body: Record<string, unknown>): Promise<{ parsed: ParsedResponse; attempts: number }> {
-  const target = responsesTarget(conn);
+  const target = providerRequest(conn, body);
+  const payload = JSON.stringify(target.body);
   let attempts = 0;
   for (;;) {
     attempts++;
     let res: Response;
     try {
-      res = await post(target.url, target.headers, JSON.stringify(body));
+      res = await post(target.url, target.headers, payload);
     } catch (e) {
       if (attempts <= BACKOFF_MS.length) { await sleep(BACKOFF_MS[attempts - 1]); continue; }
       return { parsed: { ok: false, code: 'PROVIDER_ERROR', message: `Provider unreachable: ${(e as Error).name}`, usage: { input: 0, output: 0 } }, attempts };
@@ -150,7 +152,7 @@ async function callResponses(conn: AiConnection, body: Record<string, unknown>):
     if (isRetryableStatus(res.status) && attempts <= BACKOFF_MS.length) { await res.body?.cancel(); await sleep(BACKOFF_MS[attempts - 1]); continue; }
     const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
     if (!res.ok && !json?.error) json.error = { message: `HTTP ${res.status}` };
-    return { parsed: parseOpenAIResponse(json), attempts };
+    return { parsed: parseProviderReply(conn, json), attempts };
   }
 }
 
@@ -192,10 +194,10 @@ Deno.serve(async (req: Request) => {
 
   // "Test this key": a tiny real request through the same address, key and model the workspace uses.
   if (request.action === 'health') {
-    const target = responsesTarget(conn);
+    const target = providerRequest(conn, testRequestBody(conn));
     let status = 0;
     try {
-      const res = await post(target.url, target.headers, JSON.stringify(testRequestBody(conn)));
+      const res = await post(target.url, target.headers, JSON.stringify(target.body));
       status = res.status;
       await res.body?.cancel();
     } catch { status = 0; }
@@ -260,6 +262,11 @@ Deno.serve(async (req: Request) => {
   const openaiBody = task.input === 'image' ? buildImageRequest(task, request.image!, model) : buildOpenAIRequest(task, segments, model);
   const effort = task.reasoningEffort || env('OPENAI_REASONING_EFFORT') || 'low';
   if (takesReasoningEffort(model)) openaiBody.reasoning = { effort };
+  // An input the provider cannot take (an image over Anthropic's size limit) is refused before any call.
+  try { providerRequest(conn, openaiBody); } catch (e) {
+    if (e instanceof ProviderRequestError) return fail(e.code === 'TOO_LARGE' ? 413 : 400, e.code, e.message);
+    throw e;
+  }
 
   const started = Date.now();
   let { parsed, attempts } = await callResponses(conn, openaiBody);
