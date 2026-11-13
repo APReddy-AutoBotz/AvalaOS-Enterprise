@@ -74,7 +74,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     },
     async signUp(email, password) {
       const { data, error } = await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/work` } });
-      if (error) fail({ message: error.message, status: error.status ?? 400 });
+      if (error) fail({ message: /database error|invitation/i.test(error.message) ? 'Sign-up is by invitation. Ask a workspace admin to invite this email address, then create the account with it.' : error.message, status: error.status ?? 400 });
       return { needsConfirmation: !data.session };
     },
     async signOut() { await db.auth.signOut(); },

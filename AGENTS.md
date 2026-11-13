@@ -136,3 +136,7 @@ npm run dev              # local dev server on port 3000
 ## History
 
 This repository continues `APReddy-AutoBotz/AvalaOS-Core` from commit `88d0643`. The earlier governance documents, acceptance harnesses and CI workflows remain in that repository and in this repository's git history. They are not instructions for work here.
+
+## Sign-up is by invitation
+
+A database trigger on `auth.users` (`app_private.require_invite`) refuses any new account whose email has no row in `workspace_invites`; users made from the Supabase dashboard (`invited_at` set) are allowed. Test: `supabase/tests/invite_only_signup.sql`. The first account of a new deployment is made from the dashboard.
