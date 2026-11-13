@@ -55,10 +55,23 @@ const uuid = () => globalThis.crypto.randomUUID();
 const now = () => new Date().toISOString();
 const strip = ({ processId: _p, model: _m, ...row }: StoredRevision): RevisionRow => row;
 
-export function createMemoryStore(): JourneyStore {
-  let state = load();
+export interface MemoryStoreOptions {
+  /**
+   * The demo: start from this state (the sample case as the tour test leaves it, public/demo-data/sample.json)
+   * and keep every change in memory only, so a reload starts again and nothing reaches local storage.
+   */
+  demo?: unknown;
+}
+
+export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStore {
+  const demo = options.demo !== undefined;
+  let state: State = demo ? { ...empty(), ...(structuredClone(options.demo) as Partial<State>) } : load();
   const listeners = new Set<(me: Me | null) => void>();
-  const save = () => { try { globalThis.localStorage?.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ } };
+  const save = () => {
+    if (demo) return;
+    try { globalThis.localStorage?.setItem(KEY, JSON.stringify(state)); } catch { /* storage unavailable */ }
+  };
+  const where = demo ? 'in the demo' : 'in local mode';
   const requireMe = () => { if (!state.me) throw new StoreError(401, 'Sign in again.'); return state.me; };
   const workspaceOf = (processId: string) => {
     const p = state.processes.find(x => x.id === processId);
@@ -84,7 +97,7 @@ export function createMemoryStore(): JourneyStore {
   };
 
   return {
-    kind: 'memory',
+    kind: demo ? 'demo' : 'memory',
     async currentUser() { return state.me; },
     onAuthChange(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     async signIn(email, password) {
@@ -256,11 +269,11 @@ export function createMemoryStore(): JourneyStore {
       save();
     },
     aiAvailable: false,
-    async readFlowchartImage() { throw new StoreError(501, 'Reading images needs the server; it is not available in local mode.'); },
-    async transcribe() { throw new StoreError(501, 'Transcription needs the server; it is not available in local mode.'); },
-    async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
+    async readFlowchartImage() { throw new StoreError(501, `Reading images needs the server; it is not available ${where}.`); },
+    async transcribe() { throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`); },
+    async startExtraction() { throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`); },
     async latestExtraction() { return null; },
-    async runAiTask() { throw new StoreError(501, 'AI tasks need the server; they are not available in local mode.'); },
+    async runAiTask() { throw new StoreError(501, `AI tasks need the server; they are not available ${where}.`); },
     async listProjects(workspaceId) {
       requireMe();
       return (state.projects ?? []).filter(p => p.workspaceId === workspaceId).map(({ workspaceId: _w, ...p }) => p);

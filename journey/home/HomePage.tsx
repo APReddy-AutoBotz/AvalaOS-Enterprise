@@ -215,6 +215,7 @@ export default function HomePage() {
           <nav aria-label="Main" className="flex items-center gap-2 text-sm font-semibold">
             <a href="#tour" className={`hidden rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 sm:block ${focus} focus-visible:outline-white`}>Product tour</a>
             <a href="#why" className={`hidden rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 sm:block ${focus} focus-visible:outline-white`}>Why AvalaOS</a>
+            <a href="/demo" className={`hidden rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 sm:block ${focus} focus-visible:outline-white`}>Demo</a>
             <a href={go.href} className={`rounded-lg border border-white/30 px-4 py-2 text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>{go.label}</a>
           </nav>
         </header>
@@ -226,6 +227,7 @@ export default function HomePage() {
             <p className="mt-2 text-lg leading-8 text-slate-300">AvalaOS scores each step for RPA, API, AI or a person, and shows its reasons.</p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <a href={go.href} className={cta}>{go.label}</a>
+              <a href="/demo" className={`rounded-lg border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Try the demo</a>
               <a href="#tour" className={`rounded-lg px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Watch the 30-second tour</a>
             </div>
             {!signedIn && <p className="mt-5 text-sm text-slate-300">AvalaOS is by invitation. Ask your workspace admin to invite you.</p>}
