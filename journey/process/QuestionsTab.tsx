@@ -107,7 +107,7 @@ function QuestionCard({ q, model, canEdit, onAnswer }: { q: OpenQuestion; model:
           )}
           <label className="flex-1 text-xs font-medium text-slate-600">{kind === 'role' || kind === 'system' ? 'Note (optional)' : 'Answer'}
             <input aria-label={kind === 'role' || kind === 'system' ? `Note for: ${q.question}` : `Answer to: ${q.question}`} value={text} onChange={e => setText(e.target.value)} inputMode={kind === 'number' ? 'decimal' : undefined}
-              className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm" />
+              className="mt-1 block w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm" />
           </label>
           <Button type="submit" disabled={!ready}>Answer</Button>
         </form>
@@ -158,7 +158,7 @@ function ConflictCard({ c, model, canEdit, onChoose, sourceTitle }: { c: Conflic
         <p className="mt-3 text-sm text-emerald-800"><span className="font-semibold">Resolved:</span> {c.resolution.chosen}. {c.resolution.reason}</p>
       ) : canEdit && (
         <label className="mt-3 block text-xs font-medium text-slate-600">Reason (optional)
-          <input value={reason} onChange={e => setReason(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm" />
+          <input value={reason} onChange={e => setReason(e.target.value)} className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
         </label>
       )}
     </li>

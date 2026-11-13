@@ -69,7 +69,7 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
       {open && (
         <div className="border-t border-slate-100 px-5 pb-5 pt-3">
           <p className="text-sm text-slate-600">Derived by rule from the process: each automated step, business rule, exception and control. IDs never change or get reused. Your edits stay when the process changes; a requirement whose step is removed is kept and marked.</p>
-          <div role="tablist" aria-label="Requirement type" className="mt-3 inline-flex rounded-lg bg-slate-100 p-0.5">
+          <div role="tablist" aria-label="Requirement type" className="mt-3 inline-flex rounded-lg bg-slate-200/70 p-0.5">
             {(['BR', 'FR', 'NFR'] as ReqKind[]).map(k => <button key={k} role="tab" aria-selected={kind === k} onClick={() => setKind(k)} className={cx('rounded-md px-3 py-1 text-sm font-semibold', kind === k ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{KIND_LABEL[k]} ({count(k)})</button>)}
           </div>
           <ul className="mt-3 divide-y divide-slate-100">

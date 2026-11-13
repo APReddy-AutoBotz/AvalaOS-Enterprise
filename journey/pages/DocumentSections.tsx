@@ -100,7 +100,7 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
           <h2 className="font-display text-lg font-semibold text-slate-900">Document sections</h2>
           <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Use your company's headings and order. Renaming, hiding or moving a section changes where things appear, never what the facts say; open items from a hidden section are still listed at the end.</p>
         </div>
-        <div role="tablist" aria-label="Document type" className="flex rounded-lg bg-slate-100 p-0.5">
+        <div role="tablist" aria-label="Document type" className="flex rounded-lg bg-slate-200/70 p-0.5">
           {TYPES.map(t => <button key={t.type} role="tab" aria-selected={type === t.type} onClick={() => { setType(t.type); setNote(null); }} className={cx('rounded-md px-3 py-1 text-sm font-semibold', type === t.type ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{t.label}</button>)}
         </div>
       </div>

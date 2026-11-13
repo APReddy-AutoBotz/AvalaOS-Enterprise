@@ -171,10 +171,7 @@ function ProcessStage({ store, processId, model, working, canEdit, me, onSaved }
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
   return (
-    <div className="space-y-6">
-      <ModelSummary model={editor.model} />
-      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} />
-    </div>
+    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} />
   );
 }
 

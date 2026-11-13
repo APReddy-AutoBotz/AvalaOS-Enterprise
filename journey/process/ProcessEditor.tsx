@@ -57,12 +57,12 @@ export function ProcessEditor({ editor, canEdit, me, sourceTitle }: { editor: Mo
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Parts of the process" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+        <div role="tablist" aria-label="Parts of the process" className="flex flex-wrap gap-0.5 rounded-lg bg-slate-200/70 p-0.5">
           {tabs.map(t => (
             <button key={t.id} role="tab" type="button" aria-selected={tab === t.id} onClick={() => setTab(t.id)}
-              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', tab === t.id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+              className={cx('rounded-md px-3 py-1.5 text-sm font-semibold', tab === t.id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
               {t.label}
-              {t.count !== undefined && t.count > 0 && <span className={cx('ml-1.5 rounded-full px-1.5 text-xs', (t.id === 'questions' || t.id === 'conflicts') ? 'bg-amber-100 text-amber-900' : 'bg-slate-200 text-slate-700')}>{t.count}</span>}
+              {t.count !== undefined && t.count > 0 && <span className={cx('ml-1.5 text-xs tabular-nums', (t.id === 'questions' || t.id === 'conflicts') ? 'rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900' : 'font-normal text-slate-500')}>{t.count}</span>}
             </button>
           ))}
         </div>
@@ -106,7 +106,7 @@ function StepsTab({ model, editor, canEdit, showSources, sourceTitle }: TabConte
         empty={steps.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No steps yet. Add sources to extract them, or add them here.</p> : undefined}>
         {steps.map((s, i) => (
           <tr key={s.id} data-testid="step-row" className="align-top">
-            <td className="px-3 py-2 text-xs text-slate-500">{i + 1}</td>
+            <td className="px-3 py-2.5 text-xs tabular-nums text-slate-400">{i + 1}</td>
             <td className="min-w-56 px-1 py-1">
               <InlineText value={s.name} label={`Name of step ${i + 1}`} disabled={!canEdit} onSave={v => set(s.id, 'name', v, s.name, 'Renamed')} />
               <button type="button" onClick={() => setDetails(s.id)} className="ml-2 text-xs text-slate-500 hover:text-[#002C4B]">Details</button>
@@ -118,8 +118,8 @@ function StepsTab({ model, editor, canEdit, showSources, sourceTitle }: TabConte
             <td className="whitespace-nowrap px-3 py-2 text-right">
               {canEdit && (
                 <>
-                  <button type="button" aria-label={`Move ${s.name} up`} disabled={i === 0} onClick={() => move(i, -1)} className="rounded px-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30">↑</button>
-                  <button type="button" aria-label={`Move ${s.name} down`} disabled={i === steps.length - 1} onClick={() => move(i, 1)} className="rounded px-1.5 text-slate-500 hover:bg-slate-100 disabled:opacity-30">↓</button>
+                  <button type="button" aria-label={`Move ${s.name} up`} disabled={i === 0} onClick={() => move(i, -1)} className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-25"><svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden><path d="M2.5 7.5 6 4l3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
+                  <button type="button" aria-label={`Move ${s.name} down`} disabled={i === steps.length - 1} onClick={() => move(i, 1)} className="rounded p-1 text-slate-500 hover:bg-slate-100 hover:text-slate-900 disabled:opacity-25"><svg viewBox="0 0 12 12" className="h-3 w-3" aria-hidden><path d="M2.5 4.5 6 8l3.5-3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg></button>
                   <ConfirmDelete what={`step "${s.name}"`} onDelete={() => editor.apply(m => removeStep(m, { stepId: s.id }), `Deleted "${s.name}"`)} />
                 </>
               )}
@@ -162,9 +162,9 @@ function AddStep({ editor, after }: { model: ProcessModel; editor: ModelEditor; 
     if (ok) setName('');
   };
   return (
-    <form onSubmit={submit} className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed border-slate-300 bg-white p-3">
+    <form onSubmit={submit} className="flex flex-wrap items-end gap-3 rounded-xl border border-dashed border-slate-300 bg-white p-4">
       <label className="flex-1 text-xs font-medium text-slate-600">New step
-        <input value={name} onChange={e => setName(e.target.value)} placeholder="Verb and object, e.g. Check mandatory fields" className="mt-1 block w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm" />
+        <input value={name} onChange={e => setName(e.target.value)} placeholder="Verb and object, e.g. Check mandatory fields" className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
       </label>
       <label className="text-xs font-medium text-slate-600">Type
         <div className="mt-1"><Select value={type} options={TASK_TYPES} label="Type of new step" onChange={setType} /></div>
@@ -244,7 +244,7 @@ export function AddNamed({ label, kinds, button, onAdd }: { label: string; kinds
   return (
     <form className="flex flex-wrap items-end gap-2" onSubmit={async e => { e.preventDefault(); if (name.trim() && await onAdd(name.trim(), kind)) setName(''); }}>
       <label className="text-xs font-medium text-slate-600">{label}
-        <input value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-64 rounded-md border border-slate-300 px-2 py-1.5 text-sm" />
+        <input value={name} onChange={e => setName(e.target.value)} className="mt-1 block w-64 rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
       </label>
       <Select value={kind} options={kinds} label={`Kind of ${label.toLowerCase()}`} onChange={setKind} />
       <Button type="submit" variant="secondary" disabled={!name.trim()}>{button}</Button>

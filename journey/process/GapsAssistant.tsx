@@ -148,10 +148,10 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <section className="rounded-xl border border-slate-200 bg-white p-6" aria-label="Your answer">
             {ai && (
-              <div role="tablist" aria-label="Answer" className="mb-5 inline-flex rounded-xl bg-slate-100 p-1">
+              <div role="tablist" aria-label="Answer" className="mb-5 inline-flex rounded-lg bg-slate-200/70 p-0.5">
                 {([['one', 'This question'], ['several', `Several at once (${list.length})`]] as const).map(([id, label]) => (
                   <button key={id} type="button" role="tab" aria-selected={scope === id} onClick={() => setScope(id)}
-                    className={cx('rounded-lg px-3.5 py-1.5 text-sm font-semibold transition', scope === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
+                    className={cx('rounded-md px-3.5 py-1.5 text-sm font-semibold transition', scope === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
                 ))}
               </div>
             )}
