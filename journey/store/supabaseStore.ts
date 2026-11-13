@@ -19,7 +19,7 @@ const itemFrom = (r: any): WorkItem => ({
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
-import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -252,12 +252,23 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return (data ?? []).map(itemFrom);
     },
+    async listMembers(workspaceId) {
+      const { data: rows, error } = await db.from('workspace_members').select('user_id, role').eq('workspace_id', workspaceId);
+      if (error) fail(error);
+      const ids = (rows ?? []).map(r => r.user_id as string);
+      if (!ids.length) return [];
+      const { data: profiles, error: e2 } = await db.from('profiles').select('id, display_name').in('id', ids);
+      if (e2) fail(e2);
+      const name = new Map((profiles ?? []).map(p => [p.id as string, (p.display_name as string).trim()]));
+      return (rows ?? []).map(r => ({ userId: r.user_id as string, name: name.get(r.user_id as string) || 'Unnamed member', role: r.role as Member['role'] })).sort((a, b) => a.name.localeCompare(b.name));
+    },
     async updateWorkItem(id, e) {
       const row: Record<string, unknown> = {};
       if (e.title !== undefined) row.title = e.title;
       if (e.description !== undefined) row.description = e.description;
       if (e.status !== undefined) row.status = e.status;
       if (e.priority !== undefined) row.priority = e.priority;
+      if (e.ownerId !== undefined) row.owner_id = e.ownerId;
       if (e.estimateHours !== undefined) row.estimate_hours = e.estimateHours;
       if (e.startDate !== undefined) row.start_date = e.startDate;
       if (e.dueDate !== undefined) row.due_date = e.dueDate;

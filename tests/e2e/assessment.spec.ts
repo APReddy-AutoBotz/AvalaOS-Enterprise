@@ -622,11 +622,19 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   const detail = page.getByTestId('item-panel');
   await expect(detail.getByTestId('item-criteria').locator('li')).toHaveCount(2);
   await expect(detail.getByRole('button', { name: /Rule-based RPA in SAP S\/4HANA/ })).toBeVisible(); // its epic, one click away
+  // Give it an owner: the person's mark shows on the card, and the board can show only their work.
+  await detail.getByLabel('Owner').selectOption({ label: 'analyst' });
+  await expect(page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).getByTitle('analyst', { exact: true })).toBeVisible();
   await detail.getByLabel('Status').selectOption({ label: 'In progress' });
   await detail.getByLabel('Description').fill('Ask the SAP basis team which OData services are released.');
   await detail.getByRole('button', { name: 'Save' }).click();
   await page.reload();
   await expect(page.getByTestId('column-in_progress').getByTestId('board-card')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Show work of').selectOption({ label: 'analyst' });
+  await expect(page.getByTestId('board-card')).toHaveCount(1);
+  await page.getByLabel('Show work of').selectOption({ label: "Everyone's work" });
+  await page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
   await expect(page.getByTestId('item-panel').getByLabel('Description')).toHaveValue('Ask the SAP basis team which OData services are released.');
 
   // Change the linked requirement in the FRD: the board item shows "Upstream changed" and is not edited.
