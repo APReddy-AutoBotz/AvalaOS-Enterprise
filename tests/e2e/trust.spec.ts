@@ -62,6 +62,9 @@ test('a trust page on a phone: nothing spills off the side', async ({ page }) =>
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/terms');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  // The title comes before the contents list.
+  const titleY = (await page.getByRole('heading', { level: 1 }).boundingBox())!.y;
+  expect(titleY).toBeLessThan((await page.getByRole('navigation', { name: 'On this page' }).boundingBox())!.y);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await shot(page, '76-trust-terms-phone');
 });
