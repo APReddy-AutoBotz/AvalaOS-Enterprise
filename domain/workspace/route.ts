@@ -14,6 +14,7 @@ export type StageId = (typeof STAGES)[number]['id'];
 
 export type JourneyRoute =
   | { page: 'signin' }
+  | { page: 'work' }
   | { page: 'processes' }
   | { page: 'process'; processId: string; stage: StageId }
   | { page: 'board'; projectId?: string; itemId?: string };
@@ -25,6 +26,7 @@ const isStage = (s: string): s is StageId => STAGES.some(x => x.id === s);
 export function parseJourneyPath(pathname: string): JourneyRoute | null {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts[0] === 'signin' && parts.length === 1) return { page: 'signin' };
+  if (parts[0] === 'work' && parts.length === 1) return { page: 'work' };
   if (parts[0] === 'processes' && parts.length === 1) return { page: 'processes' };
   if (parts[0] === 'board' && parts.length <= 3 && (!parts[1] || UUID.test(parts[1])) && (!parts[2] || UUID.test(parts[2]))) {
     return { page: 'board', ...(parts[1] ? { projectId: parts[1].toLowerCase() } : {}), ...(parts[2] ? { itemId: parts[2].toLowerCase() } : {}) };
@@ -39,6 +41,7 @@ export function parseJourneyPath(pathname: string): JourneyRoute | null {
 export function journeyPath(route: JourneyRoute): string {
   switch (route.page) {
     case 'signin': return '/signin';
+    case 'work': return '/work';
     case 'processes': return '/processes';
     case 'process': return `/process/${route.processId}/${route.stage}`;
     case 'board': return `/board${route.projectId ? `/${route.projectId}` : ''}${route.projectId && route.itemId ? `/${route.itemId}` : ''}`;

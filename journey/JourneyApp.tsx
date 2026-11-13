@@ -7,6 +7,7 @@ import type { JourneyStore, Me } from './store/types.ts';
 import { SignInPage } from './pages/SignInPage.tsx';
 import { BoardPage } from './pages/BoardPage.tsx';
 import { ProcessesPage } from './pages/ProcessesPage.tsx';
+import { MyWorkPage } from './pages/MyWorkPage.tsx';
 import { ProcessWorkspace } from './pages/ProcessWorkspace.tsx';
 import { Button, Spinner } from './ui.tsx';
 
@@ -18,9 +19,9 @@ export interface Nav {
 }
 
 function useRoute(): Nav {
-  const [route, setRoute] = React.useState<JourneyRoute>(() => parseJourneyPath(location.pathname) ?? { page: 'processes' });
+  const [route, setRoute] = React.useState<JourneyRoute>(() => parseJourneyPath(location.pathname) ?? { page: 'work' });
   React.useEffect(() => {
-    const onPop = () => setRoute(parseJourneyPath(location.pathname) ?? { page: 'processes' });
+    const onPop = () => setRoute(parseJourneyPath(location.pathname) ?? { page: 'work' });
     addEventListener('popstate', onPop);
     return () => removeEventListener('popstate', onPop);
   }, []);
@@ -62,7 +63,7 @@ function Journey({ store }: { store: JourneyStore }) {
       afterSignIn.current = nav.route;
       nav.go({ page: 'signin' }, { replace: true });
     } else if (me && nav.route.page === 'signin') {
-      nav.go(afterSignIn.current ?? { page: 'processes' }, { replace: true });
+      nav.go(afterSignIn.current ?? { page: 'work' }, { replace: true });
       afterSignIn.current = null;
     }
   }, [me, nav]);
@@ -75,13 +76,13 @@ function Journey({ store }: { store: JourneyStore }) {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className={`mx-auto flex h-14 items-center justify-between px-6 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
-          <a href="/processes" onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'processes' }); }} className="flex items-center gap-2.5">
+          <a href="/work" onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex items-center gap-2.5">
             <img src="/brand/avala-os-app-icon.svg" alt="" className="h-7 w-7" />
             <span className="font-display text-base font-semibold tracking-tight text-[#002C4B]">AvalaOS</span>
           </a>
           {me && nav.route.page !== 'signin' && (
             <nav aria-label="Main" className="mr-auto ml-8 flex gap-1 text-sm">
-              {([['processes', 'Processes'], ['board', 'Delivery board']] as const).map(([page, label]) => {
+              {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
                 return <a key={page} href={`/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={here ? 'rounded-md bg-slate-100 px-3 py-1.5 font-semibold text-[#002C4B]' : 'rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50'}>{label}</a>;
               })}
@@ -102,6 +103,7 @@ function Journey({ store }: { store: JourneyStore }) {
       )}
       <main className={`mx-auto px-6 py-8 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
         {!me || nav.route.page === 'signin' ? <SignInPage store={store} /> :
+          nav.route.page === 'work' ? <MyWorkPage store={store} nav={nav} /> :
           nav.route.page === 'processes' ? <ProcessesPage store={store} nav={nav} /> :
           nav.route.page === 'board' ? <BoardPage store={store} nav={nav} projectId={nav.route.projectId} itemId={nav.route.itemId} /> :
             <React.Fragment key={nav.route.processId}><ProcessWorkspace store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} /></React.Fragment>}

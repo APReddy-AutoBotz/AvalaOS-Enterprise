@@ -34,7 +34,7 @@ const toRevision = (r: Record<string, any>): RevisionRow => ({
   id: r.id, revNo: r.rev_no ?? r.revNo, state: r.state, seq: Number(r.edit_seq ?? r.seq ?? 0), modelHash: r.model_hash ?? r.modelHash ?? null,
   basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, approvedAt: r.approved_at ?? r.approvedAt ?? null,
 });
-const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at });
+const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at, analystId: p.analyst_id ?? null, architectId: p.architect_id ?? null, approverId: p.approver_id ?? null });
 const toSource = (r: Record<string, any>): SourceRow => ({
   id: r.id, key: r.source_key, title: r.title, fileName: r.file_name ?? '', format: r.format, kind: r.kind ?? '', inferred: Boolean(r.inferred),
   segmentCount: Number(r.segment_count ?? 0), warnings: Array.isArray(r.warnings) ? r.warnings : [], createdAt: r.created_at, archived: Boolean(r.archived_at),
@@ -73,7 +73,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail({ message: error.message, status: error.status ?? 400 });
     },
     async signUp(email, password) {
-      const { data, error } = await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/processes` } });
+      const { data, error } = await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/work` } });
       if (error) fail({ message: error.message, status: error.status ?? 400 });
       return { needsConfirmation: !data.session };
     },
@@ -123,21 +123,26 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
     },
     async listProcesses(workspaceId) {
-      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at')
+      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at, analyst_id, architect_id, approver_id')
         .eq('workspace_id', workspaceId).is('archived_at', null).order('updated_at', { ascending: false });
       if (error) fail(error);
       return (data ?? []).map(toProcess);
     },
     async createProcess(workspaceId, name) {
       const { data, error } = await db.from('processes').insert({ workspace_id: workspaceId, name: name.trim() })
-        .select('id, workspace_id, name, description, updated_at').single();
+        .select('id, workspace_id, name, description, updated_at, analyst_id, architect_id, approver_id').single();
       if (error) fail(error);
       return toProcess(data);
     },
     async getProcess(processId) {
-      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at').eq('id', processId).maybeSingle();
+      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at, analyst_id, architect_id, approver_id').eq('id', processId).maybeSingle();
       if (error) fail(error);
       return data ? toProcess(data) : null;
+    },
+
+    async setProcessPeople(processId, p) {
+      const { error } = await db.from('processes').update({ analyst_id: p.analystId, architect_id: p.architectId, approver_id: p.approverId }).eq('id', processId);
+      if (error) fail(error);
     },
 
     async listRevisions(processId) {
