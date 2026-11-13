@@ -178,6 +178,29 @@ function Home({ store, nav, workspace, userId }: { store: JourneyStore; nav: Nav
         {' · '}
         <a href="/board" className="font-medium text-[#002C4B] hover:underline" onClick={e => { e.preventDefault(); nav.go({ page: 'board' }); }}>Delivery board</a>
       </p>
+      <NeedsEmail store={store} />
+    </div>
+  );
+}
+
+/** The person's own choice: the weekday email when something new needs them (domain/work/digest.ts). */
+function NeedsEmail({ store }: { store: JourneyStore }) {
+  const [on, setOn] = React.useState<boolean | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => { store.getNeedsEmail().then(setOn).catch(() => setOn(null)); }, [store]);
+  if (on === null) return null;
+  const change = async (next: boolean) => {
+    setBusy(true); setError(null);
+    try { await store.setNeedsEmail(next); setOn(next); } catch (e) { setError(messageOf(e)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="border-t border-slate-200 pt-4" data-testid="needs-email">
+      <label className="flex items-start gap-2 text-sm text-slate-700">
+        <input type="checkbox" className="mt-1" checked={on} disabled={busy} onChange={e => change(e.target.checked)} />
+        <span>Email me on weekdays when something new needs me on a process I am named on.</span>
+      </label>
+      <ErrorNote message={error} />
     </div>
   );
 }

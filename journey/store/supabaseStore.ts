@@ -342,6 +342,17 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const r = await call('journey-ai', { action: 'health', workspaceId });
       return { model: String(r?.model ?? ''), source: r?.source === 'workspace' ? 'workspace' : 'platform' };
     },
+    async getNeedsEmail() {
+      const { data: auth } = await db.auth.getUser();
+      if (!auth.user) return null;
+      const { data, error } = await db.from('notification_settings').select('needs_email').eq('user_id', auth.user.id).maybeSingle();
+      if (error) return null; // not available (yet): the page leaves the choice out
+      return data ? Boolean(data.needs_email) : true; // no row yet: on, as for everyone
+    },
+    async setNeedsEmail(on) {
+      const { error } = await db.rpc('set_needs_email', { email_on: on });
+      if (error) fail(error);
+    },
     async getAiUsage(workspaceId) {
       const MAX = 10_000;
       const from = monthStart(new Date()).toISOString();

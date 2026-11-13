@@ -38,6 +38,7 @@ interface State {
   people?: Record<string, { members: Person[]; invites: Invite[]; audit: AuditEntry[] }>;
   /** Only what the browser may know of a key: its last four characters. */
   ai?: Record<string, WorkspaceAi>;
+  needsEmail?: boolean;
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -387,6 +388,8 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       save();
     },
     async testWorkspaceAi() { throw new StoreError(501, `Testing a key needs the server; it is not available ${where}.`); },
+    async getNeedsEmail() { requireMe(); return state.needsEmail ?? true; },
+    async setNeedsEmail(on) { requireMe(); state.needsEmail = on; save(); },
     // The in-browser store has no AI, so it has no AI use and no allowance to report.
     async getAiUsage(workspaceId) { peopleOf(workspaceId); return { rows: [], allowance: null, partial: false }; },
     async cancelInvite(workspaceId, email) {

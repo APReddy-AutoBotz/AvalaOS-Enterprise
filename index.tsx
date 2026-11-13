@@ -15,7 +15,8 @@ if (!rootElement) {
 // path goes to My work, so no route reaches the earlier screens, including the earlier
 // assessment versions; they are no longer part of the build.
 // The exceptions are the public pages: "/" (the homepage), /privacy, /terms and /security (the trust
-// pages), which load without the application, and /demo, the product on the sample case in the browser.
+// pages), which load without the application, /demo, the product on the sample case in the browser, and
+// /unsubscribe, which stops the weekday email from the link in it.
 const pub = publicPage(window.location.pathname);
 if (!pub && !parseJourneyPath(window.location.pathname)) {
   window.history.replaceState(null, '', `/work${window.location.hash}`);
@@ -23,6 +24,7 @@ if (!pub && !parseJourneyPath(window.location.pathname)) {
 const Root = React.lazy(async (): Promise<{ default: React.ComponentType }> => {
   if (pub === 'home') return import('./journey/home/HomePage');
   if (pub === 'demo') return import('./journey/demo/DemoApp');
+  if (pub === 'unsubscribe') return import('./journey/home/UnsubscribePage');
   if (pub) {
     const id = pub;
     const { default: TrustPage } = await import('./journey/home/TrustPage');
