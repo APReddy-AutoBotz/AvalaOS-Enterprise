@@ -94,7 +94,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
   };
 
   return (
-    <div className="space-y-5" data-testid="work-items">
+    <div className="space-y-5 pb-24" data-testid="work-items">
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-2xl">
@@ -102,7 +102,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
             <p className="mt-1 text-sm leading-6 text-slate-600">Worked out from the requirements, the automation units and the open questions: an epic per automation unit, a story per requirement, set-up tasks per application, and a decision or spike for each question that blocks the work. Review each one, then select what goes to the board. Nothing is assigned, estimated or dated for you.</p>
           </div>
           <dl className="grid grid-cols-5 gap-3 text-center text-xs" data-testid="proposal-counts">
-            {(['epic', 'story', 'task', 'spike', 'decision'] as ProposalType[]).map(t => <div key={t}><dt className="text-slate-500">{TYPE[t].label}s</dt><dd className="font-display text-lg font-semibold text-slate-900">{count(t)}</dd></div>)}
+            {(['epic', 'story', 'task', 'spike', 'decision'] as ProposalType[]).map(t => <div key={t}><dt className="text-slate-500">{t === 'story' ? 'Stories' : `${TYPE[t].label}s`}</dt><dd className="font-display text-lg font-semibold text-slate-900">{count(t)}</dd></div>)}
           </dl>
         </div>
         {derived.cov.notPlanned.length > 0 && (

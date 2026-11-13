@@ -58,7 +58,7 @@ export function deriveProposals(input: DocInput, headings: string[]): Derivation
     proposals.push({
       key, type: 'epic', parentKey: null,
       title: titled(`${APPROACH_LABEL[u.approach]}${where}: ${span}`),
-      description: [`Automates ${u.steps.length} ${u.steps.length === 1 ? 'step' : 'steps'} with ${APPROACH_LABEL[u.approach].toLowerCase()}${where}:`, ...u.steps.map(s => `- ${no(s.id)}. ${s.name}`)].join('\n'),
+      description: [`Automates ${u.steps.length} ${u.steps.length === 1 ? 'step' : 'steps'}${where} (${APPROACH_LABEL[u.approach]}):`, ...u.steps.map(s => `- ${no(s.id)}. ${s.name}`)].join('\n'),
       acceptance: [`Every step of ${u.id} runs end to end in the test environment.`, ...frs.map(c => `${c} is accepted.`)],
       stepIds: u.steps.map(s => s.id), requirements: frs,
     });
