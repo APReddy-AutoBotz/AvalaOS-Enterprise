@@ -136,3 +136,19 @@ npm run dev              # local dev server on port 3000
 ## History
 
 This repository continues `APReddy-AutoBotz/AvalaOS-Core` from commit `88d0643`. The earlier governance documents, acceptance harnesses and CI workflows remain in that repository and in this repository's git history. They are not instructions for work here.
+
+## Sign-up is by invitation
+
+A database trigger on `auth.users` (`app_private.require_invite`) refuses any new account whose email has no row in `workspace_invites`; users made from the Supabase dashboard (`invited_at` set) are allowed. Test: `supabase/tests/invite_only_signup.sql`. The first account of a new deployment is made from the dashboard.
+
+## Logo
+
+The mark is an A in five layers, one for each stage of the name (Assess, Validate, Assemble, Launch, Audit), navy with the top layer in amber `#E69F00`. The wordmark is "Avala OS" in Outfit Bold with the S in the same amber. Files in `public/brand/`: `avala-os-logo.svg` (mark and name on white; the name is drawn as paths, so there is no text to restyle and no contrast check on it), `avala-os-logo-light.svg` (on dark), `avala-os-mark.svg` and `avala-os-mark-light.svg` (mark only), `avala-os-app-icon.svg` (also the favicon). The five words appear beside the logo only at 320 px wide or more. The older gold-and-silver lockups in `public/brand/` are not used by the app.
+
+## Homepage
+
+`/` is the public homepage (`journey/home/HomePage.tsx`), loaded without the application or the database client; every other unknown path still goes to My work. A signed-in visitor (a Supabase session key in local storage) sees "Open my work" instead of "Sign in".
+
+Every screen on it is the product itself, not a mock-up. `tests/e2e/tour.spec.ts` runs the sample case (`eval/corpus/ap-invoice`, a made-up company; its hand-checked model stands in for extraction, which needs the server) through every stage and captures the screens; CI prints them in the browser job log on `claude/` branches. The sample's facts that only its people could give (SAP worked through its screens, rules written down, only invoice reading needs AI) are entered by that test in the product's own Inputs view, and its team is named on the process; the result the page quotes (RPA-led, 15 of 20 steps by rules, 1 needs AI, 4 stay with people) is what the product then computes, so update the page's wording if the sample or the scoring tables change. To refresh the tour after the product's look changes, take the `tour-*.jpg` screens from that log and convert them into `public/marketing/tour/*.webp` (2000 px wide; the three `reason-*` images are crops). Keep the claims on the page to what the product does, and keep the line that says the screens are a sample case.
+
+The tour runs five stages of six seconds (about 30 seconds), two screens each with a slow zoom. A stage's progress bar is a CSS animation whose end advances the stage, so pausing the animation pauses the timing. With reduced motion nothing runs on its own and both screens of a stage are shown one under the other. Test: `tests/e2e/home.spec.ts`.

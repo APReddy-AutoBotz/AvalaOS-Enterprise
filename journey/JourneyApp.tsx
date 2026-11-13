@@ -77,8 +77,7 @@ function Journey({ store }: { store: JourneyStore }) {
       <header className="border-b border-slate-200 bg-white">
         <div className={`mx-auto flex h-14 items-center justify-between px-6 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
           <a href="/work" onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex items-center gap-2.5">
-            <img src="/brand/avala-os-app-icon.svg" alt="" className="h-7 w-7" />
-            <span className="font-display text-base font-semibold tracking-tight text-[#002C4B]">AvalaOS</span>
+            <img src="/brand/avala-os-logo.svg" alt="Avala OS" className="h-8 w-auto" />
           </a>
           {me && nav.route.page !== 'signin' && (
             <nav aria-label="Main" className="mr-auto ml-8 flex gap-1 text-sm">
@@ -97,7 +96,7 @@ function Journey({ store }: { store: JourneyStore }) {
         </div>
       </header>
       {store.kind === 'memory' && (
-        <div className="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-center text-xs text-amber-900">
+        <div data-testid="local-mode" className="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-center text-xs text-amber-900">
           Local mode: data stays in this browser and is not saved to a server.
         </div>
       )}

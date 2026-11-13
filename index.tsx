@@ -13,10 +13,12 @@ if (!rootElement) {
 // The process journey (/signin, /work, /processes, /process/:id/:stage) is the application. Any other
 // path goes to My work, so no route reaches the earlier screens, including the earlier
 // assessment versions; they are no longer part of the build.
-if (!parseJourneyPath(window.location.pathname)) {
+// The one exception is "/", the public homepage, which loads without the application.
+const isHome = window.location.pathname.replace(/\/+$/, '') === '';
+if (!isHome && !parseJourneyPath(window.location.pathname)) {
   window.history.replaceState(null, '', `/work${window.location.hash}`);
 }
-const Root = React.lazy(() => import('./journey/JourneyApp'));
+const Root = React.lazy(() => (isHome ? import('./journey/home/HomePage') : import('./journey/JourneyApp')));
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
