@@ -8,6 +8,7 @@ import type { JourneyStore, Member, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
 import { BoardError, COLUMNS, criterionParts, initials, joinStory, lanesOf, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateProjectName, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
+import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
@@ -35,6 +36,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [over, setOver] = React.useState<string | null>(null);
   const [closed, setClosed] = React.useState<Set<string>>(new Set());
   const [members, setMembers] = React.useState<Member[]>([]);
+  const [exporting, setExporting] = React.useState(false);
   const [who, setWho] = React.useState<string>(''); // '' everyone, 'none' unassigned, else a member
 
   React.useEffect(() => {
@@ -111,6 +113,28 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
             </select>
           )}
           {work.length > 0 && <input type="search" aria-label="Find an item" placeholder="Find by title or FR code" value={query} onChange={e => setQuery(e.target.value)} className={cx(field, 'w-56')} />}
+          {project && items && items.length > 0 && (
+            <div className="relative">
+              <Button variant="secondary" aria-expanded={exporting} aria-haspopup="dialog" onClick={() => setExporting(!exporting)}>Export</Button>
+              {exporting && (
+                <div role="dialog" aria-label="Export this board" className="absolute right-0 z-20 mt-2 w-[26rem] max-w-[calc(100vw-3rem)] rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-[0_16px_40px_-12px_rgba(15,23,42,0.3)]" data-testid="export-panel">
+                  <p className="font-semibold text-slate-900">Export this board</p>
+                  <p className="mt-1 leading-6 text-slate-600">All {items.length} items of {project.name}, with their criteria and requirement codes, as a file the other tool imports.</p>
+                  <div className="mt-3 space-y-3">
+                    {([
+                      ['Jira', 'jira', toJiraCsv, 'In Jira, import work items from a CSV file and map "Issue ID" to the work item ID and "Parent" to Parent. Work under a story arrives as a Sub-task; spikes and decisions as a Task with a label.'],
+                      ['Azure DevOps', 'azure-devops', toAzureCsv, 'In Azure Boards, open Queries and choose Import work items (Agile process). An epic arrives as a Feature, a story as a User Story, its tasks as a Task. Azure creates every item as New, so the status is in the tags.'],
+                    ] as const).map(([label, slug, build, how]) => (
+                      <div key={slug} className="rounded-lg bg-slate-50 p-3">
+                        <Button variant="secondary" onClick={() => download(`${fileName(project.name)}-${slug}.csv`, build(items, id => members.find(m => m.userId === id)?.name ?? null))}>Download for {label} (CSV)</Button>
+                        <p className="mt-2 text-xs leading-5 text-slate-600">{how}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {canEdit && (adding
             ? <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); create(); }}>
                 <input autoFocus aria-label="New project name" placeholder="Project name" value={newName} onChange={e => setNewName(e.target.value)} className={cx(field, 'w-48')} />
@@ -210,6 +234,15 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
       {open && project && items && <React.Fragment key={open.id}><ItemPanel item={open} items={items} members={members} canEdit={canEdit} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
     </section>
   );
+}
+
+const fileName = (name: string) => name.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'board';
+/** Saves text as a file from the browser. */
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 /** A person's mark: two letters in a circle, with the name on hover and for screen readers. */
