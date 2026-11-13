@@ -25,7 +25,7 @@ function Icon({ name, className }: { name: keyof typeof ICONS; className?: strin
 
 function Card({ icon, tone, title, children, testid }: { icon: keyof typeof ICONS; tone: string; title: string; children: React.ReactNode; testid: string }) {
   return (
-    <div data-testid={testid} className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+    <div data-testid={testid} className="flex h-full flex-col bg-white p-5">
       <div className="flex items-center gap-2.5">
         <span className={cx('flex h-8 w-8 items-center justify-center rounded-lg', tone)}><Icon name={icon} /></span>
         <h4 className="font-display text-sm font-semibold text-slate-900">{title}</h4>
@@ -97,7 +97,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
         </ul>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-3">
         <Card testid="why-drivers" icon="check" tone={cx(tone.chip, 'ring-1 ring-inset')} title={lead ? `What makes ${APPROACH_LABEL[lead]} the best fit` : 'Why nothing is recommended yet'}>
           {lead && result.drivers.length > 0 ? (
             <ul className="space-y-2.5">
