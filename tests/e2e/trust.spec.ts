@@ -68,3 +68,11 @@ test('a trust page on a phone: nothing spills off the side', async ({ page }) =>
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await shot(page, '76-trust-terms-phone');
 });
+
+test('a visitor with a sign-in session sees "Open my work" on the public pages', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('avala.journey.auth', '{}'));
+  for (const path of ['/', '/privacy']) {
+    await page.goto(path);
+    await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Open my work' })).toHaveAttribute('href', '/work');
+  }
+});
