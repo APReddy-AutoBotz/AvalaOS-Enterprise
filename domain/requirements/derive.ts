@@ -106,12 +106,15 @@ export function deriveRequirements(m: ProcessModel, a: ProcessAssessment): Deriv
     if (!e.handling.trim()) gaps.push(`How is "${e.name}" handled?`);
     if (!e.routedToRoleId) gaps.push(`Who handles "${e.name}"?`);
     const handling = e.handling.trim().replace(/\.$/, '');
-    const then = handling ? `apply the stated handling: ${lowerFirst(handling)}${routed ? `; and route the case to ${routed}` : ''}` : routed ? `route the case to ${routed}` : '';
+    const the = (role: string) => (/^(the|a|an)\s/i.test(role) ? role : `the ${role}`);
+    const then = handling ? `apply the stated handling: ${lowerFirst(handling)}${routed ? `; and route the case to ${the(routed)}` : ''}` : routed ? `route the case to ${the(routed)}` : '';
+    // The criterion says what the solution does, as a full sentence ("then the solution applies…").
+    const outcome = handling ? `the solution applies the stated handling: ${lowerFirst(handling)}${routed ? `; and routes the case to ${the(routed)}` : ''}` : routed ? `the solution routes the case to ${the(routed)}` : '';
     out.push({
       key: `exception:${e.id}`, kind: 'FR', category: 'exception', title: e.name,
       statement: sentence(`When ${lowerFirst((e.trigger || e.name).trim().replace(/\.$/, ''))}, the solution shall ${then || 'handle it as described in the open items'}`),
       rationale: `${e.kind === 'business' ? 'A business' : 'An application'} exception${where.length ? ` at step ${where.map(no).join(', ')}` : ''}.`,
-      acceptance: then ? [{ given: sentence(e.trigger || e.name), when: where.length ? `step ${where.map(no).join(', ')} is carried out` : 'it occurs', then: sentence(then) }] : [],
+      acceptance: then ? [{ given: sentence(e.trigger || e.name), when: where.length ? `step ${where.map(no).join(', ')} is carried out` : 'the solution processes the case', then: sentence(outcome) }] : [],
       stepIds: where, ruleIds: [], exceptionIds: [e.id],
       traces: [...top, ...[...new Set(where.flatMap(id => m.steps.find(s => s.id === id)?.ruleIds ?? []))].map(r => `rule:${r}`)], gaps,
     });

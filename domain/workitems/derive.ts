@@ -97,7 +97,7 @@ export function deriveProposals(input: DocInput, headings: string[]): Derivation
     if (r.category === 'exception') {
       const e = m.exceptions.find(x => r.exceptionIds.includes(x.id));
       const to = e?.routedToRoleId ? m.roles.find(x => x.id === e.routedToRoleId)?.name : undefined;
-      if (e && to) criteria.push(`Given ${lowerFirst((e.trigger || e.name).replace(/\.$/, ''))}, when the solution detects it, then the case is handed to ${to} with the reason shown.`);
+      if (e && to) criteria.push(`Given ${lowerFirst((e.trigger || e.name).replace(/\.$/, ''))}, when the solution detects it, then the case is handed to ${article(to)} with the reason shown.`);
     }
     if (r.category === 'step' && s) {
       for (const eid of s.exceptionIds) {
@@ -119,11 +119,13 @@ export function deriveProposals(input: DocInput, headings: string[]): Derivation
     const title = r.category === 'human' ? r.title : r.category === 'exception' ? `Handle "${r.title}"` : r.title;
     const exc = r.category === 'exception' ? m.exceptions.find(x => r.exceptionIds.includes(x.id)) : undefined;
     // The person who wants the story is the one doing the work today, not where an exception is sent.
-    const who = r.stepIds.map(roleOf).find(Boolean) ?? (exc?.routedToRoleId && m.roles.find(x => x.id === exc.routedToRoleId)?.kind !== 'external' ? m.roles.find(x => x.id === exc.routedToRoleId)?.name : undefined);
+    const doer = r.stepIds.map(roleOf).find(Boolean);
+    const who = doer ?? (exc?.routedToRoleId && m.roles.find(x => x.id === exc.routedToRoleId)?.kind !== 'external' ? m.roles.find(x => x.id === exc.routedToRoleId)?.name : undefined);
     const want = r.category === 'human'
       ? `the solution to bring me "${s?.name ?? r.title}" to ${/decision/i.test(r.title) ? 'decide on' : /approval/i.test(r.title) ? 'approve' : 'review'} before the case continues`
       : r.category === 'exception'
-        ? `the solution to catch "${r.title}"${exc?.handling.trim() ? ` and ${lowerFirst(exc.handling.trim().replace(/\.$/, ''))}` : ''}`
+        // The handling itself is in the target and the criteria; the story line stays one short sentence.
+        ? doer ? `the solution to catch "${r.title}" and handle it as agreed` : `the solution to bring me each "${r.title}" case with the reason shown`
         : `the solution to ${lowerFirst(s?.name ?? r.title)}${s?.systemIds.length ? ` in ${s.systemIds.map(sys).join(' and ')}` : ''}`;
     const story = storyLine(who, want, objective);
     proposals.push({

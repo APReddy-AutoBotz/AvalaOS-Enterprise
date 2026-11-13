@@ -69,10 +69,12 @@ function Journey({ store }: { store: JourneyStore }) {
 
   if (me === undefined) return <Spinner />;
 
+  // The board uses the width of the screen: six columns need the room.
+  const wide = Boolean(me) && nav.route.page === 'board';
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
+        <div className={`mx-auto flex h-14 items-center justify-between px-6 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
           <a href="/processes" onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'processes' }); }} className="flex items-center gap-2.5">
             <img src="/brand/avala-os-app-icon.svg" alt="" className="h-7 w-7" />
             <span className="font-display text-base font-semibold tracking-tight text-[#002C4B]">AvalaOS</span>
@@ -98,7 +100,7 @@ function Journey({ store }: { store: JourneyStore }) {
           Local mode: data stays in this browser and is not saved to a server.
         </div>
       )}
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className={`mx-auto px-6 py-8 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
         {!me || nav.route.page === 'signin' ? <SignInPage store={store} /> :
           nav.route.page === 'processes' ? <ProcessesPage store={store} nav={nav} /> :
           nav.route.page === 'board' ? <BoardPage store={store} nav={nav} projectId={nav.route.projectId} itemId={nav.route.itemId} /> :
