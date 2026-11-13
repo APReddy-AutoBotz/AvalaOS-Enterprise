@@ -16,6 +16,7 @@ import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem } from '../../domain/workitems/board.ts';
+import { providerLabel } from '../../domain/auth/providers.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -94,6 +95,12 @@ export function createMemoryStore(): JourneyStore {
     },
     async signUp(email, password) { await this.signIn(email, password); return { needsConfirmation: false }; },
     async signOut() { state.me = null; save(); listeners.forEach(l => l(null)); },
+    // The in-browser store has no provider to send anyone to: it offers both so the screen can be
+    // tested, and says so when one is chosen.
+    async signInProviders() { return ['google', 'azure']; },
+    async signInWithProvider(provider) {
+      throw new StoreError(501, `${providerLabel(provider)} sign-in needs the server; this is the in-browser store.`);
+    },
 
     async listWorkspaces() { requireMe(); return state.workspaces; },
     async setProcessPeople(processId, people) {
