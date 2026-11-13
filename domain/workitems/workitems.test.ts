@@ -80,3 +80,29 @@ test('edits, selections and rejections survive deriving again; removed sources a
   assert.throws(() => editProposal(a, { title: 'x', description: '', acceptance: ['only one'] }), ProposalError);
   assert.throws(() => rejectProposal(a, ' '), ProposalError);
 });
+
+test('best-practice shape: every story sits under an epic and opens with "As the <role>, I want…"; set-up tasks sit under their application\'s epic; epic criteria are outcomes', () => {
+  const i = inputOf(gold);
+  const d = deriveProposals(i, headingsOf(i)).proposals;
+  const byKey = new Map(d.map(p => [p.key, p]));
+  for (const s of d.filter(p => p.type === 'story')) {
+    assert.equal(byKey.get(s.parentKey ?? '')?.type, 'epic', s.title);
+    const first = s.description.split('\n')[0];
+    if (s.stepIds.some(id => gold.steps.find(x => x.id === id)?.roleIds.length)) assert.match(first, /^As (the|a|an) .+, I want .+, so that the process meets its objective \(.+\)\.$/, s.title);
+  }
+  for (const t of d.filter(p => p.key.startsWith('access:') || p.key.startsWith('testenv:') || p.key.startsWith('spike:'))) assert.equal(byKey.get(t.parentKey ?? '')?.type, 'epic', t.title);
+  for (const e of d.filter(p => p.type === 'epic')) {
+    assert.ok(!e.acceptance.some(a => /^FR-\d+ is accepted/.test(a)), e.title);
+    assert.ok(e.acceptance.length >= 2);
+  }
+  // The story line never names a role that is not the one doing the step, and never an external party.
+  const ext = new Set(gold.roles.filter(r => r.kind === 'external').map(r => r.name));
+  for (const s of d.filter(p => p.type === 'story')) for (const n of ext) assert.ok(!s.description.split('\n')[0].startsWith(`As the ${n},`), s.title);
+});
+
+test('the story line leaves out what is not recorded: no role, no line; no objective, no "so that"', async () => {
+  const { storyLine } = await import('./derive.ts');
+  assert.equal(storyLine(undefined, 'x', 'y'), null);
+  assert.equal(storyLine('AP Clerk', 'the solution to log invoice', null), 'As the AP Clerk, I want the solution to log invoice.');
+  assert.equal(storyLine('AP Clerk', 'the solution to log invoice', 'Pay suppliers on time.'), 'As the AP Clerk, I want the solution to log invoice, so that the process meets its objective (Pay suppliers on time).');
+});

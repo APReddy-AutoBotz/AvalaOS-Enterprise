@@ -196,6 +196,7 @@ function ProposalCard({ r, canEdit, open, onOpen, onSave }: { r: Row; canEdit: b
             {locked && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">On the board</span>}
             {r.state === 'rejected' && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700" data-testid="rejected-reason">Rejected: {r.rejectedReason}</span>}
           </div>
+          {r.type === 'story' && /^As (the|a|an) /.test(r.description) && <p className="mt-1 text-sm italic leading-6 text-slate-700" data-testid="story-line">{r.description.split('\n')[0]}</p>}
           <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
             {r.requirements.slice(0, 6).map(c => <span key={c} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-semibold text-slate-700">{c}</span>)}
             {r.requirements.length > 6 && <span>+{r.requirements.length - 6}</span>}
