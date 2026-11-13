@@ -1,0 +1,57 @@
+// Settings → AI provider (bring your own key). The in-browser store keeps only what the browser may know
+// of a key (its last four characters) and cannot test one; the database rules and the Vault are checked
+// by supabase/tests/workspace_ai_settings.sql.
+import AxeBuilder from '@axe-core/playwright';
+import { test, expect } from '@playwright/test';
+import { shot, signInAndCreateProcess } from './helpers.ts';
+
+const AZURE_KEY = 'azure-0123456789abcdef0123456789ab9F3Q';
+const OPENAI_KEY = 'sk-proj-0123456789abcdefghijklmnopqrstuvZZ77';
+
+test('an admin connects an Azure OpenAI key, sees only its last four characters, and can go back to the platform AI', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await page.goto('/processes');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const ai = page.getByTestId('ai-provider');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText("uses Avala OS's AI, within a monthly allowance");
+
+  // Azure needs the resource's own Azure address; anything else is refused before anything is saved.
+  await ai.getByLabel('Provider').selectOption({ label: 'Azure OpenAI' });
+  await ai.getByLabel('Deployment name').fill('prod-gpt5');
+  await ai.getByLabel('Endpoint').fill('https://acme-ai.example.com');
+  await ai.getByLabel('API key').fill(AZURE_KEY);
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByRole('alert')).toContainText('must be your Azure OpenAI resource');
+
+  await ai.getByLabel('Endpoint').fill('https://Acme-AI.openai.azure.com/openai/v1/');
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own Azure OpenAI key ending 9F3Q');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('acme-ai.openai.azure.com');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('Not available with this provider yet: turning speech into text');
+  expect(await page.content()).not.toContain(AZURE_KEY);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(AZURE_KEY);
+
+  // Testing needs the server; the in-browser store says so.
+  await ai.getByRole('button', { name: 'Test this key' }).click();
+  await expect(ai.getByRole('alert')).toContainText('needs the server');
+
+  // Changing provider needs that provider's key.
+  await ai.getByRole('button', { name: 'Change' }).click();
+  await ai.getByLabel('Provider').selectOption({ label: 'OpenAI' });
+  await expect(ai.getByLabel('Endpoint')).toHaveCount(0);
+  await ai.getByLabel('Model').fill('gpt-5.5');
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByRole('alert')).toContainText('Paste the OpenAI API key');
+  await ai.getByLabel('API key').fill(OPENAI_KEY);
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('OpenAI key ending ZZ77');
+  await shot(page, '90-ai-provider');
+
+  const result = await new AxeBuilder({ page }).include('[data-testid="ai-provider"]').withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
+
+  page.once('dialog', d => d.accept());
+  await ai.getByRole('button', { name: 'Stop using this key' }).click();
+  await expect(ai.getByRole('status')).toContainText("uses Avala OS's AI again");
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('within a monthly allowance');
+});

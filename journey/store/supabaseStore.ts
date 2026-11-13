@@ -320,6 +320,27 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async sendInviteEmail(workspaceId, email) {
       await call('journey-invite', { workspaceId, email });
     },
+    async getWorkspaceAi(workspaceId) {
+      const { data, error } = await db.from('workspace_ai_settings')
+        .select('provider, model, endpoint, key_hint, updated_at, last_used_at, last_tested_at, last_test_ok').eq('workspace_id', workspaceId).maybeSingle();
+      if (error) fail(error);
+      return data ? {
+        provider: data.provider, model: data.model, endpoint: data.endpoint ?? null, keyHint: data.key_hint, updatedAt: data.updated_at,
+        lastUsedAt: data.last_used_at ?? null, lastTestedAt: data.last_tested_at ?? null, lastTestOk: data.last_test_ok ?? null,
+      } : null;
+    },
+    async saveWorkspaceAi(workspaceId, input) {
+      const { error } = await db.rpc('set_workspace_ai', { target_workspace: workspaceId, ai_provider: input.provider, ai_model: input.model, ai_endpoint: input.endpoint, api_key: input.apiKey ?? null });
+      if (error) fail(error);
+    },
+    async clearWorkspaceAi(workspaceId) {
+      const { error } = await db.rpc('clear_workspace_ai', { target_workspace: workspaceId });
+      if (error) fail(error);
+    },
+    async testWorkspaceAi(workspaceId) {
+      const r = await call('journey-ai', { action: 'health', workspaceId });
+      return { model: String(r?.model ?? ''), source: r?.source === 'workspace' ? 'workspace' : 'platform' };
+    },
     async cancelInvite(workspaceId, email) {
       const { error } = await db.rpc('cancel_invite', { target_workspace: workspaceId, invite_email: email });
       if (error) fail(error);

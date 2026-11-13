@@ -22,6 +22,7 @@ import { score } from '../../../eval/scorer.ts';
 import { parseDrawio } from '../../../domain/flowchart/drawio.ts';
 import { graphToSegments } from '../../../domain/flowchart/graph.ts';
 import { readFlowchart, readingToGraph } from '../../../domain/flowchart/vision.ts';
+import { chooseConnection, responsesTarget, takesReasoningEffort, taskNeed, unsupported, validateAiChoice, type AiConnection } from '../../../domain/ai/providers.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const SUPABASE_URL = env('SUPABASE_URL');
@@ -66,15 +67,32 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 // The 150 s limit counts from when the worker started, and one worker can serve several stages.
 const WORKER_STARTED = Date.now();
 const callBudgetMs = () => Math.max(5_000, Math.min(115_000, WORKER_STARTED + 135_000 - Date.now()));
-async function callOpenAI(body: Record<string, unknown>) {
+/**
+ * The AI connection a run uses: the workspace's own key when it has one (never falling back to the
+ * platform's), otherwise the platform key. Eval runs always use the platform key.
+ */
+async function connectionFor(run: Run | null): Promise<AiConnection> {
+  let own: Parameters<typeof chooseConnection>[0] = null;
+  if (run?.kind === 'process' && run.workspace_id) {
+    // A 404 means the lookup does not exist yet (database not migrated), so no workspace can have a key.
+    const found = await rest('rpc/workspace_ai_connection', { method: 'POST', body: JSON.stringify({ target_workspace: run.workspace_id }) })
+      .catch((e: Error) => { if (/^database 404/.test(e.message)) return null; throw e; });
+    if (found) own = { ...validateAiChoice(found), apiKey: String(found.apiKey ?? '') };
+  }
+  const c = chooseConnection(own, { apiKey: env('OPENAI_API_KEY'), model: MODEL });
+  if (!c) throw new Error('NOT_CONFIGURED: no AI provider key is set');
+  return c;
+}
+
+async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
+  const target = responsesTarget(conn);
   for (let attempt = 1; ; attempt++) {
     const ctl = new AbortController();
     // Edge functions are stopped at 150 s; stop the call first so the stage can retry or fail cleanly.
     const timer = setTimeout(() => ctl.abort(), callBudgetMs());
     try {
-      const res = await fetch('https://api.openai.com/v1/responses', {
-        method: 'POST', signal: ctl.signal, body: JSON.stringify(body),
-        headers: { Authorization: `Bearer ${env('OPENAI_API_KEY')}`, 'Content-Type': 'application/json' },
+      const res = await fetch(target.url, {
+        method: 'POST', signal: ctl.signal, body: JSON.stringify(body), headers: target.headers,
       });
       if (isRetryableStatus(res.status) && attempt < 3) { await res.body?.cancel(); await sleep(attempt * 2000); continue; }
       const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
@@ -92,12 +110,15 @@ async function callOpenAI(body: Record<string, unknown>) {
   }
 }
 
-async function runTask(task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string } | { image: string }) {
-  const body = 'segments' in input ? buildOpenAIRequest(task, input.segments, MODEL)
-    : 'image' in input ? buildImageRequest(task, input.image, MODEL)
-      : buildListingRequest(task, input.listing, MODEL);
-  if (/^(gpt-5|o\d)/.test(MODEL)) body.reasoning = { effort: task.reasoningEffort ?? EFFORT };
-  const parsed = await callOpenAI(body);
+async function runTask(conn: AiConnection, task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string } | { image: string }) {
+  const off = unsupported(conn, 'image' in input ? 'vision' : taskNeed(task));
+  if (off) throw new Error(`NOT_SUPPORTED: ${off}`);
+  const model = conn.model;
+  const body = 'segments' in input ? buildOpenAIRequest(task, input.segments, model)
+    : 'image' in input ? buildImageRequest(task, input.image, model)
+      : buildListingRequest(task, input.listing, model);
+  if (takesReasoningEffort(model)) body.reasoning = { effort: task.reasoningEffort ?? EFFORT };
+  const parsed = await callProvider(conn, body);
   if (!parsed.ok) throw new Error(`${task.id}: ${parsed.code} ${parsed.message}`);
   return { data: parsed.data, usage: parsed.usage };
 }
@@ -126,12 +147,16 @@ const patchRun = (id: string, fields: Record<string, unknown>) => rest(`extracti
 const putPart = (id: string, part: string, output: unknown, usage: { input: number; output: number }): Promise<string | null> =>
   rest('rpc/extraction_put_part', { method: 'POST', body: JSON.stringify({ target_run: id, part_name: part, part_output: output, used_input: usage.input, used_output: usage.output }) });
 
-async function logUsage(run: Run, task: string, usage: { input: number; output: number }, ok: boolean, error?: string) {
+async function logUsage(run: Run, conn: AiConnection, task: string, usage: { input: number; output: number }, ok: boolean, error?: string) {
   if (run.kind !== 'process' || !run.workspace_id) return;
   await rest('ai_usage', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
-    workspace_id: run.workspace_id, user_id: run.created_by, task, model: MODEL, status: ok ? 'ok' : 'provider_error',
-    input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : (error ?? '').slice(0, 60),
+    workspace_id: run.workspace_id, user_id: run.created_by, task, model: conn.model, provider: conn.provider, key_source: conn.source,
+    status: ok ? 'ok' : 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : (error ?? '').slice(0, 60),
   }) }).catch(e => console.error('usage log failed', e));
+  if (ok && conn.source === 'workspace') {
+    await rest(`workspace_ai_settings?workspace_id=eq.${run.workspace_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_used_at: new Date().toISOString() }) })
+      .catch(e => console.error('last used update failed', e));
+  }
 }
 
 /** Starts a stage: another invocation of this function. Only the call is awaited, not the work. */
@@ -198,7 +223,7 @@ async function parseCorpusFile(file: string, bytes: Uint8Array, sourceId: string
   if (file.endsWith('.png')) {
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    const r = await runTask(readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` });
+    const r = await runTask(await connectionFor(null), readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` });
     return graphToSegments(readingToGraph(r.data), sourceId);
   }
   const text = new TextDecoder().decode(bytes);
@@ -237,14 +262,15 @@ async function stagePass(run: Run, token: string, sourceId: string, pass: 'facts
   if (!source) throw new Error(`unknown source ${sourceId}`);
   const task = pass === 'facts' ? sourceFacts : sourceSteps;
   const segments = toGatewaySegments(source.segments);
+  const conn = await connectionFor(run);
   try {
-    const r = await runTask(task, { segments });
+    const r = await runTask(conn, task, { segments });
     const v = verifyExcerpts(r.data, task.verifyArrays, segments);
-    await logUsage(run, task.id, r.usage, true);
+    await logUsage(run, conn, task.id, r.usage, true);
     const next = await putPart(run.id, `pass:${pass}:${sourceId}`, { data: v.data, dropped: v.dropped }, r.usage);
     if (next === 'merge') await Promise.all(['flow', 'facts'].map(which => trigger({ action: 'merge', ...stageBody(run, token, { which }) })));
   } catch (e) {
-    await logUsage(run, task.id, { input: 0, output: 0 }, false, (e as Error).message);
+    await logUsage(run, conn, task.id, { input: 0, output: 0 }, false, (e as Error).message);
     throw e;
   }
 }
@@ -264,8 +290,9 @@ async function candidatesOf(run: Run) {
 async function stageMerge(run: Run, token: string, which: 'flow' | 'facts') {
   const { set } = await candidatesOf(run);
   const task = which === 'flow' ? mergeFlow : mergeFacts;
-  const r = await runTask(task, { listing: which === 'flow' ? flowListing(set) : factsListing(set) });
-  await logUsage(run, task.id, r.usage, true);
+  const conn = await connectionFor(run);
+  const r = await runTask(conn, task, { listing: which === 'flow' ? flowListing(set) : factsListing(set) });
+  await logUsage(run, conn, task.id, r.usage, true);
   const next = await putPart(run.id, `merge:${which}`, r.data, r.usage);
   if (next === 'review') await trigger({ action: 'review', ...stageBody(run, token, {}) });
 }
@@ -273,8 +300,9 @@ async function stageMerge(run: Run, token: string, which: 'flow' | 'facts') {
 async function stageReview(run: Run, token: string) {
   const { parts, set } = await candidatesOf(run);
   const flow = parts.find(p => p.part === 'merge:flow')?.output;
-  const r = await runTask(reviewFlow, { listing: reviewListing(flow, set) });
-  await logUsage(run, reviewFlow.id, r.usage, true);
+  const conn = await connectionFor(run);
+  const r = await runTask(conn, reviewFlow, { listing: reviewListing(flow, set) });
+  await logUsage(run, conn, reviewFlow.id, r.usage, true);
   const next = await putPart(run.id, 'review:flow', r.data, r.usage);
   if (next === 'assemble') await trigger({ action: 'assemble', ...stageBody(run, token, {}) });
 }
