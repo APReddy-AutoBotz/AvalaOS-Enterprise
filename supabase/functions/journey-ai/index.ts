@@ -235,16 +235,16 @@ Deno.serve(async (req: Request) => {
     const started = Date.now();
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
-    let ok = false, text = '', code = 'PROVIDER_ERROR', usage = { input: 0, output: 0 };
+    let ok = false, text = '', code = 'PROVIDER_ERROR', tokens = { input: 0, output: 0 };
     try {
       const res = await fetch(ttarget.url, { method: 'POST', body: form, signal: ctl.signal, headers: ttarget.headers });
       const json = await res.json().catch(() => ({}));
       ok = res.ok && typeof json.text === 'string';
       text = ok ? json.text : '';
-      usage = { input: Number(json?.usage?.input_tokens ?? 0) || 0, output: Number(json?.usage?.output_tokens ?? 0) || 0 };
+      tokens = { input: Number(json?.usage?.input_tokens ?? 0) || 0, output: Number(json?.usage?.output_tokens ?? 0) || 0 };
       if (!ok) code = res.status === 401 ? 'PROVIDER_AUTH' : 'PROVIDER_ERROR';
     } catch { ok = false; } finally { clearTimeout(timer); }
-    await usage({ workspace_id: request.workspaceId, user_id: userId, task: 'transcribe', model: tmodel, status: ok ? 'ok' : 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : code, duration_ms: Date.now() - started });
+    await usage({ workspace_id: request.workspaceId, user_id: userId, task: 'transcribe', model: tmodel, status: ok ? 'ok' : 'provider_error', input_tokens: tokens.input, output_tokens: tokens.output, attempts: 1, error_code: ok ? null : code, duration_ms: Date.now() - started });
     if (!ok) return fail(502, code, 'The recording could not be transcribed. Try again, or type the answer.');
     await used();
     return reply(200, { ok: true, text, model: tmodel });
