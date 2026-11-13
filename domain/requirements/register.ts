@@ -104,4 +104,5 @@ export const revertRequirement = (r: Requirement): Requirement => ({ ...r, edite
 export const keepRequirement = (r: Requirement): Requirement => ({ ...r, baseHash: r.derived ? reqHash(r.derived) : r.baseHash, needsReview: false });
 
 export const PRIORITY_LABEL: Record<Priority, string> = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" };
-export const criterionText = (a: Acceptance) => `Given ${a.given.replace(/\.$/, '')}, when ${a.when.replace(/\.$/, '')}, then ${a.then.replace(/\.$/, '')}.`;
+const low = (s: string) => (/^([A-Z][a-z]|A\s)/.test(s) ? s[0].toLowerCase() + s.slice(1) : s);
+export const criterionText = (a: Acceptance) => `Given ${low(a.given.replace(/\.$/, ''))}, when ${low(a.when.replace(/\.$/, ''))}, then ${low(a.then.replace(/\.$/, ''))}.`;

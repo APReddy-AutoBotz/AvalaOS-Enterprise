@@ -158,6 +158,7 @@ function ItemPanel({ item, canEdit, reqs, changes, onClose, onSave, onOpenFrd }:
             ))}
           </div>
         )}
+        {item.type === 'story' && /^As (the|a|an) /.test(item.description) && <p className="mt-4 text-sm italic leading-6 text-slate-700">{item.description.split('\n')[0]}</p>}
         <label className="mt-4 grid gap-1 text-xs font-semibold text-slate-700">Title<input aria-label="Title" value={title} disabled={!canEdit} onChange={e => setTitle(e.target.value)} className={input} /></label>
         <div className="mt-3 grid grid-cols-2 gap-3">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">Status
