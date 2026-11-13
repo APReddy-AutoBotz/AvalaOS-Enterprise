@@ -67,7 +67,7 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
     const v = draft.sections[o.number] ?? {};
     return (
       <div key={o.number} className={cx('flex flex-wrap items-center gap-2 py-1.5', o.level === 2 && 'pl-6', v.hidden && 'opacity-50')} data-testid="layout-section">
-        <span className="w-8 text-xs tabular-nums text-slate-400">{o.number}</span>
+        <span className="w-8 text-xs tabular-nums text-slate-500">{o.number}</span>
         <input aria-label={`Title of section ${o.number}`} value={v.title ?? o.title} disabled={!isAdmin || v.hidden} onChange={e => setSection(o.number, { title: e.target.value })} className={cx(input, 'min-w-[14rem] flex-1', o.level === 1 && 'font-semibold')} />
         {o.locked ? <span className="text-xs text-slate-500">Always shown</span> : (
           <label className="flex items-center gap-1 text-xs text-slate-600"><input type="checkbox" aria-label={`Hide section ${o.number}`} checked={!!v.hidden} disabled={!isAdmin} onChange={e => setSection(o.number, { hidden: e.target.checked })} /> Hide</label>

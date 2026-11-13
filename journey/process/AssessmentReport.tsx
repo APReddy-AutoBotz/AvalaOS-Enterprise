@@ -82,7 +82,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
                 <tr key={r.approach}>
                   <td className={cx(td, 'whitespace-nowrap font-semibold')}>{RANK_LABEL[i]}</td>
                   <td className={cx(td, 'whitespace-nowrap')}><span className={cx('mr-2 inline-block h-2 w-2 rounded-full', APPROACH_TONE[r.approach].dot)} aria-hidden />{APPROACH_LABEL[r.approach]}</td>
-                  <td className={cx(td, 'w-28')}><span className="font-semibold tabular-nums">{r.score}</span><span className="text-xs text-slate-400"> / 100</span><ScoreBar score={r.score} approach={r.approach} className="mt-1" /></td>
+                  <td className={cx(td, 'w-28')}><span className="font-semibold tabular-nums">{r.score}</span><span className="text-xs text-slate-500"> / 100</span><ScoreBar score={r.score} approach={r.approach} className="mt-1" /></td>
                   <td className={cx(td, 'whitespace-nowrap tabular-nums')}>{r.stepsWon} of {result.assessed}</td>
                   <td className={cx(td, 'text-xs leading-5 text-slate-600')}>{r.why}{r.toWin ? ` ${r.toWin}` : ''}</td>
                 </tr>
@@ -128,7 +128,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
                 const next = r.scores.find(x => x.approach !== eff.approach && x.approach !== 'human');
                 return (
                   <tr key={s.id}>
-                    <td className={cx(td, 'tabular-nums text-slate-400')}>{i + 1}</td>
+                    <td className={cx(td, 'tabular-nums text-slate-500')}>{i + 1}</td>
                     <td className={cx(td, 'font-medium')}>{s.name}</td>
                     <td className={td}>{stepLabel(r, eff.approach)}{eff.override ? ' (overridden)' : ''}</td>
                     <td className={cx(td, 'tabular-nums')}>{top ? top.score : ''}</td>

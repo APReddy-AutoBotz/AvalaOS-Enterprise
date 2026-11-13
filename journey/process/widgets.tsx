@@ -68,7 +68,7 @@ export function RefChips({ ids, options, onChange, label, disabled }: {
           {!disabled && <button type="button" aria-label={`Remove ${name(id)} from ${label.toLowerCase()}`} onClick={() => onChange(ids.filter(x => x !== id))} className="text-slate-500 hover:text-red-700">×</button>}
         </span>
       ))}
-      {ids.length === 0 && <span className="text-xs italic text-slate-400">None</span>}
+      {ids.length === 0 && <span className="text-xs italic text-slate-500">None</span>}
       {!disabled && rest.length > 0 && (
         <select aria-label={`Add to ${label.toLowerCase()}`} value="" onChange={e => e.target.value && onChange([...ids, e.target.value])}
           className="rounded-md border border-dashed border-slate-300 bg-white px-1 py-0.5 text-xs text-slate-600">

@@ -173,7 +173,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
               {list.map((x, i) => (
                 <li key={x.key}><button type="button" onClick={() => { setIndex(i); setScope('one'); }} className={cx('w-full rounded-lg px-3 py-2 text-left', scope === 'one' && i === at ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50')}>
                   <span className="flex items-start gap-2">
-                    <span className="w-5 shrink-0 text-right tabular-nums text-slate-400">{i + 1}.</span>
+                    <span className="w-5 shrink-0 text-right tabular-nums text-slate-500">{i + 1}.</span>
                     <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.group === 'decides' ? 'bg-[#002C4B]' : x.group === 'signoff' ? 'bg-sky-400' : 'bg-slate-300')} />
                     <span className="line-clamp-2">{x.question}{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}</span>
                   </span>

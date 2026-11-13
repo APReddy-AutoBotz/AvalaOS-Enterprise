@@ -155,7 +155,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
               {MAIN.map(status => (
                 <div key={status} className="flex items-center gap-2 px-2.5 text-[13px] font-semibold text-slate-700">
                   <span className={cx('h-2 w-2 rounded-full', STATUS_DOT[status])} />{STATUS_LABEL[status]}
-                  <span className="font-normal tabular-nums text-slate-400">{work.filter(i => i.status === status).length}</span>
+                  <span className="font-normal tabular-nums text-slate-500">{work.filter(i => i.status === status).length}</span>
                 </div>
               ))}
             </div>
@@ -167,7 +167,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                 return (
                   <section key={id} aria-label={lane.epic?.title ?? 'Work without an epic'}>
                     <div className="flex items-center gap-2.5 px-1 pb-1.5" data-testid={lane.epic ? 'epic-lane' : 'loose-lane'}>
-                      <button type="button" disabled={!lane.items.length} aria-expanded={!isClosed} aria-label={`${isClosed ? 'Show' : 'Hide'} the items in this lane`} onClick={() => setClosed(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; })} className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:invisible">
+                      <button type="button" disabled={!lane.items.length} aria-expanded={!isClosed} aria-label={`${isClosed ? 'Show' : 'Hide'} the items in this lane`} onClick={() => setClosed(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; })} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 disabled:invisible">
                         <svg viewBox="0 0 12 12" className={cx('h-3 w-3 transition-transform', !isClosed && 'rotate-90')} aria-hidden><path d="m4.2 2.5 3.6 3.5-3.6 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
                       {lane.epic ? <>
@@ -317,23 +317,23 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
               </span>
             </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Owner
-              <select aria-label="Owner" value={item.ownerId ?? ''} disabled={!canEdit} onChange={e => onSave({ ownerId: e.target.value || null })} className={cx(prop, !item.ownerId && 'font-normal text-slate-400')}>
+              <select aria-label="Owner" value={item.ownerId ?? ''} disabled={!canEdit} onChange={e => onSave({ ownerId: e.target.value || null })} className={cx(prop, !item.ownerId && 'font-normal text-slate-500')}>
                 <option value="">Unassigned</option>
                 {members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}
                 {item.ownerId && !members.some(m => m.userId === item.ownerId) && <option value={item.ownerId}>Someone no longer in this workspace</option>}
               </select>
             </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Priority
-              <select aria-label="Priority" value={item.priority ?? ''} disabled={!canEdit} onChange={e => onSave({ priority: (e.target.value || null) as WorkItem['priority'] })} className={cx(prop, !item.priority && 'font-normal text-slate-400')}><option value="">Not set</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+              <select aria-label="Priority" value={item.priority ?? ''} disabled={!canEdit} onChange={e => onSave({ priority: (e.target.value || null) as WorkItem['priority'] })} className={cx(prop, !item.priority && 'font-normal text-slate-500')}><option value="">Not set</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
             </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Estimate (hours)
               <input aria-label="Estimate in hours" inputMode="decimal" value={estimate} disabled={!canEdit} placeholder="Not set" onChange={e => setEstimate(e.target.value)} className={prop} />
             </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Start date
-              <input aria-label="Start date" type="date" value={start} disabled={!canEdit} onChange={e => setStart(e.target.value)} className={cx(prop, !start && 'font-normal text-slate-400')} />
+              <input aria-label="Start date" type="date" value={start} disabled={!canEdit} onChange={e => setStart(e.target.value)} className={cx(prop, !start && 'font-normal text-slate-500')} />
             </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Due date
-              <input aria-label="Due date" type="date" value={due} disabled={!canEdit} onChange={e => setDue(e.target.value)} className={cx(prop, !due && 'font-normal text-slate-400')} />
+              <input aria-label="Due date" type="date" value={due} disabled={!canEdit} onChange={e => setDue(e.target.value)} className={cx(prop, !due && 'font-normal text-slate-500')} />
             </label>
           </div>
 
