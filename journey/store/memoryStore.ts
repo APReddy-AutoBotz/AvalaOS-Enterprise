@@ -268,6 +268,10 @@ export function createMemoryStore(): JourneyStore {
       requireMe();
       return structuredClone((state.workItems ?? []).filter(i => i.projectId === projectId));
     },
+    async listMembers() {
+      const me = requireMe();
+      return [{ userId: me.id, name: me.email.split('@')[0], role: 'admin' as const }];
+    },
     async updateWorkItem(id, e) {
       requireMe();
       const item = (state.workItems ?? []).find(i => i.id === id);

@@ -15,6 +15,8 @@ import type { Segment } from '../../domain/ai/gateway.ts';
 
 export interface Me { id: string; email: string }
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean }
+/** A person in a workspace, as others see them: a name, never an email address. */
+export interface Member { userId: string; name: string; role: Workspace['role'] }
 export interface ProcessRow { id: string; workspaceId: string; name: string; description: string; updatedAt: string }
 
 export interface RevisionRow {
@@ -76,6 +78,8 @@ export interface JourneyStore {
   signOut(): Promise<void>;
 
   listWorkspaces(): Promise<Workspace[]>;
+  /** The people in a workspace, for assigning work. */
+  listMembers(workspaceId: string): Promise<Member[]>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
 
   /** The assessment settings of a workspace; the defaults when none are set. */

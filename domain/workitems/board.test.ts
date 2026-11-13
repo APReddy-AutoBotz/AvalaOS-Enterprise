@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { BoardError, criterionParts, joinStory, lanesOf, planningFacts, planningLine, splitStory, type WorkItem, upstreamChanges, validateEdit, validateProjectName } from './board.ts';
+import { BoardError, initials, criterionParts, joinStory, lanesOf, planningFacts, planningLine, splitStory, type WorkItem, upstreamChanges, validateEdit, validateProjectName } from './board.ts';
 
 const item: WorkItem = { id: 'w1', projectId: 'p', parentId: null, type: 'story', title: 'Post invoice', description: '', acceptance: ['a', 'b'], status: 'todo', priority: null, ownerId: null, estimateHours: null, startDate: null, dueDate: null, processId: 'pr', stepIds: ['s2'], requirements: ['FR-002', 'FR-003'], snapshot: { 'FR-002': 'The solution shall post invoice in SAP.', 'FR-003': 'The solution shall check totals.' }, updatedAt: '' };
 
@@ -43,4 +43,13 @@ test('a card shows only what the team has set; a criterion is split at Given, wh
   assert.deepEqual(planningFacts({ estimateHours: 8, startDate: null, dueDate: '2026-12-01' }), { estimate: '8 h', date: 'Due 1 Dec' });
   assert.deepEqual(criterionParts('Given a case, when it is posted, then the PDF is attached.')?.map(p => p.word), ['Given', 'when', 'then']);
   assert.equal(criterionParts('Every story in this epic meets its acceptance criteria.'), null);
+});
+
+test('owner: a person\'s mark is two letters; the owner can be set and cleared', () => {
+  assert.equal(initials('Priya Nair'), 'PN');
+  assert.equal(initials('analyst'), 'AN');
+  assert.equal(initials('a.p.reddy'), 'AR');
+  assert.equal(initials('  '), '?');
+  assert.deepEqual(validateEdit(item, { ownerId: 'u1' }), { ownerId: 'u1' });
+  assert.deepEqual(validateEdit(item, { ownerId: null }), { ownerId: null });
 });

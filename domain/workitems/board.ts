@@ -39,7 +39,7 @@ export class BoardError extends Error {}
 export const BOARD_LIMITS = { title: 300, description: 8000, project: 200 } as const;
 
 /** What a person may change on a board item. Owner, estimate and dates may stay empty. */
-export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null }
+export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null }
 
 export function validateEdit(item: WorkItem, e: WorkItemEdit): WorkItemEdit {
   const out: WorkItemEdit = { ...e };
@@ -125,4 +125,11 @@ export function planningFacts(i: Pick<WorkItem, 'estimateHours' | 'startDate' | 
 export function criterionParts(text: string): { word: string; text: string }[] | null {
   const m = /^Given (.+?), when (.+?), then (.+)$/s.exec(text);
   return m ? [{ word: 'Given', text: m[1] }, { word: 'when', text: m[2] }, { word: 'then', text: m[3] }] : null;
+}
+
+/** Two letters for a person's mark on a card: "Priya Nair" -> "PN", "analyst" -> "AN". */
+export function initials(name: string): string {
+  const words = name.trim().split(/[\s._-]+/).filter(Boolean);
+  if (!words.length) return '?';
+  return (words.length === 1 ? words[0].slice(0, 2) : words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
