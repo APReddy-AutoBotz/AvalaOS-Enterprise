@@ -86,3 +86,7 @@ select status, error, result->'score' from public.extraction_runs where id = '<r
 ```
 
 Extraction is not deterministic. Judge a change on the mean of at least two runs, not on one.
+
+### Evaluating an AI provider
+
+A provider is offered to workspaces only after this eval has been run with it (`checked` in `domain/ai/providers.ts`). Until then Settings → AI provider lists it only for the platform owner. To evaluate one: the owner creates a workspace for the check, connects the provider's key there and presses "Test this key"; then start eval runs as above with that workspace's id added (`insert into public.extraction_runs (kind, case_id, ref, workspace_id, token_hash, input)`). The run uses that workspace's connection, including for the flowchart image in `ap-invoice-image`, and its usage is logged against that workspace. Run each case at least twice and compare the mean with OpenAI's before setting `checked: true`.

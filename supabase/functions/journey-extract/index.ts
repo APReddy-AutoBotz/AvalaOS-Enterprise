@@ -10,7 +10,7 @@
 //
 // Deployed with verify_jwt = false: 'create' checks the user's session; stages check the run token.
 
-import { buildImageRequest, buildListingRequest, buildOpenAIRequest, isRetryableStatus, parseOpenAIResponse, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
+import { buildImageRequest, buildListingRequest, buildOpenAIRequest, isRetryableStatus, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
 import { toGatewaySegments, type IngestSegment } from '../../../domain/ingest/segment.ts';
 import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, parseVtt } from '../../../domain/ingest/parsers/text.ts';
 import { parseDocx } from '../../../domain/ingest/parsers/docx.ts';
@@ -22,7 +22,9 @@ import { score } from '../../../eval/scorer.ts';
 import { parseDrawio } from '../../../domain/flowchart/drawio.ts';
 import { graphToSegments } from '../../../domain/flowchart/graph.ts';
 import { readFlowchart, readingToGraph } from '../../../domain/flowchart/vision.ts';
-import { chooseConnection, responsesTarget, takesReasoningEffort, taskNeed, unsupported, validateAiChoice, type AiConnection } from '../../../domain/ai/providers.ts';
+import {
+  chooseConnection, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
+} from '../../../domain/ai/providers.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
 const SUPABASE_URL = env('SUPABASE_URL');
@@ -69,11 +71,12 @@ const WORKER_STARTED = Date.now();
 const callBudgetMs = () => Math.max(5_000, Math.min(115_000, WORKER_STARTED + 135_000 - Date.now()));
 /**
  * The AI connection a run uses: the workspace's own key when it has one (never falling back to the
- * platform's), otherwise the platform key. Eval runs always use the platform key.
+ * platform's), otherwise the platform key. An eval run uses the platform key, or the connection of the
+ * workspace named on it (how a provider is evaluated before it is offered; eval runs are made in SQL).
  */
-async function connectionFor(run: Run | null): Promise<AiConnection> {
+async function connectionFor(run: Pick<Run, 'workspace_id'> | null): Promise<AiConnection> {
   let own: Parameters<typeof chooseConnection>[0] = null;
-  if (run?.kind === 'process' && run.workspace_id) {
+  if (run?.workspace_id) {
     // A 404 means the lookup does not exist yet (database not migrated), so no workspace can have a key.
     const found = await rest('rpc/workspace_ai_connection', { method: 'POST', body: JSON.stringify({ target_workspace: run.workspace_id }) })
       .catch((e: Error) => { if (/^database 404/.test(e.message)) return null; throw e; });
@@ -85,19 +88,21 @@ async function connectionFor(run: Run | null): Promise<AiConnection> {
 }
 
 async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
-  const target = responsesTarget(conn);
+  // A Responses API body; providerRequest translates it for Anthropic (and refuses an input it cannot take).
+  const target = providerRequest(conn, body);
+  const payload = JSON.stringify(target.body);
   for (let attempt = 1; ; attempt++) {
     const ctl = new AbortController();
     // Edge functions are stopped at 150 s; stop the call first so the stage can retry or fail cleanly.
     const timer = setTimeout(() => ctl.abort(), callBudgetMs());
     try {
       const res = await fetch(target.url, {
-        method: 'POST', signal: ctl.signal, body: JSON.stringify(body), headers: target.headers,
+        method: 'POST', signal: ctl.signal, body: payload, headers: target.headers,
       });
       if (isRetryableStatus(res.status) && attempt < 3) { await res.body?.cancel(); await sleep(attempt * 2000); continue; }
       const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
       if (!res.ok && !json?.error) json.error = { message: `HTTP ${res.status}` };
-      const parsed = parseOpenAIResponse(json);
+      const parsed = parseProviderReply(conn, json);
       if (!parsed.ok && parsed.code === 'INVALID_OUTPUT' && attempt < 2) continue;
       return parsed;
     } catch (e) {
@@ -148,7 +153,7 @@ const putPart = (id: string, part: string, output: unknown, usage: { input: numb
   rest('rpc/extraction_put_part', { method: 'POST', body: JSON.stringify({ target_run: id, part_name: part, part_output: output, used_input: usage.input, used_output: usage.output }) });
 
 async function logUsage(run: Run, conn: AiConnection, task: string, usage: { input: number; output: number }, ok: boolean, error?: string) {
-  if (run.kind !== 'process' || !run.workspace_id) return;
+  if (!run.workspace_id) return;
   await rest('ai_usage', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
     workspace_id: run.workspace_id, user_id: run.created_by, task, model: conn.model, provider: conn.provider, key_source: conn.source,
     status: ok ? 'ok' : 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : (error ?? '').slice(0, 60),
@@ -217,13 +222,13 @@ const CASES: Record<string, EvalCase> = {
 const corpusUrl = (run: Run, file: string) => `${REPO_RAW}/${run.ref}/eval/corpus/${CASES[run.case_id ?? '']?.dir ?? run.case_id}/${file}`;
 
 /** The eval corpus formats; for 'create' the browser parses the files (and reads images through journey-ai). */
-async function parseCorpusFile(file: string, bytes: Uint8Array, sourceId: string): Promise<IngestSegment[]> {
+async function parseCorpusFile(run: Run, file: string, bytes: Uint8Array, sourceId: string): Promise<IngestSegment[]> {
   if (file.endsWith('.docx')) return parseDocx(bytes, sourceId);
   if (file.endsWith('.drawio')) return graphToSegments(await parseDrawio(new TextDecoder().decode(bytes)), sourceId);
   if (file.endsWith('.png')) {
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    const r = await runTask(await connectionFor(null), readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` });
+    const r = await runTask(await connectionFor(run), readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` });
     return graphToSegments(readingToGraph(r.data), sourceId);
   }
   const text = new TextDecoder().decode(bytes);
@@ -239,7 +244,7 @@ async function loadEvalInput(run: Run) {
   for (const s of c.sources) {
     const res = await fetch(corpusUrl(run, s.file));
     if (!res.ok) throw new Error(`could not fetch ${s.file} (${res.status})`);
-    const segments = await parseCorpusFile(s.file, new Uint8Array(await res.arrayBuffer()), s.sourceId);
+    const segments = await parseCorpusFile(run, s.file, new Uint8Array(await res.arrayBuffer()), s.sourceId);
     if (!segments.length) throw new Error(`${s.file}: no text`);
     sources.push({ sourceId: s.sourceId, title: s.title, kind: s.kind, segments, ...(s.file.endsWith('.png') ? { inferred: true } : {}) });
   }
@@ -350,8 +355,11 @@ async function createRun(req: Request, body: any): Promise<Response> {
   const total = sources.reduce((n, s) => n + s.segments.reduce((k: number, x: any) => k + String(x?.text ?? '').length, 0), 0);
   if (total > LIMITS.maxTotalChars * 2) return fail(413, 'TOO_LARGE', 'The sources are too large for one extraction.');
   const processName = String(procRows[0].name ?? '');
-  const used = Number(await rest('rpc/ai_tokens_used_this_month', { method: 'POST', body: JSON.stringify({ target_workspace: workspaceId }) }));
-  if (used >= Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
+  // The monthly allowance applies only to the platform key; a workspace on its own key is not held back by it.
+  if (usesPlatformAllowance(await connectionFor({ workspace_id: workspaceId }))) {
+    const used = Number(await rest('rpc/ai_tokens_used_this_month', { method: 'POST', body: JSON.stringify({ target_workspace: workspaceId }) }));
+    if (used >= Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
+  }
 
   const token = randomToken();
   const [row] = await rest('extraction_runs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({

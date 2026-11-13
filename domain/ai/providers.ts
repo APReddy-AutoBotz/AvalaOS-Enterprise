@@ -7,8 +7,13 @@
 // - A workspace with its own key never falls back to the platform key: a call it cannot make fails with
 //   a plain message, and a task its provider cannot do is turned off.
 // - Keys are written by admins, kept encrypted on the server and never returned to the browser.
+// - A provider is offered to workspaces only once the extraction eval has been run with it (`checked`);
+//   until then only the platform owner sees it, to run that eval.
 
-export type AiProvider = 'openai' | 'azure_openai';
+import { parseOpenAIResponse, type ParsedResponse } from './gateway.ts';
+import { ANTHROPIC_MESSAGES_URL, anthropicHeaders, parseAnthropicResponse, toAnthropicRequest } from './anthropic.ts';
+
+export type AiProvider = 'openai' | 'azure_openai' | 'anthropic';
 export type AiNeed = 'text' | 'vision' | 'transcription';
 
 export interface ProviderInfo {
@@ -18,19 +23,31 @@ export interface ProviderInfo {
   modelHint: string;
   needsEndpoint: boolean;
   can: Record<AiNeed, boolean>;
+  /** The extraction eval (eval/README.md) has been run with this provider, so workspaces may choose it. */
+  checked: boolean;
 }
 
 export const AI_PROVIDERS: Record<AiProvider, ProviderInfo> = {
   openai: {
     label: 'OpenAI', modelLabel: 'Model', modelHint: 'The OpenAI model id, for example gpt-5.5.',
-    needsEndpoint: false, can: { text: true, vision: true, transcription: true },
+    needsEndpoint: false, can: { text: true, vision: true, transcription: true }, checked: true,
   },
   azure_openai: {
     label: 'Azure OpenAI', modelLabel: 'Deployment name', modelHint: 'The name of the deployment in your Azure OpenAI resource.',
     // Transcription needs its own deployment and is not offered for Azure yet.
-    needsEndpoint: true, can: { text: true, vision: true, transcription: false },
+    // The same OpenAI models and Responses API as OpenAI itself, so OpenAI's eval runs stand for it.
+    needsEndpoint: true, can: { text: true, vision: true, transcription: false }, checked: true,
+  },
+  anthropic: {
+    label: 'Anthropic', modelLabel: 'Model', modelHint: 'The Claude model id, for example claude-sonnet-5-5.',
+    // Anthropic has no speech-to-text API. Not offered until the extraction eval has been run with it.
+    needsEndpoint: false, can: { text: true, vision: true, transcription: false }, checked: false,
   },
 };
+
+/** The providers a person may choose: those checked by the eval, and the rest only for the platform owner. */
+export const selectableProviders = (platformOwner: boolean): AiProvider[] =>
+  (Object.keys(AI_PROVIDERS) as AiProvider[]).filter(p => AI_PROVIDERS[p].checked || platformOwner);
 
 export const isAiProvider = (v: unknown): v is AiProvider => typeof v === 'string' && v in AI_PROVIDERS;
 
@@ -86,18 +103,38 @@ export const usesPlatformAllowance = (c: AiConnection) => c.source === 'platform
 
 export interface HttpTarget { url: string; headers: Record<string, string> }
 
+/** OpenAI-style providers only: an Anthropic key must never be sent to an OpenAI address. */
+function openAiStyle(c: AiConnection) {
+  if (c.provider !== 'openai' && c.provider !== 'azure_openai') throw new Error(`${c.provider} does not take OpenAI-style requests`);
+}
 const auth = (c: AiConnection): Record<string, string> => (c.provider === 'azure_openai' ? { 'api-key': c.apiKey } : { Authorization: `Bearer ${c.apiKey}` });
 const base = (c: AiConnection) => (c.provider === 'azure_openai' ? `${c.endpoint}/openai/v1` : 'https://api.openai.com/v1');
 
-/** The Responses API call (the same request body for both providers; Azure takes the deployment as the model). */
+/** The Responses API call (the same request body for OpenAI and Azure; Azure takes the deployment as the model). */
 export function responsesTarget(c: AiConnection): HttpTarget {
+  openAiStyle(c);
   return { url: `${base(c)}/responses`, headers: { ...auth(c), 'Content-Type': 'application/json' } };
 }
 
 /** The transcription call (multipart; the caller sets the body). */
 export function transcriptionTarget(c: AiConnection): HttpTarget {
+  openAiStyle(c);
   return { url: `${base(c)}/audio/transcriptions`, headers: auth(c) };
 }
+
+/**
+ * One call to the connection's provider. Every task builds a Responses API body; for Anthropic it is
+ * translated into a Messages API request (domain/ai/anthropic.ts). Throws ProviderRequestError when the
+ * provider cannot take the input (an image over Anthropic's size limit).
+ */
+export function providerRequest(c: AiConnection, body: Record<string, unknown>): HttpTarget & { body: Record<string, unknown> } {
+  if (c.provider === 'anthropic') return { url: ANTHROPIC_MESSAGES_URL, headers: anthropicHeaders(c.apiKey), body: toAnthropicRequest(body) };
+  return { ...responsesTarget(c), body };
+}
+
+/** The provider's reply in the gateway's shape. */
+export const parseProviderReply = (c: AiConnection, json: unknown): ParsedResponse =>
+  (c.provider === 'anthropic' ? parseAnthropicResponse(json) : parseOpenAIResponse(json));
 
 /** Reasoning effort applies to reasoning models; for Azure the deployment name may hide the model, so it is sent only when the name shows it. */
 export const takesReasoningEffort = (model: string) => /^(gpt-5|o\d)/.test(model);

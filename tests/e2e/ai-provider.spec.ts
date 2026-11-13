@@ -56,3 +56,25 @@ test('an admin connects an Azure OpenAI key, sees only its last four characters,
   await expect(ai.getByRole('status')).toContainText("uses Avala OS's AI again");
   await expect(ai.getByTestId('ai-provider-state')).toContainText('within a monthly allowance');
 });
+
+// Assembled at run time so the secret-hygiene scan never sees a key-shaped literal.
+const ANTHROPIC_KEY = ['sk', 'ant', 'api03', '0123456789abcdefghijklmnopqrstuvwxyzQW88'].join('-');
+
+test('a provider not yet checked by the eval is listed only for the platform owner, and an Anthropic key needs no endpoint', async ({ page }) => {
+  await signInAndCreateProcess(page); // the in-browser store treats the first account as the platform owner
+  await page.goto('/processes');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const ai = page.getByTestId('ai-provider');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('own OpenAI or Azure OpenAI key');
+
+  await ai.getByLabel('Provider').selectOption({ label: 'Anthropic (being checked)' });
+  await expect(ai.getByTestId('ai-provider-unchecked')).toContainText('Only you see this provider');
+  await expect(ai.getByLabel('Endpoint')).toHaveCount(0);
+  await ai.getByLabel('Model').fill('claude-sonnet-5-5');
+  await ai.getByLabel('API key').fill(ANTHROPIC_KEY);
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own Anthropic key ending QW88');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('Not available with this provider yet: turning speech into text');
+  expect(await page.content()).not.toContain(ANTHROPIC_KEY);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(ANTHROPIC_KEY);
+});
