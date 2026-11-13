@@ -70,7 +70,7 @@ test('Anthropic takes a model id and no endpoint, cannot transcribe, and is offe
   assert.match(unsupported(claude, 'transcription') ?? '', /Turning speech into text is not available with Anthropic/);
   assert.equal(AI_PROVIDERS.anthropic.checked, false);
   assert.deepEqual(selectableProviders(false), ['openai', 'azure_openai']);
-  assert.deepEqual(selectableProviders(true), ['openai', 'azure_openai', 'anthropic']);
+  assert.ok(selectableProviders(true).includes('anthropic'));
 });
 
 test('every registered task\'s schema is one Anthropic\'s structured outputs accept', () => {

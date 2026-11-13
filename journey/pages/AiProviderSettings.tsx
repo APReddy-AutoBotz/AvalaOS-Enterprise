@@ -1,5 +1,5 @@
-// Settings → AI provider: a workspace uses Avala OS's AI (within a monthly allowance) or its own OpenAI,
-// Azure OpenAI or Anthropic key. Admins set the key once; it is kept encrypted on the server and only its
+// Settings → AI provider: a workspace uses Avala OS's AI (within a monthly allowance) or its own key: OpenAI,
+// Azure OpenAI, Anthropic, or an OpenAI-compatible endpoint it runs. Admins set the key once; it is kept encrypted on the server and only its
 // last four characters are ever shown. A provider not yet checked by the extraction eval is listed only for
 // the platform owner (the person who may create organizations). Rules in domain/ai/providers.ts.
 import React from 'react';
@@ -99,7 +99,7 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
             {!info.checked && <span className="mt-1 block text-xs text-slate-500" data-testid="ai-provider-unchecked">{owner ? 'Only you see this provider: it is offered to workspaces once the extraction check has been run with it.' : 'This provider has not been checked for extraction quality yet.'}</span>}
           </label>
           <Field label={info.modelLabel} value={model} onChange={e => setModel(e.target.value)} hint={info.modelHint} autoComplete="off" spellCheck={false} />
-          {info.needsEndpoint && <Field label="Endpoint" value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder="https://my-resource.openai.azure.com" hint="From Keys and Endpoint in the Azure portal." autoComplete="off" spellCheck={false} />}
+          {info.needsEndpoint && <Field label="Endpoint" value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder={info.endpointPlaceholder} hint={info.endpointHint} autoComplete="off" spellCheck={false} />}
           <Field label="API key" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="new-password" spellCheck={false}
             placeholder={keepsKey ? `Leave empty to keep the key ending ${current!.keyHint}` : 'Paste the key'}
             hint="Sent once over an encrypted connection and kept encrypted on the server. Avala OS shows only its last four characters." />

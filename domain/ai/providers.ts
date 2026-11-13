@@ -12,8 +12,9 @@
 
 import { parseOpenAIResponse, type ParsedResponse } from './gateway.ts';
 import { ANTHROPIC_MESSAGES_URL, anthropicHeaders, parseAnthropicResponse, toAnthropicRequest } from './anthropic.ts';
+import { EndpointError, parseChatResponse, toChatRequest, validateCompatibleEndpoint } from './compatible.ts';
 
-export type AiProvider = 'openai' | 'azure_openai' | 'anthropic';
+export type AiProvider = 'openai' | 'azure_openai' | 'anthropic' | 'openai_compatible';
 export type AiNeed = 'text' | 'vision' | 'transcription';
 
 export interface ProviderInfo {
@@ -22,6 +23,8 @@ export interface ProviderInfo {
   modelLabel: string;
   modelHint: string;
   needsEndpoint: boolean;
+  endpointPlaceholder?: string;
+  endpointHint?: string;
   can: Record<AiNeed, boolean>;
   /** The extraction eval (eval/README.md) has been run with this provider, so workspaces may choose it. */
   checked: boolean;
@@ -36,12 +39,21 @@ export const AI_PROVIDERS: Record<AiProvider, ProviderInfo> = {
     label: 'Azure OpenAI', modelLabel: 'Deployment name', modelHint: 'The name of the deployment in your Azure OpenAI resource.',
     // Transcription needs its own deployment and is not offered for Azure yet.
     // The same OpenAI models and Responses API as OpenAI itself, so OpenAI's eval runs stand for it.
-    needsEndpoint: true, can: { text: true, vision: true, transcription: false }, checked: true,
+    needsEndpoint: true, endpointPlaceholder: 'https://my-resource.openai.azure.com', endpointHint: 'From Keys and Endpoint in the Azure portal.',
+    can: { text: true, vision: true, transcription: false }, checked: true,
   },
   anthropic: {
     label: 'Anthropic', modelLabel: 'Model', modelHint: 'The Claude model id, for example claude-sonnet-5-5.',
     // Anthropic has no speech-to-text API. Not offered until the extraction eval has been run with it.
     needsEndpoint: false, can: { text: true, vision: true, transcription: false }, checked: false,
+  },
+  openai_compatible: {
+    label: 'OpenAI-compatible endpoint', modelLabel: 'Model', modelHint: 'The model name your endpoint serves, for example meta-llama/Llama-3.3-70B-Instruct.',
+    // A server the company runs (vLLM, LiteLLM, a gateway) with the Chat Completions API and JSON-schema output.
+    // Whether it reads images depends on the model it serves; speech-to-text is not offered.
+    needsEndpoint: true, endpointPlaceholder: 'https://llm.example-company.com/v1',
+    endpointHint: 'The https address before /chat/completions, reachable on the internet on the standard port.',
+    can: { text: true, vision: true, transcription: false }, checked: false,
   },
 };
 
@@ -55,6 +67,8 @@ export class AiSettingsError extends Error {}
 
 export interface AiChoice { provider: AiProvider; model: string; endpoint: string | null }
 
+/** Model ids, deployment names and served model names (which may hold a slash, like org/model). */
+const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,99}$/;
 const AZURE_HOST = /^[a-z0-9][a-z0-9-]{0,62}\.(openai\.azure\.com|cognitiveservices\.azure\.com|services\.ai\.azure\.com)$/;
 
 /**
@@ -65,8 +79,13 @@ export function validateAiChoice(input: { provider: unknown; model: unknown; end
   if (!isAiProvider(input.provider)) throw new AiSettingsError('Choose a provider.');
   const info = AI_PROVIDERS[input.provider];
   const model = typeof input.model === 'string' ? input.model.trim() : '';
-  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$/.test(model)) throw new AiSettingsError(`Enter the ${info.modelLabel.toLowerCase()}: letters, digits, dots, dashes or underscores.`);
+  if (!MODEL.test(model)) throw new AiSettingsError(`Enter the ${info.modelLabel.toLowerCase()}: letters, digits, dots, dashes, slashes or underscores.`);
   if (!info.needsEndpoint) return { provider: input.provider, model, endpoint: null };
+  if (input.provider === 'openai_compatible') {
+    try { return { provider: input.provider, model, endpoint: validateCompatibleEndpoint(input.endpoint) }; } catch (e) {
+      throw new AiSettingsError(e instanceof EndpointError ? e.message : 'Enter the https address of your endpoint.');
+    }
+  }
   const raw = typeof input.endpoint === 'string' ? input.endpoint.trim() : '';
   let url: URL;
   try { url = new URL(raw); } catch { throw new AiSettingsError('Enter the endpoint of your Azure OpenAI resource, like https://my-resource.openai.azure.com.'); }
@@ -129,12 +148,20 @@ export function transcriptionTarget(c: AiConnection): HttpTarget {
  */
 export function providerRequest(c: AiConnection, body: Record<string, unknown>): HttpTarget & { body: Record<string, unknown> } {
   if (c.provider === 'anthropic') return { url: ANTHROPIC_MESSAGES_URL, headers: anthropicHeaders(c.apiKey), body: toAnthropicRequest(body) };
+  if (c.provider === 'openai_compatible') {
+    // validateCompatibleEndpoint again: the stored address is checked on every use, not only when saved.
+    return { url: `${validateCompatibleEndpoint(c.endpoint)}/chat/completions`, headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json' }, body: toChatRequest(body) };
+  }
   return { ...responsesTarget(c), body };
 }
 
 /** The provider's reply in the gateway's shape. */
 export const parseProviderReply = (c: AiConnection, json: unknown): ParsedResponse =>
-  (c.provider === 'anthropic' ? parseAnthropicResponse(json) : parseOpenAIResponse(json));
+  (c.provider === 'anthropic' ? parseAnthropicResponse(json) : c.provider === 'openai_compatible' ? parseChatResponse(json) : parseOpenAIResponse(json));
+
+/** The host to check against private addresses before a call (assertPublicHost), for addresses an admin typed. */
+export const hostToCheck = (c: AiConnection): string | null =>
+  (c.provider === 'openai_compatible' && c.endpoint ? new URL(c.endpoint).hostname : null);
 
 /** Reasoning effort applies to reasoning models; for Azure the deployment name may hide the model, so it is sent only when the name shows it. */
 export const takesReasoningEffort = (model: string) => /^(gpt-5|o\d)/.test(model);

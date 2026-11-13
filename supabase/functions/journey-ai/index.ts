@@ -18,9 +18,10 @@ import {
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
 import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
+import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
 import {
-  chooseConnection, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
+  chooseConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
   unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
 } from '../../../domain/ai/providers.ts';
 
@@ -129,7 +130,8 @@ async function post(url: string, headers: Record<string, string>, body: BodyInit
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
-    return await fetch(url, { method: 'POST', signal: ctl.signal, headers, body });
+    // Never follow a redirect: a key goes only to the address it was checked for.
+    return await fetch(url, { method: 'POST', signal: ctl.signal, headers, body, redirect: 'error' });
   } finally {
     clearTimeout(timer);
   }
@@ -190,6 +192,20 @@ Deno.serve(async (req: Request) => {
   }
   if (!conn) return fail(500, 'NOT_CONFIGURED', 'No AI provider key is set.');
   const model = conn.model;
+
+  // An address an admin typed (an OpenAI-compatible endpoint) must resolve only to public addresses, checked
+  // before every call. Where the runtime cannot look the name up, the call is refused rather than made blind.
+  const host = hostToCheck(conn);
+  if (host) {
+    try {
+      const resolve = Deno.resolveDns;
+      if (!resolve) throw new EndpointError('This server cannot check the endpoint\'s address, so it does not call it.');
+      await assertPublicHost(host, (h, t) => resolve(h, t));
+    } catch (e) {
+      if (request.action === 'health' && conn.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_tested_at: new Date().toISOString(), last_test_ok: false });
+      return fail(422, 'ENDPOINT_NOT_ALLOWED', e instanceof EndpointError ? e.message : 'The endpoint\'s address could not be checked.');
+    }
+  }
   const usage = (row: Record<string, unknown>) => logUsage({ ...row, provider: conn!.provider, key_source: conn!.source });
 
   // "Test this key": a tiny real request through the same address, key and model the workspace uses.
@@ -239,7 +255,7 @@ Deno.serve(async (req: Request) => {
     const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
     let ok = false, text = '', code = 'PROVIDER_ERROR', tokens = { input: 0, output: 0 };
     try {
-      const res = await fetch(ttarget.url, { method: 'POST', body: form, signal: ctl.signal, headers: ttarget.headers });
+      const res = await fetch(ttarget.url, { method: 'POST', body: form, signal: ctl.signal, headers: ttarget.headers, redirect: 'error' });
       const json = await res.json().catch(() => ({}));
       ok = res.ok && typeof json.text === 'string';
       text = ok ? json.text : '';

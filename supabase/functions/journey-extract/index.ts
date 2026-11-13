@@ -22,8 +22,9 @@ import { score } from '../../../eval/scorer.ts';
 import { parseDrawio } from '../../../domain/flowchart/drawio.ts';
 import { graphToSegments } from '../../../domain/flowchart/graph.ts';
 import { readFlowchart, readingToGraph } from '../../../domain/flowchart/vision.ts';
+import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import {
-  chooseConnection, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
+  chooseConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
 } from '../../../domain/ai/providers.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
@@ -84,6 +85,13 @@ async function connectionFor(run: Pick<Run, 'workspace_id'> | null): Promise<AiC
   }
   const c = chooseConnection(own, { apiKey: env('OPENAI_API_KEY'), model: MODEL });
   if (!c) throw new Error('NOT_CONFIGURED: no AI provider key is set');
+  // An address an admin typed must resolve only to public addresses (see journey-ai), checked before each stage.
+  const host = hostToCheck(c);
+  if (host) {
+    const resolve = Deno.resolveDns;
+    if (!resolve) throw new EndpointError('ENDPOINT_NOT_ALLOWED: this server cannot check the endpoint\'s address');
+    await assertPublicHost(host, (h, t) => resolve(h, t));
+  }
   return c;
 }
 
@@ -97,7 +105,7 @@ async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
     const timer = setTimeout(() => ctl.abort(), callBudgetMs());
     try {
       const res = await fetch(target.url, {
-        method: 'POST', signal: ctl.signal, body: payload, headers: target.headers,
+        method: 'POST', signal: ctl.signal, body: payload, headers: target.headers, redirect: 'error',
       });
       if (isRetryableStatus(res.status) && attempt < 3) { await res.body?.cancel(); await sleep(attempt * 2000); continue; }
       const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
@@ -356,7 +364,11 @@ async function createRun(req: Request, body: any): Promise<Response> {
   if (total > LIMITS.maxTotalChars * 2) return fail(413, 'TOO_LARGE', 'The sources are too large for one extraction.');
   const processName = String(procRows[0].name ?? '');
   // The monthly allowance applies only to the platform key; a workspace on its own key is not held back by it.
-  if (usesPlatformAllowance(await connectionFor({ workspace_id: workspaceId }))) {
+  let conn: AiConnection;
+  try { conn = await connectionFor({ workspace_id: workspaceId }); } catch (e) {
+    return fail(422, 'AI_NOT_AVAILABLE', (e as Error).message.replace(/^[A-Z_]+: /, ''));
+  }
+  if (usesPlatformAllowance(conn)) {
     const used = Number(await rest('rpc/ai_tokens_used_this_month', { method: 'POST', body: JSON.stringify({ target_workspace: workspaceId }) }));
     if (used >= Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
   }
