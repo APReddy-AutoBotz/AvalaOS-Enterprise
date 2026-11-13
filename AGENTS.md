@@ -143,4 +143,8 @@ A database trigger on `auth.users` (`app_private.require_invite`) refuses any ne
 
 ## Logo
 
-The mark is an A in five layers, one for each stage of the name (Assess, Validate, Assemble, Launch, Audit), navy with the top layer in amber `#E69F00`. The wordmark is "Avala OS" in Outfit bold with the S in the same amber. Files: `public/brand/avala-os-mark.svg` (on white), `avala-os-mark-light.svg` (on dark), `avala-os-app-icon.svg` (also the favicon). The five words appear beside the logo only at 320 px wide or more; the mark alone is used below that. The older gold-and-silver lockups in `public/brand/` are not used by the app.
+The mark is an A in five layers, one for each stage of the name (Assess, Validate, Assemble, Launch, Audit), navy with the top layer in amber `#E69F00`. The wordmark is "Avala OS" in Outfit Bold with the S in the same amber. Files in `public/brand/`: `avala-os-logo.svg` (mark and name on white; the name is drawn as paths, so there is no text to restyle and no contrast check on it), `avala-os-logo-light.svg` (on dark), `avala-os-mark.svg` and `avala-os-mark-light.svg` (mark only), `avala-os-app-icon.svg` (also the favicon). The five words appear beside the logo only at 320 px wide or more. The older gold-and-silver lockups in `public/brand/` are not used by the app.
+
+## Homepage
+
+`/` is the public homepage (`journey/home/HomePage.tsx`), loaded without the application or the database client; every other unknown path still goes to My work. A signed-in visitor (a Supabase session key in local storage) sees "Open my work" instead of "Sign in". The lifecycle demo runs five stages of six seconds (about 30 seconds): each stage's progress bar is a CSS animation whose end advances the stage, so pausing the animation pauses the timing, and with reduced motion nothing runs on its own. The example data on the page is made up and says so; keep it that way, and keep claims to what the product does. Test: `tests/e2e/home.spec.ts`.
