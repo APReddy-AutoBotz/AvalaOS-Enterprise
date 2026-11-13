@@ -77,11 +77,11 @@ export const TypeGlyph = ({ type }: { type: WorkType }) => (
 );
 
 const TAG = {
-  neutral: 'bg-slate-100 text-slate-700',
-  info: 'bg-sky-50 text-sky-800',
-  ok: 'bg-emerald-50 text-emerald-800',
+  neutral: 'bg-slate-200/70 text-slate-700',
+  info: 'bg-sky-100 text-sky-900',
+  ok: 'bg-emerald-100 text-emerald-900',
   warn: 'bg-amber-100 text-amber-900',
-  danger: 'bg-red-50 text-red-800',
+  danger: 'bg-red-100 text-red-900',
 } as const;
 /** A small state word beside a title: Edited, Needs review, On the board, Working draft. */
 export function Tag({ tone = 'neutral', className, ...props }: React.ComponentProps<'span'> & { tone?: keyof typeof TAG }) {

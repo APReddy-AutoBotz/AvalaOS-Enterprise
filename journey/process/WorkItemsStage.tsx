@@ -104,7 +104,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
             <p className="mt-1 text-sm leading-6 text-slate-600">Worked out from the requirements, the automation units and the open questions. Review each one, then select what goes to the board. Nothing is assigned, estimated or dated for you.</p>
           </div>
           <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm" data-testid="proposal-counts">
-            {(['epic', 'story', 'task', 'spike', 'decision'] as ProposalType[]).map(t => <div key={t} className="flex items-center gap-1.5"><TypeGlyph type={t} /><dd className="font-semibold tabular-nums text-slate-900">{count(t)}</dd><dt className="text-slate-600">{count(t) === 1 ? WORK_TYPE[t].label : WORK_TYPE[t].plural}</dt></div>)}
+            {(['epic', 'story', 'task', 'spike', 'decision'] as ProposalType[]).filter(t => count(t) > 0).map(t => <div key={t} className="flex items-center gap-1.5"><TypeGlyph type={t} /><dd className="font-semibold tabular-nums text-slate-900">{count(t)}</dd><dt className="text-slate-600">{count(t) === 1 ? WORK_TYPE[t].label : WORK_TYPE[t].plural}</dt></div>)}
           </dl>
         </div>
         {derived.cov.notPlanned.length > 0 && (
