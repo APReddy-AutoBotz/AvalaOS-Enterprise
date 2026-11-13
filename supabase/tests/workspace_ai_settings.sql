@@ -1,4 +1,4 @@
--- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (7 groups)";
+-- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (8 groups)";
 -- any other error names the failed check.
 do $test$
 declare
@@ -9,6 +9,7 @@ declare
   key1 text := 'sk-proj-test-' || replace(gen_random_uuid()::text, '-', '') || 'AB12';
   key2 text := 'azure-test-' || replace(gen_random_uuid()::text, '-', '') || 'CD34';
   key3 text := 'ant-test-' || replace(gen_random_uuid()::text, '-', '') || 'EF56';
+  key4 text := 'gw-test-' || replace(gen_random_uuid()::text, '-', '') || 'GH78';
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
@@ -112,6 +113,24 @@ begin
   execute 'reset role';
   r := public.workspace_ai_connection(ws);
   if r ->> 'provider' <> 'anthropic' or r ->> 'apiKey' <> key3 then raise exception 'FAILED 7d: %', r ->> 'provider'; end if;
+  passed := passed + 1;
+
+  -- 8. An OpenAI-compatible endpoint needs an https host name (no IP address, no port), and a served model name may hold a slash.
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  begin perform public.set_workspace_ai(ws, 'openai_compatible', 'm', null, key4); raise exception 'FAILED 8a: no endpoint accepted';
+  exception when invalid_parameter_value then null; end;
+  begin perform public.set_workspace_ai(ws, 'openai_compatible', 'm', 'https://10.0.0.1/v1', key4); raise exception 'FAILED 8b: IP address accepted';
+  exception when check_violation then null; end;
+  begin perform public.set_workspace_ai(ws, 'openai_compatible', 'm', 'https://llm.acme-corp.com:8443/v1', key4); raise exception 'FAILED 8c: port accepted';
+  exception when check_violation then null; end;
+  begin perform public.set_workspace_ai(ws, 'openai_compatible', 'm', 'http://llm.acme-corp.com/v1', key4); raise exception 'FAILED 8d: http accepted';
+  exception when check_violation then null; end;
+  r := public.set_workspace_ai(ws, 'openai_compatible', 'meta-llama/Llama-3.3-70B-Instruct', 'https://llm.acme-corp.com/v1/', key4);
+  if r ->> 'endpoint' <> 'https://llm.acme-corp.com/v1' or r ->> 'model' <> 'meta-llama/Llama-3.3-70B-Instruct' or r ->> 'keyHint' <> 'GH78' then raise exception 'FAILED 8e: %', r; end if;
+  r := public.set_workspace_ai(ws, 'openai', 'gpt-5.5', 'https://llm.acme-corp.com/v1', key1);
+  if r ->> 'endpoint' is not null then raise exception 'FAILED 8f: endpoint kept for OpenAI'; end if;
+  execute 'reset role';
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;

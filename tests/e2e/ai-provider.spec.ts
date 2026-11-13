@@ -78,3 +78,20 @@ test('a provider not yet checked by the eval is listed only for the platform own
   expect(await page.content()).not.toContain(ANTHROPIC_KEY);
   expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(ANTHROPIC_KEY);
 });
+
+test('an OpenAI-compatible endpoint must be a public https address; a served model name may hold a slash', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await page.goto('/processes');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const ai = page.getByTestId('ai-provider');
+  await ai.getByLabel('Provider').selectOption({ label: 'OpenAI-compatible endpoint (being checked)' });
+  await ai.getByLabel('Model').fill('meta-llama/Llama-3.3-70B-Instruct');
+  await ai.getByLabel('API key').fill(ANTHROPIC_KEY.replace('sk-ant-api03', 'gateway-key'));
+  await ai.getByLabel('Endpoint').fill('https://169.254.169.254/v1');
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByRole('alert')).toContainText('not an IP address');
+  await ai.getByLabel('Endpoint').fill('https://LLM.acme-corp.com/v1/chat/completions');
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own OpenAI-compatible endpoint key ending QW88');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('llm.acme-corp.com/v1');
+});
