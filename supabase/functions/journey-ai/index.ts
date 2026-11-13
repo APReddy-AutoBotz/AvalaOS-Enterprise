@@ -153,7 +153,7 @@ async function callResponses(conn: AiConnection, body: Record<string, unknown>):
     }
     if (isRetryableStatus(res.status) && attempts <= BACKOFF_MS.length) { await res.body?.cancel(); await sleep(BACKOFF_MS[attempts - 1]); continue; }
     const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
-    if (!res.ok && !json?.error) json.error = { message: `HTTP ${res.status}` };
+    if (!res.ok && !json?.error) json.error = { message: typeof json?.message === 'string' ? json.message.slice(0, 300) : `HTTP ${res.status}` };
     return { parsed: parseProviderReply(conn, json), attempts };
   }
 }

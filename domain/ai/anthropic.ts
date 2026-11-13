@@ -28,30 +28,35 @@ const IMAGE_DATA_URL = /^data:(image\/(?:png|jpeg|webp|gif));base64,([A-Za-z0-9+
 /** The decoded size of base64 data, without decoding it. */
 const base64Bytes = (data: string) => Math.floor((data.length * 3) / 4) - (data.endsWith('==') ? 2 : data.endsWith('=') ? 1 : 0);
 
-function imageBlock(url: unknown) {
+/** Where the Messages request goes: Anthropic itself, or Claude on Amazon Bedrock (a smaller image limit). */
+export interface AnthropicTarget { label: string; maxImageBytes: number }
+const ANTHROPIC: AnthropicTarget = { label: 'Anthropic', maxImageBytes: ANTHROPIC_MAX_IMAGE_BYTES };
+const mb = (bytes: number) => `${Math.round((bytes / 1024 / 1024) * 100) / 100} MB`;
+
+function imageBlock(url: unknown, target: AnthropicTarget) {
   const m = typeof url === 'string' ? IMAGE_DATA_URL.exec(url) : null;
   if (!m) throw new ProviderRequestError('INVALID_REQUEST', 'The image must be a PNG, JPEG, WebP or GIF.');
-  if (base64Bytes(m[2]) > ANTHROPIC_MAX_IMAGE_BYTES) throw new ProviderRequestError('TOO_LARGE', 'The image is too large for Anthropic; use one under 5 MB.');
+  if (base64Bytes(m[2]) > target.maxImageBytes) throw new ProviderRequestError('TOO_LARGE', `The image is too large for ${target.label}; use one under ${mb(target.maxImageBytes)}.`);
   return { type: 'image', source: { type: 'base64', media_type: m[1], data: m[2] } };
 }
 
-function contentBlocks(content: unknown): unknown[] {
+function contentBlocks(content: unknown, target: AnthropicTarget): unknown[] {
   if (typeof content === 'string') return [{ type: 'text', text: content }];
   if (!Array.isArray(content)) throw new ProviderRequestError('INVALID_REQUEST', 'Unsupported message content.');
   return content.map((part: any) => {
     if (part?.type === 'input_text') return { type: 'text', text: String(part.text ?? '') };
-    if (part?.type === 'input_image') return imageBlock(part.image_url);
+    if (part?.type === 'input_image') return imageBlock(part.image_url, target);
     throw new ProviderRequestError('INVALID_REQUEST', `Unsupported content part ${String(part?.type)}.`);
   });
 }
 
 /** A Responses API body as a Messages API body. */
-export function toAnthropicRequest(body: Record<string, any>): Record<string, unknown> {
+export function toAnthropicRequest(body: Record<string, any>, target: AnthropicTarget = ANTHROPIC): Record<string, unknown> {
   const input = body.input;
   const messages = typeof input === 'string'
     ? [{ role: 'user', content: input }]
     : Array.isArray(input)
-      ? input.map((m: any) => ({ role: m?.role === 'assistant' ? 'assistant' : 'user', content: contentBlocks(m?.content) }))
+      ? input.map((m: any) => ({ role: m?.role === 'assistant' ? 'assistant' : 'user', content: contentBlocks(m?.content, target) }))
       : null;
   if (!messages || messages.length === 0) throw new ProviderRequestError('INVALID_REQUEST', 'The request has no input.');
   const out: Record<string, unknown> = { model: body.model, max_tokens: Number(body.max_output_tokens) || 1024, messages };

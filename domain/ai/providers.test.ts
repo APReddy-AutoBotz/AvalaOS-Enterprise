@@ -11,7 +11,7 @@ test('an OpenAI choice needs a model id and takes no endpoint', () => {
   assert.deepEqual(validateAiChoice({ provider: 'openai', model: ' gpt-5.5 ', endpoint: 'https://evil.example' }), { provider: 'openai', model: 'gpt-5.5', endpoint: null });
   assert.throws(() => validateAiChoice({ provider: 'openai', model: '' }), AiSettingsError);
   assert.throws(() => validateAiChoice({ provider: 'openai', model: 'gpt 5' }), AiSettingsError);
-  assert.throws(() => validateAiChoice({ provider: 'bedrock', model: 'x' }), AiSettingsError);
+  assert.throws(() => validateAiChoice({ provider: 'vertex', model: 'x' }), AiSettingsError);
 });
 
 test('an Azure endpoint must be the resource\'s own Azure host, so a key is never sent anywhere else', () => {
