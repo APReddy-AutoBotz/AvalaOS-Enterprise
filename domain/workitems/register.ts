@@ -37,6 +37,10 @@ export const draftHash = (d: { title: string; description: string; acceptance: s
 const canon = (p: Proposal) => JSON.stringify({ key: p.key, type: p.type, parentKey: p.parentKey, title: p.title, description: p.description, acceptance: p.acceptance, stepIds: p.stepIds, requirements: p.requirements, state: p.state, rejectedReason: p.rejectedReason, edited: p.edited, order: p.order, workItemId: p.workItemId ?? null, baseHash: p.baseHash ?? null });
 const same = (a: Proposal, b: Proposal) => canon(a) === canon(b);
 
+/** Items a person made by merging or splitting have no derivation: the key says where they sit (`user:<id>:<key of the item they came from>`). */
+export const isUserMade = (key: string) => key.startsWith('user:');
+export const anchorOf = (key: string): string | null => (isUserMade(key) ? key.split(':').slice(2).join(':') || null : null);
+
 export function reconcileProposals(drafts: ProposalDraft[], stored: Proposal[]): ReconciledProposals {
   const byKey = new Map(stored.map(s => [s.key, s]));
   const out: ProposalRow[] = [];
@@ -47,15 +51,29 @@ export function reconcileProposals(drafts: ProposalDraft[], stored: Proposal[]):
     const text = edited ? { title: old!.title, description: old!.description, acceptance: old!.acceptance } : { title: d.title, description: d.description, acceptance: d.acceptance };
     // An edit made before base hashes were kept is taken as made against today's text.
     const baseHash = edited ? old!.baseHash ?? derivedHash : null;
+    // Work whose parent was merged into a new item stays with that item.
+    const parentKey = old?.parentKey && isUserMade(old.parentKey) && byKey.has(old.parentKey) ? old.parentKey : d.parentKey;
     out.push({
-      key: d.key, type: d.type, parentKey: d.parentKey, ...text, stepIds: d.stepIds, requirements: d.requirements,
+      key: d.key, type: d.type, parentKey, ...text, stepIds: d.stepIds, requirements: d.requirements,
       state: old?.state ?? 'proposed', rejectedReason: old?.rejectedReason ?? null, edited, order: i,
       ...(old?.workItemId ? { workItemId: old.workItemId } : {}), baseHash, sourceRemoved: false,
       derivedHash, needsReview: edited && baseHash !== derivedHash, derived: { title: d.title, description: d.description, acceptance: d.acceptance },
     });
   });
   const live = new Set(drafts.map(d => d.key));
-  for (const s of stored) if (!live.has(s.key)) out.push({ ...s, order: out.length, sourceRemoved: true, derivedHash: '', needsReview: false, derived: null });
+  const made = stored.filter(s => isUserMade(s.key));
+  for (const s of stored) if (!live.has(s.key) && !isUserMade(s.key)) out.push({ ...s, order: out.length, sourceRemoved: true, derivedHash: '', needsReview: false, derived: null });
+  // Each item a person made sits right after the one it came from.
+  for (const s of made) {
+    const row: ProposalRow = { ...s, sourceRemoved: false, derivedHash: '', needsReview: false, derived: null };
+    const anchor = anchorOf(s.key);
+    let at = anchor ? out.findIndex(r => r.key === anchor) : -1;
+    if (at < 0) { out.push(row); continue; }
+    at += 1;
+    while (at < out.length && isUserMade(out[at]!.key) && anchorOf(out[at]!.key) === anchor) at += 1;
+    out.splice(at, 0, row);
+  }
+  out.forEach((r, i) => { r.order = i; });
   const before = new Map(stored.map(s => [s.key, s]));
   const strip = ({ sourceRemoved: _s, derivedHash: _h, needsReview: _n, derived: _d, ...p }: ProposalRow): Proposal => p;
   return { proposals: out, changed: out.map(strip).filter(p => !before.has(p.key) || !same(before.get(p.key)!, p)) };
@@ -97,4 +115,65 @@ export const restoreProposal = (p: Proposal): Proposal => (p.state === 'rejected
 /** What will be confirmed: the selected items, with their selected or already confirmed parent. */
 export function toConfirm(ps: Proposal[]): Proposal[] {
   return ps.filter(p => p.state === 'selected');
+}
+
+const unique = (xs: string[]) => [...new Set(xs)];
+
+/** Why these items cannot be merged, or null when they can. */
+export function mergeProblem(items: Proposal[]): string | null {
+  if (items.length < 2) return 'Select at least two items to merge.';
+  if (items.some(i => i.state === 'confirmed')) return 'An item on the board cannot be merged: change it there.';
+  if (items.some(i => i.state === 'rejected')) return 'A rejected item cannot be merged. Restore it first.';
+  if (items.some(i => i.type === 'epic')) return 'Epics cannot be merged.';
+  if (new Set(items.map(i => i.type)).size > 1) return 'Only items of the same kind can be merged.';
+  if (new Set(items.map(i => i.parentKey)).size > 1) return 'Only items under the same epic or story can be merged.';
+  return null;
+}
+
+/**
+ * Several items become one: the new item carries all their criteria, steps and requirement links, their
+ * work moves under it, and the originals are set aside (rejected, with the reason) so they can be restored.
+ * Returns every proposal that changed.
+ */
+export function mergeProposals(items: Proposal[], all: Proposal[], newId: string): Proposal[] {
+  const problem = mergeProblem(items);
+  if (problem) throw new ProposalError(problem);
+  const first = items[0]!;
+  const acceptance = unique(items.flatMap(i => i.acceptance));
+  if (acceptance.length > PROPOSAL_LIMITS.criteria) throw new ProposalError('The merged item would have too many acceptance criteria. Remove some first.');
+  const description = unique(items.map(i => i.description).filter(Boolean)).join('\n\n');
+  if (description.length > PROPOSAL_LIMITS.description) throw new ProposalError('The merged description would be too long. Shorten the descriptions first.');
+  const merged: Proposal = {
+    key: `user:${newId}:${first.key}`, type: first.type, parentKey: first.parentKey, title: first.title, description, acceptance,
+    stepIds: unique(items.flatMap(i => i.stepIds)), requirements: unique(items.flatMap(i => i.requirements)),
+    state: 'selected', rejectedReason: null, edited: true, order: first.order, baseHash: null,
+  };
+  const keys = new Set(items.map(i => i.key));
+  const set = items.map((i): Proposal => ({ ...i, state: 'rejected', rejectedReason: `Merged into “${first.title}”` }));
+  const moved = all.filter(c => c.parentKey !== null && keys.has(c.parentKey) && c.state !== 'confirmed' && !keys.has(c.key)).map((c): Proposal => ({ ...c, parentKey: merged.key }));
+  return [merged, ...set, ...moved];
+}
+
+export interface SplitInput { title: string; /** Positions of the criteria that move to the new item. */ move: number[]; /** Criteria written for the new item. */ extra: string[] }
+
+/** One item becomes two. The new item starts with the same description and requirement links, and the criteria the person gave it. */
+export function splitProposal(p: Proposal & { derivedHash?: string }, input: SplitInput, newId: string): Proposal[] {
+  if (p.state === 'confirmed') throw new ProposalError('This item is on the board already: change it there.');
+  if (p.state === 'rejected') throw new ProposalError('Restore the item before splitting it.');
+  if (p.type === 'epic') throw new ProposalError('An epic is split by moving its stories, not by splitting it.');
+  const title = input.title.trim();
+  if (!title) throw new ProposalError('Give the new item a title.');
+  if (title.length > PROPOSAL_LIMITS.title) throw new ProposalError('The title is too long.');
+  const move = new Set(input.move);
+  if ([...move].some(i => !Number.isInteger(i) || i < 0 || i >= p.acceptance.length)) throw new ProposalError('Choose criteria from the list.');
+  const stay = p.acceptance.filter((_, i) => !move.has(i));
+  const go = [...p.acceptance.filter((_, i) => move.has(i)), ...input.extra.map(e => e.trim()).filter(Boolean)];
+  if (stay.length < 2) throw new ProposalError('Keep at least two acceptance criteria on this item, so it can be tested.');
+  if (go.length < 2) throw new ProposalError('The new item needs at least two acceptance criteria. Move some across or write them.');
+  const created: Proposal = {
+    key: `user:${newId}:${p.key}`, type: p.type, parentKey: p.parentKey, title, description: p.description, acceptance: go,
+    stepIds: [...p.stepIds], requirements: [...p.requirements], state: 'proposed', rejectedReason: null, edited: true, order: p.order, baseHash: null,
+  };
+  const kept = editProposal(p, { title: p.title, description: p.description, acceptance: stay });
+  return [kept, created];
 }
