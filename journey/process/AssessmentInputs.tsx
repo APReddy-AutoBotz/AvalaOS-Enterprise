@@ -268,7 +268,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                   const effort = known(s.traits?.effortMinutes), share = known(s.traits?.sharePercent);
                   return (
                     <tr key={s.id} data-testid="input-row" className={automated ? 'bg-slate-50/60' : undefined}>
-                      <td className="px-3 py-2 text-xs tabular-nums text-slate-400">{i + 1}</td>
+                      <td className="px-3 py-2 text-xs tabular-nums text-slate-500">{i + 1}</td>
                       <td className="max-w-[16rem] px-3 py-2 text-sm font-medium text-slate-900">{s.name}{automated && <span className="block text-xs font-normal text-slate-500">Already done by a system</span>}</td>
                       {STEP_COLUMNS.map(c => (
                         <td key={c.trait} className="w-28 px-1.5 py-2">

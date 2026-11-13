@@ -66,7 +66,7 @@ test('release gate: sources to documents to the board, accessible throughout', a
     await expect(doc).toContainText(title);
     await expect(doc).not.toContainText(/TBD|placeholder|lorem/i);
     titles.push((await doc.innerText()).slice(0, 4000));
-    if (tab === /PDD/) { await expect(doc.getByTestId('open-item').first()).toBeVisible(); await scan('Documents'); }
+    if (title.startsWith('Process')) { await expect(doc.getByTestId('open-item').first()).toBeVisible(); await scan('Documents'); }
   }
   expect(new Set(titles).size).toBe(3);
   await page.getByRole('tab', { name: /PDD/ }).click();

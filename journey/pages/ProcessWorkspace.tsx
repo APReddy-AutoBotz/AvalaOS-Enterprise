@@ -129,10 +129,10 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
                   title={waiting ? 'Needs the process steps first' : undefined}
                   onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: process.id, stage: s.id }); }}
                   className={cx('flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-colors',
-                    here ? 'border-[#FFBC03] text-[#002C4B]' : cx('border-transparent hover:text-slate-900', waiting ? 'text-slate-400' : 'text-slate-600'))}
+                    here ? 'border-[#FFBC03] text-[#002C4B]' : cx('border-transparent hover:text-slate-900', waiting ? 'text-slate-500' : 'text-slate-600'))}
                 >
                   <span aria-hidden data-n={i + 1} className={cx('flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums', !(done && !here) && 'before:content-[attr(data-n)]',
-                    here ? 'bg-[#002C4B] text-white' : done ? 'bg-emerald-600 text-white' : waiting ? 'bg-slate-100 text-slate-400' : 'bg-slate-200 text-slate-700')}>
+                    here ? 'bg-[#002C4B] text-white' : done ? 'bg-emerald-600 text-white' : waiting ? 'bg-slate-100 text-slate-600' : 'bg-slate-200 text-slate-700')}>
                     {done && !here ? <svg viewBox="0 0 12 12" className="h-3 w-3"><path d="M2.8 6.3 5 8.4l4.2-4.7" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg> : null}
                   </span>
                   {s.label}

@@ -306,7 +306,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           <nav aria-label="Contents" className="hidden lg:block">
             <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white p-4 text-sm">
               <p className="text-xs font-semibold text-slate-500">Contents</p>
-              <ol className="mt-2 space-y-1">{doc.sections.map(s => <li key={s.id} className={s.level === 2 ? 'pl-3' : 'mt-2 font-semibold'}><a href={`#${s.id}`} className="text-slate-700 hover:text-[#002C4B] hover:underline"><span className="tabular-nums text-slate-400">{s.number}</span> {s.title}</a></li>)}</ol>
+              <ol className="mt-2 space-y-1">{doc.sections.map(s => <li key={s.id} className={s.level === 2 ? 'pl-3' : 'mt-2 font-semibold'}><a href={`#${s.id}`} className="text-slate-700 hover:text-[#002C4B] hover:underline"><span className="tabular-nums text-slate-500">{s.number}</span> {s.title}</a></li>)}</ol>
               <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{doc.openItems.length} open {doc.openItems.length === 1 ? 'item' : 'items'}</p>
             </div>
           </nav>
@@ -324,12 +324,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               const editable = canEdit && st && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
               const head = (
                 <span className="flex flex-wrap items-center gap-2">
-                  <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-400')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
+                  <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-500')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
                   {changedIds.has(s.id) && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-changed">Changed since revision {approvedRevision}</span>}
                   {st?.state === 'edited' && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-edited">Edited by you</span>}
                   {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
                   {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}
-                  {editable && editing !== s.id && <button type="button" className="no-print ml-auto font-sans text-xs font-medium text-slate-400 hover:text-[#002C4B] hover:underline focus-visible:text-[#002C4B]" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
+                  {editable && editing !== s.id && <button type="button" className="no-print ml-auto font-sans text-xs font-medium text-slate-500 hover:text-[#002C4B] hover:underline focus-visible:text-[#002C4B]" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
                 </span>
               );
               return (

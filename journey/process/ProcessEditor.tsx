@@ -106,7 +106,7 @@ function StepsTab({ model, editor, canEdit, showSources, sourceTitle }: TabConte
         empty={steps.length === 0 ? <p className="p-6 text-center text-sm text-slate-500">No steps yet. Add sources to extract them, or add them here.</p> : undefined}>
         {steps.map((s, i) => (
           <tr key={s.id} data-testid="step-row" className="align-top">
-            <td className="px-3 py-2.5 text-xs tabular-nums text-slate-400">{i + 1}</td>
+            <td className="px-3 py-2.5 text-xs tabular-nums text-slate-500">{i + 1}</td>
             <td className="min-w-56 px-1 py-1">
               <InlineText value={s.name} label={`Name of step ${i + 1}`} disabled={!canEdit} onSave={v => set(s.id, 'name', v, s.name, 'Renamed')} />
               <button type="button" onClick={() => setDetails(s.id)} className="ml-2 text-xs text-slate-500 hover:text-[#002C4B]">Details</button>

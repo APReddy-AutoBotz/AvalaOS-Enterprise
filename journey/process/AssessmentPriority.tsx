@@ -29,7 +29,7 @@ function Card({ title, children, testid }: { title: string; children: React.Reac
 }
 const NotYet = ({ reason, onInputs }: { reason: string; onInputs: () => void }) => (
   <>
-    <p className="mt-2 font-display text-xl font-semibold text-slate-400">Not known yet</p>
+    <p className="mt-2 font-display text-xl font-semibold text-slate-500">Not known yet</p>
     <p className="mt-1.5 text-sm leading-6 text-slate-600">{reason}</p>
     <button type="button" onClick={onInputs} className="mt-3 self-start text-sm font-semibold text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4 hover:decoration-[#002C4B]">Complete the inputs</button>
   </>
@@ -61,7 +61,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
         <Card title="Ease of implementation" testid="ease">
           {p.ease ? (
             <>
-              <p className="mt-2 flex items-baseline gap-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900" data-testid="ease-score">{p.ease.score}</span><span className="text-sm text-slate-400">/ 100</span><span className="ml-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{EASE_LABEL[p.ease.band]}</span></p>
+              <p className="mt-2 flex items-baseline gap-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900" data-testid="ease-score">{p.ease.score}</span><span className="text-sm text-slate-500">/ 100</span><span className="ml-auto rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-700">{EASE_LABEL[p.ease.band]}</span></p>
               <div className="relative mt-2 h-2 rounded-full bg-slate-100" aria-hidden>
                 <div className={cx('h-full rounded-full', EASE_TONE[p.ease.band])} style={{ width: `${p.ease.score}%` }} />
                 {[EASE_BANDS.medium, EASE_BANDS.easy].map(b => <span key={b} className="absolute top-[-3px] h-[14px] w-px bg-slate-400" style={{ left: `${b}%` }} />)}
@@ -103,7 +103,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
               {GRID.flat().map(q => <span key={q} className={cx('h-9 w-9 rounded-lg', p.placement.placed && p.placement.quadrant === q ? 'bg-[#002C4B] ring-2 ring-[#FFBC03]' : !p.placement.placed && p.placement.possible.length < 4 && p.placement.possible.includes(q) ? 'bg-[#002C4B]/40' : 'bg-slate-200')} />)}
             </div>
             <div>
-              <p className={cx('font-display text-xl font-semibold', p.placement.placed ? 'text-slate-900' : 'text-slate-400')} data-testid="priority-quadrant">{p.placement.placed ? QUADRANT[p.placement.quadrant!].label : 'Not placed yet'}</p>
+              <p className={cx('font-display text-xl font-semibold', p.placement.placed ? 'text-slate-900' : 'text-slate-500')} data-testid="priority-quadrant">{p.placement.placed ? QUADRANT[p.placement.quadrant!].label : 'Not placed yet'}</p>
               {!p.placement.placed && p.placement.possible.length > 0 && p.placement.possible.length < 4 && <p className="mt-1 text-sm font-semibold text-slate-900" data-testid="priority-possible">{orList(p.placement.possible.map(q => QUADRANT[q].label))}</p>}
               <p className="mt-1 text-sm leading-6 text-slate-700">{p.placement.placed ? QUADRANT[p.placement.quadrant!].text : p.placement.reason}</p>
             </div>
