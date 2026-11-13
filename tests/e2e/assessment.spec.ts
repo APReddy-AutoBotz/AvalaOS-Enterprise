@@ -496,3 +496,44 @@ test('editing a section: the text is kept on rebuild and reload, and when the pr
   await expect(doc.getByTestId('edited-text')).toHaveCount(0);
   await expect(doc).toContainText('Post supplier invoices correctly within five working days.');
 });
+
+test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and saved to the process after review', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Flows');
+  const map = page.getByTestId('flow-map');
+  await expect(map.locator('svg')).toContainText('Post invoice in SAP');
+  // Fitted: the map is no wider than its box.
+  const [mapW, boxW] = await map.evaluate(el => [el.querySelector('svg')!.getBoundingClientRect().width, el.getBoundingClientRect().width]);
+  expect(mapW).toBeLessThanOrEqual(boxW);
+  await page.getByRole('tab', { name: 'To-Be map' }).click();
+  await expect(map.locator('svg')).toContainText('Rule-based RPA');
+  const [bpmn] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download BPMN' }).click()]);
+  expect(readFileSync(await bpmn.path(), 'utf8')).toContain('<bpmn:definitions');
+
+  await page.getByRole('tab', { name: 'Edit the flow' }).click();
+  const canvas = page.getByTestId('bpmn-canvas');
+  await expect(canvas.locator('.djs-element[data-element-id]').first()).toBeVisible();
+  await expect(canvas).toContainText('Post invoice in SAP');
+  await shot(page, '52-flow-editor');
+  // Edit as a person would on the canvas: rename one step, delete another.
+  await page.evaluate(() => {
+    const m = (window as any).__bpmnModeler;
+    const reg = m.get('elementRegistry'), modeling = m.get('modeling');
+    const named = (n: string) => reg.filter((e: any) => e.businessObject?.name === n && e.type !== 'label')[0];
+    modeling.updateLabel(named('Post invoice in SAP'), 'Post invoice in SAP S/4HANA');
+    modeling.removeElements([named('Check invoice totals')]);
+  });
+  await page.getByRole('button', { name: 'Review changes' }).click();
+  const changes = page.getByTestId('flow-changes');
+  await expect(changes).toContainText('Rename the step "Post invoice in SAP" to "Post invoice in SAP S/4HANA"');
+  await expect(changes).toContainText('Remove the step "Check invoice totals"');
+  await expect(changes).toContainText('things to check in the flow');
+  await shot(page, '53-flow-changes');
+  await changes.getByRole('button', { name: /^Save \d+ changes?$/ }).click();
+  await expect(page.getByRole('status')).toContainText('Saved');
+
+  await stage(page, 'Process');
+  await page.getByRole('tab', { name: /^Steps/ }).click();
+  await expect(page.getByLabel(/^Name of step \d+$/)).toHaveCount(1);
+  await expect(page.getByLabel('Name of step 1')).toHaveValue('Post invoice in SAP S/4HANA');
+});

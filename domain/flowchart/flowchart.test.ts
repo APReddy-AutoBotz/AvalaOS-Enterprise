@@ -87,7 +87,9 @@ test('draw.io HTML labels, UserObject cells, pools and dangling connectors', asy
 test('a Process Model exports to BPMN and imports back to the same graph', () => {
   const xml = modelToBpmn(gold);
   assert.match(xml, /<bpmndi:BPMNDiagram/);
-  assert.equal((xml.match(/<bpmndi:BPMNShape /g) ?? []).length, 1 + new Set(modelToGraph(gold).nodes.map(n => n.laneId).filter(Boolean)).size + gold.steps.length + gold.gateways.length + gold.events.length);
+  // Pool, one lane per role, a lane for what has no role (steps without a role stay out of others' lanes), and the nodes.
+  const g = modelToGraph(gold);
+  assert.equal((xml.match(/<bpmndi:BPMNShape /g) ?? []).length, 1 + new Set(g.nodes.map(n => n.laneId).filter(Boolean)).size + (g.nodes.some(n => !n.laneId) ? 1 : 0) + gold.steps.length + gold.gateways.length + gold.events.length);
   assert.equal((xml.match(/<bpmndi:BPMNEdge /g) ?? []).length, gold.flows.length);
   const back = parseBpmn(xml);
   assert.deepEqual(graphSignature(back), graphSignature(modelToGraph(gold)));

@@ -30,7 +30,8 @@ function placeUnlaned(graph: FlowGraph): void {
   const byId = new Map(graph.nodes.map(n => [n.id, n]));
   for (let pass = 0; pass < 3; pass++) {
     for (const n of graph.nodes) {
-      if (n.laneId) continue;
+      // A step's lane is its role: a step with no role is not put in someone else's lane.
+      if (n.laneId || n.kind === 'task' || n.kind === 'subprocess') continue;
       const prev = graph.edges.filter(e => e.to === n.id).map(e => byId.get(e.from)?.laneId).find(Boolean);
       const next = graph.edges.filter(e => e.from === n.id).map(e => byId.get(e.to)?.laneId).find(Boolean);
       const lane = n.kind === 'start' ? next ?? prev : prev ?? next;
