@@ -4,6 +4,7 @@ import '@fontsource-variable/outfit/wght.css';
 import './index.css';
 import ReactDOM from 'react-dom/client';
 import { parseJourneyPath } from './domain/workspace/route';
+import { publicPage } from './domain/site/pages';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -13,12 +14,21 @@ if (!rootElement) {
 // The process journey (/signin, /work, /processes, /process/:id/:stage) is the application. Any other
 // path goes to My work, so no route reaches the earlier screens, including the earlier
 // assessment versions; they are no longer part of the build.
-// The one exception is "/", the public homepage, which loads without the application.
-const isHome = window.location.pathname.replace(/\/+$/, '') === '';
-if (!isHome && !parseJourneyPath(window.location.pathname)) {
+// The exceptions are the public pages: "/" (the homepage) and /privacy, /terms and /security
+// (the trust pages), which load without the application.
+const pub = publicPage(window.location.pathname);
+if (!pub && !parseJourneyPath(window.location.pathname)) {
   window.history.replaceState(null, '', `/work${window.location.hash}`);
 }
-const Root = React.lazy(() => (isHome ? import('./journey/home/HomePage') : import('./journey/JourneyApp')));
+const Root = React.lazy(async (): Promise<{ default: React.ComponentType }> => {
+  if (pub === 'home') return import('./journey/home/HomePage');
+  if (pub) {
+    const id = pub;
+    const { default: TrustPage } = await import('./journey/home/TrustPage');
+    return { default: () => <TrustPage id={id} /> };
+  }
+  return import('./journey/JourneyApp');
+});
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

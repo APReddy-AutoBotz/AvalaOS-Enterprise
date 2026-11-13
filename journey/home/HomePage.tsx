@@ -5,6 +5,7 @@
 // is a CSS animation whose end moves to the next stage, so pausing the animation pauses the timing.
 // With reduced motion nothing moves or advances on its own and both screens of a stage are shown.
 import React from 'react';
+import { SiteFooter, focus, useGo } from './site.tsx';
 
 const NAVY = '#002C4B';
 const AMBER = '#E69F00';
@@ -101,8 +102,6 @@ function Mark({ lit, size, dark }: { lit: number; size: number; dark?: boolean }
     </svg>
   );
 }
-
-const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2';
 
 function Tour() {
   const [stage, setStage] = React.useState(0);
@@ -203,10 +202,8 @@ const OUTPUTS = [
 ];
 
 export default function HomePage() {
-  const signedIn = React.useMemo(() => {
-    try { return Object.keys(window.localStorage).some(k => /^sb-.+-auth-token$/.test(k)); } catch { return false; }
-  }, []);
-  const go = signedIn ? { href: '/work', label: 'Open my work' } : { href: '/signin', label: 'Sign in' };
+  const go = useGo();
+  const signedIn = go.href === '/work';
   const cta = `rounded-lg bg-[#E69F00] px-5 py-3 text-sm font-semibold text-[#001B2F] hover:bg-[#F2B21E] ${focus} focus-visible:outline-white`;
   return (
     <div className="min-h-screen bg-white text-slate-900">
@@ -319,12 +316,7 @@ export default function HomePage() {
         </section>
       </main>
 
-      <footer className="bg-[#001B2F] text-slate-300">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 border-t border-white/15 px-6 py-8 text-sm">
-          <p>© 2026 Avala OS</p>
-          <a href={go.href} className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>{go.label}</a>
-        </div>
-      </footer>
+      <SiteFooter go={go} />
     </div>
   );
 }
