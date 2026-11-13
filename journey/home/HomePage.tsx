@@ -247,18 +247,20 @@ export default function HomePage() {
 
       <main>
         <section aria-labelledby="motto-h">
-          <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 py-20 lg:grid-cols-5 lg:gap-16">
-            <div className="lg:col-span-2">
+          <div className="mx-auto max-w-7xl px-6 py-20">
+            <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
               <h2 id="motto-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">AI is not the answer to every step</h2>
-              <p className="mt-5 text-lg leading-8 text-slate-700">Most of a process is rules, screens and hand-offs. AvalaOS puts every approach on one scale and recommends AI or an agent only where the work needs it.</p>
-              <ul aria-label="The approaches every step is scored for" className="mt-6 flex flex-wrap gap-2 text-sm font-semibold">
-                {APPROACHES.map(([name, cls]) => <li key={name} className={`rounded-full px-3 py-1.5 ring-1 ring-inset ${cls}`}>{name}</li>)}
-              </ul>
-              <p className="mt-6 border-l-4 border-[#E69F00] pl-4 text-lg font-semibold leading-7 text-slate-900">In the sample, rules do the work for 15 of 20 steps. One needs AI. Four stay with people.</p>
+              <div>
+                <p className="text-lg leading-8 text-slate-700">Most of a process is rules, screens and hand-offs. AvalaOS puts every approach on one scale and recommends AI or an agent only where the work needs it.</p>
+                <ul aria-label="The approaches every step is scored for" className="mt-5 flex flex-wrap gap-2 text-sm font-semibold">
+                  {APPROACHES.map(([name, cls]) => <li key={name} className={`rounded-full px-3 py-1.5 ring-1 ring-inset ${cls}`}>{name}</li>)}
+                </ul>
+              </div>
             </div>
-            <div className="rounded-3xl bg-amber-100 p-4 sm:p-8 lg:col-span-3">
+            <div className="mt-12 rounded-3xl bg-amber-100 p-4 sm:p-10">
               <div className="shot-frame"><img src={shot('motto-split')} width={1800} height={563} loading="lazy" className="block h-auto w-[170%] max-w-none sm:w-full" alt="How the 20 steps of the sample split: 15 rule-based RPA, 1 AI-assisted, 4 stay with people, with the reasons for each" /></div>
             </div>
+            <p className="mt-8 max-w-3xl border-l-4 border-[#E69F00] pl-4 text-xl font-semibold leading-8 text-slate-900">In the sample, rules do the work for 15 of 20 steps. One needs AI. Four stay with people.</p>
           </div>
         </section>
 
