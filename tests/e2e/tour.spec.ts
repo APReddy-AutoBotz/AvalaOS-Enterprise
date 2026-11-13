@@ -50,17 +50,68 @@ test('tour: the sample case through every stage', async ({ page }) => {
     const state = JSON.parse(localStorage.getItem(KEY)!);
     state.revisions.find((r: { state: string }) => r.state === 'working').model = gold;
     for (const s of state.sources) for (const [key, file] of Object.entries(keys)) if (s.fileName === file) s.key = key;
+    // The team of the sample company, and who is named on this process.
+    const ws = state.workspaces[0].id, since = new Date().toISOString();
+    const member = (name: string, role: string, job: string | null, canApprove: boolean) => ({ userId: crypto.randomUUID(), name, email: `${name.toLowerCase().replace(' ', '.')}@kaveri-ic.example`, role, job, canApprove, since });
+    const meera = member('Meera Iyer', 'viewer', 'approver', true), vikram = member('Vikram Shah', 'editor', 'solution_architect', false);
+    state.people = { [ws]: { members: [{ ...member('Rahul Deshpande', 'admin', null, true), userId: state.me.id }, meera, vikram], invites: [], audit: [] } };
+    Object.assign(state.processes[0], { analystId: state.me.id, architectId: vikram.userId, approverId: meera.userId });
     localStorage.setItem(KEY, JSON.stringify(state));
   }, { gold, keys });
   await page.reload();
+
+  // Facts for the sample that only its people could give, entered in the product's own Inputs view:
+  // SAP is worked through its screens here (no API for this work, robots allowed), the rules are
+  // written down, and only reading the incoming invoices is not rule-based work.
+  await stage(page, 'Assessment');
+  await page.getByRole('tab', { name: /^Inputs/ }).click();
+  const choose = async (label: string, option: string) => {
+    await page.getByLabel(label, { exact: true }).selectOption({ label: option });
+    await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+  };
+  const type = async (label: string, value: string) => {
+    const box = page.getByLabel(label, { exact: true });
+    await box.fill(value);
+    await box.blur();
+    await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+  };
+  await choose('Volume period', 'per month');
+  await type('Volume', '9500');
+  await type('Handling time', '11');
+  await type('People', '8');
+  await choose('Process change expected', 'No change expected');
+  await choose('Application change expected', 'No change expected');
+  await choose('API of SAP S/4HANA', 'No API');
+  await choose('Robots allowed on the screens of SAP S/4HANA', 'Yes');
+  await choose('Screens of SAP S/4HANA stable', 'Yes');
+  await choose('SAP S/4HANA through a remote desktop', 'No');
+  const whole = (title: string) => `${title} for the process as a whole`;
+  await choose(whole('Rules stated in full and stable'), 'Yes');
+  await choose(whole('Form of the input'), 'Structured');
+  await choose(whole('Needs a judgment or accountable decision'), 'No');
+  await choose(whole('Needs a physical action'), 'No');
+  await choose(whole('Drafts, summarises or classifies free text'), 'No');
+  await choose(whole('What it changes'), 'A record');
+  await choose('Form of the input for Log invoice', 'Documents');
+  await choose('Form of the input for Scan paper invoice', 'Paper');
+  await choose('Needs a physical action for Scan paper invoice', 'Yes');
+  for (const step of ['Approve non-PO invoice', 'Review high-value invoice', 'Investigate variance']) await choose(`Needs a judgment or accountable decision for ${step}`, 'Yes');
+  await settle(page);
+  await snap(page, 'inputs');
+
+  await stage(page, 'Process');
   await page.getByRole('tab', { name: /^Steps/ }).click();
   await settle(page);
   await snap(page, 'process');
 
   await stage(page, 'Assessment');
   await expect(page.getByTestId('verdict')).toBeVisible();
+  console.log(`TOUR_VERDICT ${await page.getByTestId('verdict').innerText()} | ${(await page.locator('section[aria-label="Recommended approach"]').innerText()).replace(/\s+/g, ' ')}`);
   await settle(page);
   await snap(page, 'assessment');
+  await page.locator('[data-testid="step-split"]').evaluate(el => el.scrollIntoView({ block: 'center' }));
+  await settle(page);
+  await snap(page, 'assessment-why');
   for (const [label, name] of [['Priority', 'assessment-priority'], ['Benefit', 'assessment-benefit'], ['Steps', 'assessment-steps']] as const) {
     await page.locator(`section[aria-label="${label}"]`).evaluate(el => el.scrollIntoView({ block: 'start' }));
     await page.mouse.wheel(0, -24);
@@ -136,7 +187,7 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await page.goto('/processes');
   await page.getByRole('tab', { name: 'People' }).click();
   const people = page.getByTestId('people');
-  for (const [email, role] of [['meera.iyer@kaveri-ic.example', 'Approver'], ['vikram.shah@kaveri-ic.example', 'Solution architect'], ['sunita.rao@kaveri-ic.example', 'Viewer']] as const) {
+  for (const [email, role] of [['karthik.raman@kaveri-ic.example', 'Developer'], ['sunita.rao@kaveri-ic.example', 'Viewer']] as const) {
     await people.getByLabel('Work email').fill(email);
     await people.getByLabel('Role for the new person').selectOption({ label: role });
     await people.getByRole('button', { name: 'Add person' }).click();
