@@ -12,11 +12,16 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
+import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 
 export interface Me { id: string; email: string }
-export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean }
+export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null }
 /** A person in a workspace, as others see them: a name, never an email address. */
 export interface Member { userId: string; name: string; role: Workspace['role'] }
+/** A person as an admin sees them in the People screen. `email` is set for admins only. */
+export interface Person { userId: string; name: string; email: string | null; role: Workspace['role']; job: Job | null; canApprove: boolean; since: string }
+export interface Invite { email: string; role: Workspace['role']; job: Job | null; canApprove: boolean; at: string }
+export type RoleChoice = Pick<RoleDef, 'access' | 'job' | 'canApprove'>;
 export interface ProcessRow { id: string; workspaceId: string; name: string; description: string; updatedAt: string }
 
 export interface RevisionRow {
@@ -80,6 +85,17 @@ export interface JourneyStore {
   listWorkspaces(): Promise<Workspace[]>;
   /** The people in a workspace, for assigning work. */
   listMembers(workspaceId: string): Promise<Member[]>;
+  /** Everyone in a workspace with their role, and pending invitations (admins only). */
+  listPeople(workspaceId: string): Promise<{ members: Person[]; invites: Invite[] }>;
+  /** Admins only. Someone with an account joins at once; otherwise the invitation waits for their sign-up. */
+  invitePerson(workspaceId: string, email: string, role: RoleChoice): Promise<{ state: 'member' | 'invited' }>;
+  /** Admins only. The last admin cannot be demoted. */
+  changePerson(workspaceId: string, userId: string, role: RoleChoice): Promise<void>;
+  /** Admins only. Their work items stay on the board, unassigned. */
+  removePerson(workspaceId: string, userId: string): Promise<void>;
+  cancelInvite(workspaceId: string, email: string): Promise<void>;
+  /** Admins only. Membership changes and approvals, newest first. */
+  auditLog(workspaceId: string): Promise<AuditEntry[]>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
 
   /** The assessment settings of a workspace; the defaults when none are set. */
