@@ -15,12 +15,21 @@ import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
 import type { AiProvider } from '../../domain/ai/providers.ts';
+import type { Allowance, UsageRow } from '../../domain/ai/usage.ts';
 
 export interface Me { id: string; email: string }
 /** A workspace's own AI provider. The key is never here: only its last four characters. */
 export interface WorkspaceAi {
   provider: AiProvider; model: string; endpoint: string | null; keyHint: string;
   updatedAt: string; lastUsedAt: string | null; lastTestedAt: string | null; lastTestOk: boolean | null;
+}
+/** This month's AI use in a workspace: its usage rows (members may read them) and the platform allowance. */
+export interface AiUsage {
+  rows: UsageRow[];
+  /** Null when the server could not say (it is the only place that knows the allowance). */
+  allowance: (Allowance & { source: 'workspace' | 'platform' }) | null;
+  /** True when there were more rows than were read. */
+  partial: boolean;
 }
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null }
 /** A person in a workspace, as others see them: a name, never an email address. */
@@ -119,6 +128,8 @@ export interface JourneyStore {
   clearWorkspaceAi(workspaceId: string): Promise<void>;
   /** A tiny real request with the workspace's provider (or the platform's), to prove the key works. */
   testWorkspaceAi(workspaceId: string): Promise<{ model: string; source: 'workspace' | 'platform' }>;
+  /** This calendar month's AI use (UTC) and, from the server, the platform allowance. Members. */
+  getAiUsage(workspaceId: string): Promise<AiUsage>;
   /** Admins only. Emails the invitation for an open invite (server function journey-invite); throws when email is not set up. */
   sendInviteEmail(workspaceId: string, email: string): Promise<void>;
   /** Admins only. Membership changes and approvals, newest first. */
