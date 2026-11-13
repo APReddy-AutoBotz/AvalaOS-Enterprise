@@ -4,6 +4,7 @@
 import { gaps, orderedSteps } from '../processModel/selectors.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
 import { robotsBlocked } from '../assess/scoring.ts';
+import { flowMermaid, flowPicture, modeFromScore } from '../flowchart/svg.ts';
 import { ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
@@ -69,7 +70,12 @@ export function buildPdd(input: DocInput): DocTree {
       ifaces.map(({ s, a }) => [s.name, a.method.toUpperCase(), a.name ?? '', a.operations.join(', '), { text: ACCESS_TEXT[a.access], status: a.status }, sourceList(a.sources)]), '');
   }
   b.section('2.3', 'As-Is process map');
-  b.callout('The As-Is map is drawn from the same steps in the Flows stage and will be embedded here.');
+  {
+    const f = flowPicture(m, { title: `As-Is map of ${m.meta.name}` });
+    if (m.steps.length) b.figure('As-Is process map', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m) });
+    else b.callout('No steps are recorded, so there is no map yet.');
+    if (m.steps.length && !m.flows.length) b.open('How do the steps connect: which step follows which, and where does the process branch?');
+  }
   b.section('2.4', 'Detailed As-Is steps');
   b.table('Detailed As-Is steps', ['#', 'Step', 'Description', 'Role', 'Application', 'Input', 'Output', 'Rules', 'Exceptions', 'Time per case', 'Source'],
     steps.map(s => [
@@ -94,7 +100,12 @@ export function buildPdd(input: DocInput): DocTree {
   // ---- 3 To-Be
   b.section('3', 'To-Be process', 1);
   b.section('3.1', 'To-Be process map');
-  b.callout('The To-Be map, coloured by delivery mode, is drawn in the Flows stage and will be embedded here.');
+  {
+    const modes = new Map(m.steps.map(s => { const x = modeOf(input, s); return [s.id, modeFromScore(x.approach, Boolean(x.score?.alreadyAutomated), x.score?.human)] as const; }));
+    const f = flowPicture(m, { modes, title: `To-Be map of ${m.meta.name}` });
+    if (m.steps.length) b.figure('To-Be process map, coloured by delivery mode', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m, modes) });
+    else b.callout('No steps are recorded, so there is no map yet.');
+  }
   b.section('3.2', 'Delivery model');
   b.paragraph(`${a.verdict}. ${a.split}`);
   b.table('Delivery model', ['#', 'Step', 'Today', 'Future mode', 'Person in the loop', 'Reason'],

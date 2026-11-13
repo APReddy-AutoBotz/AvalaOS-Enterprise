@@ -275,6 +275,10 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   const bytes = readFileSync(await word.path());
   expect(bytes.subarray(0, 2).toString()).toBe('PK');
   expect(bytes.length).toBeGreaterThan(5000);
+  // The As-Is and To-Be maps are in the document and, as pictures, in the Word file.
+  await expect(doc.getByTestId('flow-figure')).toHaveCount(2);
+  await expect(doc.locator('[data-caption="To-Be process map, coloured by delivery mode"] svg')).toContainText('Rule-based RPA');
+  expect(bytes.includes(Buffer.from('word/media/'))).toBe(true);
 
   await page.getByRole('tab', { name: /BRD/ }).click();
   await expect(doc).toContainText('Business Requirements Document');

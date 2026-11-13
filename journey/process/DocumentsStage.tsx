@@ -49,6 +49,12 @@ function CellView({ c }: { c: Cell; key?: React.Key }) {
 function BlockView({ b }: { b: Block; key?: React.Key }) {
   switch (b.kind) {
     case 'paragraph': return <p className="text-sm leading-7 text-slate-800">{b.text}</p>;
+    case 'figure': return (
+      <figure className="keep" data-testid="flow-figure" data-caption={b.caption}>
+        <figcaption className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--doc-accent)' }}>{b.caption}</figcaption>
+        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white" dangerouslySetInnerHTML={{ __html: b.svg }} />
+      </figure>
+    );
     case 'list': return <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-slate-800">{b.items.map((x, i) => <li key={i}>{x}</li>)}</ul>;
     case 'callout': return <p className={cx('keep rounded-lg px-4 py-2.5 text-sm leading-6', b.tone === 'warning' ? 'bg-amber-50 text-amber-900 ring-1 ring-inset ring-amber-200' : 'bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200')}>{b.text}</p>;
     case 'openItem': return <p className="keep flex gap-2 rounded-lg bg-amber-50 px-4 py-2.5 text-sm leading-6 text-amber-900 ring-1 ring-inset ring-amber-200" data-testid="open-item"><span className="font-semibold">Open:</span>{b.item.text}</p>;
@@ -67,6 +73,22 @@ function BlockView({ b }: { b: Block; key?: React.Key }) {
       </div>
     );
   }
+}
+
+/** SVG maps drawn to PNG through a canvas, at twice their size, for the Word file. */
+async function svgToPng(svg: string, width: number, height: number): Promise<string> {
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  try {
+    const img = await new Promise<HTMLImageElement>((ok, bad) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => bad(new Error('The map could not be drawn.')); i.src = url; });
+    const canvas = Object.assign(document.createElement('canvas'), { width: width * 2, height: height * 2 });
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(2, 2); ctx.drawImage(img, 0, 0, width, height);
+    return canvas.toDataURL('image/png');
+  } finally { URL.revokeObjectURL(url); }
+}
+async function withPngFigures(doc: DocTree): Promise<DocTree> {
+  const sections = await Promise.all(doc.sections.map(async s => ({ ...s, blocks: await Promise.all(s.blocks.map(async b => (b.kind === 'figure' ? { ...b, png: await svgToPng(b.svg, b.width, b.height).catch(() => undefined) } : b))) })));
+  return { ...doc, sections };
 }
 
 export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null }: {
@@ -117,7 +139,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     try {
       // Loaded on demand: the Word library is only needed when someone downloads.
       const { toDocxBlob, docxStyleFrom } = await import('../../domain/docs/docx.ts');
-      const blob = await toDocxBlob(doc, { draft: revision.state !== 'approved', style: docxStyleFrom(docSettings.branding) });
+      const blob = await toDocxBlob(await withPngFigures(doc), { draft: revision.state !== 'approved', style: docxStyleFrom(docSettings.branding) });
       const url = URL.createObjectURL(blob);
       const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${doc.type.toUpperCase()}.docx` });
       a.click(); URL.revokeObjectURL(url);

@@ -18,7 +18,9 @@ export type Block =
   | { kind: 'table'; caption: string; columns: string[]; rows: Cell[][]; empty: string }
   | { kind: 'keyValue'; caption: string; rows: { key: string; value: Cell }[] }
   | { kind: 'callout'; tone: 'info' | 'warning'; text: string }
-  | { kind: 'openItem'; item: OpenItem };
+  | { kind: 'openItem'; item: OpenItem }
+  /** A process map drawn from the model: SVG for the screen, Mermaid for Markdown, and a PNG added in the browser for Word. */
+  | { kind: 'figure'; caption: string; svg: string; width: number; height: number; mermaid: string; png?: string };
 
 export interface Section { id: string; number: string; title: string; level: 1 | 2; blocks: Block[] }
 
@@ -50,6 +52,7 @@ export class DocBuilder {
   paragraph(text: string) { return text.trim() ? this.add({ kind: 'paragraph', text }) : this; }
   list(items: string[]) { return items.length ? this.add({ kind: 'list', items }) : this; }
   callout(text: string, tone: 'info' | 'warning' = 'info') { return this.add({ kind: 'callout', tone, text }); }
+  figure(caption: string, f: { svg: string; width: number; height: number; mermaid: string }) { return this.add({ kind: 'figure', caption, ...f }); }
   table(caption: string, columns: string[], rows: CellInput[][], empty: string) {
     return this.add({ kind: 'table', caption, columns, rows: rows.map(r => r.map(cell)), empty });
   }
