@@ -45,6 +45,10 @@ export function SignInPage({ store }: { store: JourneyStore }) {
           {mode === 'signin' ? 'Create an account' : 'Sign in'}
         </button>
       </p>
+      <p className="mt-6 text-center text-xs leading-5 text-slate-500">
+        By using Avala OS you agree to the <a href="/terms" className="font-medium text-slate-700 underline underline-offset-2 hover:text-[#002C4B]">Terms of service</a> and
+        the <a href="/privacy" className="font-medium text-slate-700 underline underline-offset-2 hover:text-[#002C4B]">Privacy notice</a>.
+      </p>
     </div>
   );
 }
