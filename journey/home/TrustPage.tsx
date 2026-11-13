@@ -55,7 +55,7 @@ export default function TrustPage({ id }: { id: TrustPageId }) {
                 <section key={s.id} id={s.id} aria-labelledby={`${s.id}-h`} className="scroll-mt-6 py-8">
                   <h2 id={`${s.id}-h`} className="font-display text-2xl font-semibold tracking-tight text-[#002C4B]">{s.title}</h2>
                   <div className="mt-4 space-y-4 text-base leading-7 text-slate-700">
-                    {s.body.map((b, i) => <BlockView key={i} block={b} />)}
+                    {s.body.map((b, i) => <React.Fragment key={i}><BlockView block={b} /></React.Fragment>)}
                   </div>
                 </section>
               ))}
