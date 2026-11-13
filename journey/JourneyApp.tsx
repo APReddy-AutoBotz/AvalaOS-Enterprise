@@ -17,30 +17,35 @@ import { Button, Spinner } from './ui.tsx';
 const signInRedirectError = redirectError(location.search, location.hash);
 if (signInRedirectError) history.replaceState(null, '', withoutRedirectError(location.pathname, location.search, location.hash));
 
-const store = createJourneyStore();
+// Created on first use, so the demo (which brings its own store) never starts a database client.
+let appStore: JourneyStore | null | undefined;
+const getStore = () => (appStore === undefined ? (appStore = createJourneyStore()) : appStore);
 
 export interface Nav {
   route: JourneyRoute;
   go(route: JourneyRoute, opts?: { replace?: boolean }): void;
 }
 
-function useRoute(): Nav {
-  const [route, setRoute] = React.useState<JourneyRoute>(() => parseJourneyPath(location.pathname) ?? { page: 'work' });
+/** The route from the address; `base` is a prefix the journey runs under (the demo's /demo). */
+function useRoute(base: string): Nav {
+  const current = React.useCallback(() => parseJourneyPath(location.pathname.slice(base.length) || '/work') ?? { page: 'work' } as JourneyRoute, [base]);
+  const [route, setRoute] = React.useState<JourneyRoute>(current);
   React.useEffect(() => {
-    const onPop = () => setRoute(parseJourneyPath(location.pathname) ?? { page: 'work' });
+    const onPop = () => setRoute(current());
     addEventListener('popstate', onPop);
     return () => removeEventListener('popstate', onPop);
-  }, []);
+  }, [current]);
   const go = React.useCallback((next: JourneyRoute, opts?: { replace?: boolean }) => {
-    const path = journeyPath(next);
+    const path = base + journeyPath(next);
     if (path !== location.pathname) history[opts?.replace ? 'replaceState' : 'pushState'](null, '', path);
     setRoute(next);
     scrollTo(0, 0);
-  }, []);
+  }, [base]);
   return { route, go };
 }
 
 export default function JourneyApp() {
+  const store = getStore();
   if (!store) {
     return (
       <main className="mx-auto max-w-lg p-10 text-center">
@@ -52,8 +57,9 @@ export default function JourneyApp() {
   return <Journey store={store} />;
 }
 
-function Journey({ store }: { store: JourneyStore }) {
-  const nav = useRoute();
+export function Journey({ store, base = '' }: { store: JourneyStore; base?: string }) {
+  const nav = useRoute(base);
+  const demo = store.kind === 'demo';
   const [me, setMe] = React.useState<Me | null | undefined>(undefined);
   const afterSignIn = React.useRef<JourneyRoute | null>(null);
 
@@ -82,25 +88,31 @@ function Journey({ store }: { store: JourneyStore }) {
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
         <div className={`mx-auto flex h-14 items-center justify-between px-6 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
-          <a href="/work" onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex items-center gap-2.5">
+          <a href={`${base}/work`} onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex items-center gap-2.5">
             <img src="/brand/avala-os-logo.svg" alt="Avala OS" className="h-8 w-auto" />
           </a>
           {me && nav.route.page !== 'signin' && (
             <nav aria-label="Main" className="mr-auto ml-8 flex gap-1 text-sm">
               {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
-                return <a key={page} href={`/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={here ? 'rounded-md bg-slate-100 px-3 py-1.5 font-semibold text-[#002C4B]' : 'rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50'}>{label}</a>;
+                return <a key={page} href={`${base}/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={here ? 'rounded-md bg-slate-100 px-3 py-1.5 font-semibold text-[#002C4B]' : 'rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50'}>{label}</a>;
               })}
             </nav>
           )}
-          {me && (
+          {me && !demo && (
             <div className="flex items-center gap-3 text-sm text-slate-600">
               <span className="hidden sm:inline">{me.email}</span>
               <Button variant="ghost" onClick={() => store.signOut()}>Sign out</Button>
             </div>
           )}
+          {demo && <a href="/" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Leave the demo</a>}
         </div>
       </header>
+      {demo && (
+        <div data-testid="demo-banner" role="note" className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-center text-sm text-amber-950">
+          Demo on a sample case: Kaveri Industrial Components is a made-up company. Try anything; nothing is saved, and reloading starts again.
+        </div>
+      )}
       {store.kind === 'memory' && (
         <div data-testid="local-mode" className="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-center text-xs text-amber-900">
           Local mode: data stays in this browser and is not saved to a server.

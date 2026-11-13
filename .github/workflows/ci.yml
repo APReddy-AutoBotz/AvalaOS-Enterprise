@@ -104,6 +104,12 @@ jobs:
             base64 -w0 "$f"; echo
             echo "END_SCREEN"
           done
+          # The demo's starting state from the tour test (gzip, base64), for public/demo-data/sample.json.
+          if [ -f test-results/demo/sample.json ]; then
+            echo "BEGIN_DEMO_DATA sample.json.gz"
+            gzip -9 -c test-results/demo/sample.json | base64 -w0; echo
+            echo "END_DEMO_DATA"
+          fi
 
       - name: Keep screenshots and the report
         if: always()

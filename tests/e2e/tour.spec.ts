@@ -209,4 +209,10 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'My work', exact: true })).toBeVisible();
   await settle(page);
   await snap(page, 'my-work');
+
+  // The demo at /demo starts from this state. CI prints it on agent branches; it is committed as
+  // public/demo-data/sample.json when the tour is refreshed (tests/e2e/demo.spec.ts checks the committed one).
+  const sample = await page.evaluate(() => localStorage.getItem('avala.journey.memory.v1'));
+  fs.mkdirSync('test-results/demo', { recursive: true });
+  fs.writeFileSync('test-results/demo/sample.json', JSON.stringify(JSON.parse(sample!)));
 });

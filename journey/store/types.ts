@@ -78,7 +78,7 @@ export class StoreError extends Error {
 }
 
 export interface JourneyStore {
-  readonly kind: 'supabase' | 'memory';
+  readonly kind: 'supabase' | 'memory' | 'demo';
   currentUser(): Promise<Me | null>;
   onAuthChange(listener: (me: Me | null) => void): () => void;
   signIn(email: string, password: string): Promise<void>;
