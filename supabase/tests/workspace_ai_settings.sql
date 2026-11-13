@@ -1,4 +1,4 @@
--- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (8 groups)";
+-- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (9 groups)";
 -- any other error names the failed check.
 do $test$
 declare
@@ -10,6 +10,7 @@ declare
   key2 text := 'azure-test-' || replace(gen_random_uuid()::text, '-', '') || 'CD34';
   key3 text := 'ant-test-' || replace(gen_random_uuid()::text, '-', '') || 'EF56';
   key4 text := 'gw-test-' || replace(gen_random_uuid()::text, '-', '') || 'GH78';
+  key5 text := 'ABSK' || replace(gen_random_uuid()::text, '-', '') || 'IJ90';
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
@@ -108,7 +109,7 @@ begin
   exception when invalid_parameter_value then null; end;
   r := public.set_workspace_ai(ws, 'anthropic', 'claude-sonnet-5-5', 'https://ignored.example', key3);
   if r ->> 'provider' <> 'anthropic' or r ->> 'keyHint' <> 'EF56' or r ->> 'endpoint' is not null then raise exception 'FAILED 7b: %', r; end if;
-  begin perform public.set_workspace_ai(ws, 'bedrock', 'x', null, key3); raise exception 'FAILED 7c: unknown provider accepted';
+  begin perform public.set_workspace_ai(ws, 'vertex', 'x', null, key3); raise exception 'FAILED 7c: unknown provider accepted';
   exception when invalid_parameter_value then null; end;
   execute 'reset role';
   r := public.workspace_ai_connection(ws);
@@ -131,6 +132,20 @@ begin
   r := public.set_workspace_ai(ws, 'openai', 'gpt-5.5', 'https://llm.acme-corp.com/v1', key1);
   if r ->> 'endpoint' is not null then raise exception 'FAILED 8f: endpoint kept for OpenAI'; end if;
   execute 'reset role';
+  passed := passed + 1;
+
+  -- 9. Claude on Bedrock takes a model or inference profile id (with : and /) and an AWS Region as its endpoint.
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  begin perform public.set_workspace_ai(ws, 'bedrock', 'm', null, key5); raise exception 'FAILED 9a: no Region accepted';
+  exception when invalid_parameter_value then null; end;
+  begin perform public.set_workspace_ai(ws, 'bedrock', 'm', 'https://bedrock-runtime.us-east-1.amazonaws.com', key5); raise exception 'FAILED 9b: an address accepted as the Region';
+  exception when check_violation then null; end;
+  r := public.set_workspace_ai(ws, 'bedrock', 'arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/abc', 'EU-Central-1', key5);
+  if r ->> 'provider' <> 'bedrock' or r ->> 'endpoint' <> 'eu-central-1' or r ->> 'keyHint' <> 'IJ90' then raise exception 'FAILED 9c: %', r; end if;
+  execute 'reset role';
+  r := public.workspace_ai_connection(ws);
+  if r ->> 'apiKey' <> key5 or r ->> 'endpoint' <> 'eu-central-1' then raise exception 'FAILED 9d: %', r ->> 'provider'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;

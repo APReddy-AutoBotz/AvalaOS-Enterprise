@@ -95,3 +95,20 @@ test('an OpenAI-compatible endpoint must be a public https address; a served mod
   await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own OpenAI-compatible endpoint key ending QW88');
   await expect(ai.getByTestId('ai-provider-state')).toContainText('llm.acme-corp.com/v1');
 });
+
+test('Claude on Amazon Bedrock takes an AWS Region instead of an address', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await page.goto('/processes');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const ai = page.getByTestId('ai-provider');
+  await ai.getByLabel('Provider').selectOption({ label: 'Amazon Bedrock (Claude) (being checked)' });
+  await ai.getByLabel('Model or inference profile').fill('global.anthropic.claude-sonnet-5-5');
+  await ai.getByLabel('API key').fill(ANTHROPIC_KEY.replace('sk-ant-api03', 'ABSKbedrock'));
+  await ai.getByLabel('AWS Region').fill('https://bedrock-runtime.us-east-1.amazonaws.com');
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByRole('alert')).toContainText('Enter the AWS Region');
+  await ai.getByLabel('AWS Region').fill('EU-Central-1');
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own Amazon Bedrock (Claude) key ending QW88');
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('at eu-central-1');
+});

@@ -109,7 +109,7 @@ async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
       });
       if (isRetryableStatus(res.status) && attempt < 3) { await res.body?.cancel(); await sleep(attempt * 2000); continue; }
       const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
-      if (!res.ok && !json?.error) json.error = { message: `HTTP ${res.status}` };
+      if (!res.ok && !json?.error) json.error = { message: typeof json?.message === 'string' ? json.message.slice(0, 300) : `HTTP ${res.status}` };
       const parsed = parseProviderReply(conn, json);
       if (!parsed.ok && parsed.code === 'INVALID_OUTPUT' && attempt < 2) continue;
       return parsed;

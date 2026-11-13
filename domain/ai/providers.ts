@@ -12,9 +12,13 @@
 
 import { parseOpenAIResponse, type ParsedResponse } from './gateway.ts';
 import { ANTHROPIC_MESSAGES_URL, anthropicHeaders, parseAnthropicResponse, toAnthropicRequest } from './anthropic.ts';
+
+/** Claude on Amazon Bedrock: Anthropic's body with Bedrock's version marker; images up to 3.75 MB (AWS's limit). */
+export const BEDROCK_ANTHROPIC_VERSION = 'bedrock-2023-05-31';
+const BEDROCK_TARGET = { label: 'Amazon Bedrock', maxImageBytes: 3.75 * 1024 * 1024 };
 import { EndpointError, parseChatResponse, toChatRequest, validateCompatibleEndpoint } from './compatible.ts';
 
-export type AiProvider = 'openai' | 'azure_openai' | 'anthropic' | 'openai_compatible';
+export type AiProvider = 'openai' | 'azure_openai' | 'anthropic' | 'openai_compatible' | 'bedrock';
 export type AiNeed = 'text' | 'vision' | 'transcription';
 
 export interface ProviderInfo {
@@ -23,8 +27,12 @@ export interface ProviderInfo {
   modelLabel: string;
   modelHint: string;
   needsEndpoint: boolean;
+  /** What to call the endpoint field (default "Endpoint"); for Bedrock it is the AWS Region. */
+  endpointLabel?: string;
   endpointPlaceholder?: string;
   endpointHint?: string;
+  /** Which key to paste, when the provider has more than one kind. */
+  keyAdvice?: string;
   can: Record<AiNeed, boolean>;
   /** The extraction eval (eval/README.md) has been run with this provider, so workspaces may choose it. */
   checked: boolean;
@@ -55,6 +63,15 @@ export const AI_PROVIDERS: Record<AiProvider, ProviderInfo> = {
     endpointHint: 'The https address before /chat/completions, reachable on the internet on the standard port.',
     can: { text: true, vision: true, transcription: false }, checked: false,
   },
+  bedrock: {
+    label: 'Amazon Bedrock (Claude)', modelLabel: 'Model or inference profile',
+    modelHint: 'The Bedrock id of a Claude model or inference profile, for example global.anthropic.claude-sonnet-5-5.',
+    // Claude on Bedrock through InvokeModel with Anthropic's own request body; the key is a long-term Bedrock API key.
+    needsEndpoint: true, endpointLabel: 'AWS Region', endpointPlaceholder: 'us-east-1',
+    endpointHint: 'The Region where the model is enabled for your AWS account.',
+    keyAdvice: 'Use a long-term Amazon Bedrock API key; short-term keys expire within 12 hours.',
+    can: { text: true, vision: true, transcription: false }, checked: false,
+  },
 };
 
 /** The providers a person may choose: those checked by the eval, and the rest only for the platform owner. */
@@ -68,6 +85,7 @@ export class AiSettingsError extends Error {}
 export interface AiChoice { provider: AiProvider; model: string; endpoint: string | null }
 
 /** Model ids, deployment names and served model names (which may hold a slash, like org/model). */
+const AWS_REGION = /^[a-z]{2}(?:-gov)?-[a-z]+-[0-9]$/;
 const MODEL = /^[A-Za-z0-9][A-Za-z0-9._:\/-]{0,99}$/;
 const AZURE_HOST = /^[a-z0-9][a-z0-9-]{0,62}\.(openai\.azure\.com|cognitiveservices\.azure\.com|services\.ai\.azure\.com)$/;
 
@@ -81,6 +99,11 @@ export function validateAiChoice(input: { provider: unknown; model: unknown; end
   const model = typeof input.model === 'string' ? input.model.trim() : '';
   if (!MODEL.test(model)) throw new AiSettingsError(`Enter the ${info.modelLabel.toLowerCase()}: letters, digits, dots, dashes, slashes or underscores.`);
   if (!info.needsEndpoint) return { provider: input.provider, model, endpoint: null };
+  if (input.provider === 'bedrock') {
+    const region = typeof input.endpoint === 'string' ? input.endpoint.trim().toLowerCase() : '';
+    if (!AWS_REGION.test(region)) throw new AiSettingsError('Enter the AWS Region, like us-east-1 or eu-central-1.');
+    return { provider: input.provider, model, endpoint: region };
+  }
   if (input.provider === 'openai_compatible') {
     try { return { provider: input.provider, model, endpoint: validateCompatibleEndpoint(input.endpoint) }; } catch (e) {
       throw new AiSettingsError(e instanceof EndpointError ? e.message : 'Enter the https address of your endpoint.');
@@ -148,6 +171,16 @@ export function transcriptionTarget(c: AiConnection): HttpTarget {
  */
 export function providerRequest(c: AiConnection, body: Record<string, unknown>): HttpTarget & { body: Record<string, unknown> } {
   if (c.provider === 'anthropic') return { url: ANTHROPIC_MESSAGES_URL, headers: anthropicHeaders(c.apiKey), body: toAnthropicRequest(body) };
+  if (c.provider === 'bedrock') {
+    const region = String(c.endpoint ?? '');
+    if (!AWS_REGION.test(region)) throw new AiSettingsError('The AWS Region is not valid.');
+    const { model: _model, ...rest } = toAnthropicRequest(body, BEDROCK_TARGET);
+    return {
+      url: `https://bedrock-runtime.${region}.amazonaws.com/model/${encodeURIComponent(c.model)}/invoke`,
+      headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: { anthropic_version: BEDROCK_ANTHROPIC_VERSION, ...rest },
+    };
+  }
   if (c.provider === 'openai_compatible') {
     // validateCompatibleEndpoint again: the stored address is checked on every use, not only when saved.
     return { url: `${validateCompatibleEndpoint(c.endpoint)}/chat/completions`, headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json' }, body: toChatRequest(body) };
@@ -157,7 +190,7 @@ export function providerRequest(c: AiConnection, body: Record<string, unknown>):
 
 /** The provider's reply in the gateway's shape. */
 export const parseProviderReply = (c: AiConnection, json: unknown): ParsedResponse =>
-  (c.provider === 'anthropic' ? parseAnthropicResponse(json) : c.provider === 'openai_compatible' ? parseChatResponse(json) : parseOpenAIResponse(json));
+  (c.provider === 'anthropic' || c.provider === 'bedrock' ? parseAnthropicResponse(json) : c.provider === 'openai_compatible' ? parseChatResponse(json) : parseOpenAIResponse(json));
 
 /** The host to check against private addresses before a call (assertPublicHost), for addresses an admin typed. */
 export const hostToCheck = (c: AiConnection): string | null =>
