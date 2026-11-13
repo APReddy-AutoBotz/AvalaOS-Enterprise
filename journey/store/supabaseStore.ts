@@ -6,6 +6,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { decisionsFromEntries, decisionsToEntries } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
+import type { SectionEdit } from '../../domain/docs/edits.ts';
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
@@ -221,6 +222,24 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
         const l = r.links ?? {};
         return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order };
       });
+    },
+    async listDocumentEdits(processId) {
+      const { data, error } = await db.from('document_edits').select('doc_type, section_key, html, base_hash, updated_by, updated_at').eq('process_id', processId);
+      if (error) fail(error);
+      return (data ?? []).map((r: any): SectionEdit => ({ docType: r.doc_type, sectionKey: r.section_key, html: r.html, baseHash: r.base_hash, updatedBy: r.updated_by, updatedAt: r.updated_at }));
+    },
+    async saveDocumentEdit(processId, edit) {
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const me = (await db.auth.getUser()).data.user?.id;
+      const { error } = await db.from('document_edits').upsert({
+        workspace_id: process.workspaceId, process_id: processId, doc_type: edit.docType, section_key: edit.sectionKey, html: edit.html, base_hash: edit.baseHash, updated_by: me, updated_at: new Date().toISOString(),
+      }, { onConflict: 'process_id,doc_type,section_key' });
+      if (error) fail(error);
+    },
+    async removeDocumentEdit(processId, docType, sectionKey) {
+      const { error } = await db.from('document_edits').delete().eq('process_id', processId).eq('doc_type', docType).eq('section_key', sectionKey);
+      if (error) fail(error);
     },
     async saveRequirements(processId, rows) {
       if (!rows.length) return;

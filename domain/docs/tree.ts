@@ -20,6 +20,8 @@ export type Block =
   | { kind: 'callout'; tone: 'info' | 'warning'; text: string }
   | { kind: 'openItem'; item: OpenItem }
   /** A process map drawn from the model: SVG for the screen, Mermaid for Markdown, and a PNG added in the browser for Word. */
+  /** A person's edited narrative (sanitised HTML from the editor), in place of the generated text. */
+  | { kind: 'rich'; html: string }
   | { kind: 'figure'; caption: string; svg: string; width: number; height: number; mermaid: string; png?: string };
 
 export interface Section { id: string; number: string; title: string; level: 1 | 2; blocks: Block[] }
