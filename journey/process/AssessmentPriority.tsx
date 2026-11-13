@@ -21,7 +21,7 @@ const GRID: Quadrant[][] = [['quick_win', 'major_project'], ['fill_in', 'not_now
 
 function Card({ title, children, testid }: { title: string; children: React.ReactNode; testid?: string }) {
   return (
-    <div data-testid={testid} className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+    <div data-testid={testid} className="flex flex-col bg-white p-5">
       <p className="text-xs font-semibold text-slate-500">{title}</p>
       {children}
     </div>
@@ -46,7 +46,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
     <section aria-label="Priority">
       <h3 className="font-display text-base font-semibold text-slate-900">Should it start now, and how big is it?</h3>
       <p className="text-sm text-slate-500">Readiness, build effort and value, each from fixed tables, then where this process sits among other candidates.</p>
-      <div className="mt-3 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-3 grid gap-px overflow-hidden rounded-xl border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-4">
         <Card title="Readiness" testid="readiness">
           <p className="mt-2"><span className={cx('inline-flex rounded-full px-3 py-1 text-sm font-semibold ring-1 ring-inset', READY_TONE[p.readiness.state])}>{p.readiness.label}</span></p>
           <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-700">{p.readiness.reasons.map(r => <li key={r}>{r}</li>)}</ul>
