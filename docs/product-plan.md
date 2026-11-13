@@ -601,3 +601,53 @@ Repository evidence is from `APReddy-AutoBotz/AvalaOS-Core` at `88d0643`, read a
 | Duplicating a repository | [GitHub Docs](https://docs.github.com/en/repositories/creating-and-managing-repositories/duplicating-a-repository) |
 
 Section headings for the classic UiPath PDD and SDD tables (process overview fields, applications columns, exception tables) follow the templates already mirrored in the repository’s `data/docTemplates.ts`; I did not open an official copy of those Word templates.
+
+## Roadmap after the first public release (agreed November 2026)
+
+Released: the journey from sources to the Delivery board, people and roles, My work, merge and split, the release gate, the logo, the public homepage with the real-screen tour, invite-only sign-up, and the domain avalaos.com.
+
+### Phase A: finish the public face
+
+- Trust pages: privacy, terms, security.
+- Google and Microsoft sign-in.
+- A demo workspace: the sample invoice case, read-only.
+- Invitation and confirmation emails from the avalaos.com domain (check the current sender first).
+
+### Phase B: safe to put in front of clients
+
+- Bring your own key (BYOK), below. First in this phase: it ends the dependence on the owner's personal AI credits.
+- Prove source reading on three to five real processes and fix what breaks (the largest risk in this plan).
+- A screen for AI use and limits per workspace.
+- Email notifications for "Needs you".
+- Per-process access, so a client sees only its own processes.
+- Error monitoring and a backup check.
+
+### Phase C: features that add the most value
+
+1. The Avala assistant, below, starting read-only. It absorbs the gap-closing interview.
+2. Change impact preview.
+3. Organisation system registry.
+4. Tracker push to Jira and Azure DevOps with status coming back.
+5. Review comments on document sections.
+6. Platform packs (UiPath, Power Automate).
+
+Later: process variants, recordings and event logs as sources, benefit tracking, single sign-on (SAML) for large clients.
+
+### Bring your own key (BYOK)
+
+- Each workspace chooses its AI provider and supplies its own key or endpoint: OpenAI, Azure OpenAI, Anthropic, Amazon Bedrock, or an OpenAI-compatible endpoint the company already runs. The platform default remains for workspaces that set none, within its monthly budget.
+- Keys are written by an admin, stored encrypted on the server, and never returned to the browser (show only the last four characters and when it was last used). All calls keep going through `journey-ai`; nothing else may call a provider.
+- Each task in `domain/ai/tasks.ts` declares what it needs (text, vision, transcription). A provider that lacks one turns that feature off with a plain message, never a silent fallback to the platform key.
+- Usage is metered per workspace and per provider. A "test this key" button checks it before saving.
+- The eval (`eval/README.md`) is run for each supported provider before it is offered: extraction quality differs between models.
+
+### The Avala assistant
+
+An assistant on top of the platform, in the way Rovo sits on Jira, using the workspace's own model through the same gateway.
+
+- It answers questions about a process from the model, the assessment, the documents and the board, and every answer cites where it came from (a step, a requirement, a source passage).
+- It never decides. Scores stay arithmetic from the fixed tables; the assistant explains them and cannot change them.
+- It changes nothing on its own. Anything it proposes (an answer to an open question, a section draft, a work item) goes through the existing patch operations and review screens, and a person confirms it. It acts with the signed-in person's role and no more.
+- Source documents are untrusted: text inside a transcript or procedure is content to read, never an instruction to the assistant.
+- Order: (1) read-only questions with citations; (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+
