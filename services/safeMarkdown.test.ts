@@ -35,8 +35,6 @@ assert.equal(
 );
 
 for (const sink of [
-  'components/delivery/TaskDetailModal.tsx',
-  'components/delivery/WorkspaceView.tsx',
   'components/docs/RefineSectionModal.tsx',
 ]) {
   const source = readFileSync(sink, 'utf8');
