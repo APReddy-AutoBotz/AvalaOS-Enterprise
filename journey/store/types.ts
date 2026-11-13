@@ -88,6 +88,10 @@ export interface JourneyStore {
   /** Leaves for the provider's sign-in page; the provider sends the person back to /signin. */
   signInWithProvider(provider: ProviderId): Promise<void>;
   signOut(): Promise<void>;
+  /** Emails a link to choose a new password, if an account uses the address (never says whether one does). */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Sets a new password for the signed-in person (after following the emailed link). */
+  setNewPassword(password: string): Promise<void>;
 
   listWorkspaces(): Promise<Workspace[]>;
   /** The people in a workspace, for assigning work. */
@@ -101,6 +105,8 @@ export interface JourneyStore {
   /** Admins only. Their work items stay on the board, unassigned. */
   removePerson(workspaceId: string, userId: string): Promise<void>;
   cancelInvite(workspaceId: string, email: string): Promise<void>;
+  /** Admins only. Emails the invitation for an open invite (server function journey-invite); throws when email is not set up. */
+  sendInviteEmail(workspaceId: string, email: string): Promise<void>;
   /** Admins only. Membership changes and approvals, newest first. */
   auditLog(workspaceId: string): Promise<AuditEntry[]>;
   /** Whether the signed-in person may create an organization (only the platform owner, once one is listed). */

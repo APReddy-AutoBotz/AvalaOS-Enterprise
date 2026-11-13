@@ -10,6 +10,7 @@ import { BoardPage } from './pages/BoardPage.tsx';
 import { ProcessesPage } from './pages/ProcessesPage.tsx';
 import { MyWorkPage } from './pages/MyWorkPage.tsx';
 import { ProcessWorkspace } from './pages/ProcessWorkspace.tsx';
+import { ResetPasswordPage } from './pages/ResetPasswordPage.tsx';
 import { Button, Spinner } from './ui.tsx';
 
 // A provider (Google, Microsoft) that could not sign the person in sends them back with the reason in
@@ -122,6 +123,7 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
         {!me || nav.route.page === 'signin' ? <SignInPage store={store} initialError={signInRedirectError} /> :
           nav.route.page === 'work' ? <MyWorkPage store={store} nav={nav} /> :
           nav.route.page === 'processes' ? <ProcessesPage store={store} nav={nav} /> :
+          nav.route.page === 'reset-password' ? <ResetPasswordPage store={store} nav={nav} /> :
           nav.route.page === 'board' ? <BoardPage store={store} nav={nav} projectId={nav.route.projectId} itemId={nav.route.itemId} /> :
             <React.Fragment key={nav.route.processId}><ProcessWorkspace store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} /></React.Fragment>}
       </main>

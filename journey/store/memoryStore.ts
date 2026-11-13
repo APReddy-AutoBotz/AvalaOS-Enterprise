@@ -108,6 +108,9 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     },
     async signUp(email, password) { await this.signIn(email, password); return { needsConfirmation: false }; },
     async signOut() { state.me = null; save(); listeners.forEach(l => l(null)); },
+    // The in-browser store has no email and no passwords to keep: both succeed and change nothing.
+    async requestPasswordReset() { /* nothing to send */ },
+    async setNewPassword() { requireMe(); },
     // The in-browser store has no provider to send anyone to: it offers both so the screen can be
     // tested, and says so when one is chosen.
     async signInProviders() { return ['google', 'azure']; },
@@ -364,6 +367,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       p.audit.unshift({ id: uuid(), at: now(), kind: 'removed', actor: nameOf(), subject: m.name, detail: '' });
       save();
     },
+    async sendInviteEmail() { throw new StoreError(501, `Emails need the server; they are not sent ${where}`); },
     async cancelInvite(workspaceId, email) {
       adminOf(workspaceId);
       const p = peopleOf(workspaceId);

@@ -34,6 +34,10 @@ export function redirectError(search: string, hash: string): string | null {
   const code = params.get('error') ?? fragment.get('error');
   if (!code) return null;
   const text = (params.get('error_description') ?? fragment.get('error_description') ?? '').replace(/\+/g, ' ').trim();
+  const detail = params.get('error_code') ?? fragment.get('error_code') ?? '';
+  if (detail === 'otp_expired' || /link is invalid or has expired/i.test(text)) {
+    return 'That link has expired or has already been used. Ask for a new one.';
+  }
   if (/database error saving new user|invitation/i.test(text)) return INVITE_ONLY;
   if (/unverified email/i.test(text)) {
     return 'The provider did not confirm this email address, so we have sent a confirmation email to it. Open the link in that email, then sign in again.';
