@@ -79,6 +79,15 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       return { needsConfirmation: !data.session };
     },
     async signOut() { await db.auth.signOut(); },
+    async requestPasswordReset(email) {
+      const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
+      // Only a rate limit is worth telling the person; anything else would say whether the address has an account.
+      if (error && error.status === 429) fail({ message: 'Too many requests. Wait a few minutes and try again.', status: 429 });
+    },
+    async setNewPassword(password) {
+      const { error } = await db.auth.updateUser({ password });
+      if (error) fail({ message: error.message, status: error.status ?? 400 });
+    },
     async signInProviders() {
       try {
         const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: publishableKey } });
@@ -307,6 +316,9 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async removePerson(workspaceId, userId) {
       const { error } = await db.rpc('remove_member', { target_workspace: workspaceId, target_user: userId });
       if (error) fail(error);
+    },
+    async sendInviteEmail(workspaceId, email) {
+      await call('journey-invite', { workspaceId, email });
     },
     async cancelInvite(workspaceId, email) {
       const { error } = await db.rpc('cancel_invite', { target_workspace: workspaceId, invite_email: email });

@@ -4,7 +4,8 @@ import { Button, ErrorNote, Field, messageOf } from '../ui.tsx';
 import { providerLabel, type ProviderId } from '../../domain/auth/providers.ts';
 
 export function SignInPage({ store, initialError = null }: { store: JourneyStore; initialError?: string | null }) {
-  const [mode, setMode] = React.useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = React.useState<'signin' | 'signup' | 'reset'>('signin');
+  const switchTo = (m: 'signin' | 'signup' | 'reset') => { setMode(m); setError(null); setNotice(null); };
   const [email, setEmail] = React.useState('');
   const [password, setPassword] = React.useState('');
   const [busy, setBusy] = React.useState(false);
@@ -38,7 +39,10 @@ export function SignInPage({ store, initialError = null }: { store: JourneyStore
     setNotice(null);
     try {
       if (mode === 'signin') await store.signIn(email.trim(), password);
-      else {
+      else if (mode === 'reset') {
+        await store.requestPasswordReset(email.trim());
+        setNotice('If an account uses this address, we have emailed it a link to choose a new password. The link works once.');
+      } else {
         const r = await store.signUp(email.trim(), password);
         if (r.needsConfirmation) setNotice('Check your email to confirm the address, then sign in.');
       }
@@ -51,10 +55,11 @@ export function SignInPage({ store, initialError = null }: { store: JourneyStore
 
   return (
     <div className="mx-auto mt-10 max-w-sm">
-      <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{mode === 'signin' ? 'Sign in' : 'Create an account'}</h1>
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create an account' : 'Reset your password'}</h1>
       <p className="mt-1 text-sm text-slate-600">Assess a process from its sources through to delivery.</p>
       <div className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6">
-        {providers.length > 0 && (
+        {mode === 'reset' && <p className="text-sm leading-6 text-slate-600">Enter the address you sign in with. If you use Google or Microsoft to sign in, you have no password here: use that button instead.</p>}
+        {providers.length > 0 && mode !== 'reset' && (
           <>
             <div className="space-y-2" role="group" aria-label="Sign in with Google or Microsoft">
               {providers.map(p => (
@@ -71,15 +76,18 @@ export function SignInPage({ store, initialError = null }: { store: JourneyStore
         )}
         <form onSubmit={submit} className="space-y-4">
           <Field label="Email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} />
-          <Field label="Password" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={e => setPassword(e.target.value)} />
+          {mode !== 'reset' && <Field label="Password" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={e => setPassword(e.target.value)} />}
+          {mode === 'signin' && (
+            <p className="-mt-2 text-right text-sm"><button type="button" className="font-medium text-[#002C4B] underline-offset-2 hover:underline" onClick={() => switchTo('reset')}>Forgot password?</button></p>
+          )}
           <ErrorNote message={error} />
           {notice && <p role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">{notice}</p>}
-          <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}</Button>
+          <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : 'Email me a link'}</Button>
         </form>
       </div>
       <p className="mt-4 text-center text-sm text-slate-600">
-        {mode === 'signin' ? 'New here?' : 'Already have an account?'}{' '}
-        <button type="button" className="font-semibold text-[#002C4B] underline-offset-2 hover:underline" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setNotice(null); }}>
+        {mode === 'signin' ? 'New here?' : mode === 'signup' ? 'Already have an account?' : 'Remembered it?'}{' '}
+        <button type="button" className="font-semibold text-[#002C4B] underline-offset-2 hover:underline" onClick={() => switchTo(mode === 'signin' ? 'signup' : 'signin')}>
           {mode === 'signin' ? 'Create an account' : 'Sign in'}
         </button>
       </p>

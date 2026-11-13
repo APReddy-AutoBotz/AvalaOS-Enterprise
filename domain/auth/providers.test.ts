@@ -26,6 +26,8 @@ test('other provider errors get a plain message; an address without an error get
   assert.match(redirectError('', '#error=server_error&error_description=Unverified+email+with+azure.+A+confirmation+email+has+been+sent+to+your+azure+email')!, /confirmation email/);
   assert.match(redirectError('?error=validation_failed&error_description=Unsupported+provider%3A+provider+is+not+enabled', '')!, /not available yet/);
   assert.equal(redirectError('?error=temporarily_unavailable', ''), 'Sign-in did not complete.');
+  // An emailed link (password reset, confirmation) that has expired or was used already.
+  assert.equal(redirectError('', '#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired'), 'That link has expired or has already been used. Ask for a new one.');
   assert.equal(redirectError('', '#access_token=abc&refresh_token=def'), null);
   assert.equal(redirectError('?next=%2Fwork', ''), null);
 });

@@ -21,6 +21,9 @@ test('an admin invites people by role, cannot demote the last admin, and sees it
   await expect(page.getByTestId('invites')).toContainText('ravi@acme.com');
   await expect(page.getByTestId('invites')).toContainText('Developer');
   await expect(people.getByRole('status')).toContainText('when they sign up');
+  // The in-browser store cannot send email: the admin is told to let the person know, and can send again later.
+  await expect(people.getByRole('status')).toContainText('The invitation email was not sent');
+  await expect(people.getByRole('button', { name: 'Email the invitation to ravi@acme.com again' })).toBeVisible();
 
   // The only admin cannot be demoted.
   await people.getByLabel('Role of analyst').selectOption({ label: 'Viewer' });

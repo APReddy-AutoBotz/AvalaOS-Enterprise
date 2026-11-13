@@ -49,7 +49,14 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
     run(async () => {
       const r = await store.invitePerson(workspace.id, addr, choice(role));
       setEmail('');
-      setNotice(r.state === 'member' ? `${addr} is in the workspace as ${role.label}.` : `Invitation saved for ${addr}. They get the ${role.label} role when they sign up with this address.`);
+      if (r.state === 'member') { setNotice(`${addr} is in the workspace as ${role.label}.`); return; }
+      const saved = `Invitation saved for ${addr}. They get the ${role.label} role when they sign up with this address.`;
+      try {
+        await store.sendInviteEmail(workspace.id, addr);
+        setNotice(`${saved} We emailed them the invitation.`);
+      } catch (err) {
+        setNotice(`${saved} The invitation email was not sent (${messageOf(err)}), so let them know yourself.`);
+      }
     });
   };
 
@@ -84,6 +91,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{i.email}</span>
                   <Tag tone="warn">{roleOf({ access: i.role, canApprove: i.canApprove, job: i.job }).label}</Tag>
                   <span className="text-xs text-slate-500">{ago(i.at)}</span>
+                  <Button variant="ghost" disabled={busy} aria-label={`Email the invitation to ${i.email} again`} onClick={() => run(() => store.sendInviteEmail(workspace.id, i.email), `Invitation emailed again to ${i.email}.`)}>Send again</Button>
                   <Button variant="ghost" disabled={busy} onClick={() => run(() => store.cancelInvite(workspace.id, i.email))}>Cancel</Button>
                 </li>
               ))}
