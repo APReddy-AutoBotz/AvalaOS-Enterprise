@@ -43,7 +43,7 @@ function placeUnlaned(graph: FlowGraph): void {
 const SIZE: Record<FlowNode['kind'], [number, number]> = { start: [36, 36], end: [36, 36], gateway: [50, 50], task: [120, 80], subprocess: [120, 80] };
 const COL = 170, ROW = 110, LANE_HEADER = 30, POOL_HEADER = 30, PAD = 20;
 
-interface Box { x: number; y: number; w: number; h: number }
+export interface Box { x: number; y: number; w: number; h: number }
 
 /** Columns by longest path from the start (back edges ignored), rows inside each lane. */
 export function layout(graph: FlowGraph): { boxes: Map<string, Box>; lanes: Map<string, Box>; width: number; height: number } {
@@ -120,8 +120,19 @@ function tagOf(n: FlowNode): string {
 }
 
 /** BPMN 2.0 XML with one pool, a lane per role and a diagram, so modellers open it laid out. */
-export function graphToBpmn(graph: FlowGraph): string {
-  const { boxes, lanes, width, height } = layout(graph);
+/** Where things are drawn: shapes, lanes and the pool, with flows' waypoints when known. */
+export interface Diagram {
+  boxes: Map<string, Box>;
+  lanes: Map<string, Box>;
+  width: number;
+  height: number;
+  /** False draws the pool and lanes as columns (top to bottom). */
+  horizontal: boolean;
+  waypoints?: Map<string, [number, number][]>;
+}
+
+export function graphToBpmn(graph: FlowGraph, diagram?: Diagram): string {
+  const { boxes, lanes, width, height, horizontal, waypoints } = diagram ?? { ...layout(graph), horizontal: true, waypoints: undefined };
   const id = (s: string) => xmlId(s);
   const proc = 'Process_1';
   const out: string[] = [];
@@ -149,11 +160,11 @@ export function graphToBpmn(graph: FlowGraph): string {
   }
   out.push('  </bpmn:process>');
   out.push('  <bpmndi:BPMNDiagram id="BPMNDiagram_1"><bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">');
-  out.push(`    <bpmndi:BPMNShape id="Participant_1_di" bpmnElement="Participant_1" isHorizontal="true"><dc:Bounds x="0" y="0" width="${width}" height="${height}" /></bpmndi:BPMNShape>`);
+  out.push(`    <bpmndi:BPMNShape id="Participant_1_di" bpmnElement="Participant_1" isHorizontal="${horizontal}"><dc:Bounds x="0" y="0" width="${width}" height="${height}" /></bpmndi:BPMNShape>`);
   for (const [laneId, b] of lanes) {
     if (!graph.lanes.length) break;
     const lid = laneId ? id(laneId) : 'Lane_unassigned';
-    out.push(`    <bpmndi:BPMNShape id="${lid}_di" bpmnElement="${lid}" isHorizontal="true"><dc:Bounds x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" /></bpmndi:BPMNShape>`);
+    out.push(`    <bpmndi:BPMNShape id="${lid}_di" bpmnElement="${lid}" isHorizontal="${horizontal}"><dc:Bounds x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" /></bpmndi:BPMNShape>`);
   }
   for (const n of graph.nodes) {
     const b = boxes.get(n.id)!;
@@ -161,7 +172,7 @@ export function graphToBpmn(graph: FlowGraph): string {
   }
   for (const e of graph.edges) {
     const a = boxes.get(e.from)!, b = boxes.get(e.to)!;
-    const pts = edgePoints(a, b).map(([x, y]) => `<di:waypoint x="${x}" y="${y}" />`).join('');
+    const pts = (waypoints?.get(e.id) ?? edgePoints(a, b)).map(([x, y]) => `<di:waypoint x="${Math.round(x)}" y="${Math.round(y)}" />`).join('');
     out.push(`    <bpmndi:BPMNEdge id="${id(e.id)}_di" bpmnElement="${id(e.id)}">${pts}</bpmndi:BPMNEdge>`);
   }
   out.push('  </bpmndi:BPMNPlane></bpmndi:BPMNDiagram>');

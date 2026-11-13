@@ -7,6 +7,7 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { flowPicture, modeFromScore } from '../../domain/flowchart/svg.ts';
 import { modelToBpmn, parseBpmn } from '../../domain/flowchart/bpmn.ts';
+import { modelToBpmnVertical } from '../../domain/flowchart/svg.ts';
 import { applyFlowPlan, lintFlow, planFlowEdits, type FlowPlan } from '../../domain/flowchart/edit.ts';
 import { useModelEditor } from './useModelEditor.ts';
 import type { CanvasApi } from './BpmnCanvas.tsx';
@@ -40,7 +41,10 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
     const modes = new Map(a.steps.map(s => [s.stepId, modeFromScore(s.winner, s.alreadyAutomated, s.human)]));
     return { asis: flowPicture(model, { title: `As-Is map of ${model.meta.name}` }), tobe: flowPicture(model, { modes, title: `To-Be map of ${model.meta.name}` }) };
   }, [model]);
-  const xml = React.useMemo(() => modelToBpmn(model), [model]);
+  // The editor shows the flow top to bottom like the maps; the download is the standard left-to-right
+  // layout, which every BPMN tool reads.
+  const xml = React.useMemo(() => modelToBpmnVertical(model), [model]);
+  const downloadXml = React.useMemo(() => modelToBpmn(model), [model]);
 
   const review = async () => {
     if (!api.current) return;
@@ -71,11 +75,11 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
     <div className="space-y-4" data-testid="flows-stage">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Flow view" className="inline-flex rounded-lg bg-slate-100 p-0.5">
-          {tab('asis', 'As-Is map')}{tab('tobe', 'To-Be map')}{canEdit && tab('edit', 'Edit the flow')}
+          {tab('asis', 'As-Is map')}{tab('tobe', 'To-Be map')}{canEdit && tab('edit', 'Edit the As-Is flow')}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {view !== 'edit' && <button type="button" className="font-semibold text-[#002C4B] hover:underline" onClick={() => setFull(!full)} aria-pressed={full}>{full ? 'Fit to width' : 'Full size'}</button>}
-          <Button variant="secondary" onClick={() => save(new Blob([xml], { type: 'application/xml' }), `${model.meta.name} - As-Is.bpmn`)}>Download BPMN</Button>
+          <Button variant="secondary" onClick={() => save(new Blob([downloadXml], { type: 'application/xml' }), `${model.meta.name} - As-Is.bpmn`)}>Download BPMN</Button>
         </div>
       </div>
       <ErrorNote message={error ?? editor.error} />
@@ -88,14 +92,16 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
         </figure>
       ) : (
         <div className="space-y-3">
-          <p className="text-sm leading-6 text-slate-600">Drag steps, draw connections, add or delete elements, rename by double-clicking, and move a step to another role's lane. Then <strong>Review changes</strong>: you see each change in words before it is saved to the process.</p>
+          <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200">
+            <p><strong>You are editing the As-Is flow</strong>: how the work is done today, one column per role. The To-Be map is worked out from this flow and the assessment, so it follows on its own; to change how a step will be done, change its facts in Assessment.</p>
+            <p className="mt-1 text-slate-600">Drag steps, draw connections, add or delete elements, rename by double-clicking, and drag a step into another role's column. Zoom with the buttons or Ctrl and the mouse wheel. Then <strong>Review changes</strong>: you see each change in words before it is saved.</p>
+          </div>
           <React.Suspense fallback={<Spinner label="Opening the editor" />}>
             <BpmnCanvas xml={xml} onReady={a => { api.current = a; }} onChange={() => { setDirty(true); setPlan(null); }} />
           </React.Suspense>
           <div className="flex flex-wrap items-center gap-2">
             <Button onClick={review} disabled={!dirty}>Review changes</Button>
             <Button variant="ghost" onClick={discard} disabled={!dirty}>Discard</Button>
-            <Button variant="ghost" onClick={() => api.current?.fit()}>Fit to screen</Button>
             {editor.saving && <span className="text-sm text-slate-500">Saving…</span>}
           </div>
           {plan && (
