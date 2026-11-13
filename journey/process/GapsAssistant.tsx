@@ -86,10 +86,10 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
 
   return (
     <div className="space-y-5" data-testid="gaps-assistant">
-      <section className="rounded-3xl bg-[#002C4B] p-6 text-white shadow-sm sm:p-7">
+      <section className="rounded-xl bg-[#002C4B] p-6 text-white shadow-sm sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#FFBC03]">Close the gaps</p>
+            <p className="text-xs font-semibold text-[#FFBC03]">Close the gaps</p>
             <h3 className="mt-1.5 font-display text-2xl font-semibold" data-testid="gaps-count">{open.length} {open.length === 1 ? 'question' : 'questions'} to answer</h3>
             <p className="mt-1 text-sm text-slate-200">From {t.raw} raised: duplicates merged and what the model already holds set aside. Each answer updates the model, the assessment and the documents at once.</p>
           </div>
@@ -98,7 +98,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           {(['decides', 'signoff', 'detail'] as QGroup[]).map(g => (
             <button key={g} type="button" onClick={() => { setGroup(group === g ? 'all' : g); setIndex(0); }} aria-pressed={group === g}
-              className={cx('rounded-2xl p-4 text-left ring-1 ring-inset transition', group === g ? 'bg-white text-[#002C4B] ring-white' : 'bg-white/[0.07] ring-white/10 hover:bg-white/[0.12]')}>
+              className={cx('rounded-xl p-4 text-left ring-1 ring-inset transition', group === g ? 'bg-white text-[#002C4B] ring-white' : 'bg-white/[0.07] ring-white/10 hover:bg-white/[0.12]')}>
               <span className="font-display text-2xl font-semibold tabular-nums">{counts(g)}</span>
               <span className="mt-0.5 block text-sm">{GROUP_LABEL[g]}</span>
             </button>
@@ -107,7 +107,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
       </section>
 
       {t.alreadyKnown.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-3.5" data-testid="already-known">
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3.5" data-testid="already-known">
           <p className="text-sm text-emerald-900"><span className="font-semibold">{t.alreadyKnown.length} {t.alreadyKnown.length === 1 ? 'question is' : 'questions are'} already answered by the model</span>, for example: {t.alreadyKnown[0].why}</p>
           {canEdit && <Button variant="secondary" onClick={() => editor.apply(all(...t.alreadyKnown.map(k => (m: ProcessModel) => closeQuestions(m, { questionIds: [k.questionId], answer: `Already recorded: ${k.why}` }))), `Closed ${t.alreadyKnown.length} questions the model already answers`)}>Close them</Button>}
         </div>
@@ -116,7 +116,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
       <QuestionPacks model={model} t={t} branding={branding} canImport={canEdit} onImported={r => setReply(r)} />
 
       {reply && (
-        <section className="rounded-2xl border border-[#B58500]/40 bg-white p-6 shadow-sm" aria-label="Replies read" data-testid="pack-reply">
+        <section className="rounded-xl border border-[#B58500]/40 bg-white p-6" aria-label="Replies read" data-testid="pack-reply">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h4 className="font-display text-lg font-semibold text-slate-900">Replies from {reply.label}</h4>
@@ -140,13 +140,13 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
       </div>
 
       {!item ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="gaps-done">
+        <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="gaps-done">
           <p className="font-display text-lg font-semibold text-slate-900">{open.length === 0 ? 'No open questions left' : 'Nothing left in this view'}</p>
           <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : 'Change the filters to see the rest.'}</p>
         </div>
       ) : (
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" aria-label="Your answer">
+          <section className="rounded-xl border border-slate-200 bg-white p-6" aria-label="Your answer">
             {ai && (
               <div role="tablist" aria-label="Answer" className="mb-5 inline-flex rounded-xl bg-slate-100 p-1">
                 {([['one', 'This question'], ['several', `Several at once (${list.length})`]] as const).map(([id, label]) => (
@@ -167,8 +167,8 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
                 onSkip={() => setIndex((at + 1) % list.length)} onBack={at > 0 ? () => setIndex(at - 1) : undefined} />
             )}
           </section>
-          <div className="rounded-2xl border border-slate-200 bg-white p-2">
-            <p className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500">{scope === 'several' && ai ? 'Questions you can answer now' : 'Questions'}</p>
+          <div className="rounded-xl border border-slate-200 bg-white p-2">
+            <p className="px-3 pb-1 pt-2 text-xs font-semibold text-slate-500">{scope === 'several' && ai ? 'Questions you can answer now' : 'Questions'}</p>
             <ol className="max-h-[34rem] space-y-0.5 overflow-y-auto text-sm" aria-label="Questions">
               {list.map((x, i) => (
                 <li key={x.key}><button type="button" onClick={() => { setIndex(i); setScope('one'); }} className={cx('w-full rounded-lg px-3 py-2 text-left', scope === 'one' && i === at ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-700 hover:bg-slate-50')}>

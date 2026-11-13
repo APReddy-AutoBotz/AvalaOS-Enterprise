@@ -32,7 +32,7 @@ export function SignInPage({ store }: { store: JourneyStore }) {
     <div className="mx-auto mt-10 max-w-sm">
       <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{mode === 'signin' ? 'Sign in' : 'Create an account'}</h1>
       <p className="mt-1 text-sm text-slate-600">Assess a process from its sources through to delivery.</p>
-      <form onSubmit={submit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+      <form onSubmit={submit} className="mt-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6">
         <Field label="Email" type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} />
         <Field label="Password" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required minLength={6} value={password} onChange={e => setPassword(e.target.value)} />
         <ErrorNote message={error} />

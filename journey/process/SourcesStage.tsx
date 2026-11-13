@@ -241,7 +241,7 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
         <div className="max-h-[28rem] space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
           {[...groups].map(([element, changes]) => (
             <fieldset key={element}>
-              <legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">{ELEMENT_LABEL[element as ProposedChange['element']]}</legend>
+              <legend className="text-xs font-semibold text-slate-500">{ELEMENT_LABEL[element as ProposedChange['element']]}</legend>
               <ul className="mt-1 space-y-1">
                 {changes.map(c => (
                   <li key={c.id}>

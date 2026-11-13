@@ -173,7 +173,7 @@ export function TableShell({ head, children, empty }: { head: string[]; children
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
           <tr>{head.map(h => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr>
         </thead>
         <tbody className="divide-y divide-slate-100">{children}</tbody>

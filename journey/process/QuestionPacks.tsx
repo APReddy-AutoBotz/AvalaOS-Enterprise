@@ -52,7 +52,7 @@ export function QuestionPacks({ model, t, branding, onImported, canImport }: { m
   };
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" aria-label="Question packs" data-testid="question-packs">
+    <section className="rounded-xl border border-slate-200 bg-white p-5" aria-label="Question packs" data-testid="question-packs">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="font-display text-base font-semibold text-slate-900">Send questions to the people who know</h4>
         <p className="text-xs text-slate-500">One file per owner. They write answers in the last column and send it back.</p>

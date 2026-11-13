@@ -6,7 +6,7 @@ import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner } from '../ui.tsx';
+import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
 import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
@@ -20,12 +20,7 @@ import { quoteInContext } from '../../domain/workspace/sources.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { SourceRow } from '../store/types.ts';
 
-const TONE = {
-  neutral: 'border-slate-300 bg-slate-100 text-slate-700',
-  draft: 'border-sky-200 bg-sky-50 text-sky-800',
-  approved: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-  changed: 'border-amber-300 bg-amber-50 text-amber-900',
-} as const;
+const TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
 interface Loaded {
   process: ProcessRow;
@@ -90,19 +85,20 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   const current = working ?? approved;
   const canEdit = workspace !== null && workspace.role !== 'viewer';
   const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
+  const hasSteps = Boolean(model && model.steps.length > 0);
 
   return (
     <div>
       <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
         <a href="/processes" className="hover:text-slate-800" onClick={e => { e.preventDefault(); nav.go({ page: 'processes' }); }}>Processes</a>
-        <span className="mx-2" aria-hidden>/</span>
+        <span className="mx-2 text-slate-300" aria-hidden>/</span>
         <span className="text-slate-700">{process.name}</span>
       </nav>
 
-      <div className="mt-2 flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{process.name}</h1>
-          <span data-testid="revision-status" className={cx('mt-2 inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold', TONE[status.tone])}>{status.label}</span>
+          <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
         </div>
         <div className="flex items-center gap-2">
           {canApprove && working && (
@@ -112,22 +108,35 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
         </div>
       </div>
 
-      <nav aria-label="Stages" className="mt-6 border-b border-slate-200">
-        <ul className="-mb-px flex gap-1 overflow-x-auto">
-          {STAGES.map(s => (
-            <li key={s.id}>
-              <a
-                href={`/process/${process.id}/${s.id}`}
-                aria-current={s.id === stage ? 'page' : undefined}
-                onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: process.id, stage: s.id }); }}
-                className={cx('block whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-semibold',
-                  s.id === stage ? 'border-[#FFBC03] text-[#002C4B]' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800')}
-              >
-                {s.label}
-              </a>
-            </li>
-          ))}
-        </ul>
+      {/* The journey: six stages in order. A tick means the stage has what the next ones need;
+          a stage that is still waiting for the process steps is shown quieter, and can still be opened. */}
+      <nav aria-label="Stages" className="mt-5">
+        <ol className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white px-1.5">
+          {STAGES.map((s, i) => {
+            const here = s.id === stage;
+            const done = s.id === 'sources' ? sources.length > 0 : s.id === 'process' ? hasSteps : false;
+            const waiting = !done && !here && s.id !== 'sources' && (s.id === 'process' ? false : !hasSteps);
+            return (
+              <li key={s.id} className="flex items-center">
+                {i > 0 && <svg viewBox="0 0 8 12" className="mx-0.5 h-3 w-2 shrink-0 text-slate-300" aria-hidden><path d="m1.5 1.5 4.5 4.5-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>}
+                <a
+                  href={`/process/${process.id}/${s.id}`}
+                  aria-current={here ? 'page' : undefined}
+                  title={waiting ? 'Needs the process steps first' : undefined}
+                  onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: process.id, stage: s.id }); }}
+                  className={cx('flex items-center gap-2 whitespace-nowrap border-b-2 px-3 py-3 text-sm font-semibold transition-colors',
+                    here ? 'border-[#FFBC03] text-[#002C4B]' : cx('border-transparent hover:text-slate-900', waiting ? 'text-slate-400' : 'text-slate-600'))}
+                >
+                  <span aria-hidden data-n={i + 1} className={cx('flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums', !(done && !here) && 'before:content-[attr(data-n)]',
+                    here ? 'bg-[#002C4B] text-white' : done ? 'bg-emerald-600 text-white' : waiting ? 'bg-slate-100 text-slate-400' : 'bg-slate-200 text-slate-700')}>
+                    {done && !here ? <svg viewBox="0 0 12 12" className="h-3 w-3"><path d="M2.8 6.3 5 8.4l4.2-4.7" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" /></svg> : null}
+                  </span>
+                  {s.label}
+                </a>
+              </li>
+            );
+          })}
+        </ol>
       </nav>
 
       <ErrorNote message={error} />

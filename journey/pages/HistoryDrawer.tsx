@@ -35,7 +35,7 @@ export function HistoryDrawer({ store, processId, onClose }: { store: JourneySto
           {data && data.revisions.length === 0 && <p className="text-slate-600">No revisions yet.</p>}
           {data && data.revisions.length > 0 && (
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Revisions</h3>
+              <h3 className="text-xs font-semibold text-slate-500">Revisions</h3>
               <ol className="mt-2 space-y-3">
                 {data.revisions.map(r => (
                   <li key={r.id} className="rounded-lg border border-slate-200 p-3">
@@ -56,7 +56,7 @@ export function HistoryDrawer({ store, processId, onClose }: { store: JourneySto
           )}
           {data && data.edits.length > 0 && (
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Edits</h3>
+              <h3 className="text-xs font-semibold text-slate-500">Edits</h3>
               <ol className="mt-2 space-y-2">
                 {data.edits.map(e => (
                   <li key={`${e.revisionId}-${e.seq}`} className="border-l-2 border-slate-200 pl-3">
@@ -68,7 +68,7 @@ export function HistoryDrawer({ store, processId, onClose }: { store: JourneySto
             </section>
           )}
           <section>
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Versions</h3>
+            <h3 className="text-xs font-semibold text-slate-500">Versions</h3>
             <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-slate-600">
               <dt>Process model schema version</dt><dd>{PROCESS_MODEL_SCHEMA_VERSION}</dd>
             </dl>

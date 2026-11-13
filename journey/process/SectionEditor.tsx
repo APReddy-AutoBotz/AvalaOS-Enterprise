@@ -31,7 +31,7 @@ export default function SectionEditor({ initial, title, onSave, onCancel, busy, 
       className={cx('rounded-md px-2 py-1 text-xs font-semibold', active ? 'bg-[#002C4B] text-white' : 'text-slate-700 hover:bg-slate-100')}>{label}</button>
   );
   return (
-    <div className="keep rounded-xl border border-[#002C4B]/30 bg-white shadow-sm" data-testid="section-editor">
+    <div className="keep rounded-xl border border-[#002C4B]/30 bg-white" data-testid="section-editor">
       <div className="flex flex-wrap gap-1 border-b border-slate-200 px-2 py-1.5">
         {tool('Bold', editor.isActive('bold'), () => editor.chain().focus().toggleBold().run())}
         {tool('Italic', editor.isActive('italic'), () => editor.chain().focus().toggleItalic().run())}

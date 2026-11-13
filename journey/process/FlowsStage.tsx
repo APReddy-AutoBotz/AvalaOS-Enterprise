@@ -86,7 +86,7 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
       {note && <p role="status" className="rounded-xl bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">{note}</p>}
 
       {view !== 'edit' ? (
-        <figure className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="flow-map">
+        <figure className="rounded-xl border border-slate-200 bg-white p-4" data-testid="flow-map">
           <figcaption className="mb-2 text-sm text-slate-600">{view === 'tobe' ? 'Each step coloured by how it will be done, from the assessment. Change the flow itself on the As-Is map.' : 'How the work flows today, one column per role. Drawn from the process model.'}</figcaption>
           <div className={cx(full ? 'max-h-[75vh] overflow-auto' : '[&_svg]:h-auto [&_svg]:max-w-full')} dangerouslySetInnerHTML={{ __html: pic.svg }} />
         </figure>
@@ -105,7 +105,7 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
             {editor.saving && <span className="text-sm text-slate-500">Saving…</span>}
           </div>
           {plan && (
-            <section aria-label="Changes to save" className="rounded-2xl border border-[#002C4B]/20 bg-white p-5 shadow-sm" data-testid="flow-changes">
+            <section aria-label="Changes to save" className="rounded-xl border border-[#002C4B]/20 bg-white p-5" data-testid="flow-changes">
               <h3 className="font-display text-base font-semibold text-slate-900">{plan.changes.length ? `${plan.changes.length} ${plan.changes.length === 1 ? 'change' : 'changes'} to the process` : 'No changes to the process'}</h3>
               {plan.changes.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-800">{plan.changes.map((c, i) => <li key={i}>{c}</li>)}</ul>}
               {plan.warnings.length > 0 && <ul className="mt-3 space-y-1 text-sm text-amber-900">{plan.warnings.map((w, i) => <li key={i}>⚠ {w}</li>)}</ul>}

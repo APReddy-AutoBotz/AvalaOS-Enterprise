@@ -17,16 +17,10 @@ import type { DocInput } from '../../domain/docs/common.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { coverage, deriveProposals, type ProposalType } from '../../domain/workitems/derive.ts';
 import { editProposal, keepMine, ProposalError, reconcileProposals, rejectProposal, restoreProposal, setSelected, takeUpdate, type Proposal, type ProposalRow } from '../../domain/workitems/register.ts';
-import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
+import { Button, cx, ErrorNote, messageOf, ReqCode, Spinner, Tag, TypeGlyph, WORK_TYPE } from '../ui.tsx';
+import { splitStory } from '../../domain/workitems/board.ts';
 import { BoardError, validateProjectName, type Project } from '../../domain/workitems/board.ts';
 
-const TYPE: Record<ProposalType, { label: string; cls: string }> = {
-  epic: { label: 'Epic', cls: 'bg-violet-50 text-violet-800 ring-violet-200' },
-  story: { label: 'Story', cls: 'bg-sky-50 text-sky-800 ring-sky-200' },
-  task: { label: 'Task', cls: 'bg-slate-50 text-slate-700 ring-slate-200' },
-  spike: { label: 'Spike', cls: 'bg-amber-50 text-amber-900 ring-amber-200' },
-  decision: { label: 'Decision', cls: 'bg-rose-50 text-rose-800 ring-rose-200' },
-};
 type Row = ProposalRow;
 const plain = ({ sourceRemoved: _s, derivedHash: _h, needsReview: _n, derived: _d, ...p }: ProposalRow): Proposal => p;
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
@@ -84,46 +78,53 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
     store.saveProposals(processId, next).then(() => setStored(cur => (cur ?? []).map(x => next.find(n => n.key === x.key) ?? x))).catch(e => setError(messageOf(e)));
   };
 
-  const item = (r: Row, depth: number): React.ReactNode => {
+  // One panel per epic: the epic is the heading row, the work under it the rows below, indented by level.
+  const rowsOf = (r: Row, depth: number): React.ReactNode => {
     if (!shown(r) && !kids(r.key).some(shown)) return null;
     return (
-      <li key={r.key} className={cx(depth > 0 && 'ml-6 border-l border-slate-200 pl-4')}>
-        <ProposalCard r={r} canEdit={canEdit} open={open === r.key} onOpen={() => setOpen(open === r.key ? null : r.key)} onSave={save} />
-        {kids(r.key).length > 0 && <ul className="mt-2 space-y-2">{kids(r.key).map(k => item(k, depth + 1))}</ul>}
-      </li>
+      <React.Fragment key={r.key}>
+        <li className={cx(depth > 0 && 'border-t border-slate-100')} style={depth > 1 ? { paddingLeft: `${(depth - 1) * 1.75}rem` } : undefined}>
+          <ProposalCard r={r} canEdit={canEdit} head={depth === 0 && r.type === 'epic'} open={open === r.key} onOpen={() => setOpen(open === r.key ? null : r.key)} onSave={save} />
+        </li>
+        {kids(r.key).map(k => rowsOf(k, depth + 1))}
+      </React.Fragment>
     );
+  };
+  const panel = (r: Row) => {
+    const body = rowsOf(r, 0);
+    return body ? <ul key={r.key} className="overflow-hidden rounded-xl border border-slate-200 bg-white">{body}</ul> : null;
   };
 
   return (
     <div className="space-y-5 pb-24" data-testid="work-items">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <div>
+        <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
           <div className="max-w-2xl">
             <h3 className="font-display text-lg font-semibold text-slate-900">Proposed work items</h3>
-            <p className="mt-1 text-sm leading-6 text-slate-600">Worked out from the requirements, the automation units and the open questions: an epic per automation unit, a story per requirement, set-up tasks per application, and a decision or spike for each question that blocks the work. Review each one, then select what goes to the board. Nothing is assigned, estimated or dated for you.</p>
+            <p className="mt-1 text-sm leading-6 text-slate-600">Worked out from the requirements, the automation units and the open questions. Review each one, then select what goes to the board. Nothing is assigned, estimated or dated for you.</p>
           </div>
-          <dl className="grid grid-cols-5 gap-3 text-center text-xs" data-testid="proposal-counts">
-            {(['epic', 'story', 'task', 'spike', 'decision'] as ProposalType[]).map(t => <div key={t}><dt className="text-slate-500">{t === 'story' ? 'Stories' : `${TYPE[t].label}s`}</dt><dd className="font-display text-lg font-semibold text-slate-900">{count(t)}</dd></div>)}
+          <dl className="flex flex-wrap gap-x-5 gap-y-1 text-sm" data-testid="proposal-counts">
+            {(['epic', 'story', 'task', 'spike', 'decision'] as ProposalType[]).filter(t => count(t) > 0).map(t => <div key={t} className="flex items-center gap-1.5"><TypeGlyph type={t} /><dd className="font-semibold tabular-nums text-slate-900">{count(t)}</dd><dt className="text-slate-600">{count(t) === 1 ? WORK_TYPE[t].label : WORK_TYPE[t].plural}</dt></div>)}
           </dl>
         </div>
         {derived.cov.notPlanned.length > 0 && (
-          <details className="mt-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="not-planned">
+          <details className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="not-planned">
             <summary className="cursor-pointer font-semibold">{derived.cov.notPlanned.length} {derived.cov.notPlanned.length === 1 ? 'requirement is' : 'requirements are'} not planned yet</summary>
-            <ul className="mt-2 space-y-1">{derived.cov.notPlanned.map(n => <li key={n.code}><span className="font-mono text-xs font-semibold">{n.code}</span> {n.title}: {n.reason}</li>)}</ul>
+            <ul className="mt-2 space-y-1.5">{derived.cov.notPlanned.map(n => <li key={n.code}><ReqCode>{n.code}</ReqCode> {n.title}: {n.reason}</li>)}</ul>
           </details>
         )}
       </div>
       <ErrorNote message={error} />
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Show" className="inline-flex rounded-lg bg-slate-100 p-0.5 text-sm">
+        <div role="tablist" aria-label="Show" className="inline-flex rounded-lg bg-slate-200/70 p-0.5 text-sm">
           {([['all', 'All'], ['selected', `Selected (${selected.length})`], ['rejected', `Rejected (${rows.filter(r => r.state === 'rejected').length})`]] as const).map(([id, label]) =>
             <button key={id} role="tab" aria-selected={filter === id} onClick={() => setFilter(id)} className={cx('rounded-md px-3 py-1 font-semibold', filter === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{label}</button>)}
         </div>
         {canEdit && <div className="flex gap-2 text-sm"><Button variant="ghost" onClick={() => selectAll(rows, true)}>Select all</Button><Button variant="ghost" onClick={() => selectAll(rows, false)}>Clear selection</Button></div>}
       </div>
-      {epics.length > 0 && <section aria-label="Epics"><ul className="space-y-3">{epics.map(e => item(e, 0))}</ul></section>}
-      {loose.length > 0 && <section aria-label="Set-up and decisions"><h4 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Set-up, spikes and decisions</h4><ul className="space-y-2">{loose.map(e => item(e, 0))}</ul></section>}
-      {!rows.length && <p className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">No work items yet: they come once the assessment recommends automating a step.</p>}
+      {epics.length > 0 && <section aria-label="Epics" className="space-y-3">{epics.map(panel)}</section>}
+      {loose.length > 0 && <section aria-label="Set-up and decisions"><h4 className="mb-2 text-[13px] font-semibold text-slate-700">Not under an epic</h4><div className="space-y-2">{loose.map(panel)}</div></section>}
+      {!rows.length && <p className="rounded-xl border border-dashed border-slate-300 p-8 text-center text-sm text-slate-600">No work items yet: they come once the assessment recommends automating a step.</p>}
       {canEdit && <ConfirmPanel store={store} processId={processId} workspaceId={workspaceId} selected={selected} onDone={load} onOpenBoard={onOpenBoard} />}
     </div>
   );
@@ -154,7 +155,7 @@ function ConfirmPanel({ store, processId, workspaceId, selected, onDone, onOpenB
   if (!projects) return null;
   const choice = projects.length ? projectId : '__new';
   return (
-    <div className="sticky bottom-4 z-10 rounded-2xl border border-[#002C4B]/20 bg-white/95 p-4 shadow-lg backdrop-blur" data-testid="confirm-panel">
+    <div className="sticky bottom-4 z-10 rounded-xl border border-slate-300 bg-white px-4 py-3 shadow-[0_10px_30px_-8px_rgba(15,23,42,0.25)]" data-testid="confirm-panel">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-sm font-semibold text-slate-900">{selected.length} selected</span>
         <label className="flex items-center gap-2 text-sm text-slate-600">to
@@ -172,7 +173,7 @@ function ConfirmPanel({ store, processId, workspaceId, selected, onDone, onOpenB
   );
 }
 
-function ProposalCard({ r, canEdit, open, onOpen, onSave }: { r: Row; canEdit: boolean; open: boolean; onOpen: () => void; onSave: (p: Proposal) => Promise<void> }) {
+function ProposalCard({ r, canEdit, head, open, onOpen, onSave }: { r: Row; canEdit: boolean; head: boolean; open: boolean; onOpen: () => void; onSave: (p: Proposal) => Promise<void> }) {
   const [title, setTitle] = React.useState(r.title);
   const [description, setDescription] = React.useState(r.description);
   const [criteria, setCriteria] = React.useState(r.acceptance);
@@ -181,34 +182,37 @@ function ProposalCard({ r, canEdit, open, onOpen, onSave }: { r: Row; canEdit: b
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => { setTitle(r.title); setDescription(r.description); setCriteria(r.acceptance); }, [r.title, r.description, r.acceptance]);
   const locked = r.state === 'confirmed';
+  const story = r.type === 'story' ? splitStory(r.description).story : null;
   const run = async (f: () => Proposal) => { setError(null); try { await onSave(f()); setRejecting(false); } catch (e) { setError(e instanceof ProposalError ? e.message : messageOf(e)); } };
   return (
-    <div className={cx('rounded-xl border bg-white p-3.5 shadow-sm', r.state === 'selected' ? 'border-[#002C4B]/40 ring-1 ring-[#002C4B]/20' : 'border-slate-200', r.state === 'rejected' && 'opacity-60')} data-testid="proposal" data-type={r.type}>
+    <div className={cx('relative px-4 py-3', head && 'bg-slate-50/70', r.state === 'selected' && 'bg-[#F1F6FB]', r.state === 'rejected' && 'opacity-60')} data-testid="proposal" data-type={r.type}>
+      {r.state === 'selected' && <span className="absolute inset-y-0 left-0 w-0.5 bg-[#002C4B]" aria-hidden />}
       <div className="flex items-start gap-3">
-        {canEdit && !locked && r.state !== 'rejected' && <input type="checkbox" className="mt-1 h-4 w-4 accent-[#002C4B]" aria-label={`Select ${r.title}`} checked={r.state === 'selected'} onChange={e => run(() => setSelected(plain(r), e.target.checked))} />}
+        {canEdit && !locked && r.state !== 'rejected' ? <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-[#002C4B]" aria-label={`Select ${r.title}`} checked={r.state === 'selected'} onChange={e => run(() => setSelected(plain(r), e.target.checked))} /> : <span className="w-4 shrink-0" aria-hidden />}
+        <span className="mt-0.5" title={WORK_TYPE[r.type].label}><TypeGlyph type={r.type} /></span>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={cx('rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset', TYPE[r.type].cls)}>{TYPE[r.type].label}</span>
-            <button type="button" onClick={onOpen} className="text-left text-sm font-semibold text-slate-900 hover:underline" aria-expanded={open}>{r.title}</button>
-            {r.edited && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold text-sky-800">Edited</span>}
-            {r.needsReview && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900" data-testid="proposal-review">Needs review</span>}
-            {r.sourceRemoved && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Source removed</span>}
-            {locked && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">On the board</span>}
-            {r.state === 'rejected' && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700" data-testid="rejected-reason">Rejected: {r.rejectedReason}</span>}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <button type="button" onClick={onOpen} className={cx('text-left text-sm text-slate-900 hover:underline', head ? 'font-semibold' : 'font-medium')} aria-expanded={open}>{r.title}</button>
+            {r.edited && <Tag tone="info">Edited</Tag>}
+            {r.needsReview && <Tag tone="warn" data-testid="proposal-review">Needs review</Tag>}
+            {r.sourceRemoved && <Tag tone="warn">Source removed</Tag>}
+            {locked && <Tag tone="ok">On the board</Tag>}
+            {r.state === 'rejected' && <Tag data-testid="rejected-reason" className="whitespace-normal">Rejected: {r.rejectedReason}</Tag>}
           </div>
-          {r.type === 'story' && /^As (the|a|an) /.test(r.description) && <p className="mt-1 text-sm italic leading-6 text-slate-700" data-testid="story-line">{r.description.split('\n')[0]}</p>}
-          <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-            {r.requirements.slice(0, 6).map(c => <span key={c} className="rounded bg-slate-100 px-1.5 py-0.5 font-mono font-semibold text-slate-700">{c}</span>)}
+          {story && <p className="mt-1 max-w-4xl text-[13px] leading-5 text-slate-600" data-testid="story-line">{story}</p>}
+          <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-slate-500">
+            <span>{WORK_TYPE[r.type].label}</span>
+            {r.requirements.slice(0, 6).map(c => <React.Fragment key={c}><ReqCode>{c}</ReqCode></React.Fragment>)}
             {r.requirements.length > 6 && <span>+{r.requirements.length - 6}</span>}
-            <span>{r.acceptance.length} acceptance criteria · Unassigned · Not estimated · No date</span>
+            <span>{r.acceptance.length} acceptance criteria</span>
           </p>
         </div>
         {canEdit && !locked && (r.state === 'rejected'
           ? <button type="button" className="text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => run(() => restoreProposal(plain(r)))}>Restore</button>
-          : <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => { setRejecting(!rejecting); }}>Reject</button>)}
+          : <button type="button" className="text-xs text-slate-500 hover:text-slate-900 hover:underline" onClick={() => { setRejecting(!rejecting); }}>Reject</button>)}
       </div>
       {r.needsReview && r.derived && !locked && (
-        <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-200">
+        <div className="ml-[3.75rem] mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-200">
           <p><span className="font-semibold">The process changed since you edited this item.</span> Worked out again, it would read:</p>
           <p className="mt-1 font-semibold text-slate-900">{r.derived.title}</p>
           <p className="mt-0.5 whitespace-pre-line text-xs text-slate-700">{r.derived.description}</p>
@@ -216,13 +220,13 @@ function ProposalCard({ r, canEdit, open, onOpen, onSave }: { r: Row; canEdit: b
         </div>
       )}
       {rejecting && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        <div className="ml-[3.75rem] mt-3 flex flex-wrap items-center gap-2">
           <input aria-label={`Why reject ${r.title}`} placeholder="Why is it not needed?" value={reason} onChange={e => setReason(e.target.value)} className={cx(input, 'max-w-md flex-1')} />
           <Button variant="secondary" onClick={() => run(() => rejectProposal(plain(r), reason))}>Reject</Button>
         </div>
       )}
       {open && (
-        <div className="mt-3 space-y-3 border-t border-slate-100 pt-3" data-testid="proposal-detail">
+        <div className="ml-[3.75rem] mt-3 max-w-4xl space-y-3 border-t border-slate-200 pt-3" data-testid="proposal-detail">
           <label className="grid gap-1 text-xs font-semibold text-slate-700">Title<input aria-label={`Title of ${r.title}`} value={title} disabled={!canEdit || locked} onChange={e => setTitle(e.target.value)} className={input} /></label>
           <label className="grid gap-1 text-xs font-semibold text-slate-700">Description<textarea aria-label={`Description of ${r.title}`} value={description} disabled={!canEdit || locked} rows={Math.min(10, description.split('\n').length + 1)} onChange={e => setDescription(e.target.value)} className={cx(input, 'font-normal')} /></label>
           <div className="grid gap-1.5">

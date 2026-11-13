@@ -84,7 +84,7 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
   const custom = (c: DocLayout['custom'][number], level: 1 | 2) => (
     <div key={c.id} className={cx('my-1 rounded-lg border border-dashed border-[#B58500]/50 bg-amber-50/40 p-2', level === 2 && 'ml-6')} data-testid="layout-custom">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-[#8a6500]">Your section</span>
+        <span className="text-[11px] font-semibold text-[#8a6500]">Your section</span>
         <input aria-label="Title of your section" value={c.title} disabled={!isAdmin} placeholder="Title" onChange={e => setCustom(c.id, { title: e.target.value })} className={cx(input, 'flex-1')} />
         {isAdmin && <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => change({ ...draft, custom: draft.custom.filter(x => x.id !== c.id) })}>Remove</button>}
       </div>
@@ -94,7 +94,7 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
   const levelOf = (n: string) => (n === 'start' || !n.includes('.') ? 1 : 2) as 1 | 2;
 
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm" data-testid="document-sections">
+    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="document-sections">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-lg font-semibold text-slate-900">Document sections</h2>

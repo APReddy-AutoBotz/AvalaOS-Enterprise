@@ -21,8 +21,8 @@ const GRID: Quadrant[][] = [['quick_win', 'major_project'], ['fill_in', 'not_now
 
 function Card({ title, children, testid }: { title: string; children: React.ReactNode; testid?: string }) {
   return (
-    <div data-testid={testid} className="flex flex-col rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{title}</p>
+    <div data-testid={testid} className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+      <p className="text-xs font-semibold text-slate-500">{title}</p>
       {children}
     </div>
   );
@@ -52,7 +52,7 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
           <ul className="mt-3 space-y-1.5 text-sm leading-6 text-slate-700">{p.readiness.reasons.map(r => <li key={r}>{r}</li>)}</ul>
           {p.readiness.open.length > 0 && (
             <div className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">
-              <p className="font-semibold uppercase tracking-wider text-amber-700">Not confirmed yet</p>
+              <p className="font-semibold text-amber-700">Not confirmed yet</p>
               <ul className="mt-1 space-y-0.5">{p.readiness.open.map(o => <li key={o}>{o}</li>)}</ul>
             </div>
           )}
@@ -115,9 +115,9 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
       </div>
 
       {p.nextInputs.length > 0 && (
-        <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5" data-testid="next-inputs">
+        <div className="mt-4 rounded-xl border border-slate-200 bg-white p-5" data-testid="next-inputs">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">What would sharpen this most</p>
+            <p className="text-xs font-semibold text-slate-500">What would sharpen this most</p>
             <button type="button" onClick={onInputs} className="text-sm font-semibold text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4">Open the inputs</button>
           </div>
           <ol className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -134,15 +134,15 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
       {(p.standardPath.computable || showFocus) && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2" data-testid="where-to-start">
           {p.standardPath.computable && (
-            <div className={cx('rounded-2xl border p-5', p.standardPath.value!.caution ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white')}>
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Start with the standard path</p>
+            <div className={cx('rounded-xl border p-5', p.standardPath.value!.caution ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white')}>
+              <p className="text-xs font-semibold text-slate-500">Start with the standard path</p>
               <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-slate-200" aria-hidden><div className="bg-[#002C4B]" style={{ width: `${p.standardPath.value!.share * 100}%` }} /></div>
               <p className="mt-2 text-sm leading-6 text-slate-700">{p.standardPath.value!.text}</p>
             </div>
           )}
           {showFocus && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Start with these steps</p>
+            <div className="rounded-xl border border-slate-200 bg-white p-5">
+              <p className="text-xs font-semibold text-slate-500">Start with these steps</p>
               <p className="mt-2 text-sm leading-6 text-slate-700"><span className="font-semibold text-slate-900">{p.focus.value!.stepIds.length} of the {p.focus.value!.of} steps to automate</span> carry {Math.round(p.focus.value!.share * 100)}% of the time automation could take.</p>
               <ul className="mt-2 flex flex-wrap gap-1.5">{p.focus.value!.stepIds.map(id => <li key={id}><button type="button" onClick={() => onOpenStep(id)} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-800 hover:bg-slate-200">{nameOf(id)}</button></li>)}</ul>
             </div>

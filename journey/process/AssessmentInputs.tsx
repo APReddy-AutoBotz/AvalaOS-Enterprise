@@ -54,7 +54,7 @@ function ProfileField({ label, hint, status, quote, children, from, candidates, 
   /** Figures from the sources that could fill it, when there is more than one. */ candidates?: Metric[]; onChoose?: (id: string) => void;
 }) {
   return (
-    <div className={cx('rounded-2xl border bg-white p-4', status === 'unknown' ? 'border-amber-200' : 'border-slate-200')} data-testid="profile-field">
+    <div className={cx('rounded-xl border bg-white p-4', status === 'unknown' ? 'border-amber-200' : 'border-slate-200')} data-testid="profile-field">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-semibold text-slate-900">{label}</p>
         <StatusBadge status={status} />
@@ -121,7 +121,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
 
   return (
     <div className="space-y-6" data-testid="assessment-inputs">
-      <section aria-label="Completeness" className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-7">
+      <section aria-label="Completeness" className="rounded-xl border border-slate-200 bg-white p-6 sm:p-7">
         <div className="flex flex-wrap items-start justify-between gap-5">
           <div className="max-w-2xl">
             <h3 className="font-display text-xl font-semibold text-slate-900">What the assessment is calculated from</h3>
@@ -186,10 +186,10 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
       <section aria-label="Applications">
         <h3 className="font-display text-base font-semibold text-slate-900">Applications</h3>
         <p className="text-sm text-slate-500">Where no API is confirmed, the assessment plans on rule-based RPA through the screens, unless robots are not allowed on them.</p>
-        {model.systems.length === 0 ? <p className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">No applications yet. Add them in the Process stage.</p> : (
-          <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {model.systems.length === 0 ? <p className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-5 text-sm text-slate-500">No applications yet. Add them in the Process stage.</p> : (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-500">
                 <tr>{['Application', 'API for this work', 'Robots allowed on screens', 'Screens stable', 'Remote desktop', 'Used in'].map(h => <th key={h} className="px-4 py-2.5 font-semibold">{h}</th>)}</tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -234,15 +234,15 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
           </div>
         </div>
         {steps.length === 0 ? (
-          <div className="mt-3 rounded-2xl border border-dashed border-slate-300 bg-white p-6" data-testid="no-steps">
+          <div className="mt-3 rounded-xl border border-dashed border-slate-300 bg-white p-6" data-testid="no-steps">
             <p className="text-sm font-semibold text-slate-900">No steps yet</p>
             <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Upload sources or add steps in the Process stage for a step-by-step result. If you only know the process as a whole, assess it as one step now and split it later.</p>
             {canEdit && <Button className="mt-3" onClick={() => editor.apply(m => addStep(m, { step: { name: model.meta.name, taskType: 'user' } }), 'Assess the process as one step')}>Assess the process as one step</Button>}
           </div>
         ) : (
-          <div className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="mt-3 overflow-x-auto rounded-xl border border-slate-200 bg-white">
             <table className="w-full min-w-[980px] text-left text-sm">
-              <thead className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              <thead className="border-b border-slate-200 bg-slate-50/80 text-xs font-semibold text-slate-500">
                 <tr>
                   <th className="px-3 py-2.5 font-semibold">#</th>
                   <th className="px-3 py-2.5 font-semibold">Step</th>

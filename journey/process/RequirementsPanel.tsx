@@ -58,7 +58,7 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
   const review = requirements.filter(r => r.needsReview).length;
   const steps = (ids: string[]) => ids.map(id => model.steps.find(s => s.id === id)?.name).filter(Boolean).join(', ');
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Requirements" data-testid="requirements-panel">
+    <section className="rounded-xl border border-slate-200 bg-white" aria-label="Requirements" data-testid="requirements-panel">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full flex-wrap items-center justify-between gap-3 px-5 py-4 text-left">
         <span>
           <span className="font-display text-base font-semibold text-slate-900">Requirements register</span>
@@ -82,7 +82,7 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
                       {r.edited && <span className="ml-2 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold text-sky-800">Edited</span>}
                       {r.needsReview && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900" data-testid="req-review">Needs review</span>}
                       {r.state === 'source_removed' && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Source removed</span>}
-                      {r.priority && <span className="ml-2 text-[11px] font-semibold uppercase text-slate-500">{PRIORITY_LABEL[r.priority]}</span>}
+                      {r.priority && <span className="ml-2 text-xs font-semibold text-slate-500">{PRIORITY_LABEL[r.priority]}</span>}
                     </p>
                     <p className="mt-0.5 text-sm text-slate-700">{r.statement}</p>
                     <p className="mt-1 text-xs text-slate-500">{r.acceptance.length} acceptance {r.acceptance.length === 1 ? 'criterion' : 'criteria'}{r.stepIds.length ? ` · ${steps(r.stepIds)}` : ''}{r.traces.length ? ` · serves ${r.traces.join(', ')}` : ''}{r.gaps.length ? ` · ${r.gaps.length} open` : ''}</p>
