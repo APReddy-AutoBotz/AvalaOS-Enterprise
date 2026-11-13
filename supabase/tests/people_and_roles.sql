@@ -13,6 +13,8 @@ begin
   -- Made as the dashboard makes them (invited_at, confirmed), since sign-up is by invitation.
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (dev_u, 'd-' || dev_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
+  -- Organizations are the platform owner's to create; with no owner listed, as in a new deployment, the test user may.
+  delete from app_private.platform_owners;
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   ws := (public.create_organization('People test', 'AP') ->> 'workspaceId')::uuid;
