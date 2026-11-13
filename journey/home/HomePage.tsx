@@ -77,9 +77,10 @@ function AssessPanel() {
         <p className="text-xs font-semibold text-slate-500">Recommended approach</p>
         <p className="mt-1 font-display text-2xl font-semibold text-slate-900">Rule-based automation</p>
         <dl className="mt-4 space-y-3 text-sm">
-          <div>
-            <div className="flex justify-between"><dt className="text-slate-600">Ease of implementation</dt><dd className="font-semibold tabular-nums text-slate-900">82 of 100</dd></div>
-            <div className="mt-1.5 h-2 rounded-full bg-slate-100"><div className="home-grow h-full rounded-full" style={{ ...d(2.6), width: '82%', background: NAVY }} /></div>
+          <div className="flex flex-wrap justify-between">
+            <dt className="text-slate-600">Ease of implementation</dt>
+            <dd className="font-semibold tabular-nums text-slate-900">82 of 100</dd>
+            <dd aria-hidden="true" className="mt-1.5 h-2 basis-full rounded-full bg-slate-100"><div className="home-grow h-full rounded-full" style={{ ...d(2.6), width: '82%', background: NAVY }} /></dd>
           </div>
           <div className="flex justify-between"><dt className="text-slate-600">Value</dt><dd className="font-semibold text-slate-900">Up to 192 hours a year</dd></div>
           <div className="flex justify-between"><dt className="text-slate-600">Readiness</dt><dd className="font-semibold text-emerald-800">Ready</dd></div>

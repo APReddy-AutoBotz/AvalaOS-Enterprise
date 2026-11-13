@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 import { shot } from './helpers.ts';
 
-test('homepage: the five stages can be picked, the demo paused, and and it can be paused', async ({ page }) => {
+test('homepage: the five stages can be picked and the demo paused', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Evaluate before you automate.');
   await expect(page.getByRole('link', { name: 'Sign in' }).first()).toHaveAttribute('href', '/signin');
@@ -22,7 +22,6 @@ test('homepage: the five stages can be picked, the demo paused, and and it can b
   const pause = page.getByRole('button', { name: 'Pause the demo' });
   await pause.click();
   await expect(page.getByRole('button', { name: 'Play the demo' })).toBeVisible();
-
 });
 
 test('homepage: with reduced motion nothing moves on its own', async ({ page }) => {
