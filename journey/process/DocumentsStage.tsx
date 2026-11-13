@@ -41,8 +41,24 @@ const PRINT_CSS = `
   #document-print { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; border: 0; box-shadow: none; }
   #document-print .no-print { display: none !important; }
   #document-print tr, #document-print .keep { break-inside: avoid; }
+  #document-print .flow-svg { max-height: none !important; overflow: visible !important; border: 0; }
+  #document-print .flow-svg svg { width: 100% !important; height: auto !important; max-height: 250mm; }
   @page { margin: 16mm; }
 }`;
+
+/** A process map: fitted to the page width on screen and in print, with a full-size view to zoom in. */
+function FigureView({ b }: { b: Extract<Block, { kind: 'figure' }> }) {
+  const [full, setFull] = React.useState(false);
+  return (
+    <figure className="flow-figure" data-testid="flow-figure" data-caption={b.caption}>
+      <figcaption className="mb-1.5 flex items-center justify-between gap-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--doc-accent)' }}>{b.caption}</span>
+        <button type="button" className="no-print text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => setFull(!full)} aria-pressed={full}>{full ? 'Fit to width' : 'Full size'}</button>
+      </figcaption>
+      <div className={cx('flow-svg rounded-lg border border-slate-200 bg-white', full ? 'max-h-[80vh] overflow-auto' : '[&_svg]:h-auto [&_svg]:max-w-full')} dangerouslySetInnerHTML={{ __html: b.svg }} />
+    </figure>
+  );
+}
 
 function CellView({ c }: { c: Cell; key?: React.Key }) {
   if (c.missing) return <span className="italic text-amber-700">{c.text}</span>;
@@ -53,12 +69,7 @@ function BlockView({ b }: { b: Block; key?: React.Key }) {
   switch (b.kind) {
     case 'paragraph': return <p className="text-sm leading-7 text-slate-800">{b.text}</p>;
     case 'rich': return <div data-testid="edited-text" className="text-sm leading-7 text-slate-800 [&_h3]:mt-3 [&_h3]:font-semibold [&_h4]:mt-3 [&_h4]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{ __html: b.html }} />;
-    case 'figure': return (
-      <figure className="keep" data-testid="flow-figure" data-caption={b.caption}>
-        <figcaption className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--doc-accent)' }}>{b.caption}</figcaption>
-        <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white" dangerouslySetInnerHTML={{ __html: b.svg }} />
-      </figure>
-    );
+    case 'figure': return <FigureView b={b} />;
     case 'list': return <ul className="list-disc space-y-1 pl-5 text-sm leading-6 text-slate-800">{b.items.map((x, i) => <li key={i}>{x}</li>)}</ul>;
     case 'callout': return <p className={cx('keep rounded-lg px-4 py-2.5 text-sm leading-6', b.tone === 'warning' ? 'bg-amber-50 text-amber-900 ring-1 ring-inset ring-amber-200' : 'bg-slate-50 text-slate-600 ring-1 ring-inset ring-slate-200')}>{b.text}</p>;
     case 'openItem': return <p className="keep flex gap-2 rounded-lg bg-amber-50 px-4 py-2.5 text-sm leading-6 text-amber-900 ring-1 ring-inset ring-amber-200" data-testid="open-item"><span className="font-semibold">Open:</span>{b.item.text}</p>;

@@ -84,7 +84,8 @@ function block(b: Block, s: DocxStyle): (Paragraph | Table)[] {
       const size = b.png ? imageSize(b.png) : null;
       if (!b.png || !size) return [caption(b.caption, s), new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'The map is shown in the app and in the BPMN export.', italics: true, color: GREY })] })];
       const bin = atob(b.png.slice(b.png.indexOf(',') + 1));
-      const scale = Math.min(1, 620 / b.width);
+      // Fits the page: at most the text width and a page's height.
+      const scale = Math.min(1, 620 / b.width, 860 / b.height);
       return [caption(b.caption, s), new Paragraph({ spacing: { after: 160 }, children: [new ImageRun({ type: 'png', data: Uint8Array.from(bin, c => c.charCodeAt(0)), transformation: { width: Math.round(b.width * scale), height: Math.round(b.height * scale) } })] })];
     }
     case 'openItem': return [new Paragraph({ spacing: { before: 80, after: 120 }, shading: { type: ShadingType.CLEAR, fill: 'FEF3C7', color: 'auto' },
