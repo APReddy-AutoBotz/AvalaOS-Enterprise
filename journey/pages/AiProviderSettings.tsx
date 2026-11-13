@@ -102,7 +102,7 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
           {info.needsEndpoint && <Field label={info.endpointLabel ?? 'Endpoint'} value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder={info.endpointPlaceholder} hint={info.endpointHint} autoComplete="off" spellCheck={false} />}
           <Field label="API key" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="new-password" spellCheck={false}
             placeholder={keepsKey ? `Leave empty to keep the key ending ${current!.keyHint}` : 'Paste the key'}
-            hint="Sent once over an encrypted connection and kept encrypted on the server. Avala OS shows only its last four characters." />
+            hint={`${info.keyAdvice ? `${info.keyAdvice} ` : ''}Sent once over an encrypted connection and kept encrypted on the server. Avala OS shows only its last four characters.`} />
           <ErrorNote message={error} />
           <div className="flex flex-wrap gap-2">
             <Button type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save'}</Button>

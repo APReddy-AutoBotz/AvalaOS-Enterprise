@@ -31,6 +31,8 @@ export interface ProviderInfo {
   endpointLabel?: string;
   endpointPlaceholder?: string;
   endpointHint?: string;
+  /** Which key to paste, when the provider has more than one kind. */
+  keyAdvice?: string;
   can: Record<AiNeed, boolean>;
   /** The extraction eval (eval/README.md) has been run with this provider, so workspaces may choose it. */
   checked: boolean;
@@ -67,6 +69,7 @@ export const AI_PROVIDERS: Record<AiProvider, ProviderInfo> = {
     // Claude on Bedrock through InvokeModel with Anthropic's own request body; the key is a long-term Bedrock API key.
     needsEndpoint: true, endpointLabel: 'AWS Region', endpointPlaceholder: 'us-east-1',
     endpointHint: 'The Region where the model is enabled for your AWS account.',
+    keyAdvice: 'Use a long-term Amazon Bedrock API key; short-term keys expire within 12 hours.',
     can: { text: true, vision: true, transcription: false }, checked: false,
   },
 };
