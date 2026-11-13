@@ -15,7 +15,7 @@ const count = (s: string, re: RegExp) => (s.match(re) ?? []).length;
 test('the As-Is map draws every step, event, gateway and flow of the model, one lane per role', () => {
   const f = flowPicture(gold);
   assert.equal(f.drawnFlows, gold.flows.length);
-  assert.equal(count(f.svg, /<rect x="[\d.]+" y="[\d.]+" width="120" height="80" rx="10"/g), gold.steps.length);
+  assert.equal(count(f.svg, /width="150" height="56" rx="9"/g), gold.steps.length);
   assert.equal(count(f.svg, /<circle cx/g), gold.events.length);
   for (const s of gold.steps) assert.ok(f.svg.includes(s.name.split(' ')[0]), s.name);
   assert.ok(f.svg.startsWith('<svg') && f.svg.endsWith('</svg>'));
@@ -28,6 +28,16 @@ test('the To-Be map colours each step by its mode and shows a legend for the mod
   const f = flowPicture(gold, { modes });
   for (const mode of new Set([...modes.values()].map(m => m.mode))) assert.ok(f.svg.includes(MODE_STYLE[mode].label), mode);
   assert.match(flowMermaid(gold, modes), /classDef rpa/);
+});
+
+test('the map is top to bottom: it stays narrow however many steps the process has', () => {
+  const f = flowPicture(gold);
+  const roles = new Set(gold.steps.flatMap(s => s.roleIds)).size + 1;
+  assert.ok(f.width <= roles * 176 * 2 + 120, `width ${f.width}`);
+  assert.ok(f.height > f.width / 2);
+  // Roles with no step get no column.
+  const idle = gold.roles.filter(r => !gold.steps.some(s => s.roleIds.includes(r.id)) && !gold.events.some(e => (e as any).roleId === r.id));
+  for (const r of idle) assert.ok(!f.svg.includes(`>${r.name}<`), r.name);
 });
 
 test('labels are escaped; a model without flows shows steps in order and says the flow is not recorded', () => {
@@ -46,5 +56,5 @@ test('the PDD embeds both maps; Markdown carries them as Mermaid', () => {
   const d = buildPdd({ model: gold, assessment: assessProcess(gold), decisions: emptyDecisions(), sources: [], revision: { label: 'r', state: 'working', date: 'd' } });
   const figs = d.sections.flatMap(s => s.blocks).filter(b => b.kind === 'figure');
   assert.equal(figs.length, 2);
-  assert.match(toMarkdown(d), /```mermaid\nflowchart LR/);
+  assert.match(toMarkdown(d), /```mermaid\nflowchart TB/);
 });
