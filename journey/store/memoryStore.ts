@@ -114,6 +114,8 @@ export function createMemoryStore(): JourneyStore {
       Object.assign(p, people);
       save();
     },
+    // The in-browser store has one person, who is the owner.
+    async canCreateOrganization() { return true; },
     async createOrganization(organizationName, workspaceName) {
       requireMe();
       const w: Workspace = { id: uuid(), name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true };

@@ -103,6 +103,8 @@ export interface JourneyStore {
   cancelInvite(workspaceId: string, email: string): Promise<void>;
   /** Admins only. Membership changes and approvals, newest first. */
   auditLog(workspaceId: string): Promise<AuditEntry[]>;
+  /** Whether the signed-in person may create an organization (only the platform owner, once one is listed). */
+  canCreateOrganization(): Promise<boolean>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
 
   /** The assessment settings of a workspace; the defaults when none are set. */
