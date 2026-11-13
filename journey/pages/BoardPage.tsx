@@ -102,7 +102,8 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const matches = (i: WorkItem) => !q || i.title.toLowerCase().includes(q) || i.requirements.some(c => c.toLowerCase().includes(q)) || TYPE[i.type].label.toLowerCase() === q;
   const lanes = lanesOf(items ?? []);
   const work = (items ?? []).filter(i => i.type !== 'epic');
-  const shown = lanes.map(l => ({ ...l, cards: l.items.filter(matches) })).filter(l => !q || l.cards.length);
+  // Lanes with work come first; an epic with nothing on the board yet is a single line below them.
+  const shown = lanes.map(l => ({ ...l, cards: l.items.filter(matches) })).filter(l => !q || l.cards.length).sort((a, b) => Number(!a.items.length) - Number(!b.items.length));
   const field = 'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
   return (
@@ -149,7 +150,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                 return (
                   <section key={id} aria-label={lane.epic?.title ?? 'Work without an epic'}>
                     <div className="flex items-center gap-2.5 px-1 pb-1.5" data-testid={lane.epic ? 'epic-lane' : 'loose-lane'}>
-                      <button type="button" aria-expanded={!isClosed} aria-label={`${isClosed ? 'Show' : 'Hide'} the items in this lane`} onClick={() => setClosed(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; })} className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700">
+                      <button type="button" disabled={!lane.items.length} aria-expanded={!isClosed} aria-label={`${isClosed ? 'Show' : 'Hide'} the items in this lane`} onClick={() => setClosed(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; })} className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:invisible">
                         <svg viewBox="0 0 12 12" className={cx('h-3 w-3 transition-transform', !isClosed && 'rotate-90')} aria-hidden><path d="m4.2 2.5 3.6 3.5-3.6 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
                       {lane.epic ? <>
@@ -158,7 +159,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                         <StatusLabel status={lane.epic.status} />
                         {changesOf(lane.epic).length > 0 && <ChangedTag />}
                       </> : <span className="text-sm font-semibold text-slate-600">Work without an epic</span>}
-                      {lane.items.length > 0 && <Progress done={lane.done} total={lane.items.length} className="ml-auto" />}
+                      {lane.items.length > 0 ? <Progress done={lane.done} total={lane.items.length} className="ml-auto" /> : <span className="ml-auto whitespace-nowrap text-xs text-slate-500">No work on the board under this epic yet</span>}
                     </div>
                     {!isClosed && parked.length > 0 && (
                       <div className="mb-[3px] flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-900" data-testid="blocked">
@@ -166,7 +167,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                         {parked.map(i => <button key={i.id} type="button" onClick={() => openItem(i.id)} className="rounded-md bg-white px-2 py-1 text-left text-slate-800 ring-1 ring-inset ring-red-200 hover:ring-red-400">{i.title} <span className="text-red-800">({STATUS_LABEL[i.status]})</span></button>)}
                       </div>
                     )}
-                    {!isClosed && (
+                    {!isClosed && lane.items.length > 0 && (
                       <div className={cx(TRACK, 'overflow-hidden rounded-xl')} role="list" aria-label="Columns">
                         {MAIN.map(status => {
                           const col = lane.cards.filter(i => i.status === status);
