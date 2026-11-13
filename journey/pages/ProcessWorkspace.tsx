@@ -12,6 +12,7 @@ import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
 import { SourcesStage } from '../process/SourcesStage.tsx';
 import { AssessmentStage } from '../process/AssessmentStage.tsx';
+import { FlowsStage } from '../process/FlowsStage.tsx';
 import { DocumentsStage } from '../process/DocumentsStage.tsx';
 import { SourceContext } from '../process/widgets.tsx';
 import { quoteInContext } from '../../domain/workspace/sources.ts';
@@ -139,6 +140,8 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           : stage === 'documents' && model && current && model.steps.length > 0
           ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources} approvedRevision={approved ? approved.revNo : null}
               revision={{ label: `Revision ${current.revNo}${current.state === 'working' ? ', working draft' : ''}`, state: current.state === 'approved' ? 'approved' : 'working', date: new Date(current.approvedAt ?? current.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }} />
+          : stage === 'flows' && model && model.steps.length > 0
+          ? <FlowsStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
           : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
@@ -187,7 +190,7 @@ function StagePanel({ stage, model, canEdit, busy, onStart, onGo }: { stage: Sta
     case 'documents':
       return <EmptyState title="No documents yet" action={!hasSteps ? <Button variant="secondary" onClick={() => onGo(model ? 'process' : 'sources')}>{model ? 'Go to Process' : 'Go to Sources'}</Button> : undefined}>The business requirements (BRD), process definition (PDD), functional (FRD) and solution design (SDD) documents are written from the process model and the assessment. They need the process steps first.</EmptyState>;
     case 'flows':
-      return <EmptyState title="No flows yet">The as-is and to-be flows are drawn from the process model as editable BPMN diagrams.</EmptyState>;
+      return <EmptyState title="No flows yet" action={!hasSteps ? <Button variant="secondary" onClick={() => onGo(model ? 'process' : 'sources')}>{model ? 'Go to Process' : 'Go to Sources'}</Button> : undefined}>The As-Is and To-Be maps are drawn from the process steps, and the flow can be edited as a BPMN diagram. They need the process steps first.</EmptyState>;
     case 'work-items':
       return <EmptyState title="No work items yet">Proposed work items come from the approved design, with descriptions, acceptance criteria and links to requirements. You review and select them before they reach the delivery board.</EmptyState>;
   }

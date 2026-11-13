@@ -549,3 +549,101 @@ export function routeException(model: ProcessModel, args: { exceptionId: string;
     e.status = 'user-confirmed';
   });
 }
+
+// ---------------------------------------------------------------- the flow as drawn
+
+/** The flow as a person drew it: nodes (existing by id, new without), the roles of the lanes, and the flows. */
+export interface FlowStructure {
+  roles: { ref: string; id?: string; name: string }[];
+  nodes: { ref: string; id?: string; kind: 'task' | 'gateway' | 'start' | 'end'; name: string; roleRef?: string | null; gatewayType?: 'exclusive' | 'parallel' }[];
+  flows: { id?: string; from: string; to: string; label?: string }[];
+}
+
+/**
+ * Makes the model's flow match a drawing in one edit: new roles, steps, decisions and events are added;
+ * renamed ones renamed; steps moved to another lane get that role first; elements no longer drawn are
+ * removed with every reference to them; flows are replaced by the drawn ones (an existing flow keeps
+ * its id and its exception mark). Everything else about a step (systems, facts, sources) is kept.
+ */
+export function setFlowStructure(model: ProcessModel, spec: FlowStructure): OpResult {
+  return commit(model, m => {
+    const taken = allIds(m);
+    const ref = new Map<string, string>();
+    for (const r of spec.roles) {
+      if (r.id && m.roles.some(x => x.id === r.id)) {
+        const role = m.roles.find(x => x.id === r.id)!;
+        if (r.name.trim() && role.name !== r.name.trim()) { role.name = r.name.trim(); role.status = 'user-confirmed'; }
+        ref.set(r.ref, r.id);
+      } else {
+        const same = m.roles.find(x => x.name.toLowerCase() === r.name.trim().toLowerCase());
+        if (same) { ref.set(r.ref, same.id); continue; }
+        const id = newId(m, 'r', taken); taken.add(id);
+        m.roles.push({ id, name: r.name.trim(), kind: 'person_role', inScope: true, status: 'user-confirmed', sources: [] });
+        ref.set(r.ref, id);
+      }
+    }
+    const drawn = new Set(spec.nodes.filter(n => n.id).map(n => n.id!));
+    // Removed: steps (with their references), decisions and events not in the drawing.
+    for (const st of m.steps.filter(x => !drawn.has(x.id))) {
+      const drop = (ids: string[]) => ids.filter(id => id !== st.id);
+      m.exceptions.forEach(x => { x.stepIds = drop(x.stepIds); });
+      m.painPoints.forEach(n => { n.stepIds = drop(n.stepIds); });
+      m.risks.forEach(n => { n.stepIds = drop(n.stepIds); });
+      m.controls.forEach(n => { n.stepIds = drop(n.stepIds); });
+      m.openQuestions = m.openQuestions.filter(q => !(q.target.kind === 'step' && q.target.id === st.id));
+      m.conflicts = m.conflicts.filter(c => !(c.target.kind === 'step' && c.target.id === st.id));
+      m.meta.metrics.forEach(x => { if (x.appliesTo === st.id) delete x.appliesTo; });
+    }
+    m.steps = m.steps.filter(x => drawn.has(x.id));
+    m.openQuestions = m.openQuestions.filter(q => !(q.target.kind === 'gateway' && !drawn.has(q.target.id!)));
+    m.gateways = m.gateways.filter(x => drawn.has(x.id));
+    m.events = m.events.filter(x => drawn.has(x.id));
+    for (const n of spec.nodes) {
+      const name = n.name.trim();
+      const roleId = n.roleRef === undefined ? undefined : n.roleRef === null ? null : ref.get(n.roleRef) ?? null;
+      if (n.id) {
+        ref.set(n.ref, n.id);
+        const st = m.steps.find(x => x.id === n.id);
+        if (st) {
+          if (name && st.name !== name) { st.name = name; st.status = 'user-confirmed'; }
+          if (roleId !== undefined && (st.roleIds[0] ?? null) !== roleId) {
+            st.roleIds = roleId ? [roleId, ...st.roleIds.filter(r => r !== roleId)] : st.roleIds.slice(1);
+            st.status = 'user-confirmed';
+          }
+          continue;
+        }
+        const g = m.gateways.find(x => x.id === n.id);
+        if (g) { if (name && g.question !== name) { g.question = name; g.status = 'user-confirmed'; } continue; }
+        const e = m.events.find(x => x.id === n.id);
+        if (e && name && e.name !== name) { e.name = name; e.status = 'user-confirmed'; }
+        continue;
+      }
+      if (!name) throw new ModelOpError('EMPTY', 'Name every new step, decision and event before saving.');
+      if (n.kind === 'task') {
+        const id = newId(m, 's', taken); taken.add(id);
+        m.steps.push({ id, name, description: '', roleIds: roleId ? [roleId] : [], systemIds: [], taskType: 'user', inputs: [], outputs: [], ruleIds: [], exceptionIds: [], status: 'user-confirmed', sources: [] });
+        ref.set(n.ref, id);
+      } else if (n.kind === 'gateway') {
+        const id = newId(m, 'g', taken); taken.add(id);
+        m.gateways.push({ id, type: n.gatewayType ?? 'exclusive', question: name, status: 'user-confirmed', sources: [] });
+        ref.set(n.ref, id);
+      } else {
+        const id = newId(m, 'ev', taken); taken.add(id);
+        m.events.push({ id, kind: n.kind, name, status: 'user-confirmed', sources: [] });
+        ref.set(n.ref, id);
+      }
+    }
+    const old = m.flows;
+    m.flows = [];
+    for (const f of spec.flows) {
+      const from = ref.get(f.from) ?? f.from, to = ref.get(f.to) ?? f.to;
+      const prev = (f.id && old.find(x => x.id === f.id)) || old.find(x => x.from === from && x.to === to);
+      const id = prev && !m.flows.some(x => x.id === prev.id) ? prev.id : newId(m, 'f', taken);
+      taken.add(id);
+      const flow: Flow = { id, from, to };
+      if (f.label?.trim()) flow.label = f.label.trim();
+      if (prev?.isException) flow.isException = true;
+      m.flows.push(flow);
+    }
+  });
+}

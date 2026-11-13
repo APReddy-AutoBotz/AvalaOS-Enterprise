@@ -24,6 +24,7 @@
     "@tiptap/pm": "^2.11.5",
     "@tiptap/react": "^2.11.5",
     "@tiptap/starter-kit": "^2.11.5",
+    "bpmn-js": "^18.0.0",
     "docx": "^9.5.1",
     "dompurify": "^3.4.17",
     "js-yaml": "4.3.2",
