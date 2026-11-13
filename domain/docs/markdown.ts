@@ -10,6 +10,7 @@ function block(b: Block): string {
     case 'list': return b.items.map(i => `- ${i}`).join('\n');
     case 'callout': return `> ${b.tone === 'warning' ? '**Caution.** ' : ''}${b.text}`;
     case 'openItem': return `> **Open:** ${b.item.text}`;
+    case 'figure': return `*${b.caption}*\n\n\`\`\`mermaid\n${b.mermaid}\n\`\`\``;
     case 'keyValue': return [`| ${esc(b.caption)} | |`, '| --- | --- |', ...b.rows.map(r => `| ${esc(r.key)} | ${c(r.value)} |`)].join('\n');
     case 'table': return b.rows.length
       ? [`*${esc(b.caption)}*`, '', `| ${b.columns.map(esc).join(' | ')} |`, `| ${b.columns.map(() => '---').join(' | ')} |`, ...b.rows.map(r => `| ${r.map(c).join(' | ')} |`)].join('\n')
