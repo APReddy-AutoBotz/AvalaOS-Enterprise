@@ -34,7 +34,7 @@ const TOUR: { id: string; name: string; line: string; caption: string; shots: [S
     caption: 'Requirements, process, functional and solution documents and the flow maps are built from the same confirmed model, and download as Word.',
     shots: [
       { src: 'document', origin: '55% 60%', alt: 'The Documents screen: the process definition document with its contents list and Word download' },
-      { src: 'flows', origin: '30% 70%', alt: 'The Flows screen: the To-Be map drawn from the process model, one column per role' },
+      { src: 'flows', origin: '30% 70%', alt: 'The Flows screen: the To-Be map, each step coloured by how it will be done, one column per role' },
     ],
   },
   {
@@ -42,7 +42,7 @@ const TOUR: { id: string; name: string; line: string; caption: string; shots: [S
     caption: 'Epics, stories and tasks are proposed with acceptance criteria and requirement links. A person chooses what goes to the board.',
     shots: [
       { src: 'work-items', origin: '35% 60%', alt: 'The Work items screen: 6 epics, 15 stories and 23 tasks proposed, each linked to its requirements' },
-      { src: 'board', origin: '25% 40%', alt: 'The Delivery board with the confirmed work items in columns by status' },
+      { src: 'board', origin: '25% 40%', alt: 'The Delivery board part-way through delivery: work items in six status columns, grouped by epic' },
     ],
   },
   {
@@ -66,6 +66,10 @@ const CSS = `
 @keyframes tour-fill{to{transform:scaleX(1)}}
 [data-paused="true"] *{animation-play-state:paused !important}
 .shot-frame{border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(15,23,42,.08),0 30px 60px -20px rgba(0,27,47,.35)}
+@media (max-width: 640px){
+  .tour-shot{transform:scale(1.7)}
+  @keyframes tour-zoom{from{transform:scale(1.7)}to{transform:scale(1.9)}}
+}
 @media (prefers-reduced-motion: reduce){
   .tour-a,.tour-b,.tour-fill{animation:none;opacity:1;transform:none}
   .tour-stack{aspect-ratio:auto !important}
@@ -130,7 +134,7 @@ function Tour() {
               <li key={s.id}>
                 <button type="button" aria-current={here ? 'step' : undefined} onClick={() => setStage(i)}
                   className={`w-full rounded-lg px-2 py-2 text-center transition-colors lg:px-3 lg:py-2.5 lg:text-left ${focus} focus-visible:outline-[#002C4B] ${here ? 'bg-white shadow-sm ring-1 ring-slate-200' : 'hover:bg-white/70'}`}>
-                  <span className={`block font-display text-sm font-semibold lg:text-lg ${here ? 'text-[#002C4B]' : 'text-slate-600'}`}>{s.name}</span>
+                  <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-[#002C4B]' : 'text-slate-600'}`}>{s.name}</span>
                   <span className="hidden text-sm text-slate-600 lg:block">{s.line}</span>
                   <span className={`mt-2 block h-1 overflow-hidden rounded-full ${here ? 'bg-slate-200' : 'bg-transparent'}`} aria-hidden="true">
                     {here && <span key={stage} className="tour-fill block h-full rounded-full" style={{ background: AMBER }} onAnimationEnd={() => setStage(n => (n + 1) % TOUR.length)} />}
@@ -165,7 +169,7 @@ const REASONS = [
   {
     title: 'The score is arithmetic, not an opinion',
     text: 'Every step gets a score out of 100 for each approach, worked out from fixed tables you can read. The same facts always give the same ranking. AI reads your sources, but it does not decide, and where rules are enough the answer is “AI unnecessary”.',
-    img: 'reason-score', w: 1700, h: 1020,
+    img: 'reason-score', w: 1700, h: 907,
     alt: 'The step-by-step table: each step with its recommended approach, score, next best approach and whether AI is needed',
   },
   {
@@ -222,7 +226,7 @@ export default function HomePage() {
           </div>
           <div className="lg:-mr-56 xl:-mr-40">
             <div className="shot-frame">
-              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-full" alt="The AvalaOS assessment of a vendor invoice process: API-led integration recommended, 70% of steps fit automation, approaches ranked by score" />
+              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-[170%] max-w-none sm:w-full" alt="The AvalaOS assessment of a vendor invoice process: API-led integration recommended, 70% of steps fit automation, approaches ranked by score" />
             </div>
           </div>
         </section>
@@ -246,12 +250,12 @@ export default function HomePage() {
             <h2 id="why-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Built so you can defend the answer</h2>
             <div className="mt-14 space-y-20">
               {REASONS.map((r, i) => (
-                <div key={r.title} className="grid items-center gap-8 lg:grid-cols-2 lg:gap-16">
-                  <div className={i % 2 ? 'lg:order-2' : ''}>
+                <div key={r.title} className="grid items-center gap-8 lg:grid-cols-5 lg:gap-16">
+                  <div className={`lg:col-span-2 ${i % 2 ? 'lg:order-2' : ''}`}>
                     <h3 className="font-display text-3xl font-semibold tracking-tight text-slate-900">{r.title}</h3>
                     <p className="mt-4 max-w-xl text-lg leading-8 text-slate-700">{r.text}</p>
                   </div>
-                  <div className="shot-frame"><img src={shot(r.img)} width={r.w} height={r.h} loading="lazy" className="block h-auto w-full" alt={r.alt} /></div>
+                  <div className="shot-frame lg:col-span-3"><img src={shot(r.img)} width={r.w} height={r.h} loading="lazy" className="block h-auto w-[160%] max-w-none sm:w-full" alt={r.alt} /></div>
                 </div>
               ))}
             </div>
