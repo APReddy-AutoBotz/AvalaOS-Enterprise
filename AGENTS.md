@@ -38,7 +38,7 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 | Path | What it is |
 | --- | --- |
 | `docs/product-plan.md` | The review and the full plan: target templates (section 4), flow design (5), data model (7), work packages (8) |
-| `App.tsx`, `components/`, `services/` | The existing application, inherited from AvalaOS Core. Being replaced route by route |
+| `components/`, `services/` | What remains of the inherited application: the Delivery board (`components/delivery/`) and what it imports, kept until WP4 rebuilds it in the journey, and `services/assessV2/` (data shapes the Process Model reuses). Everything else inherited was deleted in Nov 2026; recover it from git history if a work package needs it |
 | `services/assessV2/` | Data shapes and interaction-readiness rules that the Process Model reuses |
 | `services/scoringEngine.ts` | Legacy V1 scoring. Do not extend it |
 | `supabase/migrations/` | The live schema, applied to the AvalaOS Enterprise Supabase project. Access is by workspace membership (`admin`, `editor`, `viewer`, plus `can_approve`) |
@@ -109,7 +109,8 @@ npm run dev              # local dev server on port 3000
 - Requirements (WP3.1): `domain/requirements/derive.ts` derives BR (objective, each rule), FR (each step recommended for automation, each human check, each exception) and NFR (each stated control) by rule, wording only from model text; `register.ts` `reconcile` matches them to the stored ones by derivation key (IDs never reused, a person's edit wins, a removed source is marked "source removed"). Stored in the baseline `requirements` table. The FRD (`domain/docs/frd.ts`) and the BRD's business requirements read the register; edits in `journey/process/RequirementsPanel.tsx`. Missing NFR topics are open questions. AI wording of statements is not added yet.
 - SDD (`domain/docs/sdd.ts`): automation units (To-Be steps grouped by approach and main application), integration, data, rules, exceptions, human tasks, security, monitoring, environments, test scenarios from the FRD's acceptance criteria, run and support, an agent section when an agent is used, and open design decisions with options. Technical facts not in the model are open design decisions, never assumed. Shown once a revision is approved; a working draft can be previewed, marked as not for sign-off.
 - Maps (part of WP3.6): `domain/flowchart/svg.ts` draws the As-Is map and the To-Be map (coloured by delivery mode, a dot where a person checks, legend) as SVG from the model with the existing lane layout, plus Mermaid text for Markdown. The PDD embeds both (figure blocks); the Word download gets them as PNG drawn in the browser. A model without flows shows its steps in order with no arrows and raises an open item. The editable BPMN canvas (`bpmn-js`, `elkjs`, `bpmnlint`) needs those dependencies approved.
-- Next (approved Nov 2026: new tables, TipTap, deleting the old app): editable BPMN canvas (needs dependency approval), delete the old app code, editing with TipTap.
+- Legacy retired (Nov 2026): 208 inherited files that nothing in the journey or the Delivery board imports were deleted (the earlier `App.tsx`, Assess V1/V2 screens, Docs Forge and Studio screens not used by the board, govern, admin, enterprise views and their tests), with their `scripts/unit-tests.json` entries.
+- Next (approved Nov 2026: new tables, TipTap): editable BPMN canvas (needs dependency approval), editing with TipTap.
 
 ## Definition of done for a pull request
 
