@@ -2,6 +2,7 @@
 // IDs (BR-001, FR-001, NFR-001) are given once and never reused. A person's edit to the wording,
 // acceptance criteria or priority wins on every regeneration; links always follow the model. A stored
 // requirement whose source is gone is kept, marked "source removed", never deleted.
+import { hashText } from '../docs/edits.ts';
 import { REQ_ORDER, type Acceptance, type DerivedRequirement, type Priority, type ReqCategory, type ReqKind } from './derive.ts';
 
 export interface StoredRequirement {
@@ -24,14 +25,23 @@ export interface StoredRequirement {
   edited: boolean;
   state: 'active' | 'source_removed' | 'retired';
   order: number;
+  /** For an edited requirement: the hash of the derived text it was edited from. */
+  baseHash?: string | null;
 }
-export type Requirement = StoredRequirement;
+export interface Requirement extends StoredRequirement {
+  /** An edited requirement whose derived text changed since the edit. */
+  needsReview?: boolean;
+  derived?: { title: string; statement: string; acceptance: Acceptance[] };
+}
+export const reqHash = (r: { title: string; statement: string; acceptance: Acceptance[] }) => hashText(JSON.stringify([r.title, r.statement, r.acceptance]));
 
 export interface Reconciled { requirements: Requirement[]; changed: StoredRequirement[] }
 
 const pad = (n: number) => String(n).padStart(3, '0');
 const numberOf = (code: string) => Number(code.split('-')[1]) || 0;
-const same = (a: StoredRequirement, b: StoredRequirement) => JSON.stringify(a) === JSON.stringify(b);
+/** The fields kept in storage, in a fixed form, so comparing ignores what is computed on each build. */
+export const persisted = ({ needsReview: _n, derived: _d, ...r }: Requirement): StoredRequirement => ({ ...r, baseHash: r.baseHash ?? null });
+const same = (a: StoredRequirement, b: StoredRequirement) => JSON.stringify(persisted(a)) === JSON.stringify(persisted(b));
 
 export function reconcile(derived: DerivedRequirement[], stored: StoredRequirement[]): Reconciled {
   const byKey = new Map(stored.filter(s => s.key).map(s => [s.key!, s]));
@@ -47,10 +57,15 @@ export function reconcile(derived: DerivedRequirement[], stored: StoredRequireme
     const old = byKey.get(d.key);
     const code = codeOfKey.get(d.key)!;
     const links = { stepIds: d.stepIds, ruleIds: d.ruleIds, exceptionIds: d.exceptionIds, traces: d.traces.map(k => codeOfKey.get(k)).filter((x): x is string => Boolean(x)), gaps: d.gaps };
-    const text = old?.edited && old.code === code
-      ? { title: old.title, statement: old.statement, rationale: old.rationale, acceptance: old.acceptance, priority: old.priority, edited: true }
+    const editedNow = Boolean(old?.edited && old.code === code);
+    const text = editedNow
+      ? { title: old!.title, statement: old!.statement, rationale: old!.rationale, acceptance: old!.acceptance, priority: old!.priority, edited: true }
       : { title: d.title, statement: d.statement, rationale: d.rationale, acceptance: d.acceptance, priority: old?.code === code ? old.priority : null, edited: false };
-    out.push({ code, kind: d.kind, key: d.key, category: d.category, ...text, ...links, origin: 'derived', state: 'active', order: i });
+    // An edit is checked against the derived text it was made from: when that changes, it needs review.
+    const derivedHash = reqHash(d);
+    const baseHash = editedNow ? old!.baseHash ?? derivedHash : null;
+    out.push({ code, kind: d.kind, key: d.key, category: d.category, ...text, ...links, origin: 'derived', state: 'active', order: i, baseHash,
+      ...(editedNow ? { needsReview: baseHash !== derivedHash, derived: { title: d.title, statement: d.statement, acceptance: d.acceptance } } : {}) });
   });
   const live = new Set(out.map(r => r.code));
   // Stored requirements no longer derived (or written by a person) are kept after the derived ones.
@@ -78,11 +93,15 @@ export function editRequirement(r: Requirement, e: { title: string; statement: s
   if (acceptance.length > REQ_LIMITS.criteria) throw new RequirementError(`Keep to ${REQ_LIMITS.criteria} acceptance criteria.`);
   if (acceptance.some(a => !a.given || !a.when || !a.then)) throw new RequirementError('Each acceptance criterion needs Given, When and Then.');
   if (acceptance.some(a => a.given.length + a.when.length + a.then.length > REQ_LIMITS.criterion)) throw new RequirementError('An acceptance criterion is too long.');
-  return { ...r, title, statement, priority: e.priority, acceptance, edited: true };
+  // The edit is made against the derived text shown now, unless it was already edited.
+  const base = r.edited ? r.baseHash ?? null : reqHash(r.derived ?? r);
+  return { ...r, title, statement, priority: e.priority, acceptance, edited: true, baseHash: base, needsReview: false };
 }
 
 /** Back to the derived wording on the next reconcile. */
-export const revertRequirement = (r: Requirement): Requirement => ({ ...r, edited: false });
+export const revertRequirement = (r: Requirement): Requirement => ({ ...r, edited: false, baseHash: null, needsReview: false });
+/** Keep the person's text and mark the new derived text as seen. */
+export const keepRequirement = (r: Requirement): Requirement => ({ ...r, baseHash: r.derived ? reqHash(r.derived) : r.baseHash, needsReview: false });
 
 export const PRIORITY_LABEL: Record<Priority, string> = { must: 'Must', should: 'Should', could: 'Could', wont: "Won't" };
 export const criterionText = (a: Acceptance) => `Given ${a.given.replace(/\.$/, '')}, when ${a.when.replace(/\.$/, '')}, then ${a.then.replace(/\.$/, '')}.`;

@@ -4,7 +4,7 @@
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { Acceptance, Priority, ReqKind } from '../../domain/requirements/derive.ts';
-import { editRequirement, PRIORITY_LABEL, RequirementError, revertRequirement, type Requirement } from '../../domain/requirements/register.ts';
+import { editRequirement, keepRequirement, PRIORITY_LABEL, RequirementError, revertRequirement, type Requirement } from '../../domain/requirements/register.ts';
 import { Button, cx, messageOf } from '../ui.tsx';
 
 const KIND_LABEL: Record<ReqKind, string> = { BR: 'Business', FR: 'Functional', NFR: 'Non-functional' };
@@ -55,13 +55,14 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
   const shown = requirements.filter(r => r.kind === kind && r.state !== 'retired');
   const count = (k: ReqKind) => requirements.filter(r => r.kind === k && r.state === 'active').length;
   const removed = requirements.filter(r => r.state === 'source_removed').length;
+  const review = requirements.filter(r => r.needsReview).length;
   const steps = (ids: string[]) => ids.map(id => model.steps.find(s => s.id === id)?.name).filter(Boolean).join(', ');
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm" aria-label="Requirements" data-testid="requirements-panel">
       <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full flex-wrap items-center justify-between gap-3 px-5 py-4 text-left">
         <span>
           <span className="font-display text-base font-semibold text-slate-900">Requirements register</span>
-          <span className="ml-3 text-sm text-slate-600" data-testid="requirements-counts">{count('BR')} business · {count('FR')} functional · {count('NFR')} non-functional{removed ? ` · ${removed} with source removed` : ''}</span>
+          <span className="ml-3 text-sm text-slate-600" data-testid="requirements-counts">{count('BR')} business · {count('FR')} functional · {count('NFR')} non-functional{removed ? ` · ${removed} with source removed` : ''}{review ? ` · ${review} to review` : ''}</span>
         </span>
         <span className="text-sm font-semibold text-[#002C4B]">{open ? 'Hide' : canEdit ? 'Review and edit' : 'Show'}</span>
       </button>
@@ -79,6 +80,7 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
                   <div className="min-w-0 flex-1">
                     <p className="text-sm font-semibold text-slate-900">{r.title}
                       {r.edited && <span className="ml-2 rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold text-sky-800">Edited</span>}
+                      {r.needsReview && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900" data-testid="req-review">Needs review</span>}
                       {r.state === 'source_removed' && <span className="ml-2 rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Source removed</span>}
                       {r.priority && <span className="ml-2 text-[11px] font-semibold uppercase text-slate-500">{PRIORITY_LABEL[r.priority]}</span>}
                     </p>
@@ -91,6 +93,13 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
                     {r.state === 'source_removed' && <button type="button" className="text-sm text-slate-600 hover:underline" onClick={() => onSave({ ...r, state: 'retired' })}>Retire</button>}
                   </span>}
                 </div>
+                {r.needsReview && r.derived && editing !== r.code && (
+                  <div className="mt-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="req-update">
+                    <p><span className="font-semibold">The process changed since you edited this.</span> It would now read:</p>
+                    <p className="mt-1 rounded bg-white px-2 py-1 text-slate-800">{r.derived.statement}</p>
+                    {canEdit && <div className="mt-2 flex gap-2"><Button variant="secondary" onClick={() => onSave(keepRequirement(r))}>Keep mine</Button><Button variant="secondary" onClick={() => onSave(revertRequirement(r))}>Take update</Button></div>}
+                  </div>
+                )}
                 {editing === r.code && <Editor r={r} onCancel={() => setEditing(null)} onSave={async x => { await onSave(x); setEditing(null); }} />}
               </li>
             ))}

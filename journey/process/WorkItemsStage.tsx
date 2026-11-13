@@ -16,7 +16,7 @@ import { applyLayout } from '../../domain/docs/layout.ts';
 import type { DocInput } from '../../domain/docs/common.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { coverage, deriveProposals, type ProposalType } from '../../domain/workitems/derive.ts';
-import { editProposal, ProposalError, reconcileProposals, rejectProposal, restoreProposal, setSelected, type Proposal } from '../../domain/workitems/register.ts';
+import { editProposal, keepMine, ProposalError, reconcileProposals, rejectProposal, restoreProposal, setSelected, takeUpdate, type Proposal, type ProposalRow } from '../../domain/workitems/register.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { BoardError, validateProjectName, type Project } from '../../domain/workitems/board.ts';
 
@@ -27,7 +27,8 @@ const TYPE: Record<ProposalType, { label: string; cls: string }> = {
   spike: { label: 'Spike', cls: 'bg-amber-50 text-amber-900 ring-amber-200' },
   decision: { label: 'Decision', cls: 'bg-rose-50 text-rose-800 ring-rose-200' },
 };
-type Row = Proposal & { sourceRemoved: boolean };
+type Row = ProposalRow;
+const plain = ({ sourceRemoved: _s, derivedHash: _h, needsReview: _n, derived: _d, ...p }: ProposalRow): Proposal => p;
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
 export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, onOpenBoard }: { store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; canEdit: boolean; onOpenBoard: (projectId: string) => void }) {
@@ -59,7 +60,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
     const work: Promise<unknown>[] = [];
     if (derived.register.changed.length) work.push(store.saveRequirements(processId, derived.register.changed));
     if (rec.changed.length) work.push(store.saveProposals(processId, rec.changed));
-    if (work.length) Promise.all(work).then(() => { setStored(rec.proposals.map(({ sourceRemoved: _s, ...p }) => p)); if (derived.register.changed.length) setReqs(derived.register.requirements); }).catch(e => setError(messageOf(e)));
+    if (work.length) Promise.all(work).then(() => { setStored(rec.proposals.map(plain)); if (derived.register.changed.length) setReqs(derived.register.requirements); }).catch(e => setError(messageOf(e)));
   }, [rec, derived, canEdit, store, processId]);
 
   const save = async (p: Proposal) => {
@@ -79,7 +80,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
   const selected = rows.filter(r => r.state === 'selected');
   const count = (t: ProposalType) => rows.filter(r => r.type === t && r.state !== 'rejected').length;
   const selectAll = (list: Row[], on: boolean) => {
-    const next = list.filter(r => r.state !== 'confirmed' && r.state !== 'rejected').map(r => setSelected(r, on));
+    const next = list.filter(r => r.state !== 'confirmed' && r.state !== 'rejected').map(r => setSelected(plain(r), on));
     store.saveProposals(processId, next).then(() => setStored(cur => (cur ?? []).map(x => next.find(n => n.key === x.key) ?? x))).catch(e => setError(messageOf(e)));
   };
 
@@ -184,12 +185,13 @@ function ProposalCard({ r, canEdit, open, onOpen, onSave }: { r: Row; canEdit: b
   return (
     <div className={cx('rounded-xl border bg-white p-3.5 shadow-sm', r.state === 'selected' ? 'border-[#002C4B]/40 ring-1 ring-[#002C4B]/20' : 'border-slate-200', r.state === 'rejected' && 'opacity-60')} data-testid="proposal" data-type={r.type}>
       <div className="flex items-start gap-3">
-        {canEdit && !locked && r.state !== 'rejected' && <input type="checkbox" className="mt-1 h-4 w-4 accent-[#002C4B]" aria-label={`Select ${r.title}`} checked={r.state === 'selected'} onChange={e => run(() => setSelected(r, e.target.checked))} />}
+        {canEdit && !locked && r.state !== 'rejected' && <input type="checkbox" className="mt-1 h-4 w-4 accent-[#002C4B]" aria-label={`Select ${r.title}`} checked={r.state === 'selected'} onChange={e => run(() => setSelected(plain(r), e.target.checked))} />}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className={cx('rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ring-inset', TYPE[r.type].cls)}>{TYPE[r.type].label}</span>
             <button type="button" onClick={onOpen} className="text-left text-sm font-semibold text-slate-900 hover:underline" aria-expanded={open}>{r.title}</button>
             {r.edited && <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[11px] font-semibold text-sky-800">Edited</span>}
+            {r.needsReview && <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900" data-testid="proposal-review">Needs review</span>}
             {r.sourceRemoved && <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-900">Source removed</span>}
             {locked && <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-800">On the board</span>}
             {r.state === 'rejected' && <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-700" data-testid="rejected-reason">Rejected: {r.rejectedReason}</span>}
@@ -201,13 +203,21 @@ function ProposalCard({ r, canEdit, open, onOpen, onSave }: { r: Row; canEdit: b
           </p>
         </div>
         {canEdit && !locked && (r.state === 'rejected'
-          ? <button type="button" className="text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => run(() => restoreProposal(r))}>Restore</button>
+          ? <button type="button" className="text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => run(() => restoreProposal(plain(r)))}>Restore</button>
           : <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => { setRejecting(!rejecting); }}>Reject</button>)}
       </div>
+      {r.needsReview && r.derived && !locked && (
+        <div className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-950 ring-1 ring-inset ring-amber-200">
+          <p><span className="font-semibold">The process changed since you edited this item.</span> Worked out again, it would read:</p>
+          <p className="mt-1 font-semibold text-slate-900">{r.derived.title}</p>
+          <p className="mt-0.5 whitespace-pre-line text-xs text-slate-700">{r.derived.description}</p>
+          {canEdit && <div className="mt-2 flex gap-2"><Button variant="secondary" onClick={() => run(() => keepMine(r))}>Keep mine</Button><Button variant="secondary" onClick={() => run(() => takeUpdate(r))}>Take update</Button></div>}
+        </div>
+      )}
       {rejecting && (
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <input aria-label={`Why reject ${r.title}`} placeholder="Why is it not needed?" value={reason} onChange={e => setReason(e.target.value)} className={cx(input, 'max-w-md flex-1')} />
-          <Button variant="secondary" onClick={() => run(() => rejectProposal(r, reason))}>Reject</Button>
+          <Button variant="secondary" onClick={() => run(() => rejectProposal(plain(r), reason))}>Reject</Button>
         </div>
       )}
       {open && (
