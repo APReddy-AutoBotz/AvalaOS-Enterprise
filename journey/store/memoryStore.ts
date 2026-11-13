@@ -1,3 +1,4 @@
+import { leavesNoAdmin, PeopleError, roleOf, validateEmail, type AuditEntry } from '../../domain/people/roles.ts';
 import { documentSettingsFrom, validateBranding, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings, type AssessmentSettings } from '../../domain/assess/settings.ts';
 // In-memory store with the same rules as the database: one working draft per process, approved
@@ -8,7 +9,7 @@ import { hashModel } from '../../domain/processModel/hash.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
 import { applyPatch } from '../../domain/processModel/jsonPatch.ts';
 import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
-import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type Person, type Invite, type RoleChoice, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
@@ -32,6 +33,7 @@ interface State {
   workItems?: WorkItem[];
   settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
   documentSettings?: { workspaceId: string; settings: DocumentSettings }[];
+  people?: Record<string, { members: Person[]; invites: Invite[]; audit: AuditEntry[] }>;
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -64,6 +66,22 @@ export function createMemoryStore(): JourneyStore {
     return { p, w };
   };
 
+  const nameOf = () => requireMe().email.split('@')[0]!;
+  const peopleOf = (workspaceId: string) => {
+    const me = requireMe();
+    const w = state.workspaces.find(x => x.id === workspaceId);
+    if (!w) throw new StoreError(404, 'Workspace not found.');
+    const all = (state.people ??= {});
+    return (all[workspaceId] ??= { members: [{ userId: me.id, name: me.email.split('@')[0]!, email: me.email, role: 'admin', job: null, canApprove: true, since: now() }], invites: [], audit: [] });
+  };
+  const adminOf = (workspaceId: string, strict = true) => {
+    peopleOf(workspaceId);
+    const w = state.workspaces.find(x => x.id === workspaceId);
+    const ok = w?.role === 'admin';
+    if (!ok && strict) throw new StoreError(403, 'Only an admin can do that.');
+    return ok;
+  };
+
   return {
     kind: 'memory',
     async currentUser() { return state.me; },
@@ -78,6 +96,17 @@ export function createMemoryStore(): JourneyStore {
     async signOut() { state.me = null; save(); listeners.forEach(l => l(null)); },
 
     async listWorkspaces() { requireMe(); return state.workspaces; },
+    async setProcessPeople(processId, people) {
+      requireMe();
+      const { p, w } = workspaceOf(processId);
+      if (w.role === 'viewer') throw new StoreError(403, 'Naming people on a process needs the editor or admin role.');
+      const members = peopleOf(w.id).members;
+      for (const id of [people.analystId, people.architectId, people.approverId]) {
+        if (id && !members.some(m => m.userId === id)) throw new StoreError(400, 'That person is not a member of this workspace');
+      }
+      Object.assign(p, people);
+      save();
+    },
     async createOrganization(organizationName, workspaceName) {
       requireMe();
       const w: Workspace = { id: uuid(), name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true };
@@ -267,6 +296,61 @@ export function createMemoryStore(): JourneyStore {
     async listWorkItems(projectId) {
       requireMe();
       return structuredClone((state.workItems ?? []).filter(i => i.projectId === projectId));
+    },
+    async listMembers(workspaceId) {
+      requireMe();
+      return peopleOf(workspaceId).members.map(m => ({ userId: m.userId, name: m.name, role: m.role }));
+    },
+    async listPeople(workspaceId) {
+      const admin = adminOf(workspaceId, false);
+      const { members, invites } = peopleOf(workspaceId);
+      return structuredClone({ members: members.map(m => ({ ...m, email: admin ? m.email : null })), invites: admin ? invites : [] });
+    },
+    async invitePerson(workspaceId, rawEmail, r) {
+      adminOf(workspaceId);
+      let email: string;
+      try { email = validateEmail(rawEmail); } catch (e) { throw new StoreError(422, e instanceof PeopleError ? e.message : 'Enter a work email address.'); }
+      const p = peopleOf(workspaceId);
+      if (p.members.some(m => m.email === email)) throw new StoreError(409, `${email} is already in this workspace`);
+      const label = roleOf({ access: r.access, canApprove: r.canApprove, job: r.job }).label;
+      p.invites = p.invites.filter(i => i.email !== email).concat({ email, role: r.access, job: r.job, canApprove: r.canApprove || r.access === 'admin', at: now() });
+      p.audit.unshift({ id: uuid(), at: now(), kind: 'invited', actor: nameOf(), subject: email, detail: label });
+      save();
+      return { state: 'invited' as const };
+    },
+    async changePerson(workspaceId, userId, r) {
+      adminOf(workspaceId);
+      const p = peopleOf(workspaceId);
+      const m = p.members.find(x => x.userId === userId);
+      if (!m) throw new StoreError(404, 'That person is not in this workspace');
+      if (leavesNoAdmin(p.members.map(x => ({ userId: x.userId, access: x.role })), userId, r.access)) throw new StoreError(400, 'a workspace needs at least one admin');
+      Object.assign(m, { role: r.access, job: r.job, canApprove: r.canApprove || r.access === 'admin' });
+      const mine = state.me && m.userId === state.me.id ? state.workspaces.find(w => w.id === workspaceId) : null;
+      if (mine) Object.assign(mine, { role: m.role, job: m.job, canApprove: m.canApprove });
+      p.audit.unshift({ id: uuid(), at: now(), kind: 'role_changed', actor: nameOf(), subject: m.name, detail: roleOf({ access: m.role, canApprove: m.canApprove, job: m.job }).label });
+      save();
+    },
+    async removePerson(workspaceId, userId) {
+      adminOf(workspaceId);
+      const p = peopleOf(workspaceId);
+      const m = p.members.find(x => x.userId === userId);
+      if (!m) throw new StoreError(404, 'That person is not in this workspace');
+      if (leavesNoAdmin(p.members.map(x => ({ userId: x.userId, access: x.role })), userId, null)) throw new StoreError(400, 'a workspace needs at least one admin');
+      p.members = p.members.filter(x => x.userId !== userId);
+      for (const i of state.workItems ?? []) if (i.ownerId === userId) i.ownerId = null;
+      for (const pr of state.processes) if (pr.workspaceId === workspaceId) { if (pr.analystId === userId) pr.analystId = null; if (pr.architectId === userId) pr.architectId = null; if (pr.approverId === userId) pr.approverId = null; }
+      p.audit.unshift({ id: uuid(), at: now(), kind: 'removed', actor: nameOf(), subject: m.name, detail: '' });
+      save();
+    },
+    async cancelInvite(workspaceId, email) {
+      adminOf(workspaceId);
+      const p = peopleOf(workspaceId);
+      p.invites = p.invites.filter(i => i.email !== email.trim().toLowerCase());
+      save();
+    },
+    async auditLog(workspaceId) {
+      adminOf(workspaceId);
+      return structuredClone(peopleOf(workspaceId).audit);
     },
     async updateWorkItem(id, e) {
       requireMe();

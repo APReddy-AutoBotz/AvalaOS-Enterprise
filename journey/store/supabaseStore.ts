@@ -1,3 +1,4 @@
+import type { AuditEntry } from '../../domain/people/roles.ts';
 import { documentSettingsFrom, validateBranding } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
 // The real store: Supabase auth, row level security for reads, and the model RPCs for writes.
@@ -19,7 +20,7 @@ const itemFrom = (r: any): WorkItem => ({
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
-import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -33,7 +34,7 @@ const toRevision = (r: Record<string, any>): RevisionRow => ({
   id: r.id, revNo: r.rev_no ?? r.revNo, state: r.state, seq: Number(r.edit_seq ?? r.seq ?? 0), modelHash: r.model_hash ?? r.modelHash ?? null,
   basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, approvedAt: r.approved_at ?? r.approvedAt ?? null,
 });
-const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at });
+const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at, analystId: p.analyst_id ?? null, architectId: p.architect_id ?? null, approverId: p.approver_id ?? null });
 const toSource = (r: Record<string, any>): SourceRow => ({
   id: r.id, key: r.source_key, title: r.title, fileName: r.file_name ?? '', format: r.format, kind: r.kind ?? '', inferred: Boolean(r.inferred),
   segmentCount: Number(r.segment_count ?? 0), warnings: Array.isArray(r.warnings) ? r.warnings : [], createdAt: r.created_at, archived: Boolean(r.archived_at),
@@ -72,7 +73,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail({ message: error.message, status: error.status ?? 400 });
     },
     async signUp(email, password) {
-      const { data, error } = await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/processes` } });
+      const { data, error } = await db.auth.signUp({ email, password, options: { emailRedirectTo: `${location.origin}/work` } });
       if (error) fail({ message: error.message, status: error.status ?? 400 });
       return { needsConfirmation: !data.session };
     },
@@ -83,12 +84,12 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (!auth.user) throw new StoreError(401, 'Sign in again.');
       const { data, error } = await db
         .from('workspace_members')
-        .select('role, can_approve, workspaces(id, name, organizations(name))')
+        .select('role, job, can_approve, workspaces(id, name, organizations(name))')
         .eq('user_id', auth.user.id);
       if (error) fail(error);
       return (data ?? []).flatMap((m: any): Workspace[] => (m.workspaces ? [{
         id: m.workspaces.id, name: m.workspaces.name, organizationName: m.workspaces.organizations?.name ?? '',
-        role: m.role, canApprove: Boolean(m.can_approve),
+        role: m.role, canApprove: Boolean(m.can_approve), job: m.job ?? null,
       }] : [])).sort((a, b) => a.organizationName.localeCompare(b.organizationName) || a.name.localeCompare(b.name));
     },
     async createOrganization(organizationName, workspaceName) {
@@ -122,21 +123,26 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
     },
     async listProcesses(workspaceId) {
-      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at')
+      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at, analyst_id, architect_id, approver_id')
         .eq('workspace_id', workspaceId).is('archived_at', null).order('updated_at', { ascending: false });
       if (error) fail(error);
       return (data ?? []).map(toProcess);
     },
     async createProcess(workspaceId, name) {
       const { data, error } = await db.from('processes').insert({ workspace_id: workspaceId, name: name.trim() })
-        .select('id, workspace_id, name, description, updated_at').single();
+        .select('id, workspace_id, name, description, updated_at, analyst_id, architect_id, approver_id').single();
       if (error) fail(error);
       return toProcess(data);
     },
     async getProcess(processId) {
-      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at').eq('id', processId).maybeSingle();
+      const { data, error } = await db.from('processes').select('id, workspace_id, name, description, updated_at, analyst_id, architect_id, approver_id').eq('id', processId).maybeSingle();
       if (error) fail(error);
       return data ? toProcess(data) : null;
+    },
+
+    async setProcessPeople(processId, p) {
+      const { error } = await db.from('processes').update({ analyst_id: p.analystId, architect_id: p.architectId, approver_id: p.approverId }).eq('id', processId);
+      if (error) fail(error);
     },
 
     async listRevisions(processId) {
@@ -252,12 +258,54 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return (data ?? []).map(itemFrom);
     },
+    async listMembers(workspaceId) {
+      const { data: rows, error } = await db.from('workspace_members').select('user_id, role').eq('workspace_id', workspaceId);
+      if (error) fail(error);
+      const ids = (rows ?? []).map(r => r.user_id as string);
+      if (!ids.length) return [];
+      const { data: profiles, error: e2 } = await db.from('profiles').select('id, display_name').in('id', ids);
+      if (e2) fail(e2);
+      const name = new Map((profiles ?? []).map(p => [p.id as string, (p.display_name as string).trim()]));
+      return (rows ?? []).map(r => ({ userId: r.user_id as string, name: name.get(r.user_id as string) || 'Unnamed member', role: r.role as Member['role'] })).sort((a, b) => a.name.localeCompare(b.name));
+    },
+    async listPeople(workspaceId) {
+      const { data, error } = await db.rpc('list_people', { target_workspace: workspaceId });
+      if (error) fail(error);
+      const d = data as { members: any[]; invites: any[] };
+      return {
+        members: d.members.map((m): Person => ({ userId: m.userId, name: m.name, email: m.email ?? null, role: m.role, job: m.job ?? null, canApprove: Boolean(m.canApprove), since: m.since })),
+        invites: d.invites.map((i): Invite => ({ email: i.email, role: i.role, job: i.job ?? null, canApprove: Boolean(i.canApprove), at: i.at })),
+      };
+    },
+    async invitePerson(workspaceId, email, r) {
+      const { data, error } = await db.rpc('invite_member', { target_workspace: workspaceId, member_email: email, member_role: r.access, member_job: r.job, member_can_approve: r.canApprove });
+      if (error) fail(error);
+      return { state: (data as { state: 'member' | 'invited' }).state };
+    },
+    async changePerson(workspaceId, userId, r) {
+      const { error } = await db.rpc('change_member', { target_workspace: workspaceId, target_user: userId, member_role: r.access, member_job: r.job, member_can_approve: r.canApprove });
+      if (error) fail(error);
+    },
+    async removePerson(workspaceId, userId) {
+      const { error } = await db.rpc('remove_member', { target_workspace: workspaceId, target_user: userId });
+      if (error) fail(error);
+    },
+    async cancelInvite(workspaceId, email) {
+      const { error } = await db.rpc('cancel_invite', { target_workspace: workspaceId, invite_email: email });
+      if (error) fail(error);
+    },
+    async auditLog(workspaceId) {
+      const { data, error } = await db.rpc('workspace_audit_log', { target_workspace: workspaceId });
+      if (error) fail(error);
+      return (data ?? []) as AuditEntry[];
+    },
     async updateWorkItem(id, e) {
       const row: Record<string, unknown> = {};
       if (e.title !== undefined) row.title = e.title;
       if (e.description !== undefined) row.description = e.description;
       if (e.status !== undefined) row.status = e.status;
       if (e.priority !== undefined) row.priority = e.priority;
+      if (e.ownerId !== undefined) row.owner_id = e.ownerId;
       if (e.estimateHours !== undefined) row.estimate_hours = e.estimateHours;
       if (e.startDate !== undefined) row.start_date = e.startDate;
       if (e.dueDate !== undefined) row.due_date = e.dueDate;

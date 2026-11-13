@@ -16,7 +16,7 @@ import { applyLayout } from '../../domain/docs/layout.ts';
 import type { DocInput } from '../../domain/docs/common.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { coverage, deriveProposals, type ProposalType } from '../../domain/workitems/derive.ts';
-import { editProposal, keepMine, ProposalError, reconcileProposals, rejectProposal, restoreProposal, setSelected, takeUpdate, type Proposal, type ProposalRow } from '../../domain/workitems/register.ts';
+import { editProposal, keepMine, mergeProblem, mergeProposals, ProposalError, reconcileProposals, rejectProposal, restoreProposal, setSelected, splitProposal, takeUpdate, type Proposal, type ProposalRow, type SplitInput } from '../../domain/workitems/register.ts';
 import { Button, cx, ErrorNote, messageOf, ReqCode, Spinner, Tag, TypeGlyph, WORK_TYPE } from '../ui.tsx';
 import { splitStory } from '../../domain/workitems/board.ts';
 import { BoardError, validateProjectName, type Project } from '../../domain/workitems/board.ts';
@@ -64,6 +64,18 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
       setStored(cur => (cur ?? []).map(x => (x.key === p.key ? p : x)));
     } catch (e) { setError(e instanceof ProposalError ? e.message : messageOf(e)); }
   };
+  /** Saves several proposals at once (a merge or a split): changed ones are replaced, new ones added. */
+  const saveMany = async (ps: Proposal[]) => {
+    setError(null);
+    try {
+      await store.saveProposals(processId, ps);
+      setStored(cur => {
+        const list = cur ?? [];
+        const byKey = new Map(ps.map(x => [x.key, x]));
+        return [...list.map(x => byKey.get(x.key) ?? x), ...ps.filter(x => !list.some(l => l.key === x.key))];
+      });
+    } catch (e) { setError(e instanceof ProposalError ? e.message : messageOf(e)); }
+  };
   if (!rec || !derived) return error ? <ErrorNote message={error} /> : <Spinner label="Working out the work items" />;
   const rows = rec.proposals;
   const shown = (r: Row) => filter === 'all' ? true : filter === 'selected' ? r.state === 'selected' : r.state === 'rejected';
@@ -73,6 +85,12 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
   const loose = tops.filter(r => r.type !== 'epic');
   const selected = rows.filter(r => r.state === 'selected');
   const count = (t: ProposalType) => rows.filter(r => r.type === t && r.state !== 'rejected').length;
+  const mergeNote = mergeProblem(selected.map(plain));
+  const merge = () => {
+    try { saveMany(mergeProposals(selected.map(plain), rows.map(plain), crypto.randomUUID())); setFilter('all'); }
+    catch (e) { setError(e instanceof ProposalError ? e.message : messageOf(e)); }
+  };
+  const split = (r: Row, input: SplitInput) => saveMany(splitProposal(r, input, crypto.randomUUID()));
   const selectAll = (list: Row[], on: boolean) => {
     const next = list.filter(r => r.state !== 'confirmed' && r.state !== 'rejected').map(r => setSelected(plain(r), on));
     store.saveProposals(processId, next).then(() => setStored(cur => (cur ?? []).map(x => next.find(n => n.key === x.key) ?? x))).catch(e => setError(messageOf(e)));
@@ -84,7 +102,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
     return (
       <React.Fragment key={r.key}>
         <li className={cx(depth > 0 && 'border-t border-slate-100')} style={depth > 1 ? { paddingLeft: `${(depth - 1) * 1.75}rem` } : undefined}>
-          <ProposalCard r={r} canEdit={canEdit} head={depth === 0 && r.type === 'epic'} open={open === r.key} onOpen={() => setOpen(open === r.key ? null : r.key)} onSave={save} />
+          <ProposalCard r={r} canEdit={canEdit} head={depth === 0 && r.type === 'epic'} open={open === r.key} onOpen={() => setOpen(open === r.key ? null : r.key)} onSave={save} onSplit={split} />
         </li>
         {kids(r.key).map(k => rowsOf(k, depth + 1))}
       </React.Fragment>
@@ -120,7 +138,13 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
           {([['all', 'All'], ['selected', `Selected (${selected.length})`], ['rejected', `Rejected (${rows.filter(r => r.state === 'rejected').length})`]] as const).map(([id, label]) =>
             <button key={id} role="tab" aria-selected={filter === id} onClick={() => setFilter(id)} className={cx('rounded-md px-3 py-1 font-semibold', filter === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600')}>{label}</button>)}
         </div>
-        {canEdit && <div className="flex gap-2 text-sm"><Button variant="ghost" onClick={() => selectAll(rows, true)}>Select all</Button><Button variant="ghost" onClick={() => selectAll(rows, false)}>Clear selection</Button></div>}
+        {canEdit && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            {selected.length >= 2 && <Button variant="secondary" onClick={merge} disabled={mergeNote !== null} title={mergeNote ?? undefined}>Merge {selected.length} selected into one</Button>}
+            {selected.length >= 2 && mergeNote && <span className="text-xs text-slate-500" data-testid="merge-note">{mergeNote}</span>}
+            <Button variant="ghost" onClick={() => selectAll(rows, true)}>Select all</Button><Button variant="ghost" onClick={() => selectAll(rows, false)}>Clear selection</Button>
+          </div>
+        )}
       </div>
       {epics.length > 0 && <section aria-label="Epics" className="space-y-3">{epics.map(panel)}</section>}
       {loose.length > 0 && <section aria-label="Set-up and decisions"><h4 className="mb-2 text-[13px] font-semibold text-slate-700">Not under an epic</h4><div className="space-y-2">{loose.map(panel)}</div></section>}
@@ -173,7 +197,7 @@ function ConfirmPanel({ store, processId, workspaceId, selected, onDone, onOpenB
   );
 }
 
-function ProposalCard({ r, canEdit, head, open, onOpen, onSave }: { r: Row; canEdit: boolean; head: boolean; open: boolean; onOpen: () => void; onSave: (p: Proposal) => Promise<void> }) {
+function ProposalCard({ r, canEdit, head, open, onOpen, onSave, onSplit }: { r: Row; canEdit: boolean; head: boolean; open: boolean; onOpen: () => void; onSave: (p: Proposal) => Promise<void>; onSplit: (r: Row, input: SplitInput) => Promise<void> }) {
   const [title, setTitle] = React.useState(r.title);
   const [description, setDescription] = React.useState(r.description);
   const [criteria, setCriteria] = React.useState(r.acceptance);
@@ -241,9 +265,44 @@ function ProposalCard({ r, canEdit, head, open, onOpen, onSave }: { r: Row; canE
           </div>
           {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
           {canEdit && !locked && <Button onClick={() => run(() => editProposal(r, { title, description, acceptance: criteria }))}>Save item</Button>}
+          {canEdit && !locked && r.state !== 'rejected' && r.type !== 'epic' && <SplitForm r={r} onSplit={onSplit} />}
         </div>
       )}
       {!open && error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}
     </div>
+  );
+}
+
+/** Splits one item into two: a title and the criteria for the new one. */
+function SplitForm({ r, onSplit }: { r: Row; onSplit: (r: Row, input: SplitInput) => Promise<void> }) {
+  const [open, setOpen] = React.useState(false);
+  const [title, setTitle] = React.useState('');
+  const [move, setMove] = React.useState<number[]>([]);
+  const [extra, setExtra] = React.useState('');
+  const [error, setError] = React.useState<string | null>(null);
+  if (!open) return <div className="border-t border-slate-100 pt-3"><button type="button" className="text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => setOpen(true)}>Split into two items</button></div>;
+  const go = async () => {
+    setError(null);
+    try { splitProposal(r, { title, move, extra: extra.split('\n') }, 'check'); } catch (e) { setError(e instanceof ProposalError ? e.message : messageOf(e)); return; }
+    await onSplit(r, { title, move, extra: extra.split('\n') });
+    setOpen(false); setTitle(''); setMove([]); setExtra('');
+  };
+  return (
+    <fieldset className="grid gap-2 border-t border-slate-100 pt-3" data-testid="split-form">
+      <legend className="text-xs font-semibold text-slate-700">Split into two items</legend>
+      <p className="text-xs leading-5 text-slate-500">The new item starts with this description and these requirement links. Choose the criteria that move to it, and write any others it needs.</p>
+      <label className="grid gap-1 text-xs font-semibold text-slate-700">Title of the new item<input aria-label="Title of the new item" value={title} onChange={e => setTitle(e.target.value)} className={input} /></label>
+      <div className="grid gap-1">
+        {r.acceptance.map((c, i) => (
+          <label key={i} className="flex items-start gap-2 text-[13px] leading-5 text-slate-700">
+            <input type="checkbox" className="mt-1 h-4 w-4 accent-[#002C4B]" checked={move.includes(i)} onChange={e => setMove(e.target.checked ? [...move, i] : move.filter(m => m !== i))} />
+            <span>Move: {c}</span>
+          </label>
+        ))}
+      </div>
+      <label className="grid gap-1 text-xs font-semibold text-slate-700">Other criteria for the new item, one per line<textarea aria-label="Other criteria for the new item" rows={2} value={extra} onChange={e => setExtra(e.target.value)} className={cx(input, 'font-normal')} /></label>
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      <div className="flex gap-2"><Button onClick={go}>Split item</Button><Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button></div>
+    </fieldset>
   );
 }

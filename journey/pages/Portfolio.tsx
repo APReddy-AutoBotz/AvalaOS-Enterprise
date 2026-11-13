@@ -104,13 +104,13 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
           <tbody className="divide-y divide-slate-100">
             {data.rows.map(r => (
               <tr key={r.id} data-testid="portfolio-row" className="cursor-pointer hover:bg-slate-50" onClick={() => open(r.id)}>
-                <td className="px-4 py-3 text-xs tabular-nums text-slate-400">{r.rank}</td>
+                <td className="px-4 py-3 text-xs tabular-nums text-slate-500">{r.rank}</td>
                 <td className="px-4 py-3"><button type="button" className="text-left font-medium text-slate-900 hover:underline">{r.name}</button></td>
                 <td className="px-4 py-3 text-slate-700">{r.lead ? APPROACH_LABEL[r.lead] : 'Keep with people for now'}</td>
                 <td className="px-4 py-3 tabular-nums text-slate-700">{Math.round(r.fit * 100)}%</td>
                 <td className="px-4 py-3 tabular-nums text-slate-700">{r.ease ?? '–'}</td>
-                <td className="px-4 py-3 tabular-nums text-slate-700">{r.hours === null ? <span className="text-slate-400">Not known</span> : `${r.exact ? '' : 'Up to '}${hrs(r.hours)}`}</td>
-                <td className="px-4 py-3 tabular-nums text-slate-700" data-testid="portfolio-payback">{r.payback ? months(r.payback) : <span className="text-slate-400">No costs</span>}</td>
+                <td className="px-4 py-3 tabular-nums text-slate-700">{r.hours === null ? <span className="text-slate-500">Not known</span> : `${r.exact ? '' : 'Up to '}${hrs(r.hours)}`}</td>
+                <td className="px-4 py-3 tabular-nums text-slate-700" data-testid="portfolio-payback">{r.payback ? months(r.payback) : <span className="text-slate-500">No costs</span>}</td>
                 <td className="px-4 py-3">{r.quadrant ? <span className={cx('whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold', QUAD_TONE[r.quadrant])}>{QUADRANT[r.quadrant].label}</span> : <span className="text-xs text-slate-500">{r.possible.length > 0 && r.possible.length < 4 ? r.possible.map(q => QUADRANT[q].label).join(' or ') : 'Not placed yet'}</span>}</td>
                 <td className="px-4 py-3"><span className={cx('whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold', READY[r.readiness][1])}>{READY[r.readiness][0]}</span></td>
                 <td className="px-4 py-3 tabular-nums text-slate-700">{Math.round(r.inputsKnown * 100)}%</td>

@@ -4,10 +4,11 @@
 // linked requirements, and warns when a requirement changed after the item was confirmed; the item
 // itself is never changed for you.
 import React from 'react';
-import type { JourneyStore, Workspace } from '../store/types.ts';
+import type { JourneyStore, Member, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { BoardError, COLUMNS, criterionParts, joinStory, lanesOf, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateProjectName, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
+import { BoardError, COLUMNS, criterionParts, initials, joinStory, lanesOf, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateProjectName, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
+import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
@@ -34,12 +35,16 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [dragging, setDragging] = React.useState<string | null>(null);
   const [over, setOver] = React.useState<string | null>(null);
   const [closed, setClosed] = React.useState<Set<string>>(new Set());
+  const [members, setMembers] = React.useState<Member[]>([]);
+  const [exporting, setExporting] = React.useState(false);
+  const [who, setWho] = React.useState<string>(''); // '' everyone, 'none' unassigned, else a member
 
   React.useEffect(() => {
     store.listWorkspaces().then(async list => {
       const w = list.find(x => x.id === remembered()) ?? list[0] ?? null;
       setWorkspace(w);
       setProjects(w ? await store.listProjects(w.id) : []);
+      if (w) store.listMembers(w.id).then(setMembers).catch(() => {});
     }).catch(e => setError(messageOf(e)));
   }, [store]);
   const project = projects?.find(p => p.id === projectId) ?? null;
@@ -79,11 +84,14 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const openItem = (id: string) => { if (project) nav.go({ page: 'board', projectId: project.id, itemId: id }); };
   const changesOf = (i: WorkItem) => (i.processId ? upstreamChanges(i, (reqs[i.processId] ?? []).map(r => ({ code: r.code, statement: r.statement, state: r.state }))) : []);
   const q = query.trim().toLowerCase();
-  const matches = (i: WorkItem) => !q || i.title.toLowerCase().includes(q) || i.requirements.some(c => c.toLowerCase().includes(q)) || TYPE[i.type].label.toLowerCase() === q;
+  const nameOf = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? 'Someone no longer in this workspace' : null);
+  const matches = (i: WorkItem) => (!who || (who === 'none' ? !i.ownerId : i.ownerId === who))
+    && (!q || i.title.toLowerCase().includes(q) || i.requirements.some(c => c.toLowerCase().includes(q)) || TYPE[i.type].label.toLowerCase() === q || (nameOf(i.ownerId) ?? '').toLowerCase().includes(q));
+  const filtering = Boolean(q || who);
   const lanes = lanesOf(items ?? []);
   const work = (items ?? []).filter(i => i.type !== 'epic');
   // Lanes with work come first; an epic with nothing on the board yet is a single line below them.
-  const shown = lanes.map(l => ({ ...l, cards: l.items.filter(matches) })).filter(l => !q || l.cards.length).sort((a, b) => Number(!a.items.length) - Number(!b.items.length));
+  const shown = lanes.map(l => ({ ...l, cards: l.items.filter(matches) })).filter(l => !filtering || l.cards.length).sort((a, b) => Number(!a.items.length) - Number(!b.items.length));
   const field = 'rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
   return (
@@ -97,7 +105,36 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         )}
         {work.length > 0 && <Progress done={work.filter(i => i.status === 'done').length} total={work.length} />}
         <div className="ml-auto flex flex-wrap items-center gap-2">
+          {work.length > 0 && members.length > 0 && (
+            <select aria-label="Show work of" value={who} onChange={e => setWho(e.target.value)} className={field}>
+              <option value="">Everyone's work</option>
+              {members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}
+              <option value="none">Unassigned</option>
+            </select>
+          )}
           {work.length > 0 && <input type="search" aria-label="Find an item" placeholder="Find by title or FR code" value={query} onChange={e => setQuery(e.target.value)} className={cx(field, 'w-56')} />}
+          {project && items && items.length > 0 && (
+            <div className="relative">
+              <Button variant="secondary" aria-expanded={exporting} aria-haspopup="dialog" onClick={() => setExporting(!exporting)}>Export</Button>
+              {exporting && (
+                <div role="dialog" aria-label="Export this board" className="absolute right-0 z-20 mt-2 w-[26rem] max-w-[calc(100vw-3rem)] rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-[0_16px_40px_-12px_rgba(15,23,42,0.3)]" data-testid="export-panel">
+                  <p className="font-semibold text-slate-900">Export this board</p>
+                  <p className="mt-1 leading-6 text-slate-600">All {items.length} items of {project.name}, with their criteria and requirement codes, as a file the other tool imports.</p>
+                  <div className="mt-3 space-y-3">
+                    {([
+                      ['Jira', 'jira', toJiraCsv, 'In Jira, import work items from a CSV file and map "Issue ID" to the work item ID and "Parent" to Parent. Work under a story arrives as a Sub-task; spikes and decisions as a Task with a label.'],
+                      ['Azure DevOps', 'azure-devops', toAzureCsv, 'In Azure Boards, open Queries and choose Import work items (Agile process). An epic arrives as a Feature, a story as a User Story, its tasks as a Task. Azure creates every item as New, so the status is in the tags.'],
+                    ] as const).map(([label, slug, build, how]) => (
+                      <div key={slug} className="rounded-lg bg-slate-50 p-3">
+                        <Button variant="secondary" onClick={() => download(`${fileName(project.name)}-${slug}.csv`, build(items, id => members.find(m => m.userId === id)?.name ?? null))}>Download for {label} (CSV)</Button>
+                        <p className="mt-2 text-xs leading-5 text-slate-600">{how}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {canEdit && (adding
             ? <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); create(); }}>
                 <input autoFocus aria-label="New project name" placeholder="Project name" value={newName} onChange={e => setNewName(e.target.value)} className={cx(field, 'w-48')} />
@@ -118,19 +155,19 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
               {MAIN.map(status => (
                 <div key={status} className="flex items-center gap-2 px-2.5 text-[13px] font-semibold text-slate-700">
                   <span className={cx('h-2 w-2 rounded-full', STATUS_DOT[status])} />{STATUS_LABEL[status]}
-                  <span className="font-normal tabular-nums text-slate-400">{work.filter(i => i.status === status).length}</span>
+                  <span className="font-normal tabular-nums text-slate-500">{work.filter(i => i.status === status).length}</span>
                 </div>
               ))}
             </div>
             <div className="space-y-4">
               {shown.map(lane => {
                 const id = lane.epic?.id ?? 'none';
-                const isClosed = closed.has(id) && !q;
+                const isClosed = closed.has(id) && !filtering;
                 const parked = lane.cards.filter(i => i.status === 'blocked' || i.status === 'on_hold');
                 return (
                   <section key={id} aria-label={lane.epic?.title ?? 'Work without an epic'}>
                     <div className="flex items-center gap-2.5 px-1 pb-1.5" data-testid={lane.epic ? 'epic-lane' : 'loose-lane'}>
-                      <button type="button" disabled={!lane.items.length} aria-expanded={!isClosed} aria-label={`${isClosed ? 'Show' : 'Hide'} the items in this lane`} onClick={() => setClosed(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; })} className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 disabled:invisible">
+                      <button type="button" disabled={!lane.items.length} aria-expanded={!isClosed} aria-label={`${isClosed ? 'Show' : 'Hide'} the items in this lane`} onClick={() => setClosed(cur => { const n = new Set(cur); if (n.has(id)) n.delete(id); else n.add(id); return n; })} className="rounded p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-700 disabled:invisible">
                         <svg viewBox="0 0 12 12" className={cx('h-3 w-3 transition-transform', !isClosed && 'rotate-90')} aria-hidden><path d="m4.2 2.5 3.6 3.5-3.6 3.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
                       </button>
                       {lane.epic ? <>
@@ -173,6 +210,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                                             {facts.date && <span>{facts.date}</span>}
                                             {facts.estimate && <span>{facts.estimate}</span>}
                                             {i.requirements[0] && <span className="font-medium text-slate-600">{i.requirements[0]}{i.requirements.length > 1 ? ` +${i.requirements.length - 1}` : ''}</span>}
+                                            {i.ownerId && <OwnerMark name={nameOf(i.ownerId)!} />}
                                           </span>
                                         </span>
                                       </button>
@@ -188,15 +226,29 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                   </section>
                 );
               })}
-              {q && !shown.length && <p className="py-10 text-center text-sm text-slate-600">Nothing on this board matches "{query.trim()}".</p>}
+              {filtering && !shown.length && <p className="py-10 text-center text-sm text-slate-600">Nothing on this board matches{q ? ` "${query.trim()}"` : ' that choice'}.</p>}
             </div>
           </div>
         </div>
       )}
-      {open && project && items && <React.Fragment key={open.id}><ItemPanel item={open} items={items} canEdit={canEdit} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
+      {open && project && items && <React.Fragment key={open.id}><ItemPanel item={open} items={items} members={members} canEdit={canEdit} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
     </section>
   );
 }
+
+const fileName = (name: string) => name.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/g, '').slice(0, 60) || 'board';
+/** Saves text as a file from the browser. */
+function download(name: string, text: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/** A person's mark: two letters in a circle, with the name on hover and for screen readers. */
+const OwnerMark = ({ name }: { name: string }) => (
+  <span title={name} aria-label={`Owner: ${name}`} className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#002C4B] text-[9px] font-semibold tracking-wide text-white">{initials(name)}</span>
+);
 
 /** A text area that is as tall as its text, so a title or description reads like the page, not a form. */
 function useAutosize(value: string) {
@@ -205,15 +257,16 @@ function useAutosize(value: string) {
   return ref;
 }
 
-function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd }: { item: WorkItem; items: WorkItem[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void }) {
+function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd }: { item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void }) {
   const { story, rest } = splitStory(item.description);
   const [title, setTitle] = React.useState(item.title);
   const [description, setDescription] = React.useState(rest);
   const [line, setLine] = React.useState(story ?? '');
   const [estimate, setEstimate] = React.useState(item.estimateHours === null ? '' : String(item.estimateHours));
   const [due, setDue] = React.useState(item.dueDate ?? '');
-  const dirty = title !== item.title || description !== rest || line !== (story ?? '') || estimate !== (item.estimateHours === null ? '' : String(item.estimateHours)) || due !== (item.dueDate ?? '');
-  const reset = () => { setTitle(item.title); setDescription(rest); setLine(story ?? ''); setEstimate(item.estimateHours === null ? '' : String(item.estimateHours)); setDue(item.dueDate ?? ''); };
+  const [start, setStart] = React.useState(item.startDate ?? '');
+  const dirty = title !== item.title || description !== rest || line !== (story ?? '') || estimate !== (item.estimateHours === null ? '' : String(item.estimateHours)) || due !== (item.dueDate ?? '') || start !== (item.startDate ?? '');
+  const reset = () => { setTitle(item.title); setDescription(rest); setLine(story ?? ''); setEstimate(item.estimateHours === null ? '' : String(item.estimateHours)); setDue(item.dueDate ?? ''); setStart(item.startDate ?? ''); };
   const titleRef = useAutosize(title), descRef = useAutosize(description), storyRef = useAutosize(line);
   const parent = item.parentId ? items.find(i => i.id === item.parentId) ?? null : null;
   const children = item.type === 'epic' ? lanesOf(items).find(l => l.epic?.id === item.id)?.items ?? [] : items.filter(i => i.parentId === item.id);
@@ -257,20 +310,30 @@ function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSav
           <textarea ref={titleRef} aria-label="Title" rows={1} value={title} disabled={!canEdit} onChange={e => setTitle(e.target.value.replace(/\n/g, ' '))} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.currentTarget.blur(); } }} className={cx(quiet, 'font-display text-[1.35rem] font-semibold leading-8 tracking-[-0.01em]')} />
           {story !== null && <div className="mt-2 border-l-2 border-[#FFBC03] pl-3.5" data-testid="story-line"><textarea ref={storyRef} aria-label="User story" rows={1} value={line} disabled={!canEdit} onChange={e => setLine(e.target.value.replace(/\n/g, ' '))} className={cx(quiet, 'text-[15px] leading-6 text-slate-700')} /></div>}
 
-          <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-4">
+          <div className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-3">
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Status
               <span className="flex items-center gap-1.5"><span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', STATUS_DOT[item.status])} aria-hidden />
                 <select aria-label="Status" value={item.status} disabled={!canEdit} onChange={e => onSave({ status: e.target.value as WorkStatus })} className={prop}>{COLUMNS.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select>
               </span>
             </label>
+            <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Owner
+              <select aria-label="Owner" value={item.ownerId ?? ''} disabled={!canEdit} onChange={e => onSave({ ownerId: e.target.value || null })} className={cx(prop, !item.ownerId && 'font-normal text-slate-500')}>
+                <option value="">Unassigned</option>
+                {members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}
+                {item.ownerId && !members.some(m => m.userId === item.ownerId) && <option value={item.ownerId}>Someone no longer in this workspace</option>}
+              </select>
+            </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Priority
-              <select aria-label="Priority" value={item.priority ?? ''} disabled={!canEdit} onChange={e => onSave({ priority: (e.target.value || null) as WorkItem['priority'] })} className={cx(prop, !item.priority && 'font-normal text-slate-400')}><option value="">Not set</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
+              <select aria-label="Priority" value={item.priority ?? ''} disabled={!canEdit} onChange={e => onSave({ priority: (e.target.value || null) as WorkItem['priority'] })} className={cx(prop, !item.priority && 'font-normal text-slate-500')}><option value="">Not set</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
             </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Estimate (hours)
               <input aria-label="Estimate in hours" inputMode="decimal" value={estimate} disabled={!canEdit} placeholder="Not set" onChange={e => setEstimate(e.target.value)} className={prop} />
             </label>
+            <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Start date
+              <input aria-label="Start date" type="date" value={start} disabled={!canEdit} onChange={e => setStart(e.target.value)} className={cx(prop, !start && 'font-normal text-slate-500')} />
+            </label>
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Due date
-              <input aria-label="Due date" type="date" value={due} disabled={!canEdit} onChange={e => setDue(e.target.value)} className={cx(prop, !due && 'font-normal text-slate-400')} />
+              <input aria-label="Due date" type="date" value={due} disabled={!canEdit} onChange={e => setDue(e.target.value)} className={cx(prop, !due && 'font-normal text-slate-500')} />
             </label>
           </div>
 
@@ -289,7 +352,7 @@ function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSav
             <ul className="mt-2 divide-y divide-slate-100 rounded-lg ring-1 ring-slate-200" data-testid="item-children">
               {children.map(c => (
                 <li key={c.id}><button type="button" onClick={() => onOpen(c.id)} className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm hover:bg-slate-50">
-                  <TypeGlyph type={c.type} /><span className="min-w-0 flex-1 truncate text-slate-800">{c.title}</span><StatusLabel status={c.status} />
+                  <TypeGlyph type={c.type} /><span className="min-w-0 flex-1 truncate text-slate-800">{c.title}</span>{c.ownerId && members.some(m => m.userId === c.ownerId) && <OwnerMark name={members.find(m => m.userId === c.ownerId)!.name} />}<StatusLabel status={c.status} />
                 </button></li>
               ))}
             </ul>
@@ -310,7 +373,7 @@ function ItemPanel({ item, items, canEdit, reqs, changes, onClose, onOpen, onSav
         {canEdit && dirty && (
           <footer className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-3">
             <span className="text-sm text-slate-600">You have changes that are not saved.</span>
-            <span className="flex gap-2"><Button variant="ghost" onClick={reset}>Discard</Button><Button onClick={() => onSave({ title, description: joinStory(story === null ? null : line.trim() || null, description), estimateHours: estimate.trim() ? Number(estimate) : null, dueDate: due || null })}>Save</Button></span>
+            <span className="flex gap-2"><Button variant="ghost" onClick={reset}>Discard</Button><Button onClick={() => onSave({ title, description: joinStory(story === null ? null : line.trim() || null, description), estimateHours: estimate.trim() ? Number(estimate) : null, startDate: start || null, dueDate: due || null })}>Save</Button></span>
           </footer>
         )}
       </aside>

@@ -7,10 +7,11 @@ import { revisionStatus } from '../../domain/workspace/route.ts';
 const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 import { Portfolio } from './Portfolio.tsx';
 import { WorkspaceSettings } from './WorkspaceSettings.tsx';
+import { PeoplePage } from './PeoplePage.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
-const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
-const remember = (id: string) => { try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ } };
+export const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
+export const remember = (id: string) => { try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ } };
 
 export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav }) {
   const [workspaces, setWorkspaces] = React.useState<Workspace[] | null>(null);
@@ -65,7 +66,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   const [adding, setAdding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [view, setView] = React.useState<'list' | 'portfolio' | 'settings'>('list');
+  const [view, setView] = React.useState<'list' | 'portfolio' | 'people' | 'settings'>('list');
   const canEdit = workspace.role !== 'viewer';
 
   const [status, setStatus] = React.useState<Record<string, ReturnType<typeof revisionStatus>>>({});
@@ -103,7 +104,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
       {processes !== null && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div role="tablist" aria-label="Views" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
-            {([['list', 'Processes'], ['portfolio', 'Portfolio'], ['settings', 'Settings']] as const).map(([id, label]) => (
+            {([['list', 'Processes'], ['portfolio', 'Portfolio'], ['people', 'People'], ['settings', 'Settings']] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
                 className={cx('rounded-md px-3.5 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
             ))}
@@ -111,7 +112,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
           {canEdit && view === 'list' && processes.length > 0 && !adding && <Button onClick={() => setAdding(true)}>Add process</Button>}
         </div>
       )}
-      {view === 'settings' && processes !== null ? <WorkspaceSettings store={store} workspace={workspace} /> : processes === null ? <Spinner /> : processes.length === 0 ? (
+      {view === 'people' && processes !== null ? <PeoplePage store={store} workspace={workspace} /> : view === 'settings' && processes !== null ? <WorkspaceSettings store={store} workspace={workspace} /> : processes === null ? <Spinner /> : processes.length === 0 ? (
         <EmptyState title="No processes yet" action={canEdit ? addForm : undefined}>
           {canEdit ? 'Add the process you want to assess. You will add its transcripts, procedures and flowcharts next.' : 'Nobody has added a process to this workspace yet.'}
         </EmptyState>
@@ -152,7 +153,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   );
 }
 
-function FirstRun({ store, onCreated }: { store: JourneyStore; onCreated: () => void }) {
+export function FirstRun({ store, onCreated }: { store: JourneyStore; onCreated: () => void }) {
   const [org, setOrg] = React.useState('');
   const [ws, setWs] = React.useState('');
   const [busy, setBusy] = React.useState(false);

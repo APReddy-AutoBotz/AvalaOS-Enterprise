@@ -153,7 +153,7 @@ export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '' }:
                   <label className="flex gap-3">
                     <input type="checkbox" className="mt-1" checked={chosen.has(p.itemKey)} onChange={e => { const n = new Set(chosen); e.target.checked ? n.add(p.itemKey) : n.delete(p.itemKey); setChosen(n); }} />
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-slate-900"><span className="mr-1.5 tabular-nums text-slate-400">{items.findIndex(i => i.key === p.itemKey) + 1}.</span>{p.question}</span>
+                      <span className="block text-sm font-semibold text-slate-900"><span className="mr-1.5 tabular-nums text-slate-500">{items.findIndex(i => i.key === p.itemKey) + 1}.</span>{p.question}</span>
                       <span className="mt-1 block text-sm text-slate-800"><span className="font-semibold text-[#002C4B]">Answer:</span> {p.display}</span>
                       <span className="mt-1 block border-l-2 border-sky-200 pl-2 text-xs italic text-slate-500">“{p.quote}”</span>
                       {p.certainty === 'inferred' && <span className="mt-1 inline-block rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">Read between the lines: check it</span>}

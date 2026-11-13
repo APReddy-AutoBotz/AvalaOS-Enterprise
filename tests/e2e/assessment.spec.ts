@@ -555,6 +555,49 @@ test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and 
   await expect(page.getByLabel('Name of step 1')).toHaveValue('Post invoice in SAP S/4HANA');
 });
 
+test('work items: two items merge into one, one item splits into two, and a reload keeps both', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Work items');
+  const items = page.getByTestId('work-items');
+  const access = 'Set up access to SAP S/4HANA for the solution';
+  const testEnv = 'Prepare a test environment and test data for SAP S/4HANA';
+  const total = await items.getByTestId('proposal').count();
+
+  // Merge: the originals are set aside with a reason, the new item carries all four criteria and is selected.
+  await items.getByLabel(`Select ${access}`).check();
+  await expect(items.getByRole('button', { name: /^Merge 1 selected/ })).toHaveCount(0);
+  await items.getByLabel(`Select ${testEnv}`).check();
+  await items.getByRole('button', { name: 'Merge 2 selected into one' }).click();
+  await expect(items.getByTestId('rejected-reason')).toHaveCount(2);
+  await expect(items.getByTestId('rejected-reason').first()).toContainText('Merged into');
+  const merged = items.getByTestId('proposal').filter({ hasText: access }).filter({ hasText: 'Edited' });
+  await expect(merged).toContainText('4 acceptance criteria');
+  await expect(items.getByTestId('proposal')).toHaveCount(total + 1);
+  await expect(page.getByTestId('confirm-panel')).toContainText('1 selected');
+  await shot(page, '56-merged');
+
+  // Split: two of the four criteria move to a new item with its own title.
+  await merged.getByRole('button', { name: access }).click();
+  await items.getByRole('button', { name: 'Split into two items' }).click();
+  const form = items.getByTestId('split-form');
+  await form.getByRole('button', { name: 'Split item' }).click();
+  await expect(form.getByRole('alert')).toContainText('Give the new item a title');
+  await form.getByLabel('Title of the new item').fill('Prepare the SAP test environment');
+  await form.getByRole('checkbox').nth(2).check();
+  await form.getByRole('checkbox').nth(3).check();
+  await form.getByRole('button', { name: 'Split item' }).click();
+  const second = items.getByTestId('proposal').filter({ hasText: 'Prepare the SAP test environment' });
+  await expect(second).toContainText('2 acceptance criteria');
+  await expect(items.getByTestId('proposal').filter({ hasText: access }).filter({ hasText: 'Edited' })).toContainText('2 acceptance criteria');
+  await expect(items.getByTestId('proposal')).toHaveCount(total + 2);
+
+  // A reload keeps both, in place and not flagged as removed.
+  await page.reload();
+  await expect(items.getByTestId('proposal')).toHaveCount(total + 2);
+  await expect(items.getByTestId('proposal').filter({ hasText: 'Prepare the SAP test environment' })).toBeVisible();
+  await expect(items).not.toContainText('Source removed');
+});
+
 test('work items: proposals reviewed (edit, reject, select), confirmed to the board once; the board keeps moves and edits and shows upstream changes', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Work items');
@@ -622,12 +665,39 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   const detail = page.getByTestId('item-panel');
   await expect(detail.getByTestId('item-criteria').locator('li')).toHaveCount(2);
   await expect(detail.getByRole('button', { name: /Rule-based RPA in SAP S\/4HANA/ })).toBeVisible(); // its epic, one click away
+  // Give it an owner: the person's mark shows on the card, and the board can show only their work.
+  await detail.getByLabel('Owner').selectOption({ label: 'analyst' });
+  await expect(page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).getByTitle('analyst', { exact: true })).toBeVisible();
   await detail.getByLabel('Status').selectOption({ label: 'In progress' });
   await detail.getByLabel('Description').fill('Ask the SAP basis team which OData services are released.');
   await detail.getByRole('button', { name: 'Save' }).click();
   await page.reload();
   await expect(page.getByTestId('column-in_progress').getByTestId('board-card')).toHaveCount(1);
+  await page.keyboard.press('Escape');
+  await page.getByLabel('Show work of').selectOption({ label: 'analyst' });
+  await expect(page.getByTestId('board-card')).toHaveCount(1);
+  await page.getByLabel('Show work of').selectOption({ label: "Everyone's work" });
+  await page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
   await expect(page.getByTestId('item-panel').getByLabel('Description')).toHaveValue('Ask the SAP basis team which OData services are released.');
+
+  // The board exports as files Jira and Azure DevOps import.
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: 'Export' }).click();
+  const saved = async (name: string) => {
+    const [d] = await Promise.all([page.waitForEvent('download'), page.getByTestId('export-panel').getByRole('button', { name }).click()]);
+    return { file: d.suggestedFilename(), text: (await (await import('node:fs/promises')).readFile(await d.path(), 'utf8')) };
+  };
+  const jira = await saved('Download for Jira (CSV)');
+  expect(jira.file).toBe('AP-automation-jira.csv');
+  expect(jira.text).toContain('Issue ID,Parent,Issue Type,Summary');
+  expect(jira.text).toMatch(/\r\n1,,Epic,Rule-based RPA in SAP S\/4HANA/);
+  expect(jira.text).toContain('spike');
+  const azure = await saved('Download for Azure DevOps (CSV)');
+  expect(azure.text).toContain('Work Item Type,Title 1,Title 2,Title 3');
+  expect(azure.text).toMatch(/\r\nFeature,Rule-based RPA in SAP S\/4HANA/);
+  await shot(page, '55c-export');
+  await page.getByRole('button', { name: 'Export' }).click();
+  await page.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
 
   // Change the linked requirement in the FRD: the board item shows "Upstream changed" and is not edited.
   const epicCard = page.getByTestId('epic-lane').filter({ hasText: 'Rule-based RPA in SAP S/4HANA' });

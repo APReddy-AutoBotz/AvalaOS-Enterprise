@@ -182,7 +182,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
                 const next = r.scores.find(x => x.approach !== eff.approach && x.approach !== 'human');
                 return (
                   <tr key={s.id} data-testid="assessment-row" className="cursor-pointer align-top transition-colors hover:bg-slate-50" onClick={() => setOpen(s.id)}>
-                    <td className="px-4 py-3 text-xs tabular-nums text-slate-400">{i + 1}</td>
+                    <td className="px-4 py-3 text-xs tabular-nums text-slate-500">{i + 1}</td>
                     <td className="px-4 py-3">
                       <button type="button" className="text-left font-medium text-slate-900 hover:text-[#002C4B] hover:underline" aria-label={`Assessment of ${s.name}`}>{s.name}</button>
                       <p className="mt-0.5 max-w-md text-xs leading-5 text-slate-500">{eff.override ? eff.override.rationale : r.reason}</p>
@@ -192,9 +192,9 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
                       {eff.override && <p className="mt-1 text-[11px] text-slate-500" data-testid="overridden">Overridden by {eff.override.by}</p>}
                     </td>
                     <td className="w-28 px-4 py-3">
-                      {top ? <><span className="text-sm font-semibold tabular-nums text-slate-900">{top.score}</span><span className="text-xs text-slate-400"> / 100</span><ScoreBar score={top.score} approach={top.approach} className="mt-1.5" /></> : <span className="text-xs text-slate-400">Not scored</span>}
+                      {top ? <><span className="text-sm font-semibold tabular-nums text-slate-900">{top.score}</span><span className="text-xs text-slate-500"> / 100</span><ScoreBar score={top.score} approach={top.approach} className="mt-1.5" /></> : <span className="text-xs text-slate-500">Not scored</span>}
                     </td>
-                    <td className="px-4 py-3 text-xs text-slate-600">{next && !r.alreadyAutomated ? <>{APPROACH_LABEL[next.approach]} <span className="tabular-nums text-slate-400">{next.score}</span></> : ''}</td>
+                    <td className="px-4 py-3 text-xs text-slate-600">{next && !r.alreadyAutomated ? <>{APPROACH_LABEL[next.approach]} <span className="tabular-nums text-slate-500">{next.score}</span></> : ''}</td>
                     <td className="px-4 py-3"><AiBadge s={r} approach={eff.approach} /></td>
                     <td className="px-4 py-3 text-xs text-slate-700">{HUMAN_LABEL[eff.override && eff.approach === 'human' ? 'does_it' : r.human]}</td>
                     <td className="px-4 py-3 text-xs text-slate-700">{r.alreadyAutomated ? '' : CONFIDENCE_LABEL[r.confidence]}</td>
@@ -241,10 +241,10 @@ function Hero({ result, onReport }: { result: ProcessAssessment; onReport: () =>
       {result.assessed > 0 && (
         <dl className="relative mt-7 grid gap-3 sm:grid-cols-3">
           {stats.map(([value, label, sub]) => (
-            <div key={label} className="rounded-xl bg-white/[0.07] p-4 ring-1 ring-inset ring-white/10">
-              <dd className="font-display text-2xl font-semibold">{value}</dd>
-              <dt className="mt-0.5 text-sm text-slate-200">{label}</dt>
-              <p className="mt-1 text-xs text-slate-400">{sub}</p>
+            <div key={label} className="flex flex-col rounded-xl bg-white/[0.07] p-4 ring-1 ring-inset ring-white/10">
+              <dt className="order-2 mt-0.5 text-sm text-slate-200">{label}</dt>
+              <dd className="order-1 font-display text-2xl font-semibold">{value}</dd>
+              <dd className="order-3 mt-1 text-xs text-slate-200">{sub}</dd>
             </div>
           ))}
         </dl>
@@ -276,12 +276,12 @@ function Ranking({ result }: { result: ProcessAssessment }) {
                 <p className="mt-1 text-sm text-slate-700">Best for <span className="tabular-nums">{r.stepsWon}</span> {r.stepsWon === 1 ? 'step' : 'steps'}{r.stepsFit > r.stepsWon ? <span className="text-slate-500">, could do {r.stepsFit}</span> : null}</p>
               </div>
               <div>
-                <p><span className="font-display text-2xl font-semibold tabular-nums text-slate-900">{r.score}</span><span className="text-sm text-slate-400"> / 100</span></p>
+                <p><span className="font-display text-2xl font-semibold tabular-nums text-slate-900">{r.score}</span><span className="text-sm text-slate-500"> / 100</span></p>
                 <ScoreBar score={r.score} approach={r.approach} className="mt-1.5" />
               </div>
               <dl className="space-y-1.5 text-[13px] leading-5">
-                {r.strength && <div><dt className="inline font-semibold text-emerald-700">Strongest where: </dt><dd className="inline text-slate-700">{r.strength.text} <span className="text-slate-400">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
-                {r.heldBack && <div><dt className="inline font-semibold text-amber-700">Held back where: </dt><dd className="inline text-slate-700">{r.heldBack.text} <span className="text-slate-400">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+                {r.strength && <div><dt className="inline font-semibold text-emerald-700">Strongest where: </dt><dd className="inline text-slate-700">{r.strength.text} <span className="text-slate-500">({r.strength.steps} {r.strength.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
+                {r.heldBack && <div><dt className="inline font-semibold text-amber-700">Held back where: </dt><dd className="inline text-slate-700">{r.heldBack.text} <span className="text-slate-500">({r.heldBack.steps} {r.heldBack.steps === 1 ? 'step' : 'steps'})</span></dd></div>}
                 {r.toWin && !(r.approach === 'api' && result.apiSwitch.steps > 0) && <div><dt className="inline font-semibold text-slate-600">Would rank higher: </dt><dd className="inline text-slate-700">{r.toWin.replace(/^It (would rank|ranks) higher (only )?/, '').replace(/^It is justified only /, 'only ').replace(/^./, c => c.toUpperCase())}</dd></div>}
               </dl>
             </li>
@@ -307,7 +307,7 @@ function Benefit({ result, decisions, canEdit, me, onSave }: { result: ProcessAs
   const span = (r: [number, number], exact: boolean) => (exact ? (Math.round(r[0]) === Math.round(r[1]) ? money(r[0]) : `${money(r[0])} – ${Math.round(r[1]).toLocaleString('en')}`) : `Up to ${money(r[1])}`);
   const months = (m: number) => (m < 1 ? 'under a month' : `${m.toLocaleString('en', { maximumFractionDigits: 1 })} months`);
   const tile = (label: string, body: React.ReactNode, note?: React.ReactNode, testid?: string) => (
-    <div className="rounded-xl bg-slate-50 p-4" data-testid={testid}>
+    <div className="bg-white p-4" data-testid={testid}>
       <dt className="text-xs font-semibold text-slate-500">{label}</dt>
       <dd className="mt-1.5 text-sm leading-6 text-slate-900">{body}</dd>
       {note && <p className="mt-1 text-xs leading-5 text-slate-500">{note}</p>}
@@ -331,7 +331,7 @@ function Benefit({ result, decisions, canEdit, me, onSave }: { result: ProcessAs
     <section aria-label="Benefit" className="rounded-xl border border-slate-200 bg-white p-6">
       <h3 className="font-display text-base font-semibold text-slate-900">Benefit and payback</h3>
       <p className="mt-1 text-sm text-slate-500">From the hours above and the figures you enter here. Nothing is assumed; where the hours are an upper bound, so is everything that follows.</p>
-      <dl className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <dl className="mt-4 grid gap-px overflow-hidden rounded-lg border border-slate-200 bg-slate-200 md:grid-cols-2 xl:grid-cols-4">
         {tile('Hours a year', v.computable ? big(v.value!.exact ? range(v.value!.hours) : `Up to ${Math.round(v.value!.hours[1]).toLocaleString('en')}`) : missing(v.reason ?? ''), v.computable && !v.value!.exact ? 'An upper bound. Step times and shares would make it a calculated range.' : undefined)}
         {tile('Value a year', p ? big(span(p.value, p.exact)) : missing(pb.reason ?? ''), p ? `At ${cur} ${decisions.rate!.amount.toLocaleString('en')} an hour, entered by ${decisions.rate!.enteredBy}.` : undefined, 'benefit-value')}
         {tile('Payback', p ? (p.months.best === null ? missing(p.missing.includes('the build cost') ? 'Enter the build cost.' : 'The savings do not cover the running cost.') : big(p.months.worst === null ? `From ${months(p.months.best)}` : p.months.worst === 'never' ? `${months(p.months.best)} at best` : p.months.best === p.months.worst ? months(p.months.best) : `${months(p.months.best)} – ${months(p.months.worst)}`)) : missing('Needs the value a year and the build cost.'),
@@ -415,11 +415,11 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
             {result.scores.map((a, i) => (
               <li key={a.approach} className="rounded-xl bg-white ring-1 ring-slate-200" data-testid="approach-score">
                 <button type="button" aria-expanded={expanded === a.approach} onClick={() => setExpanded(expanded === a.approach ? null : a.approach)} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-                  <span className="w-5 text-xs font-semibold tabular-nums text-slate-400">{i + 1}</span>
+                  <span className="w-5 text-xs font-semibold tabular-nums text-slate-500">{i + 1}</span>
                   <span className="w-44 text-sm font-medium text-slate-900">{APPROACH_LABEL[a.approach]}</span>
                   <ScoreBar score={a.score} approach={a.approach} className="flex-1" />
                   <span className="w-10 text-right text-sm font-semibold tabular-nums text-slate-900">{a.score}</span>
-                  <span aria-hidden className="text-slate-400">{expanded === a.approach ? '−' : '+'}</span>
+                  <span aria-hidden className="text-slate-500">{expanded === a.approach ? '−' : '+'}</span>
                 </button>
                 {expanded === a.approach && <Breakdown a={a} />}
               </li>
