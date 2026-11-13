@@ -140,3 +140,7 @@ This repository continues `APReddy-AutoBotz/AvalaOS-Core` from commit `88d0643`.
 ## Sign-up is by invitation
 
 A database trigger on `auth.users` (`app_private.require_invite`) refuses any new account whose email has no row in `workspace_invites`; users made from the Supabase dashboard (`invited_at` set) are allowed. Test: `supabase/tests/invite_only_signup.sql`. The first account of a new deployment is made from the dashboard.
+
+## Logo
+
+The mark is an A in five layers, one for each stage of the name (Assess, Validate, Assemble, Launch, Audit), navy with the top layer in amber `#E69F00`. The wordmark is "Avala OS" in Outfit bold with the S in the same amber. Files: `public/brand/avala-os-mark.svg` (on white), `avala-os-mark-light.svg` (on dark), `avala-os-app-icon.svg` (also the favicon). The five words appear beside the logo only at 320 px wide or more; the mark alone is used below that. The older gold-and-silver lockups in `public/brand/` are not used by the app.
