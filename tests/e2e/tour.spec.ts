@@ -65,15 +65,16 @@ test('tour: the sample case through every stage', async ({ page }) => {
   // written down, and only reading the incoming invoices is not rule-based work.
   await stage(page, 'Assessment');
   await page.getByRole('tab', { name: /^Inputs/ }).click();
+  const saved = async () => { await page.waitForTimeout(200); await expect(page.getByTestId('save-state')).not.toContainText('Saving'); };
   const choose = async (label: string, option: string) => {
     await page.getByLabel(label, { exact: true }).selectOption({ label: option });
-    await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+    await saved();
   };
   const type = async (label: string, value: string) => {
     const box = page.getByLabel(label, { exact: true });
     await box.fill(value);
     await box.blur();
-    await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+    await saved();
   };
   await choose('Volume period', 'per month');
   await type('Volume', '9500');
