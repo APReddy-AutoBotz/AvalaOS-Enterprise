@@ -14,6 +14,10 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   await expect(hero).toBeVisible();
   expect(await hero.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 
+  // The message that AI is not needed everywhere, with the approaches every step is scored for.
+  await expect(page.getByRole('heading', { name: 'AI is not the answer to every step' })).toBeVisible();
+  await expect(page.getByRole('list', { name: 'The approaches every step is scored for' }).getByRole('listitem')).toHaveCount(5);
+
   const stages = page.getByRole('list', { name: 'The five stages' }).getByRole('button');
   await expect(stages).toHaveCount(5);
   await expect(stages.first()).toHaveAttribute('aria-current', 'step');
