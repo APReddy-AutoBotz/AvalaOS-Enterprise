@@ -96,7 +96,7 @@ function Journey({ store }: { store: JourneyStore }) {
         </div>
       </header>
       {store.kind === 'memory' && (
-        <div className="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-center text-xs text-amber-900">
+        <div data-testid="local-mode" className="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-center text-xs text-amber-900">
           Local mode: data stays in this browser and is not saved to a server.
         </div>
       )}
