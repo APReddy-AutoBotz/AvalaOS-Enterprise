@@ -243,7 +243,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           {TYPES.map(t => (
             <button key={t.id} type="button" role="tab" aria-selected={type === t.id} onClick={() => setType(t.id)}
               className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', type === t.id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
-              {t.short}<span className="ml-1.5 hidden font-normal text-slate-500 sm:inline">{t.label}</span>
+              {t.short}<span className="ml-1.5 hidden font-normal text-slate-600 sm:inline">{t.label}</span>
             </button>
           ))}
         </div>
