@@ -24,6 +24,7 @@ import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
 import { applyEdits, EditError, makeEdit, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
+import { changedSections, type SectionChange } from '../../domain/docs/changes.ts';
 
 const SectionEditor = React.lazy(() => import('./SectionEditor.tsx'));
 
@@ -106,9 +107,11 @@ async function withPngFigures(doc: DocTree): Promise<DocTree> {
   return { ...doc, sections };
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null }: {
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null }: {
   /** The number of the latest approved revision, if any: the SDD is written once one exists. */
   approvedRevision?: number | null;
+  /** The latest approved revision, when the working draft is newer: sections changed since then are marked. */
+  approvedRevisionId?: string | null;
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; onSaved: () => void; canEdit: boolean; me: string; onSourcesChanged: () => void;
   revision: { label: string; state: 'working' | 'approved'; date: string }; sources: SourceRow[];
 }) {
@@ -152,6 +155,18 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
   }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits]);
   const doc = built?.doc ?? null;
+  // The same document built from the approved revision's model: what changed since approval.
+  const [approvedModel, setApprovedModel] = React.useState<ProcessModel | null>(null);
+  React.useEffect(() => { setApprovedModel(null); if (approvedRevisionId) store.getModel(approvedRevisionId).then(setApprovedModel).catch(() => setApprovedModel(null)); }, [store, approvedRevisionId]);
+  const sinceApproved = React.useMemo<SectionChange[]>(() => {
+    if (!approvedModel || !doc || !decisions || !stored) return [];
+    const a = assessProcess(approvedModel, { rate: decisions.rate, settings });
+    const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : buildSdd(input);
+    return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
+  }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
+  const changedIds = new Set(sinceApproved.map(c => c.id));
+  const [showChanges, setShowChanges] = React.useState(false);
   const review = built ? Object.values<SectionStatus>(built.status).filter(s => s.state === 'needs_review').length : 0;
 
   const saveEdit = async (sectionKey: string, html: string, hash: string) => {
@@ -224,6 +239,27 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         </div>
       ) : (
         <>
+        {sinceApproved.length > 0 && (
+          <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="since-approved">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span><span className="font-semibold">{sinceApproved.length} {sinceApproved.length === 1 ? 'section changed' : 'sections changed'} since approved revision {approvedRevision}</span>: the process was edited after approval. The approved document is unchanged; approve this draft to make these the approved version.</span>
+              <button type="button" className="font-semibold text-[#002C4B] hover:underline" onClick={() => setShowChanges(!showChanges)} aria-expanded={showChanges}>{showChanges ? 'Hide changes' : 'Review changes'}</button>
+            </div>
+            {showChanges && (
+              <ul className="mt-3 space-y-3" data-testid="change-list">
+                {sinceApproved.map(c => (
+                  <li key={c.id} className="rounded-lg bg-white p-3 ring-1 ring-inset ring-slate-200">
+                    <a href={`#${c.id}`} className="text-sm font-semibold text-slate-900 hover:underline">{c.number} {c.title}</a>
+                    <span className="ml-2 text-xs text-slate-500">{c.kind === 'added' ? 'New section' : c.kind === 'removed' ? 'Removed' : c.figure ? 'The map changed' : 'Changed'}</span>
+                    {!c.figure && <div className="mt-2 max-h-56 overflow-auto font-mono text-[11px] leading-5">
+                      {c.diff.filter(d => d.op !== 'same').slice(0, 40).map((d, i) => <div key={i} className={d.op === 'add' ? 'bg-emerald-50 text-emerald-900' : 'bg-red-50 text-red-900 line-through decoration-red-300'}>{d.op === 'add' ? '+ ' : '− '}{d.text}</div>)}
+                    </div>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
         {review > 0 && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="review-banner"><span className="font-semibold">{review} edited {review === 1 ? 'section needs' : 'sections need'} review:</span> the process changed after you edited {review === 1 ? 'it' : 'them'}. Keep your text or take the update in each section.</p>}
         {type === 'sdd' && approvedRevision === null && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950" data-testid="sdd-preview">Preview from the working draft: no revision is approved yet, so this SDD is not for sign-off.</p>}
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
@@ -250,6 +286,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               const head = (
                 <span className="flex flex-wrap items-center gap-2">
                   <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-400')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
+                  {changedIds.has(s.id) && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-changed">Changed since revision {approvedRevision}</span>}
                   {st?.state === 'edited' && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-edited">Edited by you</span>}
                   {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
                   {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}

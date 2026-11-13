@@ -618,3 +618,58 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   await expect(page.getByTestId('item-panel').getByLabel('Title')).toHaveValue(epicTitle);
   await shot(page, '56-upstream-changed');
 });
+
+test('after approval, a process change marks what changed in the documents, and edited requirements and work items ask for review', async ({ page }) => {
+  await buildProcess(page);
+  // Edit a requirement and a work item before the change.
+  await stage(page, 'Documents');
+  await page.getByRole('tab', { name: /FRD/ }).click();
+  const reg = page.getByTestId('requirements-panel');
+  await reg.getByRole('button', { name: /Requirements register/ }).click();
+  const fr = reg.getByTestId('requirement').filter({ hasText: 'Post invoice in SAP' });
+  const code = (await fr.locator('span.font-mono').textContent())!;
+  await fr.getByRole('button', { name: `Edit ${code}` }).click();
+  await reg.getByLabel(`Statement of ${code}`).fill('The solution shall post each checked invoice in SAP S/4HANA.');
+  await reg.getByRole('button', { name: 'Save requirement' }).click();
+  await stage(page, 'Work items');
+  const epic = page.getByTestId('proposal').filter({ hasText: /Rule-based RPA in SAP S\/4HANA/ });
+  await epic.getByRole('button', { name: /Rule-based RPA in SAP S\/4HANA/ }).click();
+  await page.getByLabel(/^Title of Rule-based RPA/).fill('Automate SAP posting');
+  await page.getByRole('button', { name: 'Save item' }).click();
+  await expect(page.getByTestId('proposal').filter({ hasText: 'Automate SAP posting' })).toContainText('Edited');
+
+  // Approve, then rename the step.
+  await page.getByRole('button', { name: 'Approve' }).click();
+  await expect(page.getByTestId('revision-status')).toHaveText('Approved revision 1');
+  await stage(page, 'Process');
+  await page.getByRole('tab', { name: /^Steps/ }).click();
+  await page.getByLabel('Name of step 2').fill('Post invoice in SAP S/4HANA');
+  await page.getByLabel('Name of step 2').blur();
+  await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+  await expect(page.getByTestId('revision-status')).toContainText('unapproved changes');
+
+  // The PDD: what changed since approval, with the diff; the approved revision is unchanged.
+  await stage(page, 'Documents');
+  const since = page.getByTestId('since-approved');
+  await expect(since).toContainText('since approved revision 1');
+  await expect(page.getByTestId('document').locator('[data-testid="doc-section"]').filter({ hasText: 'Detailed As-Is steps' }).getByTestId('chip-changed')).toBeVisible();
+  await since.getByRole('button', { name: 'Review changes' }).click();
+  await expect(since.getByTestId('change-list')).toContainText('Post invoice in SAP S/4HANA');
+  await shot(page, '57-changed-since-approved');
+  // The edited requirement needs review: take the update.
+  await page.getByRole('tab', { name: /FRD/ }).click();
+  await reg.getByRole('button', { name: /Requirements register/ }).click();
+  await expect(reg.getByTestId('req-review')).toHaveCount(1);
+  await expect(reg.getByTestId('req-update')).toContainText('post invoice in SAP S/4HANA in SAP S/4HANA');
+  await reg.getByRole('button', { name: 'Take update' }).click();
+  await expect(reg.getByTestId('req-review')).toHaveCount(0);
+  await expect(page.getByTestId('document')).toContainText('The solution shall post invoice in SAP S/4HANA in SAP S/4HANA.');
+  // The edited work item needs review: keep mine.
+  await stage(page, 'Work items');
+  const mine = page.getByTestId('proposal').filter({ hasText: 'Automate SAP posting' });
+  await expect(mine.getByTestId('proposal-review')).toBeVisible();
+  await expect(mine).toContainText('Rule-based RPA in SAP S/4HANA: Post invoice in SAP S/4HANA');
+  await mine.getByRole('button', { name: 'Keep mine' }).click();
+  await expect(mine.getByTestId('proposal-review')).toHaveCount(0);
+  await expect(mine).toContainText('Edited');
+});

@@ -229,7 +229,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return (data ?? []).map((r: any): StoredRequirement => {
         const l = r.links ?? {};
-        return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order };
+        return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order, baseHash: l.baseHash ?? null };
       });
     },
     async listProjects(workspaceId) {
@@ -266,11 +266,11 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       return itemFrom(data);
     },
     async listProposals(processId) {
-      const { data, error } = await db.from('work_item_proposals').select('derivation_key, item_type, parent_key, title, description, acceptance_criteria, step_ids, requirement_codes, state, rejected_reason, user_edited, sort_order, confirmed_work_item_id').eq('process_id', processId).not('derivation_key', 'is', null).order('sort_order');
+      const { data, error } = await db.from('work_item_proposals').select('derivation_key, item_type, parent_key, title, description, acceptance_criteria, step_ids, requirement_codes, state, rejected_reason, user_edited, sort_order, confirmed_work_item_id, base_hash').eq('process_id', processId).not('derivation_key', 'is', null).order('sort_order');
       if (error) fail(error);
       return (data ?? []).map((r: any): Proposal => ({
         key: r.derivation_key, type: r.item_type, parentKey: r.parent_key, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [], stepIds: r.step_ids ?? [],
-        requirements: r.requirement_codes ?? [], state: r.state === 'edited' ? 'proposed' : r.state, rejectedReason: r.rejected_reason, edited: r.user_edited, order: r.sort_order, workItemId: r.confirmed_work_item_id,
+        requirements: r.requirement_codes ?? [], state: r.state === 'edited' ? 'proposed' : r.state, rejectedReason: r.rejected_reason, edited: r.user_edited, order: r.sort_order, workItemId: r.confirmed_work_item_id, baseHash: r.base_hash,
       }));
     },
     async saveProposals(processId, rows) {
@@ -283,7 +283,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const batch = crypto.randomUUID();
       const row = (r: Proposal) => ({
         workspace_id: process.workspaceId, process_id: processId, derivation_key: r.key, item_type: r.type, parent_key: r.parentKey, title: r.title, description: r.description,
-        acceptance_criteria: r.acceptance, step_ids: r.stepIds, requirement_codes: r.requirements, state: r.state, rejected_reason: r.rejectedReason, user_edited: r.edited, sort_order: r.order,
+        acceptance_criteria: r.acceptance, step_ids: r.stepIds, requirement_codes: r.requirements, state: r.state, rejected_reason: r.rejectedReason, user_edited: r.edited, sort_order: r.order, base_hash: r.baseHash ?? null,
       });
       const updates = rows.filter(r => idOf.has(r.key)).map(r => ({ ...row(r), id: (idOf.get(r.key) as any).id, batch_id: (idOf.get(r.key) as any).batch_id }));
       const inserts = rows.filter(r => !idOf.has(r.key)).map(r => ({ ...row(r), batch_id: batch }));
@@ -314,7 +314,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (!process) throw new StoreError(404, 'Process not found.');
       const { error } = await db.from('requirements').upsert(rows.map(r => ({
         workspace_id: process.workspaceId, process_id: processId, code: r.code, requirement_type: REQ_TYPE[r.kind], statement: r.statement, rationale: r.rationale,
-        priority: r.priority, acceptance_criteria: r.acceptance, links: { title: r.title, category: r.category, stepIds: r.stepIds, ruleIds: r.ruleIds, exceptionIds: r.exceptionIds, traces: r.traces, gaps: r.gaps },
+        priority: r.priority, acceptance_criteria: r.acceptance, links: { title: r.title, category: r.category, stepIds: r.stepIds, ruleIds: r.ruleIds, exceptionIds: r.exceptionIds, traces: r.traces, gaps: r.gaps, baseHash: r.baseHash ?? null },
         origin: r.origin, derivation_key: r.key, state: r.state, user_edited: r.edited, sort_order: r.order,
       })), { onConflict: 'process_id,code' });
       if (error) fail(error);

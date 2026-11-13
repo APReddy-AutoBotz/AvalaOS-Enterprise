@@ -97,3 +97,24 @@ test('FRD: one card per FR with acceptance criteria, interfaces, traceability; m
   const brd = toMarkdown(buildBrd(input));
   for (const r of reqs.filter(x => x.kind === 'BR')) assert.ok(brd.includes(r.code), r.code);
 });
+
+test('an edited requirement needs review when the process changes what it is derived from; keep mine or take the update', async () => {
+  const { keepRequirement } = await import('./register.ts');
+  const first = reconcile(derive(gold), []).requirements;
+  const fr = first.find(r => r.category === 'step')!;
+  const edited = editRequirement(fr, { title: fr.title, statement: 'Mine.', priority: null, acceptance: [] });
+  const stored = first.map(r => (r.code === fr.code ? edited : r));
+  assert.equal(reconcile(derive(gold), stored).requirements.find(r => r.code === fr.code)!.needsReview, false);
+  // The step is renamed: the derived statement changes; the person's text stays and is flagged.
+  const m2: ProcessModel = structuredClone(gold);
+  m2.steps.find(s => s.id === fr.stepIds[0])!.name = 'Log invoice in the AP tracker';
+  const after = reconcile(deriveRequirements(m2, assessProcess(m2)), stored).requirements.find(r => r.code === fr.code)!;
+  assert.equal(after.statement, 'Mine.');
+  assert.equal(after.needsReview, true);
+  assert.match(after.derived!.statement, /log invoice in the AP tracker/);
+  const kept = reconcile(deriveRequirements(m2, assessProcess(m2)), stored.map(r => (r.code === fr.code ? keepRequirement(after) : r))).requirements.find(r => r.code === fr.code)!;
+  assert.equal(kept.needsReview, false);
+  assert.equal(kept.statement, 'Mine.');
+  const taken = reconcile(deriveRequirements(m2, assessProcess(m2)), stored.map(r => (r.code === fr.code ? revertRequirement(after) : r))).requirements.find(r => r.code === fr.code)!;
+  assert.match(taken.statement, /log invoice in the AP tracker/);
+});
