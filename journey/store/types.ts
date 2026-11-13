@@ -128,6 +128,9 @@ export interface JourneyStore {
   clearWorkspaceAi(workspaceId: string): Promise<void>;
   /** A tiny real request with the workspace's provider (or the platform's), to prove the key works. */
   testWorkspaceAi(workspaceId: string): Promise<{ model: string; source: 'workspace' | 'platform' }>;
+  /** Whether the signed-in person gets the weekday "Needs you" email; null when it cannot be read. */
+  getNeedsEmail(): Promise<boolean | null>;
+  setNeedsEmail(on: boolean): Promise<void>;
   /** This calendar month's AI use (UTC) and, from the server, the platform allowance. Members. */
   getAiUsage(workspaceId: string): Promise<AiUsage>;
   /** Admins only. Emails the invitation for an open invite (server function journey-invite); throws when email is not set up. */

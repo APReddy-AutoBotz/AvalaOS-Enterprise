@@ -41,6 +41,6 @@ jobs:
             echo "::warning::SUPABASE_ACCESS_TOKEN is not set, so nothing was deployed."
             exit 0
           fi
-          for fn in journey-ai journey-extract journey-invite; do
+          for fn in journey-ai journey-extract journey-invite journey-notify; do
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
           done

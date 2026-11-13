@@ -9,6 +9,8 @@ test('the homepage and the three trust pages are public; every other path belong
   assert.equal(publicPage('/privacy'), 'privacy');
   assert.equal(publicPage('/terms/'), 'terms');
   assert.equal(publicPage('/Security'), 'security');
+  assert.equal(publicPage('/unsubscribe'), 'unsubscribe');
+  assert.equal(publicPage('/unsubscribe/'), 'unsubscribe');
   for (const other of ['/signin', '/work', '/processes', '/privacy/x', '/privacy-policy', '/board', '/legal', '/demonstration', '/demo-data/sample.json']) {
     assert.equal(publicPage(other), null, other);
   }
