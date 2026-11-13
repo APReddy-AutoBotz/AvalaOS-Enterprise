@@ -6,7 +6,7 @@ import type { ProposalType } from './derive.ts';
 
 export type WorkStatus = 'todo' | 'in_progress' | 'in_review' | 'testing' | 'ready_for_release' | 'done' | 'blocked' | 'on_hold';
 export const COLUMNS: { id: WorkStatus; label: string }[] = [
-  { id: 'todo', label: 'To Do' }, { id: 'in_progress', label: 'In progress' }, { id: 'in_review', label: 'In review' },
+  { id: 'todo', label: 'To do' }, { id: 'in_progress', label: 'In progress' }, { id: 'in_review', label: 'In review' },
   { id: 'testing', label: 'Testing' }, { id: 'ready_for_release', label: 'Ready for release' }, { id: 'done', label: 'Done' },
   { id: 'blocked', label: 'Blocked' }, { id: 'on_hold', label: 'On hold' },
 ];
@@ -84,4 +84,45 @@ export function planningLine(i: Pick<WorkItem, 'ownerId' | 'estimateHours' | 'st
     i.estimateHours !== null ? `${i.estimateHours} h` : 'Not estimated',
     i.dueDate ? `Due ${i.dueDate}` : i.startDate ? `Starts ${i.startDate}` : 'No date',
   ].join(' · ');
+}
+
+/** A board lane: an epic and the work under it. Epics head lanes, as in Jira and Azure DevOps; they are not cards. */
+export interface Lane { epic: WorkItem | null; items: WorkItem[]; done: number }
+/** One lane per epic, in the order the epics come, then one lane for work that has no epic. */
+export function lanesOf(items: WorkItem[]): Lane[] {
+  const byId = new Map(items.map(i => [i.id, i]));
+  const epicOf = (i: WorkItem): WorkItem | null => {
+    let cur: WorkItem | undefined = i.parentId ? byId.get(i.parentId) : undefined;
+    for (let n = 0; cur && n < 10; n++) { if (cur.type === 'epic') return cur; cur = cur.parentId ? byId.get(cur.parentId) : undefined; }
+    return null;
+  };
+  const lanes = new Map<string, Lane>(items.filter(i => i.type === 'epic').map(e => [e.id, { epic: e, items: [], done: 0 }]));
+  const loose: Lane = { epic: null, items: [], done: 0 };
+  for (const i of items) {
+    if (i.type === 'epic') continue;
+    const lane = lanes.get(epicOf(i)?.id ?? '') ?? loose;
+    lane.items.push(i);
+    if (i.status === 'done') lane.done++;
+  }
+  return [...lanes.values(), ...(loose.items.length ? [loose] : [])];
+}
+
+/** A story's description opens with its "As the…, I want…" line. The line is shown on its own, once. */
+export function splitStory(description: string): { story: string | null; rest: string } {
+  const [first, ...more] = description.split('\n');
+  if (!/^As (the|a|an) .+, I want /.test(first)) return { story: null, rest: description };
+  return { story: first, rest: more.join('\n').replace(/^\n+/, '') };
+}
+export const joinStory = (story: string | null, rest: string) => (story ? (rest.trim() ? `${story}\n\n${rest}` : story) : rest);
+
+/** What is set on an item, for a card: nothing is shown for what the team has not set yet. */
+export function planningFacts(i: Pick<WorkItem, 'estimateHours' | 'startDate' | 'dueDate'>): { estimate: string | null; date: string | null } {
+  const day = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return { estimate: i.estimateHours !== null ? `${i.estimateHours} h` : null, date: i.dueDate ? `Due ${day(i.dueDate)}` : i.startDate ? `Starts ${day(i.startDate)}` : null };
+}
+
+/** The words of a criterion that carry its shape, so the screen can set them apart. */
+export function criterionParts(text: string): { word: string; text: string }[] | null {
+  const m = /^Given (.+?), when (.+?), then (.+)$/s.exec(text);
+  return m ? [{ word: 'Given', text: m[1] }, { word: 'when', text: m[2] }, { word: 'then', text: m[3] }] : null;
 }

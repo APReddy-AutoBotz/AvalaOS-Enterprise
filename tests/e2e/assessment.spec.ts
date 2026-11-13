@@ -595,15 +595,32 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   await expect(card('Confirm SAP S/4HANA interfaces with the SAP basis team')).toContainText('On the board');
 
   // The board: exactly those items, in To Do.
+  await page.setViewportSize({ width: 1680, height: 1000 });
   await page.getByRole('link', { name: 'Delivery board' }).click();
+  // Epics head the lanes; everything else is a card, in To do.
   const todo = page.getByTestId('column-todo');
-  await expect(todo.getByTestId('board-card')).toHaveCount(total - 1);
+  const epics = await page.getByTestId('epic-lane').count();
+  expect(epics).toBeGreaterThanOrEqual(1);
+  await expect(todo.getByTestId('board-card')).toHaveCount(total - 1 - epics);
+  await expect(page.getByTestId('board')).not.toContainText('Not estimated');
   await expect(page.getByTestId('board')).not.toContainText('Prepare a test environment and test data');
   await shot(page, '55-board');
+  // A story shows its user-story line once, above the details, and not again in the description.
+  const stories = todo.getByTestId('board-card').filter({ hasText: 'Story' });
+  if (await stories.count()) {
+    await stories.first().click();
+    const sp = page.getByTestId('item-panel');
+    await expect(sp.getByLabel('Title')).toBeVisible();
+    if (await sp.getByTestId('story-line').count()) await expect(sp.getByLabel('Description')).not.toHaveValue(/^As (the|a|an) /);
+    await page.screenshot({ path: 'test-results/screens/55a-story-panel.jpg', type: 'jpeg', quality: 70 });
+    await page.keyboard.press('Escape');
+    await expect(page.getByTestId('item-panel')).toHaveCount(0);
+  }
   // Move a card, reload: kept.
   await todo.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
   const detail = page.getByTestId('item-panel');
   await expect(detail.getByTestId('item-criteria').locator('li')).toHaveCount(2);
+  await expect(detail.getByRole('button', { name: /Rule-based RPA in SAP S\/4HANA/ })).toBeVisible(); // its epic, one click away
   await detail.getByLabel('Status').selectOption({ label: 'In progress' });
   await detail.getByLabel('Description').fill('Ask the SAP basis team which OData services are released.');
   await detail.getByRole('button', { name: 'Save' }).click();
@@ -612,10 +629,12 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   await expect(page.getByTestId('item-panel').getByLabel('Description')).toHaveValue('Ask the SAP basis team which OData services are released.');
 
   // Change the linked requirement in the FRD: the board item shows "Upstream changed" and is not edited.
-  const epicCard = page.getByTestId('board-card').filter({ hasText: 'Rule-based RPA in SAP S/4HANA' });
+  const epicCard = page.getByTestId('epic-lane').filter({ hasText: 'Rule-based RPA in SAP S/4HANA' });
   await page.keyboard.press('Escape');
-  await page.getByTestId('item-panel').getByRole('button', { name: 'Close' }).click();
-  await epicCard.click();
+  await expect(page.getByTestId('item-panel')).toHaveCount(0);
+  await epicCard.getByTestId('epic-open').click();
+  await expect(page.getByTestId('item-children').locator('li').first()).toBeVisible();
+  await shot(page, '55b-epic-panel');
   const code = (await page.getByTestId('item-requirements').locator('li').first().locator('span').first().textContent())!;
   const epicTitle = await page.getByTestId('item-panel').getByLabel('Title').inputValue();
   await page.getByTestId('item-panel').getByRole('button', { name: 'Open the documents' }).click();
@@ -628,7 +647,7 @@ test('work items: proposals reviewed (edit, reject, select), confirmed to the bo
   await expect(page.getByTestId('document')).toContainText('with the scanned PDF attached');
   await page.getByRole('link', { name: 'Delivery board' }).click();
   await expect(epicCard.getByText('Upstream changed')).toBeVisible();
-  await epicCard.click();
+  await epicCard.getByTestId('epic-open').click();
   const banner = page.getByTestId('upstream-changed');
   await expect(banner).toContainText(code);
   await expect(banner).toContainText('with the scanned PDF attached');
