@@ -281,6 +281,15 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   await expect(doc).toContainText('PDD section "Detailed As-Is steps"');
   await page.getByRole('tab', { name: /SDD/ }).click();
   await expect(page.getByTestId('doc-not-ready')).toContainText('approved PDD');
+  await page.getByRole('button', { name: 'Preview the SDD from this draft' }).click();
+  await expect(page.getByTestId('sdd-preview')).toBeVisible();
+  await expect(doc).toContainText('Solution Design Document');
+  await expect(doc).toContainText(/AU-0\d Rule-based RPA in SAP S\/4HANA/);
+  await expect(doc).toContainText('How does the solution sign in to SAP S/4HANA');
+  await expect(doc).toContainText('Open design decisions');
+  await shot(page, '49-sdd');
+  const [sdd] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
+  expect(sdd.suggestedFilename()).toMatch(/SDD\.docx$/);
 });
 
 test('closing the gaps: answers in a guided session update the model and the documents', async ({ page }) => {

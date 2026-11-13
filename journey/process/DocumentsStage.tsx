@@ -19,6 +19,7 @@ import { triage } from '../../domain/questions/triage.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
 import { buildFrd } from '../../domain/docs/frd.ts';
+import { buildSdd } from '../../domain/docs/sdd.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
@@ -27,7 +28,7 @@ const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'brd', short: 'BRD', label: 'Business requirements', ready: true },
   { id: 'pdd', short: 'PDD', label: 'Process definition', ready: true },
   { id: 'frd', short: 'FRD', label: 'Functional requirements', ready: true },
-  { id: 'sdd', short: 'SDD', label: 'Solution design', ready: false },
+  { id: 'sdd', short: 'SDD', label: 'Solution design', ready: true },
 ];
 
 const PRINT_CSS = `
@@ -68,13 +69,17 @@ function BlockView({ b }: { b: Block; key?: React.Key }) {
   }
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged }: {
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null }: {
+  /** The number of the latest approved revision, if any: the SDD is written once one exists. */
+  approvedRevision?: number | null;
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; onSaved: () => void; canEdit: boolean; me: string; onSourcesChanged: () => void;
   revision: { label: string; state: 'working' | 'approved'; date: string }; sources: SourceRow[];
 }) {
   const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
   const model = editor.model;
   const [answering, setAnswering] = React.useState(false);
+  const [previewSdd, setPreviewSdd] = React.useState(false);
+  const sddReady = approvedRevision !== null || previewSdd;
   const [type, setType] = React.useState<DocType>('pdd');
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
@@ -101,9 +106,9 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const doc = React.useMemo<DocTree | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const built = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : null;
+    const built = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : sddReady ? buildSdd(input) : null;
     return built && applyLayout(built, docSettings.layouts[type]);
-  }, [type, model, decisions, assessment, sources, revision, docSettings, register]);
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady]);
 
   const [wordBusy, setWordBusy] = React.useState(false);
   const downloadWord = async () => {
@@ -153,12 +158,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       {!decisions ? (error ? null : <Spinner label="Writing the document" />) : !doc ? (
         <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="doc-not-ready">
           <p className="font-display text-lg font-semibold text-slate-900">{TYPES.find(t => t.id === type)!.label} ({type.toUpperCase()})</p>
-          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">{type === 'frd'
-            ? ''
-            : 'The SDD is written from an approved PDD and the confirmed design facts. It comes after the FRD.'}</p>
+          <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-600">The SDD is written from an approved PDD: approve this revision of the process first, so the design rests on agreed steps. Design facts that are not in the sources become open design decisions.</p>
+          <div className="mt-4"><Button variant="secondary" onClick={() => setPreviewSdd(true)}>Preview the SDD from this draft</Button></div>
         </div>
       ) : (
         <>
+        {type === 'sdd' && approvedRevision === null && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950" data-testid="sdd-preview">Preview from the working draft: no revision is approved yet, so this SDD is not for sign-off.</p>}
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
