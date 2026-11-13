@@ -9,16 +9,16 @@ export const SourceContext = React.createContext<{ title(id: string): string; lo
 import { cx } from '../ui.tsx';
 
 const STATUS: Record<FactStatus, { label: string; tone: string; title: string }> = {
-  stated: { label: 'From sources', tone: 'border-sky-200 bg-sky-50 text-sky-800', title: 'Said or written in a source' },
-  inferred: { label: 'Inferred', tone: 'border-violet-200 bg-violet-50 text-violet-800', title: 'Read from the sources but not said outright; check it' },
-  'user-confirmed': { label: 'Confirmed', tone: 'border-emerald-200 bg-emerald-50 text-emerald-800', title: 'Set or confirmed by a person' },
-  assumed: { label: 'Assumption', tone: 'border-amber-300 bg-amber-50 text-amber-900', title: 'A working assumption to confirm' },
-  unknown: { label: 'Unknown', tone: 'border-slate-300 bg-slate-100 text-slate-700', title: 'Known to be missing' },
+  stated: { label: 'From sources', tone: 'bg-sky-100 text-sky-900', title: 'Said or written in a source' },
+  inferred: { label: 'Inferred', tone: 'bg-violet-100 text-violet-900', title: 'Read from the sources but not said outright; check it' },
+  'user-confirmed': { label: 'Confirmed', tone: 'bg-emerald-100 text-emerald-900', title: 'Set or confirmed by a person' },
+  assumed: { label: 'Assumption', tone: 'bg-amber-100 text-amber-900', title: 'A working assumption to confirm' },
+  unknown: { label: 'Unknown', tone: 'bg-slate-200/70 text-slate-700', title: 'Known to be missing' },
 };
 
 export function StatusBadge({ status }: { status: FactStatus }) {
   const s = STATUS[status];
-  return <span title={s.title} data-status={status} className={cx('inline-flex whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-semibold', s.tone)}>{s.label}</span>;
+  return <span title={s.title} data-status={status} className={cx('inline-flex whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium', s.tone)}>{s.label}</span>;
 }
 
 /** A text value edited in place: saved on Enter or when focus leaves, reverted on Escape. */
@@ -48,7 +48,7 @@ export function Select<T extends string>({ value, options, onChange, label, disa
 }) {
   return (
     <select aria-label={label} value={value} disabled={disabled} onChange={e => onChange(e.target.value as T)}
-      className={cx('rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20 disabled:bg-slate-50', className)}>
+      className={cx('rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm text-slate-800 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20 disabled:bg-slate-50', className)}>
       {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
   );
@@ -157,13 +157,15 @@ export function SidePanel({ title, onClose, children, wide }: { title: string; o
     return () => removeEventListener('keydown', onKey);
   }, [onClose]);
   return (
-    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/20" onClick={onClose}>
-      <aside role="dialog" aria-label={title} className={cx('h-full w-full overflow-y-auto bg-slate-50 p-5 shadow-xl', wide ? 'max-w-2xl' : 'max-w-md')} onClick={e => e.stopPropagation()}>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="font-display text-base font-semibold text-slate-900">{title}</h2>
-          <button type="button" onClick={onClose} aria-label="Close" className="rounded px-2 text-lg text-slate-500 hover:bg-slate-200">×</button>
+    <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/25" onClick={onClose}>
+      <aside role="dialog" aria-label={title} className={cx('flex h-full w-full flex-col bg-white shadow-[-28px_0_56px_-28px_rgba(15,23,42,0.35)]', wide ? 'max-w-2xl' : 'max-w-md')} onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
+          <h2 className="min-w-0 font-display text-base font-semibold text-slate-900">{title}</h2>
+          <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 shrink-0 rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
+            <svg viewBox="0 0 12 12" className="h-3.5 w-3.5" aria-hidden><path d="m2.5 2.5 7 7m0-7-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
+          </button>
         </div>
-        <div className="mt-4 space-y-4">{children}</div>
+        <div className="flex-1 space-y-4 overflow-y-auto bg-slate-50/60 p-5">{children}</div>
       </aside>
     </div>
   );
@@ -173,10 +175,10 @@ export function TableShell({ head, children, empty }: { head: string[]; children
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-left text-sm">
-        <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold text-slate-500">
-          <tr>{head.map(h => <th key={h} className="px-3 py-2 font-semibold">{h}</th>)}</tr>
+        <thead className="border-b border-slate-200 text-xs font-semibold text-slate-500">
+          <tr>{head.map(h => <th key={h} className="px-3 py-2.5 font-semibold">{h}</th>)}</tr>
         </thead>
-        <tbody className="divide-y divide-slate-100">{children}</tbody>
+        <tbody className="divide-y divide-slate-100 [&>tr:hover]:bg-slate-50/70">{children}</tbody>
       </table>
       {empty}
     </div>

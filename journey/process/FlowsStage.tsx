@@ -74,7 +74,7 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
   return (
     <div className="space-y-4" data-testid="flows-stage">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Flow view" className="inline-flex rounded-lg bg-slate-100 p-0.5">
+        <div role="tablist" aria-label="Flow view" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
           {tab('asis', 'As-Is map')}{tab('tobe', 'To-Be map')}{canEdit && tab('edit', 'Edit the As-Is flow')}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">

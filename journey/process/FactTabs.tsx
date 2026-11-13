@@ -38,7 +38,7 @@ export function RulesTab(ctx: TabContext) {
             onSubmit={async e => { e.preventDefault(); if (ready && await editor.apply(m => addRule(m, draft), `Added rule ${draft.name.trim()}`)) setDraft({ name: '', condition: '', action: '' }); }}>
             {(['name', 'condition', 'action'] as const).map(f => (
               <label key={f} className="text-xs font-medium text-slate-600">{f === 'name' ? 'New rule' : f === 'condition' ? 'When' : 'Then'}
-                <input value={draft[f]} onChange={e => setDraft({ ...draft, [f]: e.target.value })} className="mt-1 block w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm" />
+                <input value={draft[f]} onChange={e => setDraft({ ...draft, [f]: e.target.value })} className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
               </label>
             ))}
             <div className="flex items-end"><Button type="submit" variant="secondary" disabled={!ready}>Add rule</Button></div>

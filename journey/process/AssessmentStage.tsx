@@ -132,10 +132,10 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   const known = Math.round(result.priority.inputs.share * 100);
   const tabs = (
-    <div role="tablist" aria-label="Assessment views" className="inline-flex rounded-xl bg-slate-100 p-1">
+    <div role="tablist" aria-label="Assessment views" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
       {([['assessment', 'Result'], ['inputs', `Inputs · ${known}% known`]] as const).map(([id, label]) => (
         <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
-          className={cx('rounded-lg px-4 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
+          className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
       ))}
     </div>
   );
