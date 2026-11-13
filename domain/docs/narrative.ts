@@ -74,8 +74,10 @@ export function groundingIssues(text: string, m: ProcessModel, known = ''): Grou
     };
     words.forEach((w, i) => {
       const clean = w.replace(/^[("'“]+|[)"'”,;:.!?]+$/g, '');
-      const isName = /^[A-Z][A-Za-z0-9&/-]*$/.test(clean) && !(i === 0 && /^[A-Z][a-z]+$/.test(clean) && ALLOWED.has(clean.toLowerCase()));
-      if (isName && !(i === 0 && /^[A-Z][a-z]+$/.test(clean) && !run.length && words[1] && !/^[A-Z]/.test(words[1]))) run.push(clean); else flush();
+      // A capitalised word at the start of a sentence is just the start, unless a capitalised word follows.
+      const startOnly = i === 0 && /^[A-Z][a-z]+$/.test(clean) && !(words[1] && /^[A-Z]/.test(words[1]));
+      const isName = /^[A-Z][A-Za-z0-9&/-]*$/.test(clean) && !startOnly;
+      if (isName) run.push(clean); else flush();
       if (/[,;:.!?)]$/.test(w)) flush();
     });
     flush();

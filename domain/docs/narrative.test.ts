@@ -35,6 +35,7 @@ test('grounding flags names, numbers and filler that are not in the process', ()
   assert.ok(kinds.some(k => k.startsWith('filler:')), kinds.join());
   assert.ok(!kinds.some(k => k === 'name:AP Clerk'), 'a role in the model is not flagged');
   assert.deepEqual(groundingIssues(`Step 3 is done by the AP Clerk in SAP S/4HANA.`, gold, known), []);
+  assert.deepEqual(groundingIssues('Cut the time from receipt to posting. Always. Every invoice counts.', gold, known), []);
 });
 
 test('the checklist covers the plan\'s seven checks and links each failure to the element to fix', () => {
