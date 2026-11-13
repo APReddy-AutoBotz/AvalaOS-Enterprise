@@ -14,8 +14,14 @@ import type { Project, WorkItem, WorkItemEdit } from '../../domain/workitems/boa
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
+import type { AiProvider } from '../../domain/ai/providers.ts';
 
 export interface Me { id: string; email: string }
+/** A workspace's own AI provider. The key is never here: only its last four characters. */
+export interface WorkspaceAi {
+  provider: AiProvider; model: string; endpoint: string | null; keyHint: string;
+  updatedAt: string; lastUsedAt: string | null; lastTestedAt: string | null; lastTestOk: boolean | null;
+}
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null }
 /** A person in a workspace, as others see them: a name, never an email address. */
 export interface Member { userId: string; name: string; role: Workspace['role'] }
@@ -105,6 +111,14 @@ export interface JourneyStore {
   /** Admins only. Their work items stay on the board, unassigned. */
   removePerson(workspaceId: string, userId: string): Promise<void>;
   cancelInvite(workspaceId: string, email: string): Promise<void>;
+  /** The workspace's own AI provider, or null when it uses the platform's (members read). */
+  getWorkspaceAi(workspaceId: string): Promise<WorkspaceAi | null>;
+  /** Admins only. The key is sent once and kept encrypted on the server; omit it to keep the current key (same provider only). */
+  saveWorkspaceAi(workspaceId: string, input: { provider: AiProvider; model: string; endpoint: string | null; apiKey?: string }): Promise<void>;
+  /** Admins only. Deletes the key; the workspace goes back to the platform's AI and its monthly allowance. */
+  clearWorkspaceAi(workspaceId: string): Promise<void>;
+  /** A tiny real request with the workspace's provider (or the platform's), to prove the key works. */
+  testWorkspaceAi(workspaceId: string): Promise<{ model: string; source: 'workspace' | 'platform' }>;
   /** Admins only. Emails the invitation for an open invite (server function journey-invite); throws when email is not set up. */
   sendInviteEmail(workspaceId: string, email: string): Promise<void>;
   /** Admins only. Membership changes and approvals, newest first. */

@@ -9,7 +9,7 @@ import { hashModel } from '../../domain/processModel/hash.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
 import { applyPatch } from '../../domain/processModel/jsonPatch.ts';
 import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
-import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type Person, type Invite, type RoleChoice, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { StoreError, type WorkspaceAi, type Draft, type EditRow, type JourneyStore, type Me, type Person, type Invite, type RoleChoice, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
@@ -17,6 +17,7 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem } from '../../domain/workitems/board.ts';
 import { providerLabel } from '../../domain/auth/providers.ts';
+import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -35,6 +36,8 @@ interface State {
   settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
   documentSettings?: { workspaceId: string; settings: DocumentSettings }[];
   people?: Record<string, { members: Person[]; invites: Invite[]; audit: AuditEntry[] }>;
+  /** Only what the browser may know of a key: its last four characters. */
+  ai?: Record<string, WorkspaceAi>;
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -368,6 +371,22 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       save();
     },
     async sendInviteEmail() { throw new StoreError(501, `Emails need the server; they are not sent ${where}`); },
+    async getWorkspaceAi(workspaceId) { requireMe(); return state.ai?.[workspaceId] ?? null; },
+    async saveWorkspaceAi(workspaceId, input) {
+      adminOf(workspaceId, true);
+      const choice = validateAiChoice(input);
+      const current = state.ai?.[workspaceId];
+      if (!input.apiKey && (!current || current.provider !== choice.provider)) throw new StoreError(422, 'Paste the API key for this provider.');
+      const hint = input.apiKey ? keyHint(validateApiKey(input.apiKey)) : current!.keyHint;
+      state.ai = { ...(state.ai ?? {}), [workspaceId]: { ...choice, keyHint: hint, updatedAt: now(), lastUsedAt: null, lastTestedAt: null, lastTestOk: null } };
+      save();
+    },
+    async clearWorkspaceAi(workspaceId) {
+      adminOf(workspaceId, true);
+      if (state.ai) delete state.ai[workspaceId];
+      save();
+    },
+    async testWorkspaceAi() { throw new StoreError(501, `Testing a key needs the server; it is not available ${where}.`); },
     async cancelInvite(workspaceId, email) {
       adminOf(workspaceId);
       const p = peopleOf(workspaceId);
