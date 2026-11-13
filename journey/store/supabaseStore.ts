@@ -105,6 +105,11 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
         role: m.role, canApprove: Boolean(m.can_approve), job: m.job ?? null,
       }] : [])).sort((a, b) => a.organizationName.localeCompare(b.organizationName) || a.name.localeCompare(b.name));
     },
+    async canCreateOrganization() {
+      const { data, error } = await db.rpc('can_create_organization');
+      if (error) fail(error);
+      return data === true;
+    },
     async createOrganization(organizationName, workspaceName) {
       const { data, error } = await db.rpc('create_organization', { organization_name: organizationName, workspace_name: workspaceName });
       if (error) fail(error);

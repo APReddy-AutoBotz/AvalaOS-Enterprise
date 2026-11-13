@@ -158,6 +158,12 @@ export function FirstRun({ store, onCreated }: { store: JourneyStore; onCreated:
   const [ws, setWs] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [mayCreate, setMayCreate] = React.useState<boolean | null>(null);
+  React.useEffect(() => {
+    let live = true;
+    store.canCreateOrganization().then(v => { if (live) setMayCreate(v); }).catch(() => { if (live) setMayCreate(false); });
+    return () => { live = false; };
+  }, [store]);
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
@@ -171,6 +177,15 @@ export function FirstRun({ store, onCreated }: { store: JourneyStore; onCreated:
       setBusy(false);
     }
   };
+  if (mayCreate === null) return <Spinner />;
+  if (!mayCreate) {
+    return (
+      <div className="mx-auto mt-6 max-w-md">
+        <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">You are not in a workspace yet</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-600">Avala OS is by invitation. Ask an admin of your organization's workspace to add you from People, then sign in again.</p>
+      </div>
+    );
+  }
   return (
     <div className="mx-auto mt-6 max-w-md">
       <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">Set up your organization</h1>
