@@ -49,11 +49,11 @@ test('a process has one workspace with one assessment stage, and internal labels
   expect(await primaryText(page)).not.toMatch(INTERNAL);
 });
 
-test('an unknown process says so, and every other path leads to My work, never to the earlier screens', async ({ page }) => {
+test('an unknown process says so, and every other path (except the public homepage at /) leads to My work, never to the earlier screens', async ({ page }) => {
   await signInAndCreateProcess(page);
   await page.goto('/process/00000000-0000-4000-8000-000000000000/assessment');
   await expect(page.getByRole('heading', { name: 'Process not found' })).toBeVisible();
-  for (const path of ['/', '/sandbox', '/assess/guided']) {
+  for (const path of ['/sandbox', '/assess/guided']) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/work$/);
     await expect(page.getByRole('link', { name: 'Vendor invoice processing' })).toBeVisible();
