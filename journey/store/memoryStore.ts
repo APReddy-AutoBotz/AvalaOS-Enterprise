@@ -387,6 +387,8 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       save();
     },
     async testWorkspaceAi() { throw new StoreError(501, `Testing a key needs the server; it is not available ${where}.`); },
+    // The in-browser store has no AI, so it has no AI use and no allowance to report.
+    async getAiUsage(workspaceId) { peopleOf(workspaceId); return { rows: [], allowance: null, partial: false }; },
     async cancelInvite(workspaceId, email) {
       adminOf(workspaceId);
       const p = peopleOf(workspaceId);

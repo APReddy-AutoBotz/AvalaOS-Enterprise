@@ -112,3 +112,16 @@ test('Claude on Amazon Bedrock takes an AWS Region instead of an address', async
   await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own Amazon Bedrock (Claude) key ending QW88');
   await expect(ai.getByTestId('ai-provider-state')).toContainText('at eu-central-1');
 });
+
+test('AI use this month is shown to members, and says plainly when nothing has been recorded', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await page.goto('/processes');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const usage = page.getByTestId('ai-usage');
+  await expect(usage.getByRole('heading', { name: 'AI use this month' })).toBeVisible();
+  // The in-browser store has no AI: nothing recorded and no allowance from the server.
+  await expect(usage.getByTestId('ai-usage-empty')).toContainText('No AI work has been recorded');
+  await expect(usage.getByTestId('ai-usage-allowance')).toContainText('could not be read just now');
+  const result = await new AxeBuilder({ page }).include('[data-testid="ai-usage"]').withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
+});

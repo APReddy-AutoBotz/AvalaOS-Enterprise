@@ -4,6 +4,8 @@
 // POST { action: 'run', workspaceId, task, segments[] }     -> runs a registered task with strict output
 // POST { action: 'run', workspaceId, task, image }          -> the same, for tasks that read an image (a data URL)
 // POST { action: 'transcribe', workspaceId, audio }         -> the text of a recorded answer (a data URL)
+// POST { action: 'allowance', workspaceId }                 -> which key the workspace uses and, on the platform
+//                                                              key, the monthly allowance and this month's use
 //
 // The caller's own token decides access (RLS). A caller presenting the project's secret key is a
 // trusted server (it already has full database access): membership is not checked and no user is
@@ -192,6 +194,17 @@ Deno.serve(async (req: Request) => {
   }
   if (!conn) return fail(500, 'NOT_CONFIGURED', 'No AI provider key is set.');
   const model = conn.model;
+
+  // AI use and limits (Settings): no provider call, so no address check. The allowance is a server setting.
+  if (request.action === 'allowance') {
+    const onPlatform = usesPlatformAllowance(conn);
+    let used: number | null = null;
+    if (onPlatform) { try { used = await tokensUsedThisMonth(request.workspaceId); } catch { used = null; } }
+    return reply(200, {
+      ok: true, source: conn.source, provider: conn.provider,
+      budget: onPlatform ? Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000) : null, used,
+    });
+  }
 
   // An address an admin typed (an OpenAI-compatible endpoint) must resolve only to public addresses, checked
   // before every call. Where the runtime cannot look the name up, the call is refused rather than made blind.

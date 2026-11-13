@@ -31,7 +31,7 @@ export interface TaskDefinition {
 }
 
 export interface GatewayRequest {
-  action: 'run' | 'health' | 'transcribe';
+  action: 'run' | 'health' | 'transcribe' | 'allowance';
   workspaceId: string;
   task?: string;
   segments?: Segment[];
@@ -65,9 +65,9 @@ export function validateRequest(body: unknown, tasks: Record<string, TaskDefinit
   if (!body || typeof body !== 'object') return fail('INVALID_REQUEST', 'Body must be a JSON object.');
   const b = body as Record<string, unknown>;
   const action = b.action ?? 'run';
-  if (action !== 'run' && action !== 'health' && action !== 'transcribe') return fail('INVALID_REQUEST', 'action must be "run", "health" or "transcribe".');
+  if (action !== 'run' && action !== 'health' && action !== 'transcribe' && action !== 'allowance') return fail('INVALID_REQUEST', 'action must be "run", "health", "transcribe" or "allowance".');
   if (typeof b.workspaceId !== 'string' || !UUID.test(b.workspaceId)) return fail('INVALID_REQUEST', 'workspaceId must be a UUID.');
-  if (action === 'health') return { ok: true, value: { action, workspaceId: b.workspaceId } };
+  if (action === 'health' || action === 'allowance') return { ok: true, value: { action, workspaceId: b.workspaceId } };
   if (action === 'transcribe') {
     if (typeof b.audio === 'string' && b.audio.length > LIMITS.maxAudioChars) return fail('TOO_LARGE', 'The recording is too long; keep it under about ten minutes.');
     if (!validAudio(b.audio)) return fail('INVALID_REQUEST', 'audio must be a WebM, Ogg, MP4, MPEG or WAV data URL.');

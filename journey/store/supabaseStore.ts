@@ -1,4 +1,5 @@
 import type { AuditEntry } from '../../domain/people/roles.ts';
+import { monthStart } from '../../domain/ai/usage.ts';
 import { documentSettingsFrom, validateBranding } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
 // The real store: Supabase auth, row level security for reads, and the model RPCs for writes.
@@ -340,6 +341,29 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async testWorkspaceAi(workspaceId) {
       const r = await call('journey-ai', { action: 'health', workspaceId });
       return { model: String(r?.model ?? ''), source: r?.source === 'workspace' ? 'workspace' : 'platform' };
+    },
+    async getAiUsage(workspaceId) {
+      const MAX = 10_000;
+      const from = monthStart(new Date()).toISOString();
+      const [{ data, error }, allowance] = await Promise.all([
+        db.from('ai_usage').select('created_at, task, user_id, input_tokens, output_tokens, status, key_source')
+          .eq('workspace_id', workspaceId).gte('created_at', from).order('created_at', { ascending: false }).limit(MAX),
+        call('journey-ai', { action: 'allowance', workspaceId }).catch(() => null),
+      ]);
+      if (error) fail(error);
+      const rows = (data ?? []).map((r: any) => ({
+        createdAt: r.created_at, task: r.task, userId: r.user_id ?? null, inputTokens: Number(r.input_tokens) || 0,
+        outputTokens: Number(r.output_tokens) || 0, status: r.status, keySource: r.key_source === 'workspace' ? 'workspace' as const : 'platform' as const,
+      }));
+      return {
+        rows,
+        partial: rows.length >= MAX,
+        allowance: allowance?.ok ? {
+          source: allowance.source === 'workspace' ? 'workspace' : 'platform',
+          budget: typeof allowance.budget === 'number' ? allowance.budget : null,
+          used: typeof allowance.used === 'number' ? allowance.used : null,
+        } : null,
+      };
     },
     async cancelInvite(workspaceId, email) {
       const { error } = await db.rpc('cancel_invite', { target_workspace: workspaceId, invite_email: email });

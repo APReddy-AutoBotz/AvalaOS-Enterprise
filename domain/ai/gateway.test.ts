@@ -14,6 +14,7 @@ test('validateRequest accepts a valid run and a health check', () => {
   assert.equal(run.ok, true);
   const health = validateRequest({ action: 'health', workspaceId: WS }, TASKS);
   assert.deepEqual(health, { ok: true, value: { action: 'health', workspaceId: WS } });
+  assert.deepEqual(validateRequest({ action: 'allowance', workspaceId: WS, task: 'x' }, TASKS), { ok: true, value: { action: 'allowance', workspaceId: WS } });
 });
 
 test('validateRequest rejects bad input with specific codes', () => {
