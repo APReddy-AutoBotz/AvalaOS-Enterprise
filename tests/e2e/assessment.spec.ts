@@ -673,3 +673,31 @@ test('after approval, a process change marks what changed in the documents, and 
   await expect(mine.getByTestId('proposal-review')).toHaveCount(0);
   await expect(mine).toContainText('Edited');
 });
+
+test('hand-over checklist, and the editor flags names and numbers that are not in the process before saving', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Documents');
+  await page.getByRole('button', { name: /Ready to hand over/ }).click();
+  const list = page.getByTestId('handoff-checklist');
+  await expect(list.getByTestId('check')).toHaveCount(8);
+  const roles = list.getByTestId('check').filter({ hasText: 'Every step names a role' });
+  await expect(roles).toHaveAttribute('data-ok', 'false');
+  await expect(roles).toContainText('Step 1 "Check invoice totals" has no role.');
+  await shot(page, '58-handoff-checklist');
+  await roles.getByRole('button', { name: 'Fix in Process' }).first().click();
+  await expect(page.getByRole('tab', { name: /^Steps/ })).toBeVisible();
+
+  await stage(page, 'Documents');
+  const doc = page.getByTestId('document');
+  await doc.getByRole('button', { name: 'Edit section 2.1' }).click();
+  await doc.getByRole('textbox', { name: 'Text of Process overview' }).click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('About 12,500 invoices a month are keyed into Oracle Fusion.');
+  await doc.getByRole('button', { name: 'Save section' }).click();
+  const issues = doc.getByTestId('grounding-issues');
+  await expect(issues).toContainText('12,500');
+  await expect(issues).toContainText('Oracle');
+  await expect(doc.getByTestId('edited-text')).toHaveCount(0);
+  await doc.getByRole('button', { name: 'Save anyway' }).click();
+  await expect(doc.getByTestId('edited-text').first()).toContainText('Oracle Fusion');
+});

@@ -25,6 +25,7 @@ import { reconcile, type StoredRequirement } from '../../domain/requirements/reg
 import { RequirementsPanel } from './RequirementsPanel.tsx';
 import { applyEdits, EditError, makeEdit, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
 import { changedSections, type SectionChange } from '../../domain/docs/changes.ts';
+import { draftNarrative, draftToHtml, generatedText, groundingIssues, handoffChecklist, modelFacts, overlaps, SECTION_BRIEF } from '../../domain/docs/narrative.ts';
 
 const SectionEditor = React.lazy(() => import('./SectionEditor.tsx'));
 
@@ -107,11 +108,13 @@ async function withPngFigures(doc: DocTree): Promise<DocTree> {
   return { ...doc, sections };
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null }: {
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null, onFix }: {
   /** The number of the latest approved revision, if any: the SDD is written once one exists. */
   approvedRevision?: number | null;
   /** The latest approved revision, when the working draft is newer: sections changed since then are marked. */
   approvedRevisionId?: string | null;
+  /** Opens the Process stage, to fix what the hand-over checklist found. */
+  onFix?: () => void;
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; onSaved: () => void; canEdit: boolean; me: string; onSourcesChanged: () => void;
   revision: { label: string; state: 'working' | 'approved'; date: string }; sources: SourceRow[];
 }) {
@@ -166,6 +169,22 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
   }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
   const changedIds = new Set(sinceApproved.map(c => c.id));
+  // All four documents, for the hand-over checklist, the overlap check and what counts as grounded.
+  const all = React.useMemo(() => {
+    if (!decisions || !assessment) return null;
+    const input = { model, assessment, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
+    const raw = [buildBrd(input), buildPdd(input), buildFrd(input), buildSdd(input)];
+    const docsWithEdits = raw.map(d => applyEdits(d, edits).doc);
+    return { known: generatedText(raw), checks: handoffChecklist(model, docsWithEdits), overlap: overlaps(docsWithEdits, model) };
+  }, [model, decisions, assessment, sources, revision, register, edits]);
+  const [showChecks, setShowChecks] = React.useState(false);
+  const failing = all ? all.checks.filter(c => !c.ok).length + (all.overlap.length ? 1 : 0) : 0;
+  const checkText = (html: string) => groundingIssues(html, model, all?.known ?? '');
+  const draftFor = (title: string, number: string) => store.aiAvailable ? async () => {
+    const segments = [SECTION_BRIEF(doc!.title, `${number} ${title}`, `Write the narrative of this section of the ${doc!.title}.`), ...modelFacts(model)];
+    const r = await store.runAiTask(workspaceId, draftNarrative.id, segments as any);
+    return draftToHtml(r.data, model);
+  } : undefined;
   const [showChanges, setShowChanges] = React.useState(false);
   const review = built ? Object.values<SectionStatus>(built.status).filter(s => s.state === 'needs_review').length : 0;
 
@@ -228,7 +247,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             </button>
           ))}
         </div>
-        {doc && <div className="flex flex-wrap gap-2"><Button onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
+        {doc && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setShowChecks(!showChecks)} aria-expanded={showChecks}>{failing ? `Ready to hand over? ${failing} to fix` : 'Ready to hand over ✓'}</Button><Button onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
       </div>
 
       {!decisions ? (error ? null : <Spinner label="Writing the document" />) : !doc ? (
@@ -239,6 +258,26 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         </div>
       ) : (
         <>
+        {showChecks && all && (
+          <section aria-label="Hand-over checklist" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm" data-testid="handoff-checklist">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h3 className="font-display text-base font-semibold text-slate-900">Ready to hand over?</h3>
+              <p className="text-xs text-slate-500">Checks on the process and all four documents before they go to the delivery team.</p>
+            </div>
+            <ul className="mt-3 space-y-2">
+              {all.checks.map(c => (
+                <li key={c.id} className="rounded-xl px-3 py-2 ring-1 ring-inset ring-slate-200" data-testid="check" data-ok={c.ok}>
+                  <p className="flex items-start gap-2 text-sm"><span className={c.ok ? 'text-emerald-700' : 'text-amber-700'} aria-hidden>{c.ok ? '✓' : '!'}</span><span className="font-semibold text-slate-900">{c.label}</span>{!c.ok && <span className="ml-auto shrink-0 text-xs text-slate-500">{c.failures.length} to fix</span>}</p>
+                  {!c.ok && <ul className="mt-1 space-y-0.5 pl-6 text-xs text-slate-700">{c.failures.slice(0, 8).map((f, i) => <li key={i}>{f.text}{f.target && onFix && <button type="button" className="ml-2 font-semibold text-[#002C4B] hover:underline" onClick={onFix}>Fix in Process</button>}</li>)}{c.failures.length > 8 && <li>and {c.failures.length - 8} more</li>}</ul>}
+                </li>
+              ))}
+              <li className="rounded-xl px-3 py-2 ring-1 ring-inset ring-slate-200" data-testid="check" data-ok={!all.overlap.length}>
+                <p className="flex items-start gap-2 text-sm"><span className={all.overlap.length ? 'text-amber-700' : 'text-emerald-700'} aria-hidden>{all.overlap.length ? '!' : '✓'}</span><span className="font-semibold text-slate-900">Each fact has one home: no text is repeated across the documents</span></p>
+                {all.overlap.length > 0 && <ul className="mt-1 space-y-0.5 pl-6 text-xs text-slate-700">{all.overlap.map((o, i) => <li key={i}>{o.a.doc.toUpperCase()} {o.a.section} and {o.b.doc.toUpperCase()} {o.b.section} say mostly the same ({Math.round(o.similarity * 100)}% the same words). Keep it in one and point to it from the other.</li>)}</ul>}
+              </li>
+            </ul>
+          </section>
+        )}
         {sinceApproved.length > 0 && (
           <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="since-approved">
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -312,7 +351,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {editing === s.id && st ? (
                     <div className="mt-3 space-y-3">
                       <React.Suspense fallback={<Spinner label="Opening the editor" />}>
-                        <SectionEditor initial={mine?.html ?? st.generatedHtml} title={s.title} busy={editBusy} onCancel={() => setEditing(null)} onSave={html => saveEdit(s.id, html, st.hash)} />
+                        <SectionEditor initial={mine?.html ?? st.generatedHtml} title={s.title} busy={editBusy} onCancel={() => setEditing(null)} onSave={html => saveEdit(s.id, html, st.hash)} check={checkText} draft={draftFor(s.title, s.number)} />
                       </React.Suspense>
                       {mine && <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => { takeUpdate(s.id); setEditing(null); }}>Use the generated text instead</button>}
                       {s.blocks.filter(b => b.kind !== 'rich' && b.kind !== 'paragraph' && b.kind !== 'list' && b.kind !== 'callout').map((b, i) => <BlockView key={i} b={b} />)}
