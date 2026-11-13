@@ -18,7 +18,7 @@ const TOUR: { id: string; name: string; line: string; caption: string; shots: [S
     caption: 'Five source files go in. Every approach is scored step by step from fixed tables, and the best fit is named with its reasons.',
     shots: [
       { src: 'sources', origin: '30% 75%', alt: 'The Sources screen: three meeting transcripts, a procedure and a flowchart uploaded, with the passages read from each' },
-      { src: 'assessment', origin: '30% 55%', alt: 'The Assessment screen: API-led integration recommended, with the approaches ranked by score and the reasons beside each' },
+      { src: 'assessment', origin: '30% 55%', alt: 'The Assessment screen: RPA-led automation recommended, 1 step of 20 needs AI, with the approaches ranked by score' },
     ],
   },
   {
@@ -26,7 +26,7 @@ const TOUR: { id: string; name: string; line: string; caption: string; shots: [S
     caption: 'Each step shows the sources it came from. What the sources did not say stays “Not provided” and becomes a question for a person.',
     shots: [
       { src: 'process', origin: '85% 35%', alt: 'The Process screen: 21 steps with who does them, the systems used and how many sources support each, plus 15 open questions' },
-      { src: 'document-2', origin: '45% 55%', alt: 'A generated document where two facts the sources did not give are marked Not provided' },
+      { src: 'document-2', origin: '50% 12%', alt: 'A generated document where access nobody has confirmed is marked Not provided or reported, not confirmed' },
     ],
   },
   {
@@ -41,7 +41,7 @@ const TOUR: { id: string; name: string; line: string; caption: string; shots: [S
     id: 'launch', name: 'Launch', line: 'Work items onto the Delivery board',
     caption: 'Epics, stories and tasks are proposed with acceptance criteria and requirement links. A person chooses what goes to the board.',
     shots: [
-      { src: 'work-items', origin: '35% 60%', alt: 'The Work items screen: 6 epics, 15 stories and 23 tasks proposed, each linked to its requirements' },
+      { src: 'work-items', origin: '35% 60%', alt: 'The Work items screen: 7 epics, 18 stories and 21 tasks proposed, each linked to its requirements' },
       { src: 'board', origin: '25% 40%', alt: 'The Delivery board part-way through delivery: work items in six status columns, grouped by epic' },
     ],
   },
@@ -126,17 +126,17 @@ function Tour() {
   return (
     <div ref={ref} data-paused={!playing} className="mt-10 grid gap-8 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-12">
       <div>
-        <div className="mb-6 hidden lg:block"><Mark lit={stage} size={112} /></div>
+        <div className="mb-6 hidden lg:block"><Mark lit={stage} size={112} dark /></div>
         <ol aria-label="The five stages" className="grid grid-cols-5 gap-1 lg:block lg:space-y-1">
           {TOUR.map((s, i) => {
             const here = i === stage;
             return (
               <li key={s.id}>
                 <button type="button" aria-current={here ? 'step' : undefined} onClick={() => setStage(i)}
-                  className={`w-full rounded-lg px-2 py-2 text-center transition-colors lg:px-3 lg:py-2.5 lg:text-left ${focus} focus-visible:outline-[#002C4B] ${here ? 'bg-white shadow-sm ring-1 ring-slate-200' : 'hover:bg-white/70'}`}>
-                  <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-[#002C4B]' : 'text-slate-600'}`}>{s.name}</span>
-                  <span className="hidden text-sm text-slate-600 lg:block">{s.line}</span>
-                  <span className={`mt-2 block h-1 overflow-hidden rounded-full ${here ? 'bg-slate-200' : 'bg-transparent'}`} aria-hidden="true">
+                  className={`w-full rounded-lg px-2 py-2 text-center transition-colors lg:px-3 lg:py-2.5 lg:text-left ${focus} focus-visible:outline-white ${here ? 'bg-white/10 ring-1 ring-white/25' : 'hover:bg-white/5'}`}>
+                  <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-white' : 'text-slate-300'}`}>{s.name}</span>
+                  <span className="hidden text-sm text-slate-300 lg:block">{s.line}</span>
+                  <span className={`mt-2 block h-1 overflow-hidden rounded-full ${here ? 'bg-white/20' : 'bg-transparent'}`} aria-hidden="true">
                     {here && <span key={stage} className="tour-fill block h-full rounded-full" style={{ background: AMBER }} onAnimationEnd={() => setStage(n => (n + 1) % TOUR.length)} />}
                   </span>
                 </button>
@@ -154,8 +154,8 @@ function Tour() {
             </div>
           </div>
           <div className="mt-5 flex flex-wrap items-start justify-between gap-4">
-            <p className="max-w-2xl text-lg leading-7 text-slate-800">{cur.caption}</p>
-            <button type="button" onClick={() => setPlaying(p => !p)} className={`shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 motion-reduce:hidden ${focus} focus-visible:outline-[#002C4B]`}>
+            <p className="max-w-2xl text-lg leading-7 text-slate-100">{cur.caption}</p>
+            <button type="button" onClick={() => setPlaying(p => !p)} className={`shrink-0 rounded-lg border border-white/30 px-3 py-1.5 text-sm font-semibold text-white hover:bg-white/10 motion-reduce:hidden ${focus} focus-visible:outline-white`}>
               {playing ? 'Pause the tour' : 'Play the tour'}
             </button>
           </div>
@@ -168,22 +168,30 @@ function Tour() {
 const REASONS = [
   {
     title: 'The score is arithmetic, not an opinion',
-    text: 'Every step gets a score out of 100 for each approach, worked out from fixed tables you can read. The same facts always give the same ranking. AI reads your sources, but it does not decide, and where rules are enough the answer is “AI unnecessary”.',
-    img: 'reason-score', w: 1700, h: 907,
-    alt: 'The step-by-step table: each step with its recommended approach, score, next best approach and whether AI is needed',
+    text: 'Every step gets a score out of 100 for each approach, worked out from fixed tables you can read. The same facts always give the same ranking. AI helps read your sources, but it does not decide, and where rules are enough the answer is “AI unnecessary”.',
+    img: 'reason-score', w: 1700, h: 907, tint: 'bg-sky-100',
+    alt: 'The step-by-step table: one step marked AI needed, the others AI unnecessary, each with its score and reasons',
   },
   {
     title: 'Nothing is invented',
-    text: 'A fact the sources did not give is never filled in. It shows as “Not provided”, becomes an open question with a likely owner, and is listed again at the end of each document, so a gap cannot hide in a confident paragraph.',
-    img: 'reason-facts', w: 1700, h: 1143,
-    alt: 'A process overview table in a generated document, with two missing facts marked Not provided and one marked Inferred',
+    text: 'A fact the sources did not give is never filled in. It shows as “Not provided”, or as reported but not confirmed, becomes an open question with a likely owner, and is listed again at the end of each document, so a gap cannot hide in a confident paragraph.',
+    img: 'reason-facts', w: 1700, h: 1172, tint: 'bg-amber-100',
+    alt: 'Part of a generated document: one access marked Not provided, one reported but not confirmed, and a figure marked Inferred',
   },
   {
     title: 'A named person signs off',
     text: 'Each process names its analyst, architect and approver. Only an approver can approve a revision, an approved revision is never changed, and who invited, changed and approved what is kept in the audit trail.',
-    img: 'reason-people', w: 1700, h: 982,
+    img: 'reason-people', w: 1700, h: 963, tint: 'bg-emerald-100',
     alt: 'The list of what each of the six roles can do, above the audit trail',
   },
+];
+
+const APPROACHES: [string, string][] = [
+  ['Rule-based RPA', 'bg-sky-50 text-sky-900 ring-sky-200'],
+  ['API integration', 'bg-emerald-50 text-emerald-900 ring-emerald-200'],
+  ['AI-assisted', 'bg-violet-50 text-violet-900 ring-violet-200'],
+  ['Agent', 'bg-fuchsia-50 text-fuchsia-900 ring-fuchsia-200'],
+  ['A person', 'bg-slate-100 text-slate-800 ring-slate-200'],
 ];
 
 const OUTPUTS = [
@@ -216,8 +224,9 @@ export default function HomePage() {
 
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-10 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:pb-28 lg:pt-16">
           <div>
-            <h1 className="font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl">Evaluate before you automate.</h1>
-            <p className="mt-6 text-lg leading-8 text-slate-200">AvalaOS reads a process from your transcripts, procedures and flowcharts, scores how to automate each step, writes the documents to build it and puts the work on a delivery board. People confirm the facts and approve the result, and every change is on record.</p>
+            <h1 className="font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
+            <p className="mt-6 text-xl leading-8 text-white">Not every process needs AI.</p>
+            <p className="mt-2 text-lg leading-8 text-slate-300">AvalaOS scores each step for RPA, API, AI or a person, and shows its reasons.</p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <a href={go.href} className={cta}>{go.label}</a>
               <a href="#tour" className={`rounded-lg px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Watch the 30-second tour</a>
@@ -226,7 +235,7 @@ export default function HomePage() {
           </div>
           <div className="lg:-mr-56 xl:-mr-40">
             <div className="shot-frame">
-              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-[170%] max-w-none sm:w-full" alt="The AvalaOS assessment of a vendor invoice process: API-led integration recommended, 70% of steps fit automation, approaches ranked by score" />
+              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-[170%] max-w-none sm:w-full" alt="The AvalaOS assessment of a vendor invoice process: RPA-led automation recommended, 80% of steps fit automation, 1 step of 20 needs AI" />
             </div>
           </div>
         </section>
@@ -237,10 +246,26 @@ export default function HomePage() {
       </p>
 
       <main>
-        <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-slate-50">
+        <section aria-labelledby="motto-h">
+          <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 py-20 lg:grid-cols-5 lg:gap-16">
+            <div className="lg:col-span-2">
+              <h2 id="motto-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">AI is not the answer to every step</h2>
+              <p className="mt-5 text-lg leading-8 text-slate-700">Most of a process is rules, screens and hand-offs. AvalaOS puts every approach on one scale and recommends AI or an agent only where the work needs it.</p>
+              <ul aria-label="The approaches every step is scored for" className="mt-6 flex flex-wrap gap-2 text-sm font-semibold">
+                {APPROACHES.map(([name, cls]) => <li key={name} className={`rounded-full px-3 py-1.5 ring-1 ring-inset ${cls}`}>{name}</li>)}
+              </ul>
+              <p className="mt-6 border-l-4 border-[#E69F00] pl-4 text-lg font-semibold leading-7 text-slate-900">In the sample, rules do the work for 15 of 20 steps. One needs AI. Four stay with people.</p>
+            </div>
+            <div className="rounded-3xl bg-amber-100 p-4 sm:p-8 lg:col-span-3">
+              <div className="shot-frame"><img src={shot('motto-split')} width={1800} height={563} loading="lazy" className="block h-auto w-[170%] max-w-none sm:w-full" alt="How the 20 steps of the sample split: 15 rule-based RPA, 1 AI-assisted, 4 stay with people, with the reasons for each" /></div>
+            </div>
+          </div>
+        </section>
+
+        <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-[#002C4B] text-white">
           <div className="mx-auto max-w-7xl px-6 py-20">
-            <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">From five files to a delivery board</h2>
-            <p className="mt-4 max-w-2xl text-lg text-slate-700">Avala is the five stages every process passes through. Watch the sample case go through them, or pick a stage.</p>
+            <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From five files to a delivery board</h2>
+            <p className="mt-4 max-w-2xl text-lg text-slate-200">Avala is the five stages every process passes through. Watch the sample case go through them, or pick a stage.</p>
             <Tour />
           </div>
         </section>
@@ -255,21 +280,21 @@ export default function HomePage() {
                     <h3 className="font-display text-3xl font-semibold tracking-tight text-slate-900">{r.title}</h3>
                     <p className="mt-4 max-w-xl text-lg leading-8 text-slate-700">{r.text}</p>
                   </div>
-                  <div className="shot-frame lg:col-span-3"><img src={shot(r.img)} width={r.w} height={r.h} loading="lazy" className="block h-auto w-[160%] max-w-none sm:w-full" alt={r.alt} /></div>
+                  <div className={`rounded-3xl p-4 sm:p-8 lg:col-span-3 ${r.tint}`}><div className="shot-frame"><img src={shot(r.img)} width={r.w} height={r.h} loading="lazy" className="block h-auto w-[160%] max-w-none sm:w-full" alt={r.alt} /></div></div>
                 </div>
               ))}
             </div>
           </div>
         </section>
 
-        <section aria-labelledby="out-h" className="border-t border-slate-200 bg-slate-50">
+        <section aria-labelledby="out-h" className="bg-[#FFF3D1]">
           <div className="mx-auto grid max-w-7xl gap-10 px-6 py-20 lg:grid-cols-[20rem_minmax(0,1fr)]">
-            <h2 id="out-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B]">What comes out</h2>
-            <dl className="divide-y divide-slate-200 border-y border-slate-200">
+            <h2 id="out-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">What comes out</h2>
+            <dl className="divide-y divide-[#002C4B]/15 border-y border-[#002C4B]/15">
               {OUTPUTS.map(([t, x]) => (
                 <div key={t} className="grid gap-1 py-5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-8">
-                  <dt className="font-display text-lg font-semibold text-slate-900">{t}</dt>
-                  <dd className="text-slate-700">{x}</dd>
+                  <dt className="font-display text-xl font-semibold text-[#002C4B]">{t}</dt>
+                  <dd className="text-lg text-slate-800">{x}</dd>
                 </div>
               ))}
             </dl>
