@@ -510,10 +510,27 @@ test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and 
   const [bpmn] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download BPMN' }).click()]);
   expect(readFileSync(await bpmn.path(), 'utf8')).toContain('<bpmn:definitions');
 
-  await page.getByRole('tab', { name: 'Edit the flow' }).click();
+  await page.getByRole('tab', { name: 'Edit the As-Is flow' }).click();
+  await expect(page.getByTestId('flows-stage')).toContainText('You are editing the As-Is flow');
   const canvas = page.getByTestId('bpmn-canvas');
   await expect(canvas.locator('.djs-element[data-element-id]').first()).toBeVisible();
   await expect(canvas).toContainText('Post invoice in SAP');
+  // Drawn top to bottom: the second step is below the first, as in the maps.
+  const ys = await page.evaluate(() => {
+    const reg = (window as any).__bpmnModeler.get('elementRegistry');
+    return ['Check invoice totals', 'Post invoice in SAP'].map(n => reg.filter((e: any) => e.businessObject?.name === n && e.type !== 'label')[0].y);
+  });
+  expect(ys[1]).toBeGreaterThan(ys[0]);
+  // Zoom controls.
+  const level = page.getByTestId('zoom-level');
+  await page.getByRole('button', { name: '100%' }).click();
+  await expect(level).toHaveText('100%');
+  await page.getByRole('button', { name: 'Zoom in' }).click();
+  await expect(level).toHaveText('125%');
+  await page.getByRole('button', { name: 'Zoom out' }).click();
+  await page.getByRole('button', { name: 'Zoom out' }).click();
+  await expect(level).toHaveText('80%');
+  await page.getByRole('button', { name: 'Fit' }).click();
   await shot(page, '52-flow-editor');
   // Edit as a person would on the canvas: rename one step, delete another.
   await page.evaluate(() => {

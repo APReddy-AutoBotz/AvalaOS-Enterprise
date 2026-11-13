@@ -58,3 +58,13 @@ test('the PDD embeds both maps; Markdown carries them as Mermaid', () => {
   assert.equal(figs.length, 2);
   assert.match(toMarkdown(d), /```mermaid\nflowchart TB/);
 });
+
+test('the editor\'s BPMN is drawn top to bottom like the maps and reads back to the same flow', async () => {
+  const { modelToBpmnVertical } = await import('./svg.ts');
+  const { parseBpmn, modelToGraph } = await import('./bpmn.ts');
+  const { graphSignature } = await import('./graph.ts');
+  const xml = modelToBpmnVertical(gold);
+  assert.match(xml, /bpmnElement="Participant_1" isHorizontal="false"/);
+  assert.ok(!/isHorizontal="true"/.test(xml));
+  assert.deepEqual(graphSignature(parseBpmn(xml)), graphSignature(modelToGraph(gold)));
+});

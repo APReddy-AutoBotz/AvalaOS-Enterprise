@@ -5,7 +5,7 @@
 import type { ProcessModel } from '../processModel/types.ts';
 import type { Approach, HumanPoint } from '../assess/scoring.ts';
 import { orderedSteps } from '../processModel/selectors.ts';
-import { modelToGraph } from './bpmn.ts';
+import { graphToBpmn, modelToGraph, type Box } from './bpmn.ts';
 import type { FlowGraph, FlowNode } from './graph.ts';
 
 export type FlowMode = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human' | 'system';
@@ -76,7 +76,26 @@ function ranks(graph: FlowGraph): { rank: Map<string, number>; back: Set<string>
  * person checks the result, and a legend. Without recorded flows, the steps are placed in their order
  * with no arrows, and the picture says the flow is not recorded. Roles with no step get no column.
  */
-export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, StepMode>; title?: string } = {}): FlowPicture {
+export interface Route { id: string; points: [number, number][]; label: { x: number; y: number } | null }
+export interface VerticalLayout {
+  graph: FlowGraph;
+  laneIds: string[];
+  lanes: { id: string; name: string; x: number; w: number }[];
+  pool: { x: number; y: number; w: number; h: number };
+  /** Height of the pool's title band, and of each lane's name band below it. */
+  titleH: number; headH: number;
+  noFlows: boolean;
+  centre: (n: FlowNode) => { x: number; y: number };
+  half: (n: FlowNode) => { w: number; h: number };
+  routes: Route[];
+  order: ReturnType<typeof orderedSteps>;
+}
+
+/**
+ * The top-to-bottom layout shared by the maps and the BPMN editor: one column per role, rows by the
+ * place in the flow, and a route for each flow (back flows run up the right edge).
+ */
+export function verticalLayout(model: ProcessModel): VerticalLayout {
   const graph = modelToGraph(model);
   const noFlows = graph.edges.length === 0;
   const order = orderedSteps(model);
@@ -113,14 +132,59 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
   const rows = Math.max(1, ...[...rank.values()].map(r => r + 1));
   const top = TITLE_H + HEAD_H;
   const poolH = HEAD_H + rows * ROW_H;
+  const centre = (n: FlowNode) => ({ x: laneX.get(laneOf(n))! + slot.get(n.id)! * COL_W + COL_W / 2, y: top + rank.get(n.id)! * ROW_H + ROW_H / 2 });
+  const half = (n: FlowNode) => (n.kind === 'start' || n.kind === 'end' ? { w: EVENT / 2, h: EVENT / 2 } : n.kind === 'gateway' ? { w: GATE / 2, h: GATE / 2 } : { w: TASK_W / 2, h: TASK_H / 2 });
+  const routes: Route[] = [];
+  let lane = 0;
+  const byId = new Map(graph.nodes.map(n => [n.id, n]));
+  const right = SIDE + poolW - 6;
+  for (const e of graph.edges) {
+    const a = byId.get(e.from), b = byId.get(e.to);
+    if (!a || !b) continue;
+    const ca = centre(a), cb = centre(b), ha = half(a), hb = half(b);
+    let points: [number, number][], lx: number, ly: number;
+    if (!back.has(e.id) && cb.y > ca.y) {
+      const y1 = ca.y + ha.h, y2 = cb.y - hb.h;
+      // Each source's turn is at its own height, so flows from neighbouring shapes do not share a line.
+      const ym = y1 + 8 + (slot.get(a.id)! % 3) * 6;
+      const skips = rank.get(b.id)! - rank.get(a.id)! > 1;
+      const blocked = skips && graph.nodes.some(n => n.id !== a.id && n.id !== b.id && Math.abs(centre(n).x - cb.x) < TASK_W / 2 && centre(n).y > ca.y && centre(n).y < cb.y);
+      if (blocked) {
+        // A flow that skips rows would cross the shapes between: it goes down the column's left gutter.
+        const gx = (ca.x === cb.x ? cb.x : Math.min(ca.x, cb.x)) - TASK_W / 2 - 5;
+        points = [[ca.x, y1], [ca.x, ym], [gx, ym], [gx, y2 - 12], [cb.x, y2 - 12], [cb.x, y2]];
+        lx = gx + 4; ly = ym + 12;
+      } else {
+        points = ca.x === cb.x ? [[ca.x, y1], [cb.x, y2]] : [[ca.x, y1], [ca.x, ym], [cb.x, ym], [cb.x, y2]];
+        // The label sits on the last leg, beside the shape it leads to, so two labels from one decision never meet.
+        lx = cb.x + 5; ly = ca.x === cb.x ? y1 + 12 : ym + 12;
+      }
+    } else {
+      const gx = right - (lane++ % 6) * 8;
+      points = [[ca.x + ha.w, ca.y], [gx, ca.y], [gx, cb.y], [cb.x + hb.w, cb.y]];
+      lx = ca.x + ha.w + 4; ly = ca.y - 4;
+    }
+    routes.push({ id: e.id, points, label: e.label ? { x: lx, y: ly } : null });
+  }
+  return {
+    graph, laneIds, lanes: laneIds.map(id => ({ id, name: graph.lanes.find(l => l.id === id)?.name ?? '', x: laneX.get(id)!, w: widthOf(id) })),
+    pool: { x: SIDE, y: 0, w: poolW, h: TITLE_H + poolH }, titleH: TITLE_H, headH: HEAD_H, noFlows, centre, half, routes, order,
+  };
+}
+
+export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, StepMode>; title?: string } = {}): FlowPicture {
+  const L = verticalLayout(model);
+  const { graph, laneIds, centre, half, noFlows, order } = L;
+  const poolW = L.pool.w, poolH = L.pool.h - TITLE_H, top = TITLE_H + HEAD_H;
+  const laneX = new Map(L.lanes.map(l => [l.id, l.x]));
+  const widthOf = (id: string) => L.lanes.find(l => l.id === id)!.w;
+  void top;
   const legendH = opts.modes ? 52 : 0;
   const noteH = noFlows && graph.nodes.length ? 22 : 0;
   // Room on the right for labels beside shapes in the last column.
   const width = Math.max(SIDE * 2 + poolW + 60, opts.modes ? 520 : 0);
   const height = TITLE_H + poolH + 14 + noteH + legendH;
 
-  const centre = (n: FlowNode) => ({ x: laneX.get(laneOf(n))! + slot.get(n.id)! * COL_W + COL_W / 2, y: top + rank.get(n.id)! * ROW_H + ROW_H / 2 });
-  const half = (n: FlowNode) => (n.kind === 'start' || n.kind === 'end' ? { w: EVENT / 2, h: EVENT / 2 } : n.kind === 'gateway' ? { w: GATE / 2, h: GATE / 2 } : { w: TASK_W / 2, h: TASK_H / 2 });
   const out: string[] = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="Segoe UI, Calibri, Arial, sans-serif" role="img" aria-label="${esc(opts.title ?? model.meta.name)}">`);
   out.push('<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#334155"/></marker></defs>');
@@ -138,39 +202,14 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
     ls.forEach((l, i) => out.push(`<text x="${lx + lw / 2}" y="${TITLE_H + HEAD_H / 2 + 4 - (ls.length - 1) * 6.5 + i * 13}" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">${esc(l)}</text>`));
   }
   // Flows: down from the bottom of one shape to the top of the next; flows going back run up the right edge.
-  let drawn = 0, lane = 0;
-  const byId = new Map(graph.nodes.map(n => [n.id, n]));
-  const right = SIDE + poolW - 6;
-  for (const e of graph.edges) {
-    const a = byId.get(e.from), b = byId.get(e.to);
-    if (!a || !b) continue;
+  let drawn = 0;
+  for (const r of L.routes) {
+    const e = graph.edges.find(x => x.id === r.id)!;
     drawn++;
-    const ca = centre(a), cb = centre(b), ha = half(a), hb = half(b);
     const dash = model.flows.find(f => f.id === e.id)?.isException ? ' stroke-dasharray="5 4"' : '';
-    let d: string, lx: number, ly: number;
-    if (!back.has(e.id) && cb.y > ca.y) {
-      const y1 = ca.y + ha.h, y2 = cb.y - hb.h;
-      // Each source's turn is at its own height, so flows from neighbouring shapes do not share a line.
-      const ym = y1 + 8 + (slot.get(a.id)! % 3) * 6;
-      const skips = rank.get(b.id)! - rank.get(a.id)! > 1;
-      const blocked = skips && graph.nodes.some(n => n.id !== a.id && n.id !== b.id && Math.abs(centre(n).x - cb.x) < TASK_W / 2 && centre(n).y > ca.y && centre(n).y < cb.y);
-      if (blocked) {
-        // A flow that skips rows would cross the shapes between: it goes down the column's left gutter.
-        const gx = (ca.x === cb.x ? cb.x : Math.min(ca.x, cb.x)) - TASK_W / 2 - 5;
-        d = `M${ca.x},${y1} V${ym} H${gx} V${y2 - 12} H${cb.x} V${y2}`;
-        lx = gx + 4; ly = ym + 12;
-      } else {
-        d = ca.x === cb.x ? `M${ca.x},${y1} V${y2}` : `M${ca.x},${y1} V${ym} H${cb.x} V${y2}`;
-        // The label sits on the last leg, beside the shape it leads to, so two labels from one decision never meet.
-        lx = cb.x + 5; ly = ca.x === cb.x ? y1 + 12 : ym + 12;
-      }
-    } else {
-      const gx = right - (lane++ % 6) * 8;
-      d = `M${ca.x + ha.w},${ca.y} H${gx} V${cb.y} H${cb.x + hb.w}`;
-      lx = ca.x + ha.w + 4; ly = ca.y - 4;
-    }
+    const d = r.points.map(([px, py], i) => `${i ? 'L' : 'M'}${px},${py}`).join(' ');
     out.push(`<path d="${d}" fill="none" stroke="#334155" stroke-width="1.3"${dash} marker-end="url(#arrow)"/>`);
-    if (e.label) out.push(`<text x="${lx}" y="${ly}" font-size="10" font-weight="600" fill="#334155">${esc(wrap(e.label, 18, 1)[0])}</text>`);
+    if (e.label && r.label) out.push(`<text x="${r.label.x}" y="${r.label.y}" font-size="10" font-weight="600" fill="#334155">${esc(wrap(e.label, 18, 1)[0])}</text>`);
   }
   // Shapes.
   for (const n of graph.nodes) {
@@ -241,4 +280,22 @@ export function flowMermaid(model: ProcessModel, modes?: Map<string, StepMode>):
     for (const [stepId, m] of modes) lines.push(`  class ${id(stepId)} ${m.mode}`);
   }
   return lines.join('\n');
+}
+
+/**
+ * The model as BPMN drawn top to bottom, one column per role, the same layout as the maps: used by the
+ * editor, so the flow looks the same where it is read and where it is changed.
+ */
+export function modelToBpmnVertical(model: ProcessModel): string {
+  const L = verticalLayout(model);
+  const boxes = new Map<string, Box>();
+  for (const n of L.graph.nodes) {
+    const c = L.centre(n), h = L.half(n);
+    boxes.set(n.id, { x: Math.round(c.x - h.w), y: Math.round(c.y - h.h), w: h.w * 2, h: h.h * 2 });
+  }
+  const lanes = new Map<string, Box>(L.lanes.map(l => [l.id, { x: l.x, y: L.titleH, w: l.w, h: L.pool.h - L.titleH }]));
+  return graphToBpmn(L.graph, {
+    boxes, lanes, width: L.pool.w + L.pool.x, height: L.pool.h, horizontal: false,
+    waypoints: new Map(L.routes.map(r => [r.id, r.points])),
+  });
 }
