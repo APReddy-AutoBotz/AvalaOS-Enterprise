@@ -33,7 +33,7 @@ begin
   begin perform public.invite_member(ws, 'not-an-email', 'viewer'); raise exception 'FAILED 2b: accepted a bad email';
   exception when invalid_parameter_value then null; end;
   execute 'reset role';
-  insert into auth.users (id, email) values (late_u, late_email);
+  insert into auth.users (id, email, email_confirmed_at) values (late_u, late_email, now());
   select count(*) into n from public.workspace_members where workspace_id = ws and user_id = late_u and role = 'viewer' and can_approve and job = 'approver';
   if n <> 1 then raise exception 'FAILED 2c: invitation not claimed'; end if;
   select count(*) into n from public.workspace_invites where workspace_id = ws;

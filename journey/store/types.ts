@@ -13,6 +13,7 @@ import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
+import type { ProviderId } from '../../domain/auth/providers.ts';
 
 export interface Me { id: string; email: string }
 export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null }
@@ -82,6 +83,10 @@ export interface JourneyStore {
   onAuthChange(listener: (me: Me | null) => void): () => void;
   signIn(email: string, password: string): Promise<void>;
   signUp(email: string, password: string): Promise<{ needsConfirmation: boolean }>;
+  /** The sign-in providers (Google, Microsoft) the server has turned on; none when it cannot tell. */
+  signInProviders(): Promise<ProviderId[]>;
+  /** Leaves for the provider's sign-in page; the provider sends the person back to /signin. */
+  signInWithProvider(provider: ProviderId): Promise<void>;
   signOut(): Promise<void>;
 
   listWorkspaces(): Promise<Workspace[]>;

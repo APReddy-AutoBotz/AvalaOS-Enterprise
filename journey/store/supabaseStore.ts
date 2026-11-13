@@ -21,6 +21,7 @@ const itemFrom = (r: any): WorkItem => ({
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
 import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -78,6 +79,18 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       return { needsConfirmation: !data.session };
     },
     async signOut() { await db.auth.signOut(); },
+    async signInProviders() {
+      try {
+        const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: publishableKey } });
+        return res.ok ? enabledProviders(await res.json()) : [];
+      } catch { return []; }
+    },
+    async signInWithProvider(provider) {
+      const { error } = await db.auth.signInWithOAuth({
+        provider, options: { redirectTo: `${location.origin}/signin`, scopes: providerScopes(provider) },
+      });
+      if (error) fail({ message: error.message, status: error.status ?? 400 });
+    },
 
     async listWorkspaces() {
       const { data: auth } = await db.auth.getUser();
