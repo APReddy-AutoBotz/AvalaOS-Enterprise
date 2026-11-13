@@ -8,6 +8,7 @@ import {
 } from 'docx';
 import type { Block, Cell, DocTree } from './tree.ts';
 import { imageSize } from './branding.ts';
+import { richParas } from './edits.ts';
 
 function logoRun(dataUrl: string | null | undefined, height: number): ImageRun | null {
   if (!dataUrl) return null;
@@ -74,6 +75,11 @@ function block(b: Block, s: DocxStyle): (Paragraph | Table)[] {
     case 'list': return b.items.map(i => new Paragraph({ text: i, numbering: { reference: 'bullets', level: 0 } }));
     case 'callout': return [new Paragraph({ spacing: { before: 80, after: 120 }, shading: { type: ShadingType.CLEAR, fill: b.tone === 'warning' ? 'FEF3C7' : 'F1F5F9', color: 'auto' },
       children: [new TextRun({ text: b.tone === 'warning' ? 'Caution. ' : '', bold: true }), new TextRun(b.text)] })];
+    case 'rich': return richParas(b.html).map(p => new Paragraph({
+      spacing: { after: p.kind === 'li' ? 40 : 120 },
+      ...(p.kind === 'li' ? { numbering: { reference: p.ordered ? 'numbers' : 'bullets', level: 0 } } : {}),
+      children: p.runs.map(r => new TextRun({ text: r.text, bold: r.bold || p.kind === 'heading', italics: r.italic })),
+    }));
     case 'figure': {
       const size = b.png ? imageSize(b.png) : null;
       if (!b.png || !size) return [caption(b.caption, s), new Paragraph({ spacing: { after: 120 }, children: [new TextRun({ text: 'The map is shown in the app and in the BPMN export.', italics: true, color: GREY })] })];
@@ -137,7 +143,10 @@ export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxS
     features: { updateFields: true },
     // A company template's styles replace ours, so its fonts and heading look apply throughout.
     ...(s.stylesXml ? { externalStyles: s.stylesXml } : { styles }),
-    numbering: { config: [{ reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 240 } } } }] }] },
+    numbering: { config: [
+      { reference: 'bullets', levels: [{ level: 0, format: LevelFormat.BULLET, text: '•', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 240 } } } }] },
+      { reference: 'numbers', levels: [{ level: 0, format: LevelFormat.DECIMAL, text: '%1.', alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 360, hanging: 260 } } } }] },
+    ] },
     sections: [{
       properties: { page: { margin: { top: 1080, bottom: 1080, left: 1080, right: 1080 } }, titlePage: true },
       headers: { default: new Header({ children: [new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1', space: 4 } }, children: [

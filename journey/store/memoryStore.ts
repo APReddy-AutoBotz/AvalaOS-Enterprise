@@ -12,6 +12,7 @@ import { StoreError, type Draft, type EditRow, type JourneyStore, type Me, type 
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
+import type { SectionEdit } from '../../domain/docs/edits.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -23,6 +24,7 @@ interface State {
   sources: (SourceRow & { processId: string; segments: IngestSegment[] })[];
   assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
   requirements?: Record<string, StoredRequirement[]>;
+  docEdits?: Record<string, SectionEdit[]>;
   settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
   documentSettings?: { workspaceId: string; settings: DocumentSettings }[];
 }
@@ -218,6 +220,27 @@ export function createMemoryStore(): JourneyStore {
     async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
     async latestExtraction() { return null; },
     async runAiTask() { throw new StoreError(501, 'AI tasks need the server; they are not available in local mode.'); },
+    async listDocumentEdits(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return structuredClone((state.docEdits ?? {})[processId] ?? []);
+    },
+    async saveDocumentEdit(processId, edit) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
+      state.docEdits ??= {};
+      const list = (state.docEdits[processId] ?? []).filter(e => !(e.docType === edit.docType && e.sectionKey === edit.sectionKey));
+      list.push({ ...structuredClone(edit), updatedBy: state.me?.email, updatedAt: new Date().toISOString() });
+      state.docEdits[processId] = list;
+      save();
+    },
+    async removeDocumentEdit(processId, docType, sectionKey) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
+      state.docEdits ??= {};
+      state.docEdits[processId] = (state.docEdits[processId] ?? []).filter(e => !(e.docType === docType && e.sectionKey === sectionKey));
+      save();
+    },
     async listRequirements(processId) {
       requireMe();
       workspaceOf(processId);

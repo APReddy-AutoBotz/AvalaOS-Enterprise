@@ -8,6 +8,7 @@ import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { StoredFormat } from '../../domain/workspace/sources.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
+import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 
 export interface Me { id: string; email: string }
@@ -125,4 +126,11 @@ export interface JourneyStore {
   listRequirements(processId: string): Promise<StoredRequirement[]>;
   /** Inserts or updates requirements by their ID; editors and admins only. Nothing is deleted. */
   saveRequirements(processId: string, rows: StoredRequirement[]): Promise<void>;
+
+  /** People's edits to section narratives, for every document of the process. */
+  listDocumentEdits(processId: string): Promise<SectionEdit[]>;
+  /** Saves an edit (one per section); editors and admins only. */
+  saveDocumentEdit(processId: string, edit: SectionEdit): Promise<void>;
+  /** Removes an edit, so the section shows the generated text again ("take update"). */
+  removeDocumentEdit(processId: string, docType: SectionEdit['docType'], sectionKey: string): Promise<void>;
 }

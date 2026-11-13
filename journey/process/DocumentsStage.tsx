@@ -23,6 +23,9 @@ import { buildSdd } from '../../domain/docs/sdd.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
+import { applyEdits, EditError, makeEdit, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
+
+const SectionEditor = React.lazy(() => import('./SectionEditor.tsx'));
 
 const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'brd', short: 'BRD', label: 'Business requirements', ready: true },
@@ -49,6 +52,7 @@ function CellView({ c }: { c: Cell; key?: React.Key }) {
 function BlockView({ b }: { b: Block; key?: React.Key }) {
   switch (b.kind) {
     case 'paragraph': return <p className="text-sm leading-7 text-slate-800">{b.text}</p>;
+    case 'rich': return <div data-testid="edited-text" className="text-sm leading-7 text-slate-800 [&_h3]:mt-3 [&_h3]:font-semibold [&_h4]:mt-3 [&_h4]:font-semibold [&_ol]:list-decimal [&_ol]:pl-5 [&_p]:mb-2 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{ __html: b.html }} />;
     case 'figure': return (
       <figure className="keep" data-testid="flow-figure" data-caption={b.caption}>
         <figcaption className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider" style={{ color: 'var(--doc-accent)' }}>{b.caption}</figcaption>
@@ -108,9 +112,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   const [error, setError] = React.useState<string | null>(null);
   const [stored, setStored] = React.useState<StoredRequirement[] | null>(null);
+  const [edits, setEdits] = React.useState<SectionEdit[]>([]);
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const [editBusy, setEditBusy] = React.useState(false);
   React.useEffect(() => {
-    Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId)])
-      .then(([d, s, ds, r]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); }).catch(e => setError(messageOf(e)));
+    Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId), store.listDocumentEdits(processId)])
+      .then(([d, s, ds, r, ed]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
 
   const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings }) : null), [model, decisions, settings]);
@@ -125,12 +132,33 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     setStored(cur => (cur ?? []).some(x => x.code === r.code) ? (cur ?? []).map(x => (x.code === r.code ? r : x)) : [...(cur ?? []), r]);
   };
 
-  const doc = React.useMemo<DocTree | null>(() => {
+  const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const built = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : sddReady ? buildSdd(input) : null;
-    return built && applyLayout(built, docSettings.layouts[type]);
-  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady]);
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : sddReady ? buildSdd(input) : null;
+    if (!raw) return null;
+    const edited = applyEdits(raw, edits);
+    return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits]);
+  const doc = built?.doc ?? null;
+  const review = built ? Object.values<SectionStatus>(built.status).filter(s => s.state === 'needs_review').length : 0;
+
+  const saveEdit = async (sectionKey: string, html: string, hash: string) => {
+    setEditBusy(true); setError(null);
+    try {
+      const e = makeEdit(type, sectionKey, html, hash);
+      await store.saveDocumentEdit(processId, e);
+      setEdits(cur => [...cur.filter(x => !(x.docType === type && x.sectionKey === sectionKey)), e]);
+      setEditing(null);
+    } catch (x) { setError(x instanceof EditError ? x.message : messageOf(x)); } finally { setEditBusy(false); }
+  };
+  const takeUpdate = async (sectionKey: string) => {
+    setError(null);
+    try {
+      await store.removeDocumentEdit(processId, type, sectionKey);
+      setEdits(cur => cur.filter(x => !(x.docType === type && x.sectionKey === sectionKey)));
+    } catch (x) { setError(messageOf(x)); }
+  };
 
   const [wordBusy, setWordBusy] = React.useState(false);
   const downloadWord = async () => {
@@ -185,6 +213,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         </div>
       ) : (
         <>
+        {review > 0 && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="review-banner"><span className="font-semibold">{review} edited {review === 1 ? 'section needs' : 'sections need'} review:</span> the process changed after you edited {review === 1 ? 'it' : 'them'}. Keep your text or take the update in each section.</p>}
         {type === 'sdd' && approvedRevision === null && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950" data-testid="sdd-preview">Preview from the working draft: no revision is approved yet, so this SDD is not for sign-off.</p>}
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 lg:grid-cols-[15rem_minmax(0,1fr)]">
@@ -203,14 +232,47 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">{doc.control.slice(1).map(c => <div key={c.key}><dt className="inline font-semibold">{c.key}: </dt><dd className="inline">{c.value}</dd></div>)}</dl>
               {revision.state === 'working' && <p className="mt-3 inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-slate-600">Draft until the revision is approved</p>}
             </header>
-            {doc.sections.map(s => (
-              <section key={s.id} id={s.id} className="scroll-mt-4">
-                {s.level === 1
-                  ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900"><span className="mr-2 tabular-nums" style={{ color: 'var(--doc-accent)' }}>{s.number}</span>{s.title}</h3>
-                  : <h4 className="mt-6 font-display text-base font-semibold text-slate-900"><span className="mr-2 tabular-nums text-slate-400">{s.number}</span>{s.title}</h4>}
-                <div className="mt-3 space-y-3">{s.blocks.map((b, i) => <BlockView key={i} b={b} />)}</div>
-              </section>
-            ))}
+            {doc.sections.map(s => {
+              const st = built!.status[s.id];
+              const mine = edits.find(e => e.docType === type && e.sectionKey === s.id);
+              const editable = canEdit && st && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
+              const head = (
+                <span className="flex flex-wrap items-center gap-2">
+                  <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-400')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
+                  {st?.state === 'edited' && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-edited">Edited by you</span>}
+                  {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
+                  {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}
+                  {editable && editing !== s.id && <button type="button" className="no-print ml-auto font-sans text-xs font-semibold text-[#002C4B] opacity-70 hover:underline hover:opacity-100" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
+                </span>
+              );
+              return (
+                <section key={s.id} id={s.id} className="group scroll-mt-4" data-testid="doc-section">
+                  {s.level === 1
+                    ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900">{head}</h3>
+                    : <h4 className="mt-6 font-display text-base font-semibold text-slate-900">{head}</h4>}
+                  {st?.state === 'needs_review' && mine && (
+                    <div className="no-print mt-3 rounded-xl bg-amber-50 p-4 ring-1 ring-inset ring-amber-200" data-testid="review-update">
+                      <p className="text-sm text-amber-950"><span className="font-semibold">The process changed since you edited this section.</span> The generated text now reads:</p>
+                      <div className="mt-2 rounded-lg bg-white px-3 py-2 text-sm leading-6 text-slate-700 [&_ul]:list-disc [&_ul]:pl-5" dangerouslySetInnerHTML={{ __html: st.generatedHtml || '<p><em>No generated text.</em></p>' }} />
+                      {canEdit && <div className="mt-3 flex flex-wrap gap-2">
+                        <Button variant="secondary" onClick={() => saveEdit(s.id, mine.html, st.hash)}>Keep mine</Button>
+                        <Button variant="secondary" onClick={() => takeUpdate(s.id)}>Take update</Button>
+                        <Button variant="ghost" onClick={() => setEditing(s.id)}>Edit mine</Button>
+                      </div>}
+                    </div>
+                  )}
+                  {editing === s.id && st ? (
+                    <div className="mt-3 space-y-3">
+                      <React.Suspense fallback={<Spinner label="Opening the editor" />}>
+                        <SectionEditor initial={mine?.html ?? st.generatedHtml} title={s.title} busy={editBusy} onCancel={() => setEditing(null)} onSave={html => saveEdit(s.id, html, st.hash)} />
+                      </React.Suspense>
+                      {mine && <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => { takeUpdate(s.id); setEditing(null); }}>Use the generated text instead</button>}
+                      {s.blocks.filter(b => b.kind !== 'rich' && b.kind !== 'paragraph' && b.kind !== 'list' && b.kind !== 'callout').map((b, i) => <BlockView key={i} b={b} />)}
+                    </div>
+                  ) : <div className="mt-3 space-y-3">{s.blocks.map((b, i) => <BlockView key={i} b={b} />)}</div>}
+                </section>
+              );
+            })}
           </article>
         </div>
         </>

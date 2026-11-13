@@ -453,3 +453,46 @@ test('the FRD: requirements derived from the process with IDs; an edit is kept a
   const [word] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Download Word' }).click()]);
   expect(word.suggestedFilename()).toMatch(/FRD\.docx$/);
 });
+
+test('editing a section: the text is kept on rebuild and reload, and when the process changes the person keeps theirs or takes the update', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Documents');
+  const doc = page.getByTestId('document');
+  await doc.getByRole('button', { name: 'Edit section 1.2' }).click();
+  const box = doc.getByRole('textbox', { name: 'Text of Objectives of the process' });
+  await box.click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Cut the time from receipt to posting.');
+  await doc.getByRole('button', { name: 'Bold' }).click();
+  await page.keyboard.type(' Always.');
+  await doc.getByRole('button', { name: 'Save section' }).click();
+  await expect(doc.getByTestId('edited-text').first()).toContainText('Cut the time from receipt to posting.');
+  await expect(doc.getByTestId('edited-text').first().locator('strong')).toHaveText('Always.');
+  await expect(doc.getByTestId('chip-edited')).toHaveCount(1);
+  // Tables and open items still come from the model.
+  await expect(doc.getByTestId('open-item').first()).toBeVisible();
+  await page.reload();
+  await stage(page, 'Documents');
+  await expect(doc.getByTestId('edited-text').first()).toContainText('Cut the time from receipt to posting.');
+  const [md] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Markdown' }).click()]);
+  expect(readFileSync(await md.path(), 'utf8')).toContain('Cut the time from receipt to posting. **Always.**');
+  await shot(page, '50-section-edited');
+
+  // The objective is answered: the generated text changes, so the edit needs review.
+  await page.getByRole('button', { name: 'Answer them' }).click();
+  const assistant = page.getByTestId('gaps-assistant');
+  await assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /objective/i }).click();
+  await assistant.getByLabel('Answer', { exact: true }).fill('Post supplier invoices correctly within five working days.');
+  await assistant.getByRole('button', { name: 'Save answer' }).click();
+  await saved(page);
+  await assistant.getByRole('button', { name: 'Back to the document' }).click();
+  await expect(page.getByTestId('review-banner')).toContainText('1 edited section needs review');
+  await expect(doc.getByTestId('chip-review')).toHaveCount(1);
+  await expect(doc.getByTestId('review-update')).toContainText('Post supplier invoices correctly within five working days.');
+  await expect(doc.getByTestId('edited-text').first()).toContainText('Cut the time from receipt to posting.');
+  await shot(page, '51-section-needs-review');
+  await doc.getByRole('button', { name: 'Take update' }).click();
+  await expect(doc.getByTestId('chip-review')).toHaveCount(0);
+  await expect(doc.getByTestId('edited-text')).toHaveCount(0);
+  await expect(doc).toContainText('Post supplier invoices correctly within five working days.');
+});
