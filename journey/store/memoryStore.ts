@@ -13,6 +13,8 @@ import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
+import type { Proposal } from '../../domain/workitems/register.ts';
+import type { Project, WorkItem } from '../../domain/workitems/board.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -25,6 +27,9 @@ interface State {
   assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
   requirements?: Record<string, StoredRequirement[]>;
   docEdits?: Record<string, SectionEdit[]>;
+  proposals?: Record<string, Proposal[]>;
+  projects?: (Project & { workspaceId: string })[];
+  workItems?: WorkItem[];
   settings?: { workspaceId: string; assessment: AssessmentSettings; updatedBy: string; updatedAt: string }[];
   documentSettings?: { workspaceId: string; settings: DocumentSettings }[];
 }
@@ -220,6 +225,71 @@ export function createMemoryStore(): JourneyStore {
     async startExtraction() { throw new StoreError(501, 'Extraction needs the server; it is not available in local mode.'); },
     async latestExtraction() { return null; },
     async runAiTask() { throw new StoreError(501, 'AI tasks need the server; they are not available in local mode.'); },
+    async listProjects(workspaceId) {
+      requireMe();
+      return (state.projects ?? []).filter(p => p.workspaceId === workspaceId).map(({ workspaceId: _w, ...p }) => p);
+    },
+    async createProject(workspaceId, name) {
+      requireMe();
+      const w = state.workspaces.find(x => x.id === workspaceId);
+      if (!w) throw new StoreError(404, 'Workspace not found.');
+      if (w.role === 'viewer') throw new StoreError(403, 'Creating a project needs the editor or admin role.');
+      const p = { id: crypto.randomUUID(), name, description: '', workspaceId };
+      (state.projects ??= []).push(p);
+      save();
+      return { id: p.id, name: p.name, description: '' };
+    },
+    async confirmProposals(processId, projectId, keys) {
+      requireMe();
+      const { w } = workspaceOf(processId);
+      if (w.role === 'viewer') throw new StoreError(403, 'Confirming needs the editor or admin role.');
+      if (!(state.projects ?? []).some(p => p.id === projectId && p.workspaceId === w.id)) throw new StoreError(404, 'Project not found.');
+      const list = (state.proposals ?? {})[processId] ?? [];
+      const reqs = (state.requirements ?? {})[processId] ?? [];
+      let created = 0, skipped = 0;
+      let pending = [...keys];
+      for (let pass = 0; pending.length && pass < 10; pass++) {
+        for (const p of list.filter(x => pending.includes(x.key)).sort((a, b) => a.order - b.order)) {
+          if (p.state === 'confirmed') { skipped++; pending = pending.filter(k => k !== p.key); continue; }
+          if (p.state !== 'selected') throw new StoreError(409, `Not selected: ${p.title}`);
+          if (p.parentKey && pending.includes(p.parentKey)) continue;
+          const parent = list.find(x => x.key === p.parentKey && x.state === 'confirmed')?.workItemId ?? null;
+          const item: WorkItem = { id: crypto.randomUUID(), projectId, parentId: parent, type: p.type, title: p.title, description: p.description, acceptance: p.acceptance, status: 'todo', priority: null, ownerId: null, estimateHours: null, startDate: null, dueDate: null, processId, stepIds: p.stepIds, requirements: p.requirements, snapshot: Object.fromEntries(reqs.filter(r => p.requirements.includes(r.code)).map(r => [r.code, r.statement])), updatedAt: new Date().toISOString() };
+          (state.workItems ??= []).push(item);
+          p.state = 'confirmed'; p.workItemId = item.id;
+          created++; pending = pending.filter(k => k !== p.key);
+        }
+      }
+      if (pending.length) throw new StoreError(404, `${pending.length} of the selected items are unknown.`);
+      save();
+      return { created, skipped };
+    },
+    async listWorkItems(projectId) {
+      requireMe();
+      return structuredClone((state.workItems ?? []).filter(i => i.projectId === projectId));
+    },
+    async updateWorkItem(id, e) {
+      requireMe();
+      const item = (state.workItems ?? []).find(i => i.id === id);
+      if (!item) throw new StoreError(404, 'Work item not found.');
+      Object.assign(item, Object.fromEntries(Object.entries(e).filter(([, v]) => v !== undefined)), { updatedAt: new Date().toISOString() });
+      save();
+      return structuredClone(item);
+    },
+    async listProposals(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return structuredClone((state.proposals ?? {})[processId] ?? []).sort((a, b) => a.order - b.order);
+    },
+    async saveProposals(processId, rows) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Changing work items needs the editor or admin role.');
+      state.proposals ??= {};
+      const list = state.proposals[processId] ?? [];
+      for (const r of rows) { const i = list.findIndex(x => x.key === r.key); if (i >= 0) list[i] = structuredClone(r); else list.push(structuredClone(r)); }
+      state.proposals[processId] = list;
+      save();
+    },
     async listDocumentEdits(processId) {
       requireMe();
       workspaceOf(processId);

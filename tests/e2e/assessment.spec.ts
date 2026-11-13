@@ -537,3 +537,84 @@ test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and 
   await expect(page.getByLabel(/^Name of step \d+$/)).toHaveCount(1);
   await expect(page.getByLabel('Name of step 1')).toHaveValue('Post invoice in SAP S/4HANA');
 });
+
+test('work items: proposals reviewed (edit, reject, select), confirmed to the board once; the board keeps moves and edits and shows upstream changes', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Work items');
+  const items = page.getByTestId('work-items');
+  const card = (title: string | RegExp) => items.getByTestId('proposal').filter({ hasText: title });
+  await expect(card(/Rule-based RPA in SAP S\/4HANA/)).toBeVisible();
+  await expect(items).toContainText('Unassigned · Not estimated · No date');
+  const total = await items.getByTestId('proposal').count();
+  expect(total).toBeGreaterThanOrEqual(4);
+  await shot(page, '54-work-items');
+
+  // Edit two.
+  await card('Confirm how the solution can use SAP S/4HANA').getByRole('button', { name: 'Confirm how the solution can use SAP S/4HANA' }).click();
+  await items.getByLabel('Title of Confirm how the solution can use SAP S/4HANA').fill('Confirm SAP S/4HANA interfaces with the SAP basis team');
+  await items.getByRole('button', { name: 'Save item' }).click();
+  await expect(card('Confirm SAP S/4HANA interfaces with the SAP basis team')).toContainText('Edited');
+  await card('Set up access to SAP S/4HANA for the solution').getByRole('button', { name: 'Set up access to SAP S/4HANA for the solution' }).click();
+  await items.getByLabel('Description of Set up access to SAP S/4HANA for the solution').fill('Robot account with posting rights in company code 1000.');
+  await items.getByRole('button', { name: 'Save item' }).click();
+  await expect(card('Set up access to SAP S/4HANA for the solution')).toContainText('Edited');
+  // Reject one, with a reason.
+  const env = card('Prepare a test environment and test data for SAP S/4HANA');
+  await env.getByRole('button', { name: 'Reject' }).click();
+  await env.getByLabel(/^Why reject/).fill('The SAP quality system is already set up for us.');
+  await env.getByRole('button', { name: 'Reject' }).last().click();
+  await expect(env.getByTestId('rejected-reason')).toContainText('already set up');
+  // Select the rest and confirm to a new project.
+  await items.getByRole('button', { name: 'Select all' }).click();
+  const panel = page.getByTestId('confirm-panel');
+  await expect(panel).toContainText(`${total - 1} selected`);
+  await panel.getByLabel('New project name').fill('AP automation');
+  await panel.getByRole('button', { name: `Confirm ${total - 1} to the board` }).click();
+  await expect(panel.getByRole('status')).toContainText(`${total - 1} items added to the board`);
+  await expect(items.getByText('On the board')).toHaveCount(total - 1);
+  // A reload keeps the review; nothing is selected to confirm twice.
+  await page.reload();
+  await expect(page.getByTestId('confirm-panel')).toContainText('0 selected');
+  await expect(card('Confirm SAP S/4HANA interfaces with the SAP basis team')).toContainText('On the board');
+
+  // The board: exactly those items, in To Do.
+  await page.getByRole('link', { name: 'Delivery board' }).click();
+  const todo = page.getByTestId('column-todo');
+  await expect(todo.getByTestId('board-card')).toHaveCount(total - 1);
+  await expect(page.getByTestId('board')).not.toContainText('Prepare a test environment and test data');
+  await shot(page, '55-board');
+  // Move a card, reload: kept.
+  await todo.getByTestId('board-card').filter({ hasText: 'Confirm SAP S/4HANA interfaces' }).click();
+  const detail = page.getByTestId('item-panel');
+  await expect(detail.getByTestId('item-criteria').locator('li')).toHaveCount(2);
+  await detail.getByLabel('Status').selectOption({ label: 'In progress' });
+  await detail.getByLabel('Description').fill('Ask the SAP basis team which OData services are released.');
+  await detail.getByRole('button', { name: 'Save' }).click();
+  await page.reload();
+  await expect(page.getByTestId('column-in_progress').getByTestId('board-card')).toHaveCount(1);
+  await expect(page.getByTestId('item-panel').getByLabel('Description')).toHaveValue('Ask the SAP basis team which OData services are released.');
+
+  // Change the linked requirement in the FRD: the board item shows "Upstream changed" and is not edited.
+  const epicCard = page.getByTestId('board-card').filter({ hasText: 'Rule-based RPA in SAP S/4HANA' });
+  await page.keyboard.press('Escape');
+  await page.getByTestId('item-panel').getByRole('button', { name: 'Close' }).click();
+  await epicCard.click();
+  const code = (await page.getByTestId('item-requirements').locator('li').first().locator('span').first().textContent())!;
+  const epicTitle = await page.getByTestId('item-panel').getByLabel('Title').inputValue();
+  await page.getByTestId('item-panel').getByRole('button', { name: 'Open the documents' }).click();
+  await page.getByRole('tab', { name: /FRD/ }).click();
+  const reg = page.getByTestId('requirements-panel');
+  await reg.getByRole('button', { name: /Requirements register/ }).click();
+  await reg.getByRole('button', { name: `Edit ${code}` }).click();
+  await reg.getByLabel(`Statement of ${code}`).fill('The solution shall post the invoice in SAP S/4HANA with the scanned PDF attached.');
+  await reg.getByRole('button', { name: 'Save requirement' }).click();
+  await expect(page.getByTestId('document')).toContainText('with the scanned PDF attached');
+  await page.getByRole('link', { name: 'Delivery board' }).click();
+  await expect(epicCard.getByText('Upstream changed')).toBeVisible();
+  await epicCard.click();
+  const banner = page.getByTestId('upstream-changed');
+  await expect(banner).toContainText(code);
+  await expect(banner).toContainText('with the scanned PDF attached');
+  await expect(page.getByTestId('item-panel').getByLabel('Title')).toHaveValue(epicTitle);
+  await shot(page, '56-upstream-changed');
+});
