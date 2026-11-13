@@ -83,9 +83,10 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await snap(page, 'document-brd');
 
   await stage(page, 'Flows');
+  await page.getByRole('tab', { name: 'To-Be map' }).click();
   await settle(page);
   await snap(page, 'flows');
-  await page.mouse.wheel(0, 700);
+  await page.mouse.wheel(0, 520);
   await settle(page);
   await snap(page, 'flows-2');
 
@@ -104,12 +105,29 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await confirm.getByRole('button', { name: /^Confirm \d+ to the board$/ }).click();
   await expect(confirm.getByRole('status')).toContainText('items added to the board');
 
+  // A board part-way through delivery: statuses, owners and estimates as a team would have set them.
+  await page.evaluate(() => {
+    const KEY = 'avala.journey.memory.v1';
+    const state = JSON.parse(localStorage.getItem(KEY)!);
+    const flow = ['done', 'done', 'ready_for_release', 'testing', 'in_review', 'in_progress', 'in_progress', 'todo', 'todo', 'todo'];
+    let n = 0;
+    for (const item of state.workItems) {
+      if (item.type === 'epic') continue;
+      item.status = flow[n % flow.length];
+      if (n % 3 !== 2) item.ownerId = state.me.id;
+      if (n % 2 === 0) item.estimateHours = [6, 12, 16, 24][n % 4];
+      if (n % 5 === 0) item.priority = 'high';
+      n += 1;
+    }
+    localStorage.setItem(KEY, JSON.stringify(state));
+  });
+  await page.reload();
   await page.setViewportSize({ width: 1680, height: 1050 });
   await page.getByRole('link', { name: 'Delivery board' }).click();
   await expect(page.getByTestId('board-card').first()).toBeVisible();
   await settle(page);
   await snap(page, 'board');
-  await page.getByTestId('board-card').first().click();
+  await page.getByTestId('board-card').filter({ hasText: 'Story' }).first().click();
   await settle(page);
   await snap(page, 'board-item');
   await page.keyboard.press('Escape');
