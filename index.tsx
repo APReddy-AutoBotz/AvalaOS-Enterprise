@@ -10,11 +10,11 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-// The process journey (/signin, /processes, /process/:id/:stage) is the application. Any other
-// path goes to the process list, so no route reaches the earlier screens, including the earlier
+// The process journey (/signin, /work, /processes, /process/:id/:stage) is the application. Any other
+// path goes to My work, so no route reaches the earlier screens, including the earlier
 // assessment versions; they are no longer part of the build.
 if (!parseJourneyPath(window.location.pathname)) {
-  window.history.replaceState(null, '', `/processes${window.location.hash}`);
+  window.history.replaceState(null, '', `/work${window.location.hash}`);
 }
 const Root = React.lazy(() => import('./journey/JourneyApp'));
 

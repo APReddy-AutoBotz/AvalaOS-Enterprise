@@ -96,6 +96,17 @@ export function createMemoryStore(): JourneyStore {
     async signOut() { state.me = null; save(); listeners.forEach(l => l(null)); },
 
     async listWorkspaces() { requireMe(); return state.workspaces; },
+    async setProcessPeople(processId, people) {
+      requireMe();
+      const { p, w } = workspaceOf(processId);
+      if (w.role === 'viewer') throw new StoreError(403, 'Naming people on a process needs the editor or admin role.');
+      const members = peopleOf(w.id).members;
+      for (const id of [people.analystId, people.architectId, people.approverId]) {
+        if (id && !members.some(m => m.userId === id)) throw new StoreError(400, 'That person is not a member of this workspace');
+      }
+      Object.assign(p, people);
+      save();
+    },
     async createOrganization(organizationName, workspaceName) {
       requireMe();
       const w: Workspace = { id: uuid(), name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true };
@@ -327,6 +338,7 @@ export function createMemoryStore(): JourneyStore {
       if (leavesNoAdmin(p.members.map(x => ({ userId: x.userId, access: x.role })), userId, null)) throw new StoreError(400, 'a workspace needs at least one admin');
       p.members = p.members.filter(x => x.userId !== userId);
       for (const i of state.workItems ?? []) if (i.ownerId === userId) i.ownerId = null;
+      for (const pr of state.processes) if (pr.workspaceId === workspaceId) { if (pr.analystId === userId) pr.analystId = null; if (pr.architectId === userId) pr.architectId = null; if (pr.approverId === userId) pr.approverId = null; }
       p.audit.unshift({ id: uuid(), at: now(), kind: 'removed', actor: nameOf(), subject: m.name, detail: '' });
       save();
     },

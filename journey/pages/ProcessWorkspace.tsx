@@ -19,6 +19,7 @@ import { SourceContext } from '../process/widgets.tsx';
 import { quoteInContext } from '../../domain/workspace/sources.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { SourceRow } from '../store/types.ts';
+import { ProcessPeople } from '../process/ProcessPeople.tsx';
 
 const TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
@@ -107,6 +108,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
       </div>
+
+      <ProcessPeople store={store} workspaceId={process.workspaceId} processId={process.id} canEdit={canEdit}
+        named={{ analystId: process.analystId ?? null, architectId: process.architectId ?? null, approverId: process.approverId ?? null }} onError={setError} />
 
       {/* The journey: six stages in order. A tick means the stage has what the next ones need;
           a stage that is still waiting for the process steps is shown quieter, and can still be opened. */}

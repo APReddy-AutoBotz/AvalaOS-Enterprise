@@ -10,8 +10,8 @@ import { WorkspaceSettings } from './WorkspaceSettings.tsx';
 import { PeoplePage } from './PeoplePage.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
-const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
-const remember = (id: string) => { try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ } };
+export const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
+export const remember = (id: string) => { try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ } };
 
 export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav }) {
   const [workspaces, setWorkspaces] = React.useState<Workspace[] | null>(null);
@@ -153,7 +153,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   );
 }
 
-function FirstRun({ store, onCreated }: { store: JourneyStore; onCreated: () => void }) {
+export function FirstRun({ store, onCreated }: { store: JourneyStore; onCreated: () => void }) {
   const [org, setOrg] = React.useState('');
   const [ws, setWs] = React.useState('');
   const [busy, setBusy] = React.useState(false);

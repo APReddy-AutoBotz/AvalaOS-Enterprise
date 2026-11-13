@@ -22,7 +22,9 @@ export interface Member { userId: string; name: string; role: Workspace['role'] 
 export interface Person { userId: string; name: string; email: string | null; role: Workspace['role']; job: Job | null; canApprove: boolean; since: string }
 export interface Invite { email: string; role: Workspace['role']; job: Job | null; canApprove: boolean; at: string }
 export type RoleChoice = Pick<RoleDef, 'access' | 'job' | 'canApprove'>;
-export interface ProcessRow { id: string; workspaceId: string; name: string; description: string; updatedAt: string }
+export interface ProcessRow { id: string; workspaceId: string; name: string; description: string; updatedAt: string; analystId?: string | null; architectId?: string | null; approverId?: string | null }
+/** The people named on a process. Each is a workspace member or null. */
+export interface ProcessPeople { analystId: string | null; architectId: string | null; approverId: string | null }
 
 export interface RevisionRow {
   id: string;
@@ -110,6 +112,8 @@ export interface JourneyStore {
   listProcesses(workspaceId: string): Promise<ProcessRow[]>;
   createProcess(workspaceId: string, name: string): Promise<ProcessRow>;
   getProcess(processId: string): Promise<ProcessRow | null>;
+  /** Editors and admins. Everyone named must be a member of the workspace. */
+  setProcessPeople(processId: string, people: ProcessPeople): Promise<void>;
 
   /** Revisions of a process, newest first. */
   listRevisions(processId: string): Promise<RevisionRow[]>;
