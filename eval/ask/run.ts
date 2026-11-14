@@ -18,6 +18,8 @@ import { buildOpenAIRequest } from '../../domain/ai/gateway.ts';
 import { askProcess, askSegments, readAnswer, type Fact } from '../../domain/assistant/ask.ts';
 import { askBoard } from '../../domain/assistant/board.ts';
 import { askWorkspace } from '../../domain/assistant/workspace.ts';
+import type { RecordedAnswer } from '../../domain/assistant/recorded.ts';
+import { STARTERS } from '../../journey/process/askSubjects.ts';
 import { factsFor, loadQuestions, loadSample, plantedFor, type Sample } from './sample.ts';
 import { holders, judge, KINDS, KIND_ORDER, renderScorecard, scorecard, ungrounded, type Outcome, type Question, type QuestionSet } from './scorer.ts';
 
@@ -125,6 +127,28 @@ function describeSet(questions: Question[], sample: Sample, set: QuestionSet) {
   return total;
 }
 
+/**
+ * The demo's recorded answers: each scope's starter questions, asked once on the sample case, printed as
+ * public/demo-data/ask-answers.json between markers (the sample company is made up, so the log may show it).
+ */
+async function record(server: Server, sample: Sample, set: QuestionSet) {
+  const asks = (Object.entries(STARTERS) as [Question['scope'] & string, readonly string[]][])
+    .flatMap(([scope, qs]) => qs.map((question, i) => ({ id: `R-${scope}-${i + 1}`, kind: 'answered' as const, scope, question })));
+  const out: RecordedAnswer[] = [];
+  for (const q of asks) {
+    const { question, facts } = factsFor(q as Question, sample, set);
+    const r = await gateway(server, { action: 'run', task: taskOf(q.scope).id, segments: askSegments(question, facts) });
+    if (r.status !== 200 || !r.json?.ok) throw new Error(`${q.id} was not answered (${r.status} ${r.json?.error?.code ?? ''}). Nothing was recorded.`);
+    const answer = readAnswer(r.json.data, facts);
+    if (!answer.lead) throw new Error(`${q.id} has no direct answer first. Nothing was recorded; ask again.`);
+    console.log(`${q.id}: ${answer.sentences.length} sentences, ${Number(r.json.usage?.input ?? 0) + Number(r.json.usage?.output ?? 0)} tokens.`);
+    out.push({ task: taskOf(q.scope).id, question, reply: r.json.data });
+  }
+  console.log('BEGIN_ASK_ANSWERS');
+  console.log(JSON.stringify(out, null, 2));
+  console.log('END_ASK_ANSWERS');
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const flag = (name: string) => args.includes(name);
@@ -136,12 +160,13 @@ async function main() {
   const questions = only ? set.questions.filter(q => only.includes(q.id) || only.includes(q.kind)) : set.questions;
   if (!questions.length) throw new Error('No question matches --only.');
 
-  if (!flag('--live') && !flag('--check')) { describeSet(questions, sample, set); return; }
+  if (!flag('--live') && !flag('--check') && !flag('--record')) { describeSet(questions, sample, set); return; }
 
   const server = await connect();
   const before = await allowance(server);
   console.log(`The workspace's AI runs on ${keyWords(before)}.${before.budget ? ` This month ${Number(before.used ?? 0).toLocaleString('en')} of ${before.budget.toLocaleString('en')} tokens of its allowance are used.` : ''}`);
   if (flag('--check')) { console.log('Sign-in and workspace are in order. No AI was called.'); return; }
+  if (flag('--record')) { await record(server, sample, set); return; }
 
   const runs = Math.max(1, Math.min(5, Number(value('--runs') ?? 1) || 1));
   const estimate = questions.reduce((n, q) => { const f = factsFor(q, sample, set); return n + approxTokens(f.facts, f.question) + 400; }, 0) * runs;

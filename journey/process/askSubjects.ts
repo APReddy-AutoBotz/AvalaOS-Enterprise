@@ -27,12 +27,22 @@ export interface AskSubject {
   assessment(record: unknown): ProcessAssessment | null;
 }
 
+/**
+ * The questions each subject starts with. They are also the demo's recorded questions (eval/ask/run.ts
+ * --record asks exactly these), so change them together with public/demo-data/ask-answers.json.
+ */
+export const STARTERS = {
+  process: ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'],
+  board: ['What is blocked or overdue?', 'Which open items have no owner?', 'What is in progress, and who owns it?'],
+  workspace: ['Which processes are quick wins?', 'What is open across the workspace?', 'Which processes have no approver named?'],
+} as const;
+
 export function processSubject(store: JourneyStore, p: { processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[] }): AskSubject {
   return {
     kind: 'process', noun: 'this process', task: askProcess,
     intro: 'Ask about this process. Answers come only from its record (its steps, assessment, requirements, board items and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
     placeholder: 'Ask about the steps, the assessment, requirements or sources…',
-    suggested: ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'],
+    suggested: [...STARTERS.process],
     load: () => loadAskRecord(store, p),
     facts: (q, r) => askFacts(q, { model: p.model, ...(r as Omit<AskContext, 'model'>) }),
     assessment: r => (r as Omit<AskContext, 'model'>).assessment ?? null,
@@ -45,7 +55,7 @@ export function boardSubject(store: JourneyStore, b: { workspaceId: string; proj
     kind: 'board', noun: 'this board', task: askBoard,
     intro: 'Ask about this Delivery board. Answers come only from its items, owners, statuses, dates and sprints, with the counts worked out exactly, and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
     placeholder: 'Ask about items, owners, statuses, dates or sprints…',
-    suggested: ['What is blocked or overdue?', 'Which open items have no owner?', 'What is in progress, and who owns it?'],
+    suggested: [...STARTERS.board],
     load: async (): Promise<BoardContext> => {
       const [items, sprints, members, processes] = await Promise.all([
         store.listWorkItems(b.project.id), store.listSprints(b.project.id).catch(() => []),
@@ -71,7 +81,7 @@ export function workspaceSubject(store: JourneyStore, w: { workspace: { id: stri
     intro: 'Ask about this workspace: its processes, where each stands and who is named on it, the portfolio, the applications list, its people and its boards. Name a process to ask about its steps and sources. Answers come only from what the workspace holds and from how Avala OS itself works, and each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
     placeholder: 'Ask about processes, the portfolio, applications, people or boards…',
     suggested: w.processesInUse
-      ? ['Which processes are quick wins?', 'What is open across the workspace?', 'Which processes have no approver named?']
+      ? [...STARTERS.workspace]
       : ['What is blocked or overdue on the boards?', 'Who are the people in this workspace?', 'Which applications are on the list?'],
     load: async (): Promise<WorkspaceRecord> => {
       const id = w.workspace.id;

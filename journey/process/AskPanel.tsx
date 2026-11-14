@@ -6,13 +6,14 @@ import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { answerGroups, AskError, askFailure, askSegments, readAnswer, validateQuestion, type Answer, type Target } from '../../domain/assistant/ask.ts';
 import type { AskSubject } from './askSubjects.ts';
+import { RECORDED_LABEL } from '../../domain/assistant/recorded.ts';
 import { answerAction, citedFacts, figureTiles, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 
-type Turn = { question: string; answer?: Answer; error?: string };
+type Turn = { question: string; answer?: Answer; error?: string; recorded?: boolean };
 
 export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_ORDER, onOpen, onClose }: {
   store: JourneyStore; workspaceId: string;
@@ -55,7 +56,7 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
       const facts = await subject.facts(q, record);
       const r = await store.runAiTask(workspaceId, subject.task.id, askSegments(q, facts, earlier) as never);
       const answer = readAnswer(r.data, facts);
-      setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer } : x)));
+      setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer, recorded: r.recorded } : x)));
     } catch (x) {
       setTurns(t => t.map((y, i) => (i === t.length - 1 ? { ...y, error: askFailure(messageOf(x)) } : y)));
     } finally { setBusy(false); }
@@ -76,12 +77,17 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
           )}
           {turns.map((t, n) => {
             // Two questions to ask next, by rule from what the last answer cited, never one already asked.
-            const next = t.answer && n === turns.length - 1 && !busy ? followUps(t.answer, turns.map(x => x.question), stages, 2, subject.kind) : [];
+            // After a recorded answer (the demo), the other suggested questions, which are recorded too.
+            const asked = turns.map(x => x.question.toLowerCase());
+            const next = !t.answer || n !== turns.length - 1 || busy ? []
+              : t.recorded ? subject.suggested.filter(s => !asked.includes(s.toLowerCase())).slice(0, 2)
+              : followUps(t.answer, turns.map(x => x.question), stages, 2, subject.kind);
             return (
               <section key={n} aria-label={`Question ${n + 1}`} data-testid="ask-turn">
                 <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
                 {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
                 {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
+                {t.answer && t.recorded && <p className="mt-3 text-xs font-medium text-slate-500" data-testid="ask-recorded">{RECORDED_LABEL}</p>}
                 {t.answer && <AnswerView answer={t.answer} assessment={record ? subject.assessment(record) : null} stages={stages} onOpen={onOpen} />}
                 {next.length > 0 && (
                   <div role="group" aria-label="Ask next" className="mt-4 flex flex-wrap gap-2">
