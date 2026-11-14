@@ -4,10 +4,8 @@
 import React from 'react';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { assessProcess } from '../../domain/assess/process.ts';
-import type { Override } from '../../domain/assess/decisions.ts';
-import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Passage, type Target } from '../../domain/assistant/ask.ts';
-import { STATUS_LABEL } from '../../domain/workitems/board.ts';
+import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Target } from '../../domain/assistant/ask.ts';
+import { loadAskRecord } from './askRecord.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 
@@ -29,24 +27,8 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   // The record the answers come from: read once when the panel opens.
   React.useEffect(() => {
     let live = true;
-    (async () => {
-      const [settings, decisions, requirements, projects, members] = await Promise.all([
-        store.getSettings(workspaceId).catch(() => null), store.getAssessmentDecisions(processId).catch(() => null),
-        store.listRequirements(processId).catch(() => []), store.listProjects(workspaceId).catch(() => []), store.listMembers(workspaceId).catch(() => []),
-      ]);
-      const items = (await Promise.all(projects.map(p => store.listWorkItems(p.id).catch(() => [])))).flat().filter(i => i.processId === processId);
-      const passages: Passage[] = (await Promise.all(sources.map(async s => (await store.getSourceSegments(s.id).catch(() => []))
-        .map(seg => ({ sourceKey: s.key, sourceTitle: s.title, locator: seg.locator, text: seg.text }))))).flat();
-      const name = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? null : null);
-      if (!live) return;
-      setRecord({
-        assessment: assessProcess(model, { rate: decisions?.rate ?? null, ...(settings ? { settings: settings.settings } : {}) }),
-        requirements: requirements.filter(r => r.state === 'active').map(r => ({ code: r.code, statement: r.statement })),
-        items: items.map(i => ({ id: i.id, projectId: i.projectId, title: i.title, type: i.type, status: STATUS_LABEL[i.status], owner: name(i.ownerId) })),
-        passages,
-        overrides: (decisions ? Object.values(decisions.overrides) as Override[] : []).map(o => ({ stepId: o.stepId, approach: o.approach, rationale: o.rationale })),
-      });
-    })().catch(e => { if (live) setLoadError(messageOf(e)); });
+    loadAskRecord(store, { processId, workspaceId, model, sources }).then(r => { if (live) setRecord(r); })
+      .catch(e => { if (live) setLoadError(messageOf(e)); });
     return () => { live = false; };
   }, [store, processId, workspaceId, model, sources]);
 
