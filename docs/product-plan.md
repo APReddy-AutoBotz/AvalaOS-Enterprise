@@ -619,7 +619,7 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 - Prove source reading on three to five real processes and fix what breaks (the largest risk in this plan).
 - A screen for AI use and limits per workspace.
 - Email notifications for "Needs you".
-- Per-process access, so a client sees only its own processes.
+- Per-process access, so a client sees only its own processes (done, November 2026, as a workspace per client: people see only the workspaces they are in, which the database already enforces; grants on single processes inside one workspace stay possible later).
 - Error monitoring and a backup check.
 
 ### Phase C: features that add the most value
