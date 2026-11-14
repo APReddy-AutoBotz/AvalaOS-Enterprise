@@ -78,3 +78,24 @@ test('a company template\'s headings are matched to sections; unmatched headings
 test('the BRD points to the PDD by section title, so a renumbered PDD keeps the link right', () => {
   assert.match(toMarkdown(buildBrd(input)), /PDD section "Detailed As-Is steps"/);
 });
+
+test('UiPath pack: the PDD takes the UiPath template headings, our own sections keep their names', async () => {
+  const { UIPATH_PDD, applyPack } = await import('./packs.ts');
+  const outline = outlineOf(pdd);
+  // Every heading the pack names is a section the PDD has.
+  const titles = new Set(outline.map(o => o.title));
+  for (const t of Object.keys(UIPATH_PDD.titles)) assert.ok(titles.has(t), `the PDD has no section "${t}"`);
+  const start = { sections: { '4': { hidden: true } }, order: ['2', '1'], custom: [{ id: 'x', after: '2.4', title: 'Controls', text: '' }] };
+  const { layout, renamed } = applyPack(UIPATH_PDD, outline, start);
+  assert.equal(renamed, Object.keys(UIPATH_PDD.titles).length);
+  const d = applyLayout(pdd, validateLayout(layout, outline));
+  const out = d.sections.map(s => s.title);
+  for (const t of ['As-Is Process Description', 'Applications Used in the Process', 'In Scope for RPA', 'Out of Scope for RPA', 'Business Exceptions Handling', 'Additional Sources of Process Documentation']) assert.ok(out.includes(t), t);
+  // Kept: hidden section, order, own section, sections UiPath has no heading for, the open items.
+  assert.ok(!out.includes('Other Observations'));
+  assert.equal(d.sections[0].title, 'As-Is Process Description');
+  assert.ok(out.includes('Controls'));
+  for (const t of ['Decision points and business rules', 'Delivery model', 'Open gaps and deferred items']) assert.ok(out.includes(t), t);
+  // Applying it twice changes nothing more.
+  assert.deepEqual(applyPack(UIPATH_PDD, outline, layout).layout, layout);
+});
