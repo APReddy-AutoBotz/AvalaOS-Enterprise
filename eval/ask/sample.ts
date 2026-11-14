@@ -6,9 +6,11 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { askFacts, validateQuestion, type AskContext, type Fact } from '../../domain/assistant/ask.ts';
 import { createMemoryStore } from '../../journey/store/memoryStore.ts';
 import { loadAskRecord } from '../../journey/process/askRecord.ts';
+import { boardSubject } from '../../journey/process/askSubjects.ts';
+import { boardFacts, type BoardContext } from '../../domain/assistant/board.ts';
 import type { Planted, Question, QuestionSet } from './scorer.ts';
 
-export interface Sample { processName: string; model: ProcessModel; record: Omit<AskContext, 'model'> }
+export interface Sample { processName: string; model: ProcessModel; record: Omit<AskContext, 'model'>; board: BoardContext }
 
 export async function loadSample(): Promise<Sample> {
   const demo = JSON.parse(fs.readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8'));
@@ -22,7 +24,11 @@ export async function loadSample(): Promise<Sample> {
   const model = current ? await store.getModel(current.id) : null;
   if (!model) throw new Error('The sample process has no model.');
   const sources = await store.listSources(process.id);
-  return { processName: process.name, model, record: await loadAskRecord(store, { processId: process.id, workspaceId: workspace.id, model, sources }) };
+  // The board as the panel reads it on the Delivery board; today is fixed so the measure does not change by the day.
+  const project = (await store.listProjects(workspace.id))[0];
+  if (!project) throw new Error('The sample has no board.');
+  const board = { ...(await boardSubject(store, { workspaceId: workspace.id, project }).load()) as BoardContext, today: '2026-11-14' };
+  return { processName: process.name, model, record: await loadAskRecord(store, { processId: process.id, workspaceId: workspace.id, model, sources }), board };
 }
 
 export function loadQuestions(): QuestionSet {
@@ -34,6 +40,7 @@ export const plantedFor = (q: Question, set: QuestionSet): Planted | undefined =
 /** The facts the panel would send for this question; a planted passage joins the sources for its question only. */
 export function factsFor(q: Question, sample: Sample, set: QuestionSet): { question: string; facts: Fact[] } {
   const question = validateQuestion(q.question);
+  if (q.scope === 'board') return { question, facts: boardFacts(question, sample.board) };
   const p = plantedFor(q, set);
   const passages = [...(sample.record.passages ?? []), ...(p ? [{ sourceKey: p.sourceKey, sourceTitle: p.sourceTitle, locator: p.locator as never, text: p.text }] : [])];
   return { question, facts: askFacts(question, { model: sample.model, ...sample.record, passages }) };

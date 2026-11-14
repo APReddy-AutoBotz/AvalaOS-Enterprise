@@ -20,7 +20,7 @@ export function placeOf(t: Target): Place {
     case 'assessment': return 'assessment';
     case 'requirement': return 'documents';
     case 'platform': return t.stage;
-    case 'item': return 'board';
+    case 'item': case 'board': return 'board';
     default: return null;
   }
 }
@@ -45,7 +45,7 @@ export function answerAction(answer: Answer, stages: StageId[]): { label: string
   const best = placesOf(answer, stages)[0];
   if (!best) return null;
   const fact = citedFacts(answer).find(f => placeOf(f.target) === best)!;
-  return { label: OPEN[best], target: fact.target };
+  return { label: fact.target.kind === 'board' ? 'Open the board' : OPEN[best], target: fact.target };
 }
 
 /** Questions the record can answer, by where the cited facts live. */
