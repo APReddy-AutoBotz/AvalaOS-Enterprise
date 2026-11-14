@@ -40,11 +40,13 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
   const impactCtx = useImpactContext(store, processId, workspaceId);
   const impact = React.useMemo(() => (plan && plan.changes.length ? previewImpact(impactCtx, model, m => applyFlowPlan(m, plan)) : null), [plan, impactCtx, model]);
 
+  // The To-Be map follows the approach in effect for each step: a person's choice where one was made.
+  const decisions = impactCtx?.decisions ?? null;
   const pictures = React.useMemo(() => {
-    const a = assessProcess(model);
+    const a = assessProcess(model, { decisions });
     const modes = new Map(a.steps.map(s => [s.stepId, modeFromScore(s.winner, s.alreadyAutomated, s.human)]));
     return { asis: flowPicture(model, { title: `As-Is map of ${model.meta.name}` }), tobe: flowPicture(model, { modes, title: `To-Be map of ${model.meta.name}` }) };
-  }, [model]);
+  }, [model, decisions]);
   // The editor shows the flow top to bottom like the maps; the download is the standard left-to-right
   // layout, which every BPMN tool reads.
   const xml = React.useMemo(() => modelToBpmnVertical(model), [model]);

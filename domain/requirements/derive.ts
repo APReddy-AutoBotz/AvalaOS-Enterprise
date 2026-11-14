@@ -81,7 +81,8 @@ export function deriveRequirements(m: ProcessModel, a: ProcessAssessment): Deriv
       out.push({
         key: `step:${s.id}`, kind: 'FR', category: 'step', title: s.name,
         statement: sentence(`The solution shall ${lowerFirst(s.name)}${systems.length ? ` in ${list(systems)}` : ''}`),
-        rationale: `${sentence(s.description) ? `${sentence(s.description)} ` : ''}Recommended approach: ${APPROACH_LABEL[sc!.winner]}.`,
+        // Wording changes only where a person chose another approach, so no other requirement turns "Needs review".
+        rationale: `${sentence(s.description) ? `${sentence(s.description)} ` : ''}${sc!.recommended ? `Approach chosen by a person: ${APPROACH_LABEL[sc!.winner]} (the scoring recommends ${APPROACH_LABEL[sc!.recommended]}).` : `Recommended approach: ${APPROACH_LABEL[sc!.winner]}.`}`,
         acceptance, stepIds: [s.id], ruleIds: s.ruleIds, exceptionIds: s.exceptionIds,
         traces: [...top, ...s.ruleIds.map(r => `rule:${r}`)], gaps,
       });

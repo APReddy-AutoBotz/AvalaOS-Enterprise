@@ -137,7 +137,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       .then(([d, s, ds, r, ed]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
 
-  const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings }) : null), [model, decisions, settings]);
+  const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings, decisions }) : null), [model, decisions, settings]);
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
   const register = React.useMemo(() => (assessment && stored ? reconcile(deriveRequirements(model, assessment), stored) : null), [model, assessment, stored]);
   React.useEffect(() => {
@@ -163,7 +163,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   React.useEffect(() => { setApprovedModel(null); if (approvedRevisionId) store.getModel(approvedRevisionId).then(setApprovedModel).catch(() => setApprovedModel(null)); }, [store, approvedRevisionId]);
   const sinceApproved = React.useMemo<SectionChange[]>(() => {
     if (!approvedModel || !doc || !decisions || !stored) return [];
-    const a = assessProcess(approvedModel, { rate: decisions.rate, settings });
+    const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
     const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
     const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);

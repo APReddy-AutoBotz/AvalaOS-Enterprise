@@ -117,6 +117,9 @@ test('an override needs a rationale, survives reload and re-scoring, and keeps t
   await page.keyboard.press('Escape');
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Keep with a person');
   await expect(row(page, 'Check invoice totals').getByTestId('overridden')).toBeVisible();
+  // The headline follows the choice, and the scoring's own verdict is still said.
+  await expect(page.getByText("Approach, with people's choices")).toBeVisible();
+  await expect(page.getByTestId('scoring-alone')).toContainText('The scoring alone recommends');
 
   await page.reload();
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Keep with a person');
@@ -134,6 +137,7 @@ test('an override needs a rationale, survives reload and re-scoring, and keeps t
   await panel.getByRole('button', { name: 'Remove override' }).click();
   await page.keyboard.press('Escape');
   await expect(row(page, 'Check invoice totals').getByTestId('recommendation')).toHaveText('Rule-based RPA');
+  await expect(page.getByTestId('scoring-alone')).toHaveCount(0);
 });
 
 test('inputs entered by hand give value and a priority, persist, and a major change means wait', async ({ page }) => {

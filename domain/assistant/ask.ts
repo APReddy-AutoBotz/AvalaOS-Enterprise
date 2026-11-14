@@ -129,7 +129,7 @@ export function askFacts(question: string, ctx: AskContext): Fact[] {
     for (const s of a.steps) {
       if (s.alreadyAutomated) { out.push({ id: `a:step:${s.stepId}`, text: `Step "${stepName(s.stepId)}" is already done by a system, so it is not scored.`, label: `Assessment of step ${stepNo.get(s.stepId)}`, target: { kind: 'assessment', stepId: s.stepId } }); continue; }
       const top = s.scores[0];
-      out.push({ id: `a:step:${s.stepId}`, text: `Step "${stepName(s.stepId)}": recommended approach ${APPROACH_LABEL[s.winner]}${top ? ` (score ${top.score} out of 100)` : ''}. ${s.reason}`, label: `Assessment of step ${stepNo.get(s.stepId)}`, target: { kind: 'assessment', stepId: s.stepId } });
+      out.push({ id: `a:step:${s.stepId}`, text: `Step "${stepName(s.stepId)}": recommended approach ${APPROACH_LABEL[s.recommended ?? s.winner]}${top ? ` (score ${top.score} out of 100)` : ''}. ${s.reason}${s.recommended ? ` The approach in effect is ${APPROACH_LABEL[s.winner]}, chosen by a person.` : ''}`, label: `Assessment of step ${stepNo.get(s.stepId)}`, target: { kind: 'assessment', stepId: s.stepId } });
     }
     for (const o of ctx.overrides ?? []) out.push({ id: `a:override:${o.stepId}`, text: `A person chose ${APPROACH_LABEL[o.approach]} for step "${stepName(o.stepId)}" instead of the recommendation${o.rationale.trim() ? `, because: ${o.rationale.trim().replace(/[.\s]+$/, '')}` : ''}.`, label: `Assessment of step ${stepNo.get(o.stepId)}`, target: { kind: 'assessment', stepId: o.stepId } });
     for (const c of a.cautions.filter(c => c.fired)) out.push({ id: `a:caution:${c.id}`, text: `Caution, ${c.label}: ${c.reason}`, label: 'Assessment', target: { kind: 'assessment' } });
