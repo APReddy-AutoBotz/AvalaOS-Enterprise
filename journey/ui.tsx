@@ -3,7 +3,28 @@ import React from 'react';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
-export function Button({ variant = 'primary', className, ...props }: React.ComponentProps<'button'> & { variant?: 'primary' | 'secondary' | 'ghost' }) {
+/** A card on the page: white, rounded, with a soft shadow. Add the padding where it is used. */
+export const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-card';
+
+/**
+ * The head of a main page: where you are, the page's title, one line that sums it up, and beside them
+ * the page's figures or its main action. Light throughout; navy is the colour of the title only.
+ */
+export function PageHead({ eyebrow, title, summary, children }: { eyebrow: string; title: string; summary?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
+      <div className="min-w-0 flex-1 basis-96">
+        <p className="text-[13px] font-medium text-slate-500">{eyebrow}</p>
+        <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{title}</h1>
+        {summary && <p className="mt-2 text-[17px] leading-7 text-slate-700">{summary}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// `accent` is the brand amber with navy text (contrast above 6:1): the one action a page leads with.
+export function Button({ variant = 'primary', className, ...props }: React.ComponentProps<'button'> & { variant?: 'primary' | 'secondary' | 'ghost' | 'accent' }) {
   return (
     <button
       {...props}
@@ -12,6 +33,7 @@ export function Button({ variant = 'primary', className, ...props }: React.Compo
         variant === 'primary' && 'bg-[#002C4B] text-white hover:bg-[#073B60]',
         variant === 'secondary' && 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50',
         variant === 'ghost' && 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+        variant === 'accent' && 'bg-[#E69F00] text-[#002C4B] shadow-sm hover:bg-[#F2B233]',
         className,
       )}
     />

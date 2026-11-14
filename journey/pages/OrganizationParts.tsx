@@ -29,7 +29,7 @@ export function OrganizationParts({ store, workspace }: { store: JourneyStore; w
     } catch (x) { setError(x instanceof ModulesError ? x.message : messageOf(x)); } finally { setBusy(false); }
   };
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="organization-parts">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="organization-parts">
       <h2 className="font-display text-lg font-semibold text-slate-900">Parts of Avala OS</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">
         {org} uses <span className="font-semibold text-slate-900">{current.label}</span>. {owner ? 'Switching a part off hides it; nothing in it is deleted, and switching it on again brings it all back.' : 'To change this, ask the Avala OS team.'}

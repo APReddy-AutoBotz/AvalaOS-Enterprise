@@ -50,7 +50,7 @@ export function needsFor(me: Person, processes: ProcessFacts[]): Need[] {
 }
 
 /** The processes this person is named on; those with nobody named are listed for editors and admins. */
-export function processesFor(me: Person, processes: ProcessFacts[]): { mine: ProcessFacts[]; unassigned: ProcessFacts[] } {
+export function processesFor<P extends ProcessFacts>(me: Person, processes: P[]): { mine: P[]; unassigned: P[] } {
   const mine = processes.filter(p => [p.analystId, p.architectId, p.approverId].includes(me.userId));
   const unassigned = me.access === 'viewer' ? [] : processes.filter(p => !p.analystId && !p.architectId && !p.approverId);
   return { mine, unassigned };

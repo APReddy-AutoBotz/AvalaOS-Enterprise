@@ -94,7 +94,7 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
   const levelOf = (n: string) => (n === 'start' || !n.includes('.') ? 1 : 2) as 1 | 2;
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="document-sections">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="document-sections">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="font-display text-lg font-semibold text-slate-900">Document sections</h2>

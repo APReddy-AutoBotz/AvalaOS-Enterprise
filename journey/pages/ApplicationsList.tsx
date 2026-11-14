@@ -52,7 +52,7 @@ export function ApplicationsList({ store, workspace }: { store: JourneyStore; wo
   };
 
   return (
-    <section aria-labelledby="apps-heading" className="rounded-xl border border-slate-200 bg-white p-6" data-testid="applications-list">
+    <section aria-labelledby="apps-heading" className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="applications-list">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 id="apps-heading" className="font-display text-lg font-semibold text-slate-900">Applications</h2>

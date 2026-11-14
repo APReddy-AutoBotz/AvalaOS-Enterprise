@@ -112,7 +112,7 @@ test('release gate: sources to documents to the board, accessible throughout', a
 
   // The people and home screens.
   await page.getByRole('link', { name: 'My work' }).click();
-  await expect(page.getByRole('heading', { name: 'My work', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
   await scan('My work');
   await page.getByRole('link', { name: 'Processes' }).first().click();
   await scan('Processes');
