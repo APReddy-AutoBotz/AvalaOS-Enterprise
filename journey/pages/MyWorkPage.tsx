@@ -169,7 +169,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
           {processList.length > 0 && (
             <section aria-labelledby="my-processes" className={cx(CARD, 'overflow-hidden')} data-testid="my-processes">
               <div className="flex items-baseline gap-2.5 px-6 py-4">
-                <h2 id="my-processes" className={heading}>{myProcesses.length > 0 ? 'My processes' : 'Processes'}</h2>
+                <h2 id="my-processes" className={heading}>{unassigned.length === 0 ? 'My processes' : 'Processes'}</h2>
                 <span className="text-sm tabular-nums text-slate-500">{processList.length}</span>
               </div>
               {processList.length === 1 ? (
