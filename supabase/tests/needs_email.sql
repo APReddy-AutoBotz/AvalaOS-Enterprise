@@ -1,10 +1,11 @@
--- Weekday "Needs you" emails. Rolls back; success ends with the error "ALL_TESTS_PASSED (6 groups)";
+-- Weekday "Needs you" emails. Rolls back; success ends with the error "ALL_TESTS_PASSED (7 groups)";
 -- any other error names the failed check.
 do $test$
 declare
   ana uuid := gen_random_uuid();
   ben uuid := gen_random_uuid();
   ws uuid; proc uuid; n int; r jsonb; t uuid; ok boolean; passed int := 0;
+  proj uuid; given uuid; own uuid; finished uuid; moved uuid;
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (ana, 'ana-' || ana || '@example.test', now(), now()), (ben, 'ben-' || ben || '@example.test', now(), now());
@@ -80,6 +81,31 @@ begin
   if public.needs_digest_secret_ok(repeat('0', 64)) or public.needs_digest_secret_ok(null) then raise exception 'FAILED 6b: wrong secret accepted'; end if;
   select count(*) into n from cron.job where jobname = 'avala-needs-digest' and schedule = '30 3 * * 1-5' and command like '%needs_digest_url%';
   if n <> 1 then raise exception 'FAILED 6c: schedule'; end if;
+  passed := passed + 1;
+
+  -- 7. Board items assigned to a person by someone else are in the input, with who did it; work a
+  --    person took themselves, done work and items nobody set the owner of since the history began are not.
+  insert into public.delivery_projects (workspace_id, name, created_by) values (ws, 'Website', ana) returning id into proj;
+  perform set_config('request.jwt.claims', json_build_object('sub', ben, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  insert into public.delivery_work_items (workspace_id, project_id, item_type, title, owner_id) values (ws, proj, 'task', 'Given by Ben', ana) returning id into given;
+  insert into public.delivery_work_items (workspace_id, project_id, item_type, title) values (ws, proj, 'task', 'Ben takes it') returning id into own;
+  update public.delivery_work_items set owner_id = ben where id = own;
+  insert into public.delivery_work_items (workspace_id, project_id, item_type, title, owner_id) values (ws, proj, 'task', 'Finished', ana) returning id into finished;
+  update public.delivery_work_items set status = 'done' where id = finished;
+  insert into public.delivery_work_items (workspace_id, project_id, item_type, title, owner_id) values (ws, proj, 'task', 'Moved on', ana) returning id into moved;
+  perform set_config('request.jwt.claims', json_build_object('sub', ana, 'role', 'authenticated')::text, true);
+  update public.delivery_work_items set owner_id = ben where id = moved;
+  execute 'reset role';
+  update public.profiles set display_name = 'Ben Iyer' where id = ben;
+  r := public.needs_digest_input();
+  select count(*) into n from jsonb_array_elements(r -> 'assigned') a
+    where a ->> 'id' = given::text and a ->> 'ownerId' = ana::text and a ->> 'assignedBy' = 'Ben Iyer' and a ->> 'project' = 'Website' and (a ->> 'workspaceId')::uuid = ws;
+  if n <> 1 then raise exception 'FAILED 7a: assigned %', r -> 'assigned'; end if;
+  select count(*) into n from jsonb_array_elements(r -> 'assigned') a where a ->> 'id' in (own::text, finished::text);
+  if n <> 0 then raise exception 'FAILED 7b: self-assigned or done work listed'; end if;
+  select count(*) into n from jsonb_array_elements(r -> 'assigned') a where a ->> 'id' = moved::text and a ->> 'ownerId' = ben::text;
+  if n <> 1 then raise exception 'FAILED 7c: a reassignment was not listed for the new owner'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;
