@@ -34,7 +34,7 @@ test('counts by status, kind and owner are worked out, not left to the AI', () =
     item({ status: 'in_progress', ownerId: 'u1', parentId: epic.id }), item({ status: 'in_progress', ownerId: 'u1' }),
     item({ status: 'done', ownerId: 'u2' }), item({ status: 'todo' }),
   ]));
-  assert.equal(fact(facts, 'b:summary'), 'The board "Vendor onboarding" has 5 items: 2 to do, 2 in progress, 1 done. By kind: 1 epic, 4 stories.');
+  assert.equal(fact(facts, 'b:summary'), 'The board "Vendor onboarding" has 5 items: 2 to do, 2 in progress, 1 done. By kind: 1 epic, 4 stories. Open (not done): 4.');
   assert.match(fact(facts, 'b:summary'), /2 in progress/);
   assert.match(fact(facts, 'b:owner:u1'), /^Rahul Deshpande owns 2 items: 2 in progress\.$/);
   assert.match(fact(facts, 'b:owner:u2'), /^Meera Iyer owns 1 item: 1 done\.$/);

@@ -22,8 +22,10 @@ test('Ask Avala is in the top bar: away from a process it asks about the workspa
   await expect(panel).toContainText('Ask about this workspace');
   const whole = panel.getByRole('group', { name: 'Questions to start with' });
   await expect(whole.getByRole('button')).toHaveCount(3);
-  await whole.getByRole('button', { name: 'Which processes are quick wins?' }).click();
-  await expect(panel.getByTestId('ask-turn').getByRole('alert')).toContainText('need the server');
+  await whole.getByRole('button', { name: 'Where does each process stand?' }).click();
+  // The demo answers its suggested questions from what was recorded on the sample case.
+  await expect(panel.getByTestId('ask-recorded')).toHaveText('Recorded answer on the sample case');
+  await expect(panel.getByTestId('ask-lead')).toBeVisible();
   await about.selectOption({ label: 'Vendor invoice processing' });
   await expect(panel).toContainText('Answers come only from its record');
   await expect(panel.getByRole('group', { name: 'Questions to start with' }).getByRole('button')).toHaveCount(3);

@@ -72,7 +72,7 @@ const NEXT: Record<Place | 'none', string[]> = {
 const FALLBACK: Record<'process' | 'board' | 'workspace', string[]> = {
   process: NEXT.none,
   board: ['What is blocked or overdue?', 'Which open items have no owner?', 'What is in progress, and who owns it?'],
-  workspace: ['Which processes are quick wins?', 'What is open across the workspace?', 'Which processes have no approver named?'],
+  workspace: ['Which processes are quick wins?', 'Which processes have no approver named?', 'What is open across the workspace?'],
 };
 
 /** Two questions to ask next, none already asked in the panel, from where this answer's facts live. */

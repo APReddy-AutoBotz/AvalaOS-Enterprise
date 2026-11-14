@@ -131,9 +131,11 @@ function describeSet(questions: Question[], sample: Sample, set: QuestionSet) {
  * The demo's recorded answers: each scope's starter questions, asked once on the sample case, printed as
  * public/demo-data/ask-answers.json between markers (the sample company is made up, so the log may show it).
  */
-async function record(server: Server, sample: Sample, set: QuestionSet) {
+async function record(server: Server, sample: Sample, set: QuestionSet, only?: string[]) {
+  // --only takes ids (R-workspace-2) or scopes (workspace), to record again just those.
   const asks = (Object.entries(STARTERS) as [Question['scope'] & string, readonly string[]][])
-    .flatMap(([scope, qs]) => qs.map((question, i) => ({ id: `R-${scope}-${i + 1}`, kind: 'answered' as const, scope, question })));
+    .flatMap(([scope, qs]) => qs.map((question, i) => ({ id: `R-${scope}-${i + 1}`, kind: 'answered' as const, scope, question })))
+    .filter(q => !only?.length || only.includes(q.id) || only.includes(q.scope));
   const out: RecordedAnswer[] = [];
   for (const q of asks) {
     const { question, facts } = factsFor(q as Question, sample, set);
@@ -158,7 +160,7 @@ async function main() {
   const only = value('--only')?.split(',').map(s => s.trim()).filter(Boolean);
   // --only takes question ids or kinds ("platform,score").
   const questions = only ? set.questions.filter(q => only.includes(q.id) || only.includes(q.kind)) : set.questions;
-  if (!questions.length) throw new Error('No question matches --only.');
+  if (!questions.length && !flag('--record')) throw new Error('No question matches --only.');
 
   if (!flag('--live') && !flag('--check') && !flag('--record')) { describeSet(questions, sample, set); return; }
 
@@ -166,7 +168,7 @@ async function main() {
   const before = await allowance(server);
   console.log(`The workspace's AI runs on ${keyWords(before)}.${before.budget ? ` This month ${Number(before.used ?? 0).toLocaleString('en')} of ${before.budget.toLocaleString('en')} tokens of its allowance are used.` : ''}`);
   if (flag('--check')) { console.log('Sign-in and workspace are in order. No AI was called.'); return; }
-  if (flag('--record')) { await record(server, sample, set); return; }
+  if (flag('--record')) { await record(server, sample, set, value('--only')?.split(',').map(s => s.trim()).filter(Boolean)); return; }
 
   const runs = Math.max(1, Math.min(5, Number(value('--runs') ?? 1) || 1));
   const estimate = questions.reduce((n, q) => { const f = factsFor(q, sample, set); return n + approxTokens(f.facts, f.question) + 400; }, 0) * runs;

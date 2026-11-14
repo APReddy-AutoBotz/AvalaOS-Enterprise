@@ -34,7 +34,7 @@ export interface AskSubject {
 export const STARTERS = {
   process: ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'],
   board: ['What is blocked or overdue?', 'Which open items have no owner?', 'What is in progress, and who owns it?'],
-  workspace: ['Which processes are quick wins?', 'What is open across the workspace?', 'Which processes have no approver named?'],
+  workspace: ['Where does each process stand?', 'What is open across the workspace?', 'Who is named on each process?'],
 } as const;
 
 export function processSubject(store: JourneyStore, p: { processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[] }): AskSubject {
