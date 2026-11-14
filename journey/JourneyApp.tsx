@@ -63,6 +63,17 @@ export default function JourneyApp() {
   return <Journey store={store} />;
 }
 
+// The items of the top bar: a mark and a word each. The page a person is on is navy and carries an amber
+// bar; from the widest layout up, where the bar never wraps, the amber bar sits on the bar's bottom edge.
+const navItem = (here: boolean) => `group relative flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#002C4B] ${here
+  ? 'font-semibold text-[#002C4B] after:absolute after:inset-x-3 after:bottom-0 after:h-[3px] after:rounded-full after:bg-[#E69F00] xl:after:-bottom-2 xl:after:rounded-b-none'
+  : 'font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900'}`;
+const NAV_ICON = {
+  work: <><path d="M3.5 9.3 10 3.8l6.5 5.5V16a1 1 0 0 1-1 1h-3.3v-4.4H7.8V17H4.5a1 1 0 0 1-1-1z" /></>,
+  processes: <><rect x="3" y="3" width="5.5" height="5.5" rx="1.3" /><rect x="11.5" y="11.5" width="5.5" height="5.5" rx="1.3" /><path d="M8.5 5.75h3.75a2 2 0 0 1 2 2v3.75" /></>,
+  board: <><rect x="3" y="3.5" width="3.8" height="13" rx="1.1" /><rect x="8.1" y="3.5" width="3.8" height="8" rx="1.1" /><rect x="13.2" y="3.5" width="3.8" height="10.5" rx="1.1" /></>,
+} as const;
+
 export function Journey({ store, base = '' }: { store: JourneyStore; base?: string }) {
   const nav = useRoute(base);
   const demo = store.kind === 'demo';
@@ -125,20 +136,25 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
             <img src="/brand/avala-os-logo.svg" alt="Avala OS" className="h-8 w-auto" />
           </a>
           {signedIn && (
-            <nav aria-label="Main" className="mr-auto ml-5 flex gap-1 text-sm">
+            <nav aria-label="Main" className="mr-auto ml-6 flex gap-1 self-stretch text-sm">
               {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).filter(([page]) => page === 'work' || parts[page]).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
-                return <a key={page} href={`${base}/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={here ? 'rounded-md bg-slate-100 px-3 py-1.5 font-semibold text-[#002C4B]' : 'rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50'}>{label}</a>;
+                return (
+                  <a key={page} href={`${base}/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
+                    <svg viewBox="0 0 20 20" className={`h-[18px] w-[18px] shrink-0 ${here ? 'text-[#002C4B]' : 'text-slate-400 group-hover:text-slate-600'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{NAV_ICON[page]}</svg>
+                    {label}
+                  </a>
+                );
               })}
             </nav>
           )}
           {signedIn && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 self-stretch">
               {ws && <WorkspaceSwitcher store={store} ws={ws} />}
               {ws && (
                 <a href={`${base}/settings`} aria-label="Settings" aria-current={nav.route.page === 'settings' ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: 'people' }); }}
-                  className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm ${nav.route.page === 'settings' ? 'bg-slate-100 font-semibold text-[#002C4B]' : 'text-slate-600 hover:bg-slate-50'}`}>
-                  <svg viewBox="0 0 20 20" className="h-4 w-4" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  className={`self-stretch ${navItem(nav.route.page === 'settings')}`}>
+                  <svg viewBox="0 0 20 20" className={`h-[18px] w-[18px] shrink-0 ${nav.route.page === 'settings' ? 'text-[#002C4B]' : 'text-slate-400 group-hover:text-slate-600'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 5.5h7.2M14.8 5.5H17M3 10h2.2M8.8 10H17M3 14.5h8.2M15.8 14.5H17" />
                     <circle cx="12.5" cy="5.5" r="1.9" /><circle cx="6.5" cy="10" r="1.9" /><circle cx="13.5" cy="14.5" r="1.9" />
                   </svg>
