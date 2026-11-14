@@ -3,7 +3,8 @@
 //   node eval/ask/run.ts                       the set, and what each question is given; no AI is called
 //   node eval/ask/run.ts --check               signs in to the server and reads the workspace's allowance; no AI is called
 //   node eval/ask/run.ts --live [--runs 2]     asks every question through the live gateway and scores the answers
-//   add --only A01,S03 to ask some questions, --json for machine-readable output, --strict to exit 1 when a target fails
+//   add --only A01,S03 (ids) or --only platform,score (kinds) to ask some questions, --json for machine-readable
+//   output, --strict to exit 1 when a target fails
 //
 // A live run calls journey-ai exactly as the panel does (the registered task, the same facts), as a
 // trusted server: ASK_EVAL_URL (https://<project-ref>.supabase.co), ASK_EVAL_KEY (the project's server
@@ -72,7 +73,7 @@ const keyWords = (a: { source: string; provider: string }) => (a.source === 'wor
 async function askOne(server: Server, q: Question, sample: Sample, set: QuestionSet, run: number): Promise<{ outcome: Outcome; model?: string }> {
   const { question, facts } = factsFor(q, sample, set);
   const base = { id: q.id, kind: q.kind, scope: q.scope ?? 'process' as const, question: q.question, run, tokens: { input: 0, output: 0 }, dropped: 0, ungrounded: [] as string[] };
-  const offered = q.kind === 'answered' || q.kind === 'partial' ? holders(q, facts).length > 0 : undefined;
+  const offered = q.kind === 'answered' || q.kind === 'partial' || q.kind === 'platform' ? holders(q, facts).length > 0 : undefined;
   let last = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -113,7 +114,7 @@ function describeSet(questions: Question[], sample: Sample, set: QuestionSet) {
       const { question, facts } = factsFor(q, sample, set);
       const tokens = approxTokens(facts, question);
       total += tokens;
-      const held = q.kind === 'answered' || q.kind === 'partial' ? (holders(q, facts).length ? '' : '  [the fact that holds the answer is not among the facts sent]') : '';
+      const held = q.kind === 'answered' || q.kind === 'partial' || q.kind === 'platform' ? (holders(q, facts).length ? '' : '  [the fact that holds the answer is not among the facts sent]') : '';
       console.log(`  ${q.id}  ${q.question}  (${facts.length} facts, about ${tokens.toLocaleString('en')} tokens)${held}`);
     }
   }
@@ -128,7 +129,8 @@ async function main() {
   const set = loadQuestions();
   const sample = await loadSample();
   const only = value('--only')?.split(',').map(s => s.trim()).filter(Boolean);
-  const questions = only ? set.questions.filter(q => only.includes(q.id)) : set.questions;
+  // --only takes question ids or kinds ("platform,score").
+  const questions = only ? set.questions.filter(q => only.includes(q.id) || only.includes(q.kind)) : set.questions;
   if (!questions.length) throw new Error('No question matches --only.');
 
   if (!flag('--live') && !flag('--check')) { describeSet(questions, sample, set); return; }

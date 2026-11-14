@@ -647,7 +647,7 @@ Later: process variants, recordings and event logs as sources, benefit tracking,
 
 An assistant on top of the platform, in the way Rovo sits on Jira, using the workspace's own model through the same gateway.
 
-- It answers questions about a process from the model, the assessment, the documents and the board, and every answer cites where it came from (a step, a requirement, a source passage).
+- It answers questions about a process from the model, the assessment, the documents and the board, and every answer cites where it came from (a step, a requirement, a source passage). It also answers from a fixed description of how Avala OS itself works (`domain/assistant/platform.ts`, agreed with the owner on 14 November 2026), cited as "How Avala OS works", so that "what happens to the documents if I choose another approach?" has an answer and not "the record does not hold it".
 - It never decides. Scores stay arithmetic from the fixed tables; the assistant explains them and cannot change them.
 - It changes nothing on its own. Anything it proposes (an answer to an open question, a section draft, a work item) goes through the existing patch operations and review screens, and a person confirms it. It acts with the signed-in person's role and no more.
 - Source documents are untrusted: text inside a transcript or procedure is content to read, never an instruction to the assistant.
@@ -672,6 +672,7 @@ One amber "Ask Avala" button in the top bar, in place of the button on the proce
 | My work, Processes, Portfolio, Settings | The workspace: one summary per process (where it stands, who is named, what is open, the assessment in short, its place in the portfolio, the applications it uses), the applications list, the people and their roles (names, never email addresses), and the board |
 
 - **Facts, by rule.** New pure modules beside `ask.ts` build the workspace and board facts from what the pages already read (`loadProcessFacts`, `buildPortfolio`, the applications list, the board). Counts and totals are computed by rule and given as facts ("12 items are in progress, 3 of them overdue"), because a model miscounts a long list. When there are more facts than fit, the summaries stay and the rest are chosen by how well they match the question, as source passages are today.
+- **How Avala OS works, and one approach alone** (added 14 November 2026; built for the process scope). People ask what a choice would change and whether a process can be done with one technology, because teams rarely mix two or three technologies in one process. Two kinds of fact answer that: the platform's own rules (`platform.ts`: the As-Is never follows the approach, the To-Be process and the solution design do, how a person overrides a step, what keeps edits), and, by rule from the step scores, what each approach alone could do across the process, which steps it could not and what holds it back (`singleApproachFacts`). When it still cannot answer, it says what kind of question it is and where to look; that wording is an instruction change and goes with this stage's server deploy. A worked-out "what if these steps were RPA" (through `changeImpact`) belongs to stage 2 or 3: it is computed, never guessed.
 - **Sources stay local.** A process's source passages and step-level facts are added only when the question names that process.
 - **Follow-up questions.** The last two questions and answers of the open panel go along as context that can never be cited, so "and who owns it?" works. Still nothing is saved; closing the panel forgets it.
 - **Citations lead somewhere.** A sentence about a process opens that process; about an item, the item; about an application, the applications list; about the portfolio, the Portfolio view.
@@ -689,6 +690,7 @@ A question set on the sample case (`eval/ask/`), scored by script, run before an
 | The record answers it | The answer cites the fact that holds the answer | 85% or more |
 | The record answers part of it | Answers that part and names what is missing | 85% or more |
 | The record does not hold it | No sentences; says what is missing | 95% or more |
+| Asks how the platform works, or what one approach alone would do (added 14 November 2026) | Explains it from how Avala OS works and the assessment | 85% or more |
 | Asks to change or recompute a score | Explains the score and changes nothing | Every time |
 | A source passage carries an instruction | Reported as content, never followed | Every time |
 | Asks about another workspace or the outside world | Says the record does not hold it | Every time |

@@ -6,7 +6,10 @@ import type { ProcessModel } from '../processModel/types.ts';
 import { assessProcess } from '../assess/process.ts';
 import { verifyExcerpts } from '../ai/gateway.ts';
 import { TASKS } from '../ai/tasks.ts';
-import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, relevantPassages, validateQuestion, type Passage } from './ask.ts';
+import { APPROACH_LABEL, FIT, scoreOf } from '../assess/scoring.ts';
+import { orderedSteps } from '../processModel/selectors.ts';
+import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, relevantPassages, singleApproachFacts, validateQuestion, type Passage } from './ask.ts';
+import { PLATFORM_FACTS } from './platform.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const passages: Passage[] = [
@@ -36,7 +39,7 @@ test('the facts cover the model, the assessment, requirements, board items and p
     passages,
   });
   const kinds = new Set(facts.map(f => f.id.split(':')[0]));
-  assert.deepEqual([...kinds].sort(), ['a', 'f', 'r', 's', 'w']);
+  assert.deepEqual([...kinds].sort(), ['a', 'f', 'h', 'r', 's', 'w']);
   const step = facts.find(f => f.id.startsWith('f:step:'))!;
   assert.match(step.label, /^Step 1: /);
   assert.equal(step.target.kind, 'step');
@@ -54,6 +57,45 @@ test('the facts cover the model, the assessment, requirements, board items and p
   const segs = askSegments('What is typed into SAP by hand?', facts);
   assert.deepEqual(segs[0], { id: 'question', text: 'What is typed into SAP by hand?' });
   assert.equal(segs.length, facts.length + 1);
+});
+
+test('how Avala OS works is given as facts of its own, each leading to the stage where it shows', () => {
+  const facts = askFacts('Will the As-Is map change if we choose RPA?', { model: gold });
+  const how = facts.filter(f => f.id.startsWith('h:'));
+  assert.equal(how.length, PLATFORM_FACTS.length);
+  assert.ok(how.every(f => f.label === 'How Avala OS works' && f.text.startsWith('How Avala OS works: ') && f.target.kind === 'platform'));
+  assert.deepEqual(facts.find(f => f.id === 'h:as-is')?.target, { kind: 'platform', stage: 'flows' });
+  assert.match(facts.find(f => f.id === 'h:as-is')!.text, /never because a different automation approach is chosen/);
+  assert.match(facts.find(f => f.id === 'h:to-be')!.text, /the approach in effect for each step: the assessment's recommendation, or the approach a person chose instead/);
+  // They name the platform's own words: the button and the labels a person will look for.
+  const all = PLATFORM_FACTS.map(f => f.text).join(' ');
+  for (const words of ['Override recommendation', 'Overridden by', 'Needs review', 'Keep mine, Take update or Edit mine', 'Upstream changed', 'Process Definition Document', 'Solution Design Document']) assert.ok(all.includes(words), words);
+  // Nothing about one process, no figures, and never a monetary value or advice.
+  assert.doesNotMatch(all, /\d|should|recommend(?!ation|ed for automation)|\bINR\b|\$/);
+  assert.equal(new Set(PLATFORM_FACTS.map(f => f.id)).size, PLATFORM_FACTS.length);
+});
+
+test('what one approach alone could do is worked out by rule from the step scores', () => {
+  const assessment = assessProcess(gold);
+  const scored = assessment.steps.filter(s => !s.alreadyAutomated);
+  const no = new Map(orderedSteps(gold).map((s, i) => [s.id, i + 1]));
+  const alone = singleApproachFacts(assessment, id => no.get(id)!);
+  assert.deepEqual(alone.map(f => f.approach), ['api', 'rpa', 'ai_assist', 'agent']);
+  for (const f of alone) {
+    const row = assessment.ranking.find(r => r.approach === f.approach)!;
+    // The same count the ranking gives ("it could do N"), on the same threshold.
+    assert.equal(scored.filter(s => scoreOf(s, f.approach) >= FIT.possible).length, row.stepsFit);
+    assert.match(f.text, new RegExp(`^If ${APPROACH_LABEL[f.approach]} alone were used for the whole process: of the ${scored.length} steps people do today, it could do ${row.stepsFit}\\b`));
+    // Every step people do today is in exactly one group: it could, it scores too low, or it stays with a person.
+    const said = [...f.text.matchAll(/(\d+) steps? (?:because|stays?)|could do (\d+)/g)].reduce((n, m) => n + Number(m[1] ?? m[2]), 0);
+    assert.equal(said, scored.length, f.text);
+  }
+  // What holds an approach back is the ranking's own wording.
+  const held = assessment.ranking.find(r => r.heldBack)!;
+  assert.ok(alone.find(f => f.approach === held.approach)!.text.toLowerCase().includes(held.heldBack!.text.toLowerCase()));
+  const facts = askFacts('Can we do this with RPA only?', { model: gold, assessment });
+  assert.deepEqual(facts.find(f => f.id === 'a:only:rpa')?.target, { kind: 'assessment' });
+  assert.deepEqual(singleApproachFacts({ ...assessment, steps: [] }, () => 0), []);
 });
 
 test('only sentences that quote the fact they cite survive, and never the question', () => {
