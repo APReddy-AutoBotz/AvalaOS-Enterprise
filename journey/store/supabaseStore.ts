@@ -485,6 +485,23 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       if (!data?.length) throw new StoreError(403, 'Deleting a sprint needs the editor or admin role.');
     },
+    async importWorkItems(projectId, planned) {
+      if (!planned.length) return 0;
+      const { data: project, error: e1 } = await db.from('delivery_projects').select('workspace_id').eq('id', projectId).single();
+      if (e1) fail(e1);
+      const { data: last, error: e2 } = await db.from('delivery_work_items').select('sort_order').eq('project_id', projectId).order('sort_order', { ascending: false }).limit(1);
+      if (e2) fail(e2);
+      const base = Number(last?.[0]?.sort_order ?? 0);
+      const ids = planned.map(() => crypto.randomUUID());
+      // One statement: the parent links are checked at its end, so the import lands whole or not at all.
+      const { error } = await db.from('delivery_work_items').insert(planned.map((p, n) => ({
+        id: ids[n], workspace_id: project.workspace_id, project_id: projectId, parent_id: p.parent === null ? null : ids[p.parent], item_type: p.type,
+        title: p.title, description: p.description, status: p.status, priority: p.priority, owner_id: p.ownerId, estimate_hours: p.estimateHours,
+        start_date: p.startDate, due_date: p.dueDate, labels: p.labels, sort_order: base + n + 1,
+      })));
+      if (error) fail(error);
+      return planned.length;
+    },
     async listItemHistory(workItemId) {
       const { data, error } = await db.from('delivery_work_item_events').select('id, work_item_id, actor_id, kind, field, old_value, new_value, created_at').eq('work_item_id', workItemId).order('id', { ascending: false }).limit(200);
       if (error) fail(error);

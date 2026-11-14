@@ -13,6 +13,7 @@ import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint, validateSprint } from '../../domain/workitems/sprints.ts';
+import type { PlannedItem } from '../../domain/workitems/jiraImport.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
@@ -237,4 +238,6 @@ export interface JourneyStore {
   closeSprint(id: string, moveTo: string | null): Promise<number>;
   /** Its work goes back to the backlog. */
   deleteSprint(id: string): Promise<void>;
+  /** Adds the items of an import (planJiraImport) in one go, all or nothing, after the board's items. Editors and admins. */
+  importWorkItems(projectId: string, items: PlannedItem[]): Promise<number>;
 }

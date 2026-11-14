@@ -13,6 +13,7 @@ import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
 import { ItemActivity, LabelsField } from './ItemActivity.tsx';
 import { CompleteSprintDialog, SprintBar, SprintsDialog } from './SprintsPanel.tsx';
+import { JiraImportDialog } from './JiraImport.tsx';
 import { defaultView, inView, sprintChoices, sprintOrder, type Sprint, type SprintView } from '../../domain/workitems/sprints.ts';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
@@ -48,6 +49,8 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [view, setView] = React.useState<SprintView>('all');
   const [sprintsOpen, setSprintsOpen] = React.useState(false);
   const [completing, setCompleting] = React.useState<Sprint | null>(null);
+  const [importing, setImporting] = React.useState(false);
+  const [notice, setNotice] = React.useState<string | null>(null);
   const [me, setMe] = React.useState('');
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.id ?? '')).catch(() => {}); }, [store]);
 
@@ -189,6 +192,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
               )}
             </div>
           )}
+          {canEdit && project && items && <Button variant="secondary" onClick={() => setImporting(true)}>Import from Jira</Button>}
           {canEdit && project && items && <Button onClick={() => setCreating(true)}>New item</Button>}
           {canEdit && (adding
             ? <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); create(); }}>
@@ -200,10 +204,11 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         </div>
       </div>
       <ErrorNote message={error} />
+      {notice && <p role="status" className="flex items-center gap-3 rounded-lg bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900 ring-1 ring-inset ring-emerald-200">{notice}<button type="button" onClick={() => setNotice(null)} className="ml-auto text-xs font-medium hover:underline">Dismiss</button></p>}
       {shownSprint && items && <React.Fragment key={shownSprint.id + shownSprint.state}><SprintBar sprint={shownSprint} sprints={sprints} items={items} canEdit={canEdit} onStart={() => startSprint(shownSprint)} onComplete={() => setCompleting(shownSprint)} /></React.Fragment>}
       {!projects.length && <EmptyState title="No projects yet">Start a project with New project, then add epics, stories, tasks and bugs to it. Work items confirmed from a process also arrive on a project's board.</EmptyState>}
       {project && !items && <Spinner />}
-      {project && items && !items.length && <EmptyState title="Nothing on this board yet">{canEdit ? 'Add an item with New item, or confirm work items from a process. New items arrive in To do.' : 'Items appear here when the team adds them.'}</EmptyState>}
+      {project && items && !items.length && <EmptyState title="Nothing on this board yet">{canEdit ? 'Add an item with New item, bring a board over with Import from Jira, or confirm work items from a process. New items arrive in To do.' : 'Items appear here when the team adds them.'}</EmptyState>}
       {project && items && items.length > 0 && (
         <div className="overflow-x-auto pb-2">
           <div className="min-w-[84rem]">
@@ -294,6 +299,8 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         onChange={(next, itemsChanged) => { setSprints(next); if (!next.some(x => x.id === view) && view !== 'backlog') setView('all'); if (itemsChanged) reloadItems(); }}
         onComplete={sp => setCompleting(sp)} onShow={id => { setView(id); setSprintsOpen(false); }} onClose={() => setSprintsOpen(false)} />}
       {completing && items && <CompleteSprintDialog sprint={completing} sprints={sprints} items={items} onDone={to => completeSprint(completing, to)} onClose={() => setCompleting(null)} />}
+      {importing && project && <JiraImportDialog store={store} projectId={project.id} projectName={project.name} members={members} onClose={() => setImporting(false)}
+        onDone={async n => { setImporting(false); setView('all'); await reloadItems(); setNotice(`${n} ${n === 1 ? 'item' : 'items'} imported from Jira into ${project.name}.`); }} />}
       {creating && project && items && <NewItemDialog items={items} members={members} onAdd={addItem} onClose={() => setCreating(false)} />}
       {open && project && items && <React.Fragment key={open.id}><ItemPanel sprints={sprints} store={store} me={me} isAdmin={workspace?.role === 'admin'} labels={labels} item={open} items={items} members={members} canEdit={canEdit} onDelete={() => remove(open)} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
     </section>
