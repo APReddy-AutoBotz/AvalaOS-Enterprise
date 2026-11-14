@@ -77,6 +77,11 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
   const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
   React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);
+  // On a narrow screen the stage rail scrolls sideways: keep the open stage in view.
+  const loaded = Boolean(data && data !== 'missing');
+  React.useEffect(() => {
+    if (loaded) document.querySelector('nav[aria-label="Stages"] [aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+  }, [stage, loaded]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);

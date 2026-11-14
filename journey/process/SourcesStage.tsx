@@ -109,7 +109,7 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600" aria-hidden>
               <svg viewBox="0 0 20 20" className="h-5 w-5"><path d="M10 13V4m0 0L6.5 7.5M10 4l3.5 3.5M4 13v2.5h12V13" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
             </span>
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 flex-1 basis-56">
               <h3 className="text-sm font-semibold text-slate-900">Add sources</h3>
               <p className="mt-0.5 max-w-3xl text-sm leading-6 text-slate-600">
                 Drop files here, or choose them. Meeting transcripts (.vtt, .srt, .txt), procedures (Word, PDF, Markdown), trackers (Excel) and flowcharts (draw.io, BPMN, or an image).
@@ -142,9 +142,9 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-500">
             <span className="flex-1">{active.length} {active.length === 1 ? 'source' : 'sources'}{canEdit ? `, ${chosen.size} ticked for extraction` : ''}</span>
-            <span className="w-24 text-right" aria-hidden>Passages</span>
-            <span className="w-28 text-right" aria-hidden>Added</span>
-            {canEdit && <span className="w-16" aria-hidden />}
+            <span className="hidden w-24 text-right sm:block" aria-hidden>Passages</span>
+            <span className="hidden w-28 text-right sm:block" aria-hidden>Added</span>
+            {canEdit && <span className="hidden w-16 sm:block" aria-hidden />}
           </div>
           <ul className="divide-y divide-slate-100">
             {sources.map(s => (
@@ -157,11 +157,13 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
                 <div className="min-w-0 flex-1">
                   <p className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900">{s.title}{s.archived && <Tag>archived</Tag>}{s.inferred && <Tag tone="info">Read from an image</Tag>}</p>
                   <p className="mt-0.5 truncate text-xs text-slate-500">{FORMAT_LABEL[s.format]}<span className="mx-1.5 text-slate-300" aria-hidden>|</span>{s.fileName}</p>
+                  {/* On a phone the passages and the date go under the name, not in columns. */}
+                  <p className="mt-0.5 text-xs text-slate-500 sm:hidden">{s.segmentCount} passages<span className="mx-1.5 text-slate-300" aria-hidden>|</span>added {ago(s.createdAt)}</p>
                   {s.inferred && <p className="mt-1 text-xs text-slate-600">Everything this source supports is marked Inferred until a person confirms it.</p>}
                   {s.warnings.length > 0 && <ul className="mt-1 list-disc pl-4 text-xs text-amber-800">{s.warnings.slice(0, 5).map((w, i) => <li key={i}>{w}</li>)}</ul>}
                 </div>
-                <span className="w-24 text-right text-sm tabular-nums text-slate-700">{s.segmentCount} passages</span>
-                <span className="w-28 text-right text-xs text-slate-500" title={when(s.createdAt)}>{ago(s.createdAt)}</span>
+                <span className="hidden w-24 text-right text-sm tabular-nums text-slate-700 sm:block">{s.segmentCount} passages</span>
+                <span className="hidden w-28 text-right text-xs text-slate-500 sm:block" title={when(s.createdAt)}>{ago(s.createdAt)}</span>
                 {canEdit && <span className="w-16 text-right">{!s.archived && (
                   <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-900 hover:underline" onClick={async () => { try { await store.archiveSource(s.id); await load(); onSourcesChanged(); } catch (e) { setError(messageOf(e)); } }}>Archive</button>
                 )}</span>}
