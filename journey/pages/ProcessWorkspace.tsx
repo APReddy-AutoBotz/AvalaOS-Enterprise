@@ -103,15 +103,16 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
 
   return (
     <div>
-      <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
+      {/* The page head of the main pages (PageHead): a quiet line above, the name in navy. */}
+      <nav aria-label="Breadcrumb" className="text-[13px] font-medium text-slate-500">
         <a href="/processes" className="hover:text-slate-800" onClick={e => { e.preventDefault(); nav.go({ page: 'processes' }); }}>Processes</a>
         <span className="mx-2 text-slate-300" aria-hidden>/</span>
         <span className="text-slate-700">{process.name}</span>
       </nav>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{process.name}</h1>
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="min-w-0 break-words font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{process.name}</h1>
           <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
         </div>
         <div className="flex items-center gap-2">
