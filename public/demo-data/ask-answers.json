@@ -1,426 +1,454 @@
 [
-  {
-    "task": "askProcess",
-    "question": "Why is this the recommended approach?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "The recommended approach is RPA-led automation because rule-based RPA is the best fit for most automatable steps, mainly where rules are complete, inputs are structured and no judgment is needed.",
-          "segmentId": "a:verdict",
-          "excerpt": "Rule-based RPA is the best fit for 15 of the 16 steps open to automation, mainly because no judgment is needed and the input is structured data.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "Rule-based RPA ranks first and is recommended for 15 steps, with its strongest ground being that the rules are written down in full.",
-          "segmentId": "a:rank:rpa",
-          "excerpt": "Rule-based RPA ranks 1 of 4 with an average score of 91 out of 100 and is the recommendation for 15 steps. Best fit for 15 of 20 steps. Its strongest ground: the rules are written down in full",
-          "role": "point",
-          "group": "Why RPA"
-        },
-        {
-          "text": "API integration is not recommended for any step because no API is confirmed for this work, so integration cannot be planned on yet for several steps.",
-          "segmentId": "a:rank:api",
-          "excerpt": "API integration ranks 2 of 4 with an average score of 37 out of 100 and is the recommendation for 0 steps. Not the best fit for any of the 20 steps; it could do 9. Most often held back because no API is confirmed for this work",
-          "role": "point",
-          "group": "Why not API"
-        },
-        {
-          "text": "AI-assisted automation is recommended for only one step and is usually held back because structured inputs with no free text can be handled by rules without AI.",
-          "segmentId": "a:rank:ai_assist",
-          "excerpt": "AI-assisted automation ranks 3 of 4 with an average score of 23 out of 100 and is the recommendation for 1 steps. Best fit for 1 of 20 steps. Its strongest ground: the input is unstructured documents (1 step). Most often held back because the input is structured data and there is no free text: rules can do this without AI",
-          "role": "point",
-          "group": "Why not AI"
-        },
-        {
-          "text": "Agentic AI is not recommended because it is not shown that the next action cannot be written down as rules.",
-          "segmentId": "a:rank:agent",
-          "excerpt": "Agentic AI ranks 4 of 4 with an average score of 0 out of 100 and is the recommendation for 0 steps. Not the best fit for any of the 20 steps. Most often held back because it is not shown that the next action cannot be written down as rules",
-          "role": "point",
-          "group": "Why not agentic"
-        },
-        {
-          "text": "Four steps stay with people because a physical action, judgment or accountable decision stays with a person.",
-          "segmentId": "a:step:s-investigate",
-          "excerpt": "Step \"Investigate variance\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
-          "role": "point",
-          "group": "Human work"
-        },
-        {
-          "text": "The three-way match is already done by a system, so it is not scored.",
-          "segmentId": "a:step:s-match",
-          "excerpt": "Step \"Three-way match\" is already done by a system, so it is not scored.",
-          "role": "point",
-          "group": "Already system"
-        }
-      ],
-      "missing": ""
+ {
+  "task": "askProcess",
+  "question": "Why is this the recommended approach?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "The recommended approach is RPA-led automation because rule-based RPA is the best fit for most automatable steps, mainly where rules are complete, inputs are structured and no judgment is needed.",
+     "segmentId": "a:verdict",
+     "excerpt": "Rule-based RPA is the best fit for 15 of the 16 steps open to automation, mainly because no judgment is needed and the input is structured data.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "Rule-based RPA ranks first and is recommended for 15 steps, with its strongest ground being that the rules are written down in full.",
+     "segmentId": "a:rank:rpa",
+     "excerpt": "Rule-based RPA ranks 1 of 4 with an average score of 91 out of 100 and is the recommendation for 15 steps. Best fit for 15 of 20 steps. Its strongest ground: the rules are written down in full",
+     "role": "point",
+     "group": "Why RPA"
+    },
+    {
+     "text": "API integration is not recommended for any step because no API is confirmed for this work, so integration cannot be planned on yet for several steps.",
+     "segmentId": "a:rank:api",
+     "excerpt": "API integration ranks 2 of 4 with an average score of 37 out of 100 and is the recommendation for 0 steps. Not the best fit for any of the 20 steps; it could do 9. Most often held back because no API is confirmed for this work",
+     "role": "point",
+     "group": "Why not API"
+    },
+    {
+     "text": "AI-assisted automation is recommended for only one step and is usually held back because structured inputs with no free text can be handled by rules without AI.",
+     "segmentId": "a:rank:ai_assist",
+     "excerpt": "AI-assisted automation ranks 3 of 4 with an average score of 23 out of 100 and is the recommendation for 1 steps. Best fit for 1 of 20 steps. Its strongest ground: the input is unstructured documents (1 step). Most often held back because the input is structured data and there is no free text: rules can do this without AI",
+     "role": "point",
+     "group": "Why not AI"
+    },
+    {
+     "text": "Agentic AI is not recommended because it is not shown that the next action cannot be written down as rules.",
+     "segmentId": "a:rank:agent",
+     "excerpt": "Agentic AI ranks 4 of 4 with an average score of 0 out of 100 and is the recommendation for 0 steps. Not the best fit for any of the 20 steps. Most often held back because it is not shown that the next action cannot be written down as rules",
+     "role": "point",
+     "group": "Why not agentic"
+    },
+    {
+     "text": "Four steps stay with people because a physical action, judgment or accountable decision stays with a person.",
+     "segmentId": "a:step:s-investigate",
+     "excerpt": "Step \"Investigate variance\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
+     "role": "point",
+     "group": "Human work"
+    },
+    {
+     "text": "The three-way match is already done by a system, so it is not scored.",
+     "segmentId": "a:step:s-match",
+     "excerpt": "Step \"Three-way match\" is already done by a system, so it is not scored.",
+     "role": "point",
+     "group": "Already system"
     }
-  },
-  {
-    "task": "askProcess",
-    "question": "Which steps stay with people, and why?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "Four steps stay with people: Scan paper invoice, Approve non-PO invoice, Review high-value invoice, and Investigate variance.",
-          "segmentId": "a:verdict",
-          "excerpt": "Of 20 steps people do today: Rule-based RPA for 15, AI-assisted automation for 1, 4 stay with people.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "Scan paper invoice stays with a person because it is a physical action.",
-          "segmentId": "a:step:s-scan",
-          "excerpt": "Step \"Scan paper invoice\": recommended approach Keep with a person (score 80 out of 100). A physical action stays with a person.",
-          "role": "point",
-          "group": "Physical action"
-        },
-        {
-          "text": "Approve non-PO invoice stays with a person because it is a judgment or accountable decision.",
-          "segmentId": "a:step:s-approve",
-          "excerpt": "Step \"Approve non-PO invoice\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
-          "role": "point",
-          "group": "Judgment decisions"
-        },
-        {
-          "text": "Review high-value invoice stays with a person because it is a judgment or accountable decision.",
-          "segmentId": "a:step:s-review",
-          "excerpt": "Step \"Review high-value invoice\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
-          "role": "point",
-          "group": "Judgment decisions"
-        },
-        {
-          "text": "Investigate variance stays with a person because it is a judgment or accountable decision.",
-          "segmentId": "a:step:s-investigate",
-          "excerpt": "Step \"Investigate variance\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
-          "role": "point",
-          "group": "Judgment decisions"
-        },
-        {
-          "text": "The same four steps stay with a person whatever the approach: steps 2, 10, 17 and 18.",
-          "segmentId": "a:only:rpa",
-          "excerpt": "4 steps stay with a person whatever the approach (steps 2, 10, 17 and 18).",
-          "role": "point",
-          "group": "Across approaches"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askProcess",
-    "question": "What is still unknown about this process?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "The record still has open questions about handling time, paper volume, system interfaces, coding rules, buyer turnaround, approval mappings and credit notes.",
-          "segmentId": "f:oq:q-aht-nonpo",
-          "excerpt": "Open question: How long does a non-PO invoice take to handle? Why it matters: Needed to size the benefit for the 20% of invoices without a PO.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "The handling time for a non-PO invoice is still unknown.",
-          "segmentId": "f:oq:q-aht-nonpo",
-          "excerpt": "Open question: How long does a non-PO invoice take to handle? Why it matters: Needed to size the benefit for the 20% of invoices without a PO.",
-          "role": "point",
-          "group": "Work measures"
-        },
-        {
-          "text": "The paper invoice share is still only an estimate and has not been counted.",
-          "segmentId": "f:oq:q-paper-count",
-          "excerpt": "Open question: What share of invoices arrives on paper? The estimate is 10 to 15% and has not been counted.",
-          "role": "point",
-          "group": "Work measures"
-        },
-        {
-          "text": "It is unknown whether the goods receipt API, supplier invoice API, SAP attachment API and ServiceNow API can be used for this work.",
-          "segmentId": "f:oq:q-gr-api",
-          "excerpt": "Open question: Is API_MATERIAL_DOCUMENT_SRV exposed outside SAP, and can AP read goods receipts through it? Why it matters: Determines whether GR checks can run without SAP GUI.",
-          "role": "point",
-          "group": "System interfaces"
-        },
-        {
-          "text": "The rule for choosing a GL account for a non-PO invoice from a vendor with no posting history is still unknown.",
-          "segmentId": "f:oq:q-gl-coding",
-          "excerpt": "Open question: How should the GL account be chosen for a non-PO invoice from a vendor with no posting history? Why it matters: There is no rule today; it is a judgment point.",
-          "role": "point",
-          "group": "Business rules"
-        },
-        {
-          "text": "The required buyer turnaround for variance resolution is still unknown.",
-          "segmentId": "f:oq:q-buyer-sla",
-          "excerpt": "Open question: What turnaround should buyers meet when AP refers a variance? Why it matters: Waiting on buyers is one of the largest delays and has no agreed time.",
-          "role": "point",
-          "group": "Business rules"
-        },
-        {
-          "text": "The authoritative mapping of department heads for DoA approvals and the processing of vendor credit notes are still unknown.",
-          "segmentId": "f:oq:q-dept-head",
-          "excerpt": "Open question: Where is the authoritative mapping of department heads for DoA approvals? Why it matters: It is kept in a personal Excel file; approvals cannot be routed reliably without it.",
-          "role": "point",
-          "group": "Open design"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askBoard",
-    "question": "What is blocked or overdue?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "Nothing is blocked or overdue.",
-          "segmentId": "b:blocked",
-          "excerpt": "No item on the board is blocked.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "No item on the board is blocked.",
-          "segmentId": "b:blocked",
-          "excerpt": "No item on the board is blocked.",
-          "role": "point",
-          "group": "Blocked items"
-        },
-        {
-          "text": "No open item is past its due date.",
-          "segmentId": "b:overdue",
-          "excerpt": "No open item is past its due date; no open item has a due date.",
-          "role": "point",
-          "group": "Overdue items"
-        },
-        {
-          "text": "No open item has a due date.",
-          "segmentId": "b:overdue",
-          "excerpt": "No open item is past its due date; no open item has a due date.",
-          "role": "point",
-          "group": "Overdue items"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askBoard",
-    "question": "Which open items have no owner?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "There are 11 open non-epic items with no owner.",
-          "segmentId": "b:no-owner",
-          "excerpt": "11 open items have no owner (epics not counted): \"Validate vendor\", \"Park invoice and request goods receipt\", \"UAT: exception path \"Missing or incorrect mandatory field\"\"",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "The open no-owner stories include \"Validate vendor\", \"Park invoice and request goods receipt\", \"Handle \"No goods receipt\"\", and \"Handle \"Non-PO approval not received\"\".",
-          "segmentId": "b:no-owner",
-          "excerpt": "\"Validate vendor\", \"Park invoice and request goods receipt\", \"UAT: exception path \"Missing or incorrect mandatory field\"\", \"UAT: exception path \"Bank details differ from vendor master\"\", \"Handle \"No goods receipt\"\", \"Handle \"Non-PO approval not received\"\"",
-          "role": "point",
-          "group": "No owner items"
-        },
-        {
-          "text": "The open no-owner UAT tasks include \"UAT: exception path \"Missing or incorrect mandatory field\"\", \"UAT: exception path \"Bank details differ from vendor master\"\", and \"UAT: exception path \"Password-protected or unreadable PDF\"\".",
-          "segmentId": "b:no-owner",
-          "excerpt": "\"UAT: exception path \"Missing or incorrect mandatory field\"\", \"UAT: exception path \"Bank details differ from vendor master\"\", \"Handle \"No goods receipt\"\", \"Handle \"Non-PO approval not received\"\", \"UAT: exception path \"Password-protected or unreadable PDF\"\"",
-          "role": "point",
-          "group": "No owner items"
-        },
-        {
-          "text": "The open no-owner setup items are \"Set up access to AP shared mailbox (Microsoft 365) for the solution\", \"Prepare a test environment and test data for SharePoint library \"AP Invoices\"\", and \"Set up access to ServiceNow for the solution\".",
-          "segmentId": "b:no-owner",
-          "excerpt": "\"Set up access to AP shared mailbox (Microsoft 365) for the solution\", \"Prepare a test environment and test data for SharePoint library \"AP Invoices\"\", \"Confirm how the solution can use AP tracker (Excel on SharePoint)\", \"Set up access to ServiceNow for the solution\"",
-          "role": "point",
-          "group": "Setup items"
-        },
-        {
-          "text": "The open no-owner spike is \"Confirm how the solution can use AP tracker (Excel on SharePoint)\".",
-          "segmentId": "b:no-owner",
-          "excerpt": "\"Confirm how the solution can use AP tracker (Excel on SharePoint)\"",
-          "role": "point",
-          "group": "Spike item"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askBoard",
-    "question": "What is in progress, and who owns it?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "There are 8 items in progress on the board.",
-          "segmentId": "b:summary",
-          "excerpt": "The board \"Invoice automation\" has 50 items: 19 to do, 8 in progress, 4 in review, 4 testing, 5 ready for release, 10 done.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "Rahul Deshpande owns 5 in-progress items.",
-          "segmentId": "b:owner:00a1974d-6b87-418a-af35-503560f8d431",
-          "excerpt": "Rahul Deshpande owns 29 items: 8 to do, 5 in progress, 3 in review, 3 testing, 3 ready for release, 7 done.",
-          "role": "point",
-          "group": "Owner summary"
-        },
-        {
-          "text": "\"Park invoice and request goods receipt\" is in progress and has no owner.",
-          "segmentId": "w:1d37e2c0-dbc1-4ea3-8888-aa9172f0b2ac",
-          "excerpt": "Board item (story) \"Park invoice and request goods receipt\": status In progress, no owner, priority high, linked to FR-011",
-          "role": "point",
-          "group": "No owner"
-        },
-        {
-          "text": "\"Park invoice and refer variance\" and \"Handle \"Suspected duplicate\"\" are in progress and owned by Rahul Deshpande.",
-          "segmentId": "w:82129195-ee72-4d18-bb4a-1d33f491be78",
-          "excerpt": "Board item (story) \"Park invoice and refer variance\": status In progress, owner Rahul Deshpande, estimate 16 hours, linked to FR-014",
-          "role": "point",
-          "group": "Rahul owned"
-        },
-        {
-          "text": "\"UAT: exception path \"Suspected duplicate\"\" and \"Handle \"Password-protected or unreadable PDF\"\" are in progress and owned by Rahul Deshpande.",
-          "segmentId": "w:44a2a7d8-d5d6-4770-aded-2fcd94d07a6d",
-          "excerpt": "Board item (task) \"UAT: exception path \"Suspected duplicate\"\": status In progress, owner Rahul Deshpande, estimate 6 hours, linked to FR-025",
-          "role": "point",
-          "group": "Rahul owned"
-        },
-        {
-          "text": "\"UAT: exception path \"Password-protected or unreadable PDF\"\" and \"Confirm how the solution can use AP tracker (Excel on SharePoint)\" are in progress and have no owner.",
-          "segmentId": "w:e7599f74-1922-4d31-958a-81f490988ec8",
-          "excerpt": "Board item (task) \"UAT: exception path \"Password-protected or unreadable PDF\"\": status In progress, no owner, estimate 16 hours, linked to FR-030",
-          "role": "point",
-          "group": "No owner"
-        },
-        {
-          "text": "\"Set up access to SAP S/4HANA for the solution\" is in progress and owned by Rahul Deshpande.",
-          "segmentId": "w:a1542ee0-f8cf-4190-9161-8297acb5fed8",
-          "excerpt": "Board item (task) \"Set up access to SAP S/4HANA for the solution\": status In progress, owner Rahul Deshpande, estimate 6 hours",
-          "role": "point",
-          "group": "Rahul owned"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askWorkspace",
-    "question": "Which processes are quick wins?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "No process is identified as a quick win in the workspace.",
-          "segmentId": "ws:portfolio",
-          "excerpt": "In the portfolio, ordered by placement then hours: 1. \"Vendor invoice processing\" (not placed yet).",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "The only process in the workspace is \"Vendor invoice processing\".",
-          "segmentId": "ws:processes",
-          "excerpt": "The workspace \"Finance Operations\" has 1 process: \"Vendor invoice processing\".",
-          "role": "point",
-          "group": "Process list"
-        },
-        {
-          "text": "That process is not placed yet in the portfolio.",
-          "segmentId": "ws:portfolio",
-          "excerpt": "\"Vendor invoice processing\" (not placed yet).",
-          "role": "point",
-          "group": "Portfolio status"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askWorkspace",
-    "question": "What is open across the workspace?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "Open across the workspace: 10 open questions in Vendor invoice processing, plus 40 board items that are not done, including 11 open non-epic items with no owner.",
-          "segmentId": "ws:open",
-          "excerpt": "10 open questions across 1 process: \"Vendor invoice processing\" 10.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "The workspace has 1 process, Vendor invoice processing, and it has 10 open questions.",
-          "segmentId": "ws:open",
-          "excerpt": "10 open questions across 1 process: \"Vendor invoice processing\" 10.",
-          "role": "point",
-          "group": "Open questions"
-        },
-        {
-          "text": "The Invoice automation board has 50 items: 19 to do, 8 in progress, 4 in review, 4 testing, 5 ready for release, and 10 done.",
-          "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:summary",
-          "excerpt": "The board \"Invoice automation\" has 50 items: 19 to do, 8 in progress, 4 in review, 4 testing, 5 ready for release, 10 done.",
-          "role": "point",
-          "group": "Board status"
-        },
-        {
-          "text": "The board has 11 open items with no owner, with epics not counted.",
-          "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:no-owner",
-          "excerpt": "On the board \"Invoice automation\": 11 open items have no owner (epics not counted):",
-          "role": "point",
-          "group": "Board ownership"
-        },
-        {
-          "text": "No item on the Invoice automation board is blocked or on hold.",
-          "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:blocked",
-          "excerpt": "On the board \"Invoice automation\": no item on the board is blocked.",
-          "role": "point",
-          "group": "Board risks"
-        },
-        {
-          "text": "No open board item is past its due date, and no open item has a due date.",
-          "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:overdue",
-          "excerpt": "On the board \"Invoice automation\": no open item is past its due date; no open item has a due date.",
-          "role": "point",
-          "group": "Board dates"
-        },
-        {
-          "text": "No process has work-item proposals waiting for review.",
-          "segmentId": "ws:proposals",
-          "excerpt": "No process has work-item proposals waiting for review.",
-          "role": "point",
-          "group": "Proposals"
-        }
-      ],
-      "missing": ""
-    }
-  },
-  {
-    "task": "askWorkspace",
-    "question": "Which processes have no approver named?",
-    "reply": {
-      "sentences": [
-        {
-          "text": "No processes have no approver named.",
-          "segmentId": "ws:no-approver",
-          "excerpt": "Every process has an approver named.",
-          "role": "answer",
-          "group": ""
-        },
-        {
-          "text": "The workspace has 1 process, \"Vendor invoice processing\".",
-          "segmentId": "ws:processes",
-          "excerpt": "The workspace \"Finance Operations\" has 1 process: \"Vendor invoice processing\".",
-          "role": "point",
-          "group": "Process count"
-        },
-        {
-          "text": "That process names Meera Iyer as approver.",
-          "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
-          "excerpt": "Process \"Vendor invoice processing\": where it stands: Approved revision 1; analyst Rahul Deshpande, architect Vikram Shah, approver Meera Iyer;",
-          "role": "point",
-          "group": "Named approver"
-        }
-      ],
-      "missing": ""
-    }
+   ],
+   "missing": ""
   }
+ },
+ {
+  "task": "askProcess",
+  "question": "Which steps stay with people, and why?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "Four steps stay with people: Scan paper invoice, Approve non-PO invoice, Review high-value invoice, and Investigate variance.",
+     "segmentId": "a:verdict",
+     "excerpt": "Of 20 steps people do today: Rule-based RPA for 15, AI-assisted automation for 1, 4 stay with people.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "Scan paper invoice stays with a person because it is a physical action.",
+     "segmentId": "a:step:s-scan",
+     "excerpt": "Step \"Scan paper invoice\": recommended approach Keep with a person (score 80 out of 100). A physical action stays with a person.",
+     "role": "point",
+     "group": "Physical action"
+    },
+    {
+     "text": "Approve non-PO invoice stays with a person because it is a judgment or accountable decision.",
+     "segmentId": "a:step:s-approve",
+     "excerpt": "Step \"Approve non-PO invoice\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
+     "role": "point",
+     "group": "Judgment decisions"
+    },
+    {
+     "text": "Review high-value invoice stays with a person because it is a judgment or accountable decision.",
+     "segmentId": "a:step:s-review",
+     "excerpt": "Step \"Review high-value invoice\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
+     "role": "point",
+     "group": "Judgment decisions"
+    },
+    {
+     "text": "Investigate variance stays with a person because it is a judgment or accountable decision.",
+     "segmentId": "a:step:s-investigate",
+     "excerpt": "Step \"Investigate variance\": recommended approach Keep with a person (score 80 out of 100). A judgment or accountable decision stays with a person.",
+     "role": "point",
+     "group": "Judgment decisions"
+    },
+    {
+     "text": "The same four steps stay with a person whatever the approach: steps 2, 10, 17 and 18.",
+     "segmentId": "a:only:rpa",
+     "excerpt": "4 steps stay with a person whatever the approach (steps 2, 10, 17 and 18).",
+     "role": "point",
+     "group": "Across approaches"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askProcess",
+  "question": "What is still unknown about this process?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "The record still has open questions about handling time, paper volume, system interfaces, coding rules, buyer turnaround, approval mappings and credit notes.",
+     "segmentId": "f:oq:q-aht-nonpo",
+     "excerpt": "Open question: How long does a non-PO invoice take to handle? Why it matters: Needed to size the benefit for the 20% of invoices without a PO.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "The handling time for a non-PO invoice is still unknown.",
+     "segmentId": "f:oq:q-aht-nonpo",
+     "excerpt": "Open question: How long does a non-PO invoice take to handle? Why it matters: Needed to size the benefit for the 20% of invoices without a PO.",
+     "role": "point",
+     "group": "Work measures"
+    },
+    {
+     "text": "The paper invoice share is still only an estimate and has not been counted.",
+     "segmentId": "f:oq:q-paper-count",
+     "excerpt": "Open question: What share of invoices arrives on paper? The estimate is 10 to 15% and has not been counted.",
+     "role": "point",
+     "group": "Work measures"
+    },
+    {
+     "text": "It is unknown whether the goods receipt API, supplier invoice API, SAP attachment API and ServiceNow API can be used for this work.",
+     "segmentId": "f:oq:q-gr-api",
+     "excerpt": "Open question: Is API_MATERIAL_DOCUMENT_SRV exposed outside SAP, and can AP read goods receipts through it? Why it matters: Determines whether GR checks can run without SAP GUI.",
+     "role": "point",
+     "group": "System interfaces"
+    },
+    {
+     "text": "The rule for choosing a GL account for a non-PO invoice from a vendor with no posting history is still unknown.",
+     "segmentId": "f:oq:q-gl-coding",
+     "excerpt": "Open question: How should the GL account be chosen for a non-PO invoice from a vendor with no posting history? Why it matters: There is no rule today; it is a judgment point.",
+     "role": "point",
+     "group": "Business rules"
+    },
+    {
+     "text": "The required buyer turnaround for variance resolution is still unknown.",
+     "segmentId": "f:oq:q-buyer-sla",
+     "excerpt": "Open question: What turnaround should buyers meet when AP refers a variance? Why it matters: Waiting on buyers is one of the largest delays and has no agreed time.",
+     "role": "point",
+     "group": "Business rules"
+    },
+    {
+     "text": "The authoritative mapping of department heads for DoA approvals and the processing of vendor credit notes are still unknown.",
+     "segmentId": "f:oq:q-dept-head",
+     "excerpt": "Open question: Where is the authoritative mapping of department heads for DoA approvals? Why it matters: It is kept in a personal Excel file; approvals cannot be routed reliably without it.",
+     "role": "point",
+     "group": "Open design"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askBoard",
+  "question": "What is blocked or overdue?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "Nothing is blocked or overdue.",
+     "segmentId": "b:blocked",
+     "excerpt": "No item on the board is blocked.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "No item on the board is blocked.",
+     "segmentId": "b:blocked",
+     "excerpt": "No item on the board is blocked.",
+     "role": "point",
+     "group": "Blocked items"
+    },
+    {
+     "text": "No open item is past its due date.",
+     "segmentId": "b:overdue",
+     "excerpt": "No open item is past its due date; no open item has a due date.",
+     "role": "point",
+     "group": "Overdue items"
+    },
+    {
+     "text": "No open item has a due date.",
+     "segmentId": "b:overdue",
+     "excerpt": "No open item is past its due date; no open item has a due date.",
+     "role": "point",
+     "group": "Overdue items"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askBoard",
+  "question": "Which open items have no owner?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "There are 11 open non-epic items with no owner.",
+     "segmentId": "b:no-owner",
+     "excerpt": "11 open items have no owner (epics not counted): \"Validate vendor\", \"Park invoice and request goods receipt\", \"UAT: exception path \"Missing or incorrect mandatory field\"\"",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "The open no-owner stories include \"Validate vendor\", \"Park invoice and request goods receipt\", \"Handle \"No goods receipt\"\", and \"Handle \"Non-PO approval not received\"\".",
+     "segmentId": "b:no-owner",
+     "excerpt": "\"Validate vendor\", \"Park invoice and request goods receipt\", \"UAT: exception path \"Missing or incorrect mandatory field\"\", \"UAT: exception path \"Bank details differ from vendor master\"\", \"Handle \"No goods receipt\"\", \"Handle \"Non-PO approval not received\"\"",
+     "role": "point",
+     "group": "No owner items"
+    },
+    {
+     "text": "The open no-owner UAT tasks include \"UAT: exception path \"Missing or incorrect mandatory field\"\", \"UAT: exception path \"Bank details differ from vendor master\"\", and \"UAT: exception path \"Password-protected or unreadable PDF\"\".",
+     "segmentId": "b:no-owner",
+     "excerpt": "\"UAT: exception path \"Missing or incorrect mandatory field\"\", \"UAT: exception path \"Bank details differ from vendor master\"\", \"Handle \"No goods receipt\"\", \"Handle \"Non-PO approval not received\"\", \"UAT: exception path \"Password-protected or unreadable PDF\"\"",
+     "role": "point",
+     "group": "No owner items"
+    },
+    {
+     "text": "The open no-owner setup items are \"Set up access to AP shared mailbox (Microsoft 365) for the solution\", \"Prepare a test environment and test data for SharePoint library \"AP Invoices\"\", and \"Set up access to ServiceNow for the solution\".",
+     "segmentId": "b:no-owner",
+     "excerpt": "\"Set up access to AP shared mailbox (Microsoft 365) for the solution\", \"Prepare a test environment and test data for SharePoint library \"AP Invoices\"\", \"Confirm how the solution can use AP tracker (Excel on SharePoint)\", \"Set up access to ServiceNow for the solution\"",
+     "role": "point",
+     "group": "Setup items"
+    },
+    {
+     "text": "The open no-owner spike is \"Confirm how the solution can use AP tracker (Excel on SharePoint)\".",
+     "segmentId": "b:no-owner",
+     "excerpt": "\"Confirm how the solution can use AP tracker (Excel on SharePoint)\"",
+     "role": "point",
+     "group": "Spike item"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askBoard",
+  "question": "What is in progress, and who owns it?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "There are 8 items in progress on the board.",
+     "segmentId": "b:summary",
+     "excerpt": "The board \"Invoice automation\" has 50 items: 19 to do, 8 in progress, 4 in review, 4 testing, 5 ready for release, 10 done.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "Rahul Deshpande owns 5 in-progress items.",
+     "segmentId": "b:owner:00a1974d-6b87-418a-af35-503560f8d431",
+     "excerpt": "Rahul Deshpande owns 29 items: 8 to do, 5 in progress, 3 in review, 3 testing, 3 ready for release, 7 done.",
+     "role": "point",
+     "group": "Owner summary"
+    },
+    {
+     "text": "\"Park invoice and request goods receipt\" is in progress and has no owner.",
+     "segmentId": "w:1d37e2c0-dbc1-4ea3-8888-aa9172f0b2ac",
+     "excerpt": "Board item (story) \"Park invoice and request goods receipt\": status In progress, no owner, priority high, linked to FR-011",
+     "role": "point",
+     "group": "No owner"
+    },
+    {
+     "text": "\"Park invoice and refer variance\" and \"Handle \"Suspected duplicate\"\" are in progress and owned by Rahul Deshpande.",
+     "segmentId": "w:82129195-ee72-4d18-bb4a-1d33f491be78",
+     "excerpt": "Board item (story) \"Park invoice and refer variance\": status In progress, owner Rahul Deshpande, estimate 16 hours, linked to FR-014",
+     "role": "point",
+     "group": "Rahul owned"
+    },
+    {
+     "text": "\"UAT: exception path \"Suspected duplicate\"\" and \"Handle \"Password-protected or unreadable PDF\"\" are in progress and owned by Rahul Deshpande.",
+     "segmentId": "w:44a2a7d8-d5d6-4770-aded-2fcd94d07a6d",
+     "excerpt": "Board item (task) \"UAT: exception path \"Suspected duplicate\"\": status In progress, owner Rahul Deshpande, estimate 6 hours, linked to FR-025",
+     "role": "point",
+     "group": "Rahul owned"
+    },
+    {
+     "text": "\"UAT: exception path \"Password-protected or unreadable PDF\"\" and \"Confirm how the solution can use AP tracker (Excel on SharePoint)\" are in progress and have no owner.",
+     "segmentId": "w:e7599f74-1922-4d31-958a-81f490988ec8",
+     "excerpt": "Board item (task) \"UAT: exception path \"Password-protected or unreadable PDF\"\": status In progress, no owner, estimate 16 hours, linked to FR-030",
+     "role": "point",
+     "group": "No owner"
+    },
+    {
+     "text": "\"Set up access to SAP S/4HANA for the solution\" is in progress and owned by Rahul Deshpande.",
+     "segmentId": "w:a1542ee0-f8cf-4190-9161-8297acb5fed8",
+     "excerpt": "Board item (task) \"Set up access to SAP S/4HANA for the solution\": status In progress, owner Rahul Deshpande, estimate 6 hours",
+     "role": "point",
+     "group": "Rahul owned"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askWorkspace",
+  "question": "Where does each process stand?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "The workspace has one process, “Vendor invoice processing,” and it stands at approved revision 1.",
+     "segmentId": "ws:processes",
+     "excerpt": "The workspace \"Finance Operations\" has 1 process: \"Vendor invoice processing\". Where they stand: 1 approved revision 1.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "“Vendor invoice processing” has steps to assess and has 10 open questions.",
+     "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
+     "excerpt": "Process \"Vendor invoice processing\": where it stands: Approved revision 1; analyst Rahul Deshpande, architect Vikram Shah, approver Meera Iyer; 10 open questions;",
+     "role": "point",
+     "group": "Current status"
+    },
+    {
+     "text": "Its named roles are analyst Rahul Deshpande, architect Vikram Shah, and approver Meera Iyer.",
+     "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
+     "excerpt": "analyst Rahul Deshpande, architect Vikram Shah, approver Meera Iyer;",
+     "role": "point",
+     "group": "Named roles"
+    },
+    {
+     "text": "Rule-based RPA leads for the process; of 20 steps people do today, 15 would be done by rules, 1 with AI, and 4 would stay with people.",
+     "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
+     "excerpt": "Rule-based RPA leads; of 20 steps people do today, 15 by rules (RPA or an API), 1 with AI, 4 stay with people;",
+     "role": "point",
+     "group": "Assessment split"
+    },
+    {
+     "text": "Automation could take up to 20,900 hours a year for this process.",
+     "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
+     "excerpt": "automation could take up to 20,900 hours a year;",
+     "role": "point",
+     "group": "Potential value"
+    },
+    {
+     "text": "In the portfolio, it is 1 of 1 and is not placed yet.",
+     "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
+     "excerpt": "in the portfolio 1 of 1, not placed yet;",
+     "role": "point",
+     "group": "Portfolio place"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askWorkspace",
+  "question": "What is open across the workspace?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "Across the workspace, there are 10 open process questions and 40 open Delivery board items.",
+     "segmentId": "ws:open",
+     "excerpt": "10 open questions across 1 process: \"Vendor invoice processing\" 10.",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "The only process is Vendor invoice processing, and all 10 open questions are on that process.",
+     "segmentId": "ws:open",
+     "excerpt": "10 open questions across 1 process: \"Vendor invoice processing\" 10.",
+     "role": "point",
+     "group": "Open questions"
+    },
+    {
+     "text": "The Invoice automation board has 50 items, with 40 open and 10 done.",
+     "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:summary",
+     "excerpt": "The board \"Invoice automation\" has 50 items: 19 to do, 8 in progress, 4 in review, 4 testing, 5 ready for release, 10 done. By kind: 7 epics, 18 stories, 21 tasks, 2 spikes, 2 decisions. Open (not done): 40.",
+     "role": "point",
+     "group": "Board status"
+    },
+    {
+     "text": "Those open board items include 19 to do, 8 in progress, 4 in review, 4 testing, and 5 ready for release.",
+     "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:summary",
+     "excerpt": "19 to do, 8 in progress, 4 in review, 4 testing, 5 ready for release, 10 done.",
+     "role": "point",
+     "group": "Board status"
+    },
+    {
+     "text": "No item on the Invoice automation board is blocked or on hold.",
+     "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:blocked",
+     "excerpt": "On the board \"Invoice automation\": no item on the board is blocked.",
+     "role": "point",
+     "group": "Board risks"
+    },
+    {
+     "text": "No open board item is past its due date, and no open item has a due date.",
+     "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:overdue",
+     "excerpt": "On the board \"Invoice automation\": no open item is past its due date; no open item has a due date.",
+     "role": "point",
+     "group": "Board risks"
+    },
+    {
+     "text": "There are 11 open board items with no owner, with epics not counted.",
+     "segmentId": "ws:b:e69c1588-a1ce-43e1-96b1-d1b48c33372f:no-owner",
+     "excerpt": "On the board \"Invoice automation\": 11 open items have no owner (epics not counted): \"Validate vendor\", \"Park invoice and request goods receipt\", \"UAT: exception path \"Missing or incorrect mandatory field\"",
+     "role": "point",
+     "group": "Ownership"
+    }
+   ],
+   "missing": ""
+  }
+ },
+ {
+  "task": "askWorkspace",
+  "question": "Who is named on each process?",
+  "reply": {
+   "sentences": [
+    {
+     "text": "The only process is \"Vendor invoice processing\", and it names Rahul Deshpande as analyst, Vikram Shah as architect, and Meera Iyer as approver.",
+     "segmentId": "ws:p:d56f924f-c123-47db-9375-b25564fb0d1f",
+     "excerpt": "Process \"Vendor invoice processing\": where it stands: Approved revision 1; analyst Rahul Deshpande, architect Vikram Shah, approver Meera Iyer;",
+     "role": "answer",
+     "group": ""
+    },
+    {
+     "text": "Every process in the workspace has an analyst named.",
+     "segmentId": "ws:no-analyst",
+     "excerpt": "Every process has an analyst named.",
+     "role": "point",
+     "group": "Named roles"
+    },
+    {
+     "text": "Every process in the workspace has an architect named.",
+     "segmentId": "ws:no-architect",
+     "excerpt": "Every process has an architect named.",
+     "role": "point",
+     "group": "Named roles"
+    },
+    {
+     "text": "Every process in the workspace has an approver named.",
+     "segmentId": "ws:no-approver",
+     "excerpt": "Every process has an approver named.",
+     "role": "point",
+     "group": "Named roles"
+    }
+   ],
+   "missing": ""
+  }
+ }
 ]
