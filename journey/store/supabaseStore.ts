@@ -31,8 +31,15 @@ import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
 import type { Module } from '../../domain/workspace/modules.ts';
+import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
+const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
+const applicationFrom = (r: Record<string, any>): Application => ({
+  id: r.id, name: r.name, aliases: r.aliases ?? [], kind: r.kind, access: Array.isArray(r.access) ? r.access : [],
+  uiAllowed: r.ui_allowed ?? null, remote: r.remote ?? null, notes: r.notes ?? '', updatedAt: r.updated_at, updatedBy: r.updated_by ?? null,
+});
+
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
   const code = error?.code ?? '';
   const status = /^PT\d{3}$/.test(code) ? Number(code.slice(2)) : code === '42501' ? 403 : error?.status ?? fallback;
@@ -459,6 +466,30 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('delivery_work_item_comments').delete().eq('id', id).select('id');
       if (error) fail(error);
       if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+    },
+    async listApplications(workspaceId) {
+      const { data, error } = await db.from('workspace_applications').select(APP_COLUMNS).eq('workspace_id', workspaceId).order('name');
+      if (error) fail(error);
+      return (data ?? []).map(applicationFrom);
+    },
+    async saveApplication(workspaceId, input, id) {
+      const { data: rows, error: e0 } = await db.from('workspace_applications').select('id, name, aliases').eq('workspace_id', workspaceId);
+      if (e0) fail(e0);
+      const v = validateApplication(input, (rows ?? []).map(r => ({ id: r.id, name: r.name, aliases: r.aliases ?? [] })), id);
+      const row = { name: v.name, aliases: v.aliases, kind: v.kind, access: v.access, ui_allowed: v.uiAllowed, remote: v.remote, notes: v.notes };
+      const q = id ? db.from('workspace_applications').update(row).eq('id', id) : db.from('workspace_applications').insert({ workspace_id: workspaceId, ...row });
+      const { data, error } = await q.select(APP_COLUMNS);
+      if (error) {
+        if ((error as { code?: string }).code === '23505') throw new StoreError(409, `"${v.name}" is already on the list.`);
+        fail(error);
+      }
+      if (!data?.length) throw new StoreError(403, 'Changing the applications list needs the editor or admin role.');
+      return applicationFrom(data[0]);
+    },
+    async deleteApplication(id) {
+      const { data, error } = await db.from('workspace_applications').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Changing the applications list needs the editor or admin role.');
     },
     async listSprints(projectId) {
       const { data, error } = await db.from('delivery_sprints').select(SPRINT_COLUMNS).eq('project_id', projectId).order('created_at');

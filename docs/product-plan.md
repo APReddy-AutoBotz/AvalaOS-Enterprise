@@ -626,7 +626,7 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 
 1. The Avala assistant, below, starting read-only. It absorbs the gap-closing interview.
 2. Change impact preview (built, November 2026: before a delete or a canvas save, and straight after an inline edit, since edits save as they are made).
-3. Organisation system registry.
+3. Organisation system registry (in progress, November 2026: one list per workspace, since a workspace is one client; the list in Settings → Applications is built; next, a process that names an application offers its facts for a person to accept).
 4. Tracker push to Jira and Azure DevOps with status coming back.
 5. Review comments on document sections.
 6. Platform packs (UiPath, Power Automate).

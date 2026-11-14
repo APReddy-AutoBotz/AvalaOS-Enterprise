@@ -21,6 +21,7 @@ import type { Sprint } from '../../domain/workitems/sprints.ts';
 import { validateModules } from '../../domain/workspace/modules.ts';
 import { providerLabel } from '../../domain/auth/providers.ts';
 import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
+import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -45,6 +46,7 @@ interface State {
   comments?: ItemComment[];
   itemEvents?: ItemEvent[];
   sprints?: Sprint[];
+  applications?: (Application & { workspaceId: string })[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -517,6 +519,31 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (!c) throw new StoreError(404, 'Comment not found.');
       if (c.authorId !== me.id && itemWorkspace(c.workItemId).role !== 'admin') throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
       state.comments = (state.comments ?? []).filter(x => x.id !== id);
+      save();
+    },
+    async listApplications(workspaceId) {
+      requireMe();
+      return (state.applications ?? []).filter(a => a.workspaceId === workspaceId).map(({ workspaceId: _w, ...a }) => a).sort((x, y) => x.name.localeCompare(y.name));
+    },
+    async saveApplication(workspaceId, input, id) {
+      const me = requireMe();
+      const w = state.workspaces.find(x => x.id === workspaceId);
+      if (!w) throw new StoreError(404, 'Workspace not found.');
+      if (w.role === 'viewer') throw new StoreError(403, 'Changing the applications list needs the editor or admin role.');
+      const mine = (state.applications ?? []).filter(a => a.workspaceId === workspaceId);
+      const v = validateApplication(input, mine, id);
+      if (id && !mine.some(a => a.id === id)) throw new StoreError(404, 'Application not found.');
+      const app: Application = { id: id ?? uuid(), ...v, updatedAt: now(), updatedBy: me.id };
+      state.applications = [...(state.applications ?? []).filter(a => a.id !== app.id), { ...app, workspaceId }];
+      save();
+      return app;
+    },
+    async deleteApplication(id) {
+      requireMe();
+      const a = (state.applications ?? []).find(x => x.id === id);
+      if (!a) return;
+      if (state.workspaces.find(x => x.id === a.workspaceId)?.role === 'viewer') throw new StoreError(403, 'Changing the applications list needs the editor or admin role.');
+      state.applications = (state.applications ?? []).filter(x => x.id !== id);
       save();
     },
     async listSprints(projectId) {
