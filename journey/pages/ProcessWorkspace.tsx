@@ -13,6 +13,8 @@ import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
 import { useImpactContext } from '../process/ImpactNote.tsx';
+import type { AppList } from '../process/ApplicationOffer.tsx';
+import type { Application } from '../../domain/workspace/applications.ts';
 import { SourcesStage } from '../process/SourcesStage.tsx';
 import { AssessmentStage } from '../process/AssessmentStage.tsx';
 import { FlowsStage } from '../process/FlowsStage.tsx';
@@ -190,8 +192,14 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
   const impact = useImpactContext(store, processId, workspaceId);
+  const [apps, setApps] = React.useState<Application[] | null>(null);
+  React.useEffect(() => { store.listApplications(workspaceId).then(setApps).catch(() => setApps(null)); }, [store, workspaceId]);
+  const appList = React.useMemo<AppList | null>(() => (apps ? {
+    apps,
+    add: async input => { const saved = await store.saveApplication(workspaceId, input); setApps(cur => [...(cur ?? []), saved]); },
+  } : null), [apps, store, workspaceId]);
   return (
-    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} />
+    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
   );
 }
 

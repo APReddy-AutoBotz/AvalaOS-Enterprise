@@ -96,3 +96,63 @@ export function applicationSummary(a: Application): string {
   if (a.remote !== null) parts.push(a.remote ? 'reached through a remote desktop' : 'not through a remote desktop');
   return parts.length ? parts.join('; ') : 'Nothing recorded yet about how it is reached';
 }
+
+// ---------------------------------------------------------------- the list and a process
+
+const sameWay = (a: { method: string; name?: string }, b: { method: string; name?: string }) => a.method === b.method && nameKey(a.name ?? '') === nameKey(b.name ?? '');
+const factValue = <T>(f: { value: T | null; status: string } | undefined): T | null => (f && f.status !== 'unknown' ? f.value : null);
+
+/**
+ * What accepting the list's entry would change on a process's system, in words; empty when the
+ * process already says the same. A way in the process lacks is added; one it has takes the list's
+ * availability and any operations it lacks; the screen facts are set where the list knows them.
+ */
+export function applicationOffer(system: SystemRef, app: Application): string[] {
+  const lines: string[] = [];
+  for (const a of app.access) {
+    const has = system.access.find(x => sameWay(x, a));
+    if (!has) { lines.push(`Add ${accessText(a)}`); continue; }
+    const more = a.operations.filter(o => !has.operations.some(x => x.toLowerCase() === o.toLowerCase()));
+    const label = `${methodWord(a.method)}${a.name ? ` ${a.name}` : ''}`;
+    if (has.access !== a.access) lines.push(`${label}: ${statusWord(has.access)} becomes ${statusWord(a.access)}`);
+    if (more.length) lines.push(`${label}: add ${more.length === 1 ? 'the operation' : 'the operations'} ${more.join(', ')}`);
+  }
+  if (app.uiAllowed !== null && factValue(system.uiAllowed) !== app.uiAllowed) lines.push(app.uiAllowed ? 'Robots may use its screens' : 'Robots may not use its screens');
+  if (app.remote !== null && factValue(system.remote) !== app.remote) lines.push(app.remote ? 'Reached through a remote desktop' : 'Not reached through a remote desktop');
+  return lines;
+}
+
+/** Applies the list's entry to a copy of the system (used by the patch operation `adoptApplication`). Every fact it sets is marked as confirmed by a person. */
+export function mergeApplication(system: SystemRef, app: Application): void {
+  for (const a of app.access) {
+    const has = system.access.find(x => sameWay(x, a));
+    if (!has) {
+      system.access.push({ method: a.method, ...(a.name ? { name: a.name } : {}), operations: [...a.operations], access: a.access, status: 'user-confirmed', sources: [], ...(a.note ? { note: a.note } : {}) });
+      continue;
+    }
+    const more = a.operations.filter(o => !has.operations.some(x => x.toLowerCase() === o.toLowerCase()));
+    if (has.access !== a.access || more.length) {
+      has.access = a.access;
+      has.operations = [...has.operations, ...more];
+      has.status = 'user-confirmed';
+    }
+  }
+  if (app.uiAllowed !== null && factValue(system.uiAllowed) !== app.uiAllowed) system.uiAllowed = { value: app.uiAllowed, status: 'user-confirmed', sources: [] };
+  if (app.remote !== null && factValue(system.remote) !== app.remote) system.remote = { value: app.remote, status: 'user-confirmed', sources: [] };
+}
+
+/**
+ * A process's system as a new entry for the list: its name, kind, and the ways in and screen facts
+ * that a source states or a person confirmed (inferred and assumed ones stay behind, so nothing
+ * guessed reaches the list). A person sees `applicationSummary` of it before it is saved.
+ */
+export function applicationFromSystem(system: SystemRef): ApplicationInput {
+  const firm = (status: string) => status === 'stated' || status === 'user-confirmed';
+  return {
+    name: system.name, aliases: [], kind: system.kind, notes: '',
+    access: system.access.filter(a => firm(a.status) && a.access !== 'unknown')
+      .map(a => ({ method: a.method, ...(a.name ? { name: a.name } : {}), operations: [...a.operations], access: a.access, ...(a.note ? { note: a.note } : {}) })),
+    uiAllowed: system.uiAllowed && firm(system.uiAllowed.status) ? system.uiAllowed.value : null,
+    remote: system.remote && firm(system.remote.status) ? system.remote.value : null,
+  };
+}

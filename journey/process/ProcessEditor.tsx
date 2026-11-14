@@ -9,6 +9,7 @@ import type { ModelEditor, ModelOp } from './useModelEditor.ts';
 import type { ImpactContext } from '../../domain/docs/impact.ts';
 import { impactSummary } from '../../domain/docs/impact.ts';
 import { LastChangeImpact, previewImpact } from './ImpactNote.tsx';
+import { ApplicationLink, type AppList } from './ApplicationOffer.tsx';
 import { ConfirmDelete, InlineText, RefChips, Select, SidePanel, SourceList, SourcesButton, StatusBadge, TableShell } from './widgets.tsx';
 import { DataTab, ExceptionsTab, RulesTab } from './FactTabs.tsx';
 import { ConflictsTab, QuestionsTab } from './QuestionsTab.tsx';
@@ -38,11 +39,13 @@ export interface TabContext {
   showSources(title: string, sources: SourceRef[]): void;
   /** What an edit would change downstream, in one line, or null when not known. */
   impactOf(op: ModelOp): string | null;
+  /** The workspace's applications list, once loaded. */
+  appList: AppList | null;
 }
 
 type TabId = 'steps' | 'roles' | 'rules' | 'exceptions' | 'data' | 'questions' | 'conflicts';
 
-export function ProcessEditor({ editor, canEdit, me, sourceTitle, impact = null }: { editor: ModelEditor; canEdit: boolean; me: string; sourceTitle: (id: string) => string; impact?: ImpactContext | null }) {
+export function ProcessEditor({ editor, canEdit, me, sourceTitle, impact = null, appList = null }: { editor: ModelEditor; canEdit: boolean; me: string; sourceTitle: (id: string) => string; impact?: ImpactContext | null; appList?: AppList | null }) {
   const model = editor.model;
   const [tab, setTab] = React.useState<TabId>('steps');
   const [panel, setPanel] = React.useState<{ title: string; sources: SourceRef[] } | null>(null);
@@ -58,7 +61,7 @@ export function ProcessEditor({ editor, canEdit, me, sourceTitle, impact = null 
     { id: 'conflicts', label: 'Conflicts', count: conflictCount },
   ];
   const impactOf = (op: ModelOp) => { const i = previewImpact(impact, model, op); return i ? impactSummary(i) : null; };
-  const ctx: TabContext = { model, editor, canEdit, me, sourceTitle, showSources: (title, sources) => setPanel({ title, sources }), impactOf };
+  const ctx: TabContext = { model, editor, canEdit, me, sourceTitle, showSources: (title, sources) => setPanel({ title, sources }), impactOf, appList };
 
   return (
     <div>
@@ -183,7 +186,7 @@ function AddStep({ editor, after }: { model: ProcessModel; editor: ModelEditor; 
 
 // ---------------------------------------------------------------- roles and systems
 
-function RolesSystemsTab({ model, editor, canEdit, showSources, impactOf }: TabContext) {
+function RolesSystemsTab({ model, editor, canEdit, showSources, impactOf, appList }: TabContext) {
   const setRole = (id: string, field: string, value: unknown, name: string) => editor.apply(m => updateFact(m, { target: { kind: 'role', id, field }, value }), `Changed role ${name}`);
   const setSystem = (id: string, field: string, value: unknown, name: string) => editor.apply(m => updateFact(m, { target: { kind: 'system', id, field }, value }), `Changed system ${name}`);
   return (
@@ -210,7 +213,10 @@ function RolesSystemsTab({ model, editor, canEdit, showSources, impactOf }: TabC
         <TableShell head={['System', 'Kind', 'Access', 'Steps', 'Status', '']}>
           {model.systems.map(s => (
             <tr key={s.id} data-testid="system-row" className="align-top">
-              <td className="px-1 py-1"><InlineText value={s.name} label={`Name of system ${s.name}`} disabled={!canEdit} onSave={v => setSystem(s.id, 'name', v, s.name)} /></td>
+              <td className="px-1 py-1">
+                <InlineText value={s.name} label={`Name of system ${s.name}`} disabled={!canEdit} onSave={v => setSystem(s.id, 'name', v, s.name)} />
+                <span className="px-2"><ApplicationLink system={s} list={appList} editor={editor} canEdit={canEdit} impactOf={impactOf} /></span>
+              </td>
               <td className="px-3 py-2"><Select value={s.kind} options={SYSTEM_KINDS} label={`Kind of ${s.name}`} disabled={!canEdit} onChange={v => setSystem(s.id, 'kind', v, s.name)} /></td>
               <td className="px-3 py-2">
                 {s.access.length === 0 ? <span className="text-xs italic text-slate-500">Unknown</span> : (
