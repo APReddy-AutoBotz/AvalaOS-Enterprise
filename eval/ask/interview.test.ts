@@ -42,3 +42,9 @@ test('the judge: a follow-up where nothing was said, the right value where it wa
   assert.ok(judgeInterview(c('IV17'), { kind: 'followUp', question: '?' }).pass, 'maybe: a follow-up is fine');
   assert.ok(!judgeInterview(c('IV08'), { kind: 'followUp', question: '?' }).pass, 'a value was given');
 });
+
+test('an application\'s own name is not a figure the person did not give', () => {
+  const c = cases.find(x => x.id === 'IV08')!;
+  const p = { itemKey: 'k', question: 'q', display: 'SAP S/4HANA', quote: 'That check happens in SAP', certainty: 'inferred' as const, answer: {} };
+  assert.ok(judgeInterview(c, { kind: 'confirm', proposal: p, question: 'Did you mean: SAP S/4HANA?' }).pass);
+});

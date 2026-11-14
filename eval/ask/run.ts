@@ -173,7 +173,7 @@ async function interview(server: Server, sample: Sample, only?: string[]) {
     if (r.status !== 200 || !r.json?.ok) { outcomes.push({ id: c.id, pass: false, reasons: [`${r.status} ${r.json?.error?.code ?? ''}`], kind: 'error', recorded: null, notStated: false }); return; }
     tokens += Number(r.json.usage?.input ?? 0) + Number(r.json.usage?.output ?? 0);
     const findings = ((r.json.data as { answers?: NoteFinding[] })?.answers ?? []);
-    outcomes.push(judgeInterview(c, readInterview(sample.model, item, ids, findings, 1)));
+    outcomes.push(judgeInterview(c, readInterview(sample.model, item, ids, findings, 1, c.answer)));
   });
   outcomes.sort((a, b) => a.id.localeCompare(b.id));
   const passed = outcomes.filter(o => o.pass).length, notStated = outcomes.filter(o => o.notStated).length;

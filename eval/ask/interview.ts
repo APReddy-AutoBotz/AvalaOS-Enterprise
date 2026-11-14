@@ -26,12 +26,14 @@ export function judgeInterview(c: InterviewCase, reading: Reading): InterviewOut
   const p = reading.kind === 'record' || reading.kind === 'confirm' ? reading.proposal : null;
   const recorded = p?.display ?? null;
   let notStated = false;
-  // Any figure offered must be one the person gave.
-  if (p) {
+  // Any figure offered must be one the person gave; an option's own name ("SAP S/4HANA") is not a figure.
+  if (p && !c.expect.pick) {
     const given = figures(c.answer);
     const extra = [...figures(p.display)].filter(n => !given.has(n));
     if (extra.length) { reasons.push(`offers a figure the person did not give: ${extra.join(', ')}`); notStated = true; }
-    // The person's words it shows must be theirs (an access answer joins several quotes with " … ").
+  }
+  // The person's words it shows must be theirs (an access answer joins several quotes with " … ").
+  if (p) {
     const norm = (s: string) => s.toLowerCase().replace(/[\u2018\u2019]/g, "'").replace(/\s+/g, ' ').trim();
     if (p.quote.split(' … ').some(part => !norm(c.answer).includes(norm(part)))) reasons.push(`quotes words that are not in the answer: "${p.quote}"`);
   }

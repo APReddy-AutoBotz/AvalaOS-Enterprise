@@ -45,7 +45,7 @@ test('a stated value is offered to record, with the person\'s words, and the edi
   const role = ofKind(items, 'role');
   const clerk = m.roles.find(r => /Clerk/.test(r.name))!;
   const { ids } = interviewSegments(m, role, 'The AP clerk does it.');
-  const r = readInterview(m, role, ids, [finding({ value: clerk.name, excerpt: 'The AP clerk does it' })], 1);
+  const r = readInterview(m, role, ids, [finding({ value: clerk.name, excerpt: 'The AP clerk does it' })], 1, 'The AP clerk does it.');
   assert.equal(r.kind, 'record');
   if (r.kind !== 'record') return;
   assert.equal(willRecord(r.proposal), `This will record: ${clerk.name}`);
@@ -61,7 +61,7 @@ test('an inferred value is asked back; nothing is recorded without a yes', () =>
   const role = ofKind(items, 'role');
   const lead = m.roles.find(r => /Lead/.test(r.name))!;
   const { ids } = interviewSegments(m, role, 'Probably whoever leads the team.');
-  const r = readInterview(m, role, ids, [finding({ value: lead.name, certainty: 'inferred', excerpt: 'whoever leads the team' })], 1);
+  const r = readInterview(m, role, ids, [finding({ value: lead.name, certainty: 'inferred', excerpt: 'whoever leads the team' })], 1, 'Probably whoever leads the team.');
   assert.equal(r.kind, 'confirm');
   if (r.kind === 'confirm') assert.equal(r.question, `Did you mean: ${lead.name}?`);
 });
@@ -70,12 +70,20 @@ test('no value: one follow-up by kind, then nothing is recorded; a value that fi
   const { m, items } = setup();
   const role = ofKind(items, 'role');
   const { ids } = interviewSegments(m, role, 'Not sure.');
-  const first = readInterview(m, role, ids, [], 1);
+  const first = readInterview(m, role, ids, [], 1, 'Not sure.');
   assert.equal(first.kind, 'followUp');
   if (first.kind === 'followUp') assert.match(first.question, /^I could not tell which role from that\. Which of these does it: .*AP Clerk/);
-  assert.deepEqual(readInterview(m, role, ids, [], 2), { kind: 'unanswered', message: UNANSWERED });
+  assert.deepEqual(readInterview(m, role, ids, [], 2, 'Not sure.'), { kind: 'unanswered', message: UNANSWERED });
   // A role the process does not have is not recorded, however it was said.
-  assert.equal(readInterview(m, role, ids, [finding({ value: 'Chief Robot Officer', excerpt: 'Not sure' })], 1).kind, 'followUp');
+  assert.equal(readInterview(m, role, ids, [finding({ value: 'Chief Robot Officer', excerpt: 'Not sure' })], 1, 'Chief Robot Officer.').kind, 'followUp');
+  // "I don't know" is no value, even when a free-text reading would record the words.
+  const free = { ...role, kind: 'free' as const };
+  for (const said of ['No idea, honestly.', "I'm not sure, you would have to ask procurement.", "I'll have to check with the ServiceNow admin."]) {
+    assert.equal(readInterview(m, free, ids, [finding({ value: said, excerpt: said })], 1, said).kind, 'followUp', said);
+  }
+  // A real answer that also mentions not being sure of something else is still read.
+  const long = 'Buyers should come back within two working days, though I am not sure every buyer knows that yet, so we will remind them in the next team meeting.';
+  assert.equal(readInterview(m, free, ids, [finding({ value: 'Within two working days.', excerpt: 'Buyers should come back within two working days' })], 1, long).kind, 'record');
   for (const kind of ['system', 'number', 'access', 'free'] as const) {
     const item = { ...role, kind, interfaces: kind === 'access' ? [{ index: 0, label: 'API', access: 'unknown' as const }] : undefined };
     assert.ok(followUpFor(item, m).length > 20, kind);

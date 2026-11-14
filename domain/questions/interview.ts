@@ -76,14 +76,22 @@ export type Reading =
   /** No value after the follow-up either: nothing is recorded. */
   | { kind: 'unanswered'; message: string };
 
+/**
+ * An answer that says the person does not know ("not sure", "no idea", "I'll have to check with …"),
+ * when it is short enough that saying so is all it does. Such an answer is no value, whatever a
+ * free-text reading makes of it: "No idea, honestly." is never offered as the answer to record.
+ */
+const NOT_KNOWN = /\b(?:not sure|unsure|no idea|no clue|(?:do not|don't|dont|do n't) know|not known|can(?:no|')t say|have to (?:check|ask|find out)|need to (?:check|ask|find out)|will (?:check|ask|find out)|i'll (?:check|ask|find out)|ask (?:procurement|it|finance|hr|the|someone|them))\b/i;
+export const saysNotKnown = (answer: string) => NOT_KNOWN.test(answer) && answer.trim().split(/\s+/).length <= 20;
+
 export const UNANSWERED = 'I could not find an answer to record, so nothing is recorded. You can skip this question or leave it with the person who knows.';
 
 /**
  * What an answer means for the question, by rule, from the notes task's findings. `attempt` is 1 for
  * the first answer and 2 after the follow-up, so there is never more than one follow-up.
  */
-export function readInterview(model: ProcessModel, item: TriageItem, ids: Map<string, string>, findings: NoteFinding[], attempt: 1 | 2): Reading {
-  const p = proposalsFrom(model, [item], ids, findings)[0];
+export function readInterview(model: ProcessModel, item: TriageItem, ids: Map<string, string>, findings: NoteFinding[], attempt: 1 | 2, answer: string): Reading {
+  const p = saysNotKnown(answer) ? undefined : proposalsFrom(model, [item], ids, findings)[0];
   if (!p) return attempt === 1 ? { kind: 'followUp', question: followUpFor(item, model) } : { kind: 'unanswered', message: UNANSWERED };
   if (p.certainty === 'inferred') return { kind: 'confirm', proposal: p, question: `Did you mean: ${p.display}?` };
   return { kind: 'record', proposal: p };
