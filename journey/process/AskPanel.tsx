@@ -6,16 +6,20 @@ import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Target } from '../../domain/assistant/ask.ts';
 import { loadAskRecord } from './askRecord.ts';
+import { answerAction, citedFacts, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
+import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 
 type Turn = { question: string; answer?: Answer; error?: string };
 const SUGGESTED = ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'];
 
-export function AskPanel({ store, processId, workspaceId, model, sources, about, onOpen, onClose }: {
+export function AskPanel({ store, processId, workspaceId, model, sources, about, stages = STAGE_ORDER, onOpen, onClose }: {
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[];
   /** What the panel is asking about, and the choice of another process (the top bar's panel, journey/AskAvala.tsx). */
   about?: React.ReactNode;
+  /** The stages this workspace uses: the answer's action opens only one of them. */
+  stages?: StageId[];
   onOpen: (target: Target) => void; onClose: () => void;
 }) {
   const [record, setRecord] = React.useState<Omit<AskContext, 'model'> | null>(null);
@@ -66,14 +70,23 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
               {SUGGESTED.map(s => <button key={s} type="button" onClick={() => ask(s)} className="rounded-full bg-slate-100 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-200">{s}</button>)}
             </div>
           )}
-          {turns.map((t, n) => (
-            <section key={n} aria-label={`Question ${n + 1}`} data-testid="ask-turn">
-              <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
-              {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
-              {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
-              {t.answer && <AnswerView answer={t.answer} onOpen={onOpen} />}
-            </section>
-          ))}
+          {turns.map((t, n) => {
+            // Two questions to ask next, by rule from what the last answer cited, never one already asked.
+            const next = t.answer && n === turns.length - 1 && !busy ? followUps(t.answer, turns.map(x => x.question), stages) : [];
+            return (
+              <section key={n} aria-label={`Question ${n + 1}`} data-testid="ask-turn">
+                <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
+                {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
+                {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
+                {t.answer && <AnswerView answer={t.answer} stages={stages} onOpen={onOpen} />}
+                {next.length > 0 && (
+                  <div role="group" aria-label="Ask next" className="mt-4 flex flex-wrap gap-2">
+                    {next.map(q => <button key={q} type="button" onClick={() => ask(q)} className="rounded-full border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50">{q}</button>)}
+                  </div>
+                )}
+              </section>
+            );
+          })}
           <div ref={end} />
         </div>
         <form className="sticky bottom-0 mt-6 border-t border-slate-100 bg-white pt-4" onSubmit={e => { e.preventDefault(); ask(question); }}>
@@ -92,32 +105,57 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
   );
 }
 
-function AnswerView({ answer, onOpen }: { answer: Answer; onOpen: (t: Target) => void }) {
-  // One number per fact cited, in the order they first appear.
-  const cited = [...new Map(answer.sentences.map(s => [s.fact.id, s.fact])).values()];
+/**
+ * One answer: the sentences with their numbers, what the record does not hold, one action that opens where
+ * most of the facts live, and the sources as compact chips that show their quote when opened. The layout
+ * is decided by rule (domain/assistant/present.ts); nothing here is written by the AI.
+ */
+function AnswerView({ answer, stages, onOpen }: { answer: Answer; stages: StageId[]; onOpen: (t: Target) => void }) {
+  const cited = citedFacts(answer);
   const num = (id: string) => cited.findIndex(f => f.id === id) + 1;
+  const [shown, setShown] = React.useState<string | null>(null);
   if (!answer.sentences.length) {
     return <p className="mt-3 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200">{answer.missing || 'The record of this process does not answer that.'}</p>;
   }
+  const action = answerAction(answer, stages);
+  const open = cited.find(f => f.id === shown) ?? null;
   return (
     <div className="mt-3" data-testid="ask-answer">
       <p className="text-sm leading-7 text-slate-800">
         {answer.sentences.map((s, i) => (
-          <React.Fragment key={i}>{i > 0 && ' '}{s.text}<sup className="ml-0.5"><a href={`#cite-${s.fact.id}`} className="font-semibold text-[#002C4B] no-underline hover:underline" aria-label={`Source ${num(s.fact.id)}: ${s.fact.label}`}>[{num(s.fact.id)}]</a></sup></React.Fragment>
+          <React.Fragment key={i}>{i > 0 && ' '}{s.text}<sup className="ml-0.5"><a href={`#cite-${s.fact.id}`} onClick={() => setShown(s.fact.id)} className="font-semibold text-[#002C4B] no-underline hover:underline" aria-label={`Source ${num(s.fact.id)}: ${s.fact.label}`}>{num(s.fact.id)}</a></sup></React.Fragment>
         ))}
       </p>
       {answer.missing && <p className="mt-2 text-sm text-amber-900"><span className="font-semibold">Not in the record:</span> {answer.missing}</p>}
-      <ol className="mt-3 space-y-2 border-l-2 border-slate-200 pl-3 text-xs" aria-label="Where this comes from">
-        {cited.map((f, i) => (
-          <li key={f.id} id={`cite-${f.id}`} data-testid="ask-citation">
-            <span className="font-semibold text-slate-700">[{i + 1}]</span>{' '}
-            {f.target.kind === 'source'
-              ? <span className="text-slate-700">{f.label}<span className="mt-1 block"><SourceList sources={[f.target.ref]} sourceTitle={() => f.label} /></span></span>
-              : <button type="button" onClick={() => onOpen(f.target)} className={cx('text-left font-medium text-[#002C4B] hover:underline')}>{f.label}</button>}
-            <span className="mt-0.5 block text-slate-500">“{answer.sentences.find(s => s.fact.id === f.id)!.quote}”</span>
-          </li>
-        ))}
-      </ol>
+      {action && (
+        <Button variant="secondary" className="mt-3" onClick={() => onOpen(action.target)}>
+          {action.label}<svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
+        </Button>
+      )}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-slate-500" id={`sources-${cited[0]!.id}`}>Sources</span>
+          <ul className="contents" aria-labelledby={`sources-${cited[0]!.id}`}>
+            {cited.map((f, i) => (
+              <li key={f.id} id={`cite-${f.id}`} data-testid="ask-citation">
+                <button type="button" aria-expanded={shown === f.id} onClick={() => setShown(shown === f.id ? null : f.id)}
+                  className={cx('max-w-[16rem] truncate rounded-md px-2 py-1 text-left text-xs', shown === f.id ? 'bg-[#002C4B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')}>
+                  <span className="font-semibold">{i + 1}</span> · {f.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {open && (
+          <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600 ring-1 ring-inset ring-slate-200" data-testid="ask-quote">
+            <p className="font-semibold text-slate-700">{num(open.id)} · {open.label}</p>
+            {open.target.kind === 'source'
+              ? <div className="mt-1"><SourceList sources={[open.target.ref]} sourceTitle={() => open.label} /></div>
+              : <p className="mt-1">“{answer.sentences.find(s => s.fact.id === open.id)!.quote}”</p>}
+            {open.target.kind !== 'source' && <button type="button" onClick={() => onOpen(open.target)} className="mt-1.5 font-medium text-[#002C4B] hover:underline">Open where this is</button>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
