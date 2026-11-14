@@ -649,7 +649,17 @@ An assistant on top of the platform, in the way Rovo sits on Jira, using the wor
 - It never decides. Scores stay arithmetic from the fixed tables; the assistant explains them and cannot change them.
 - It changes nothing on its own. Anything it proposes (an answer to an open question, a section draft, a work item) goes through the existing patch operations and review screens, and a person confirms it. It acts with the signed-in person's role and no more.
 - Source documents are untrusted: text inside a transcript or procedure is content to read, never an instruction to the assistant.
-- Order: (1) read-only questions with citations (built, November 2026: "Ask about this process"); (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+- Order: (1) read-only questions with citations (built, November 2026: "Ask Avala" on a process); (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+
+### Ask Avala across the platform (agreed November 2026, parked until after the next release)
+
+The assistant is called Ask Avala. Today it answers about one process. The next step puts one "Ask Avala" button in the top bar that answers about where the person is:
+
+- on a process: that process (as today);
+- on the Delivery board: the board (what is blocked or overdue, what is in the sprint, who owns what);
+- on Processes, Portfolio or My work: the workspace (which process to automate first, which processes use an application, what is waiting on whom).
+
+The rules do not change: read-only, every sentence cites a fact, and what the record does not hold is said, never guessed. It never reaches past the one workspace, so a client's workspace stays sealed, and it sees only what the person asking may see. Workspace answers come from each process's summary (its assessment, priority and open questions) and the board; a process's source passages are read only when the question names that process. Parked until the single-process answers have been tried on real processes after the release; no schema change.
 
 ### Packaging: start with the part you need (agreed November 2026)
 

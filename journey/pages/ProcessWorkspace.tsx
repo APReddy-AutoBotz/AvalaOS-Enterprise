@@ -111,7 +111,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           {canApprove && working && (
             <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
           )}
-          {model && hasSteps && shownStages.length > 0 && <Button variant="secondary" onClick={() => setAsking(true)} aria-haspopup="dialog">Ask about this process</Button>}
+          {model && hasSteps && shownStages.length > 0 && <Button variant="secondary" onClick={() => setAsking(true)} aria-haspopup="dialog">Ask Avala</Button>}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
       </div>

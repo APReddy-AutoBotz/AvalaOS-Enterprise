@@ -1,4 +1,4 @@
-// "Ask about this process": the Avala assistant, read-only (domain/assistant/ask.ts). It answers only from
+// "Ask Avala" on a process: the Avala assistant, read-only (domain/assistant/ask.ts). It answers only from
 // this process's record, and every sentence links to the fact it came from. It changes nothing and saves
 // nothing; the conversation goes when the panel closes.
 import React from 'react';
@@ -70,9 +70,9 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   };
 
   return (
-    <SidePanel title="Ask about this process" onClose={onClose} wide>
+    <SidePanel title="Ask Avala" onClose={onClose} wide>
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
-        <p className="text-sm leading-6 text-slate-600">Answers come only from this process: its steps, assessment, requirements, board items and sources. Each sentence links to where it came from. The assistant explains; it changes nothing, and nothing here is saved.</p>
+        <p className="text-sm leading-6 text-slate-600">Ask about this process. Answers come only from its record: its steps, assessment, requirements, board items and sources. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.</p>
         <ErrorNote message={loadError} />
         {!record && !loadError && <div className="mt-6"><Spinner /></div>}
         <div className="mt-5 flex-1 space-y-6" aria-live="polite">
