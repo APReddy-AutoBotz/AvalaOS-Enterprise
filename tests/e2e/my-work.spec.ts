@@ -1,16 +1,18 @@
 import { test, expect } from '@playwright/test';
-import { shot, signInAndCreateProcess } from './helpers.ts';
+import { shot, signInAndCreateProcess, signOut } from './helpers.ts';
 
 test('signing in lands on My work; what needs you comes from the process, and naming someone moves it to them', async ({ page }) => {
   await signInAndCreateProcess(page);
   await page.getByRole('link', { name: 'My work' }).click();
   await expect(page).toHaveURL(/\/work$/);
-  await expect(page.getByRole('heading', { name: 'My work', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
 
   // Nobody is named yet, so the admin sees the analyst's first step, marked as unassigned.
   const needs = page.getByTestId('needs-you');
   await expect(needs).toContainText('Add sources and start the process model');
   await expect(needs).toContainText('Nobody is named for this yet');
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('Welcome back, analyst');
+  await expect(page.getByTestId('work-summary')).toHaveText('1 thing needs you on Vendor invoice processing.');
   await expect(page.getByTestId('my-processes')).toContainText('Nobody named');
   await shot(page, '61-my-work-unassigned');
 
@@ -18,6 +20,20 @@ test('signing in lands on My work; what needs you comes from the process, and na
   await needs.getByRole('button', { name: /Vendor invoice processing/ }).click();
   await expect(page).toHaveURL(/\/process\/[0-9a-f-]{36}\/sources$/);
   await page.getByTestId('process-people').getByLabel('Analyst').selectOption({ label: 'analyst' });
+  // The Processes page shows who is named, what is open and where the process stands: as a card, and as a row of the list.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
+  await expect(page.getByTestId('processes-summary')).toHaveText('1 process, 0 assessed.');
+  const card = page.getByTestId('process-card');
+  await expect(card).toContainText('Analyst: analyst.');
+  await expect(card).toContainText('No sources yet');
+  await expect(card).toContainText('Not started');
+  await expect(card).toContainText('Nothing to assess yet');
+  await shot(page, '63-processes-cards');
+  await page.getByRole('tab', { name: 'List' }).click();
+  const row = page.getByTestId('process-row');
+  await expect(row).toContainText('Analyst: analyst.');
+  await expect(row).toContainText('No sources yet');
+  await expect(row).toContainText('Not started');
   await page.getByRole('link', { name: 'My work' }).click();
   await expect(page.getByTestId('needs-you')).not.toContainText('Nobody is named for this yet');
   await expect(page.getByTestId('my-processes')).toContainText('Analyst');
@@ -25,7 +41,7 @@ test('signing in lands on My work; what needs you comes from the process, and na
   await shot(page, '62-my-work-named');
 
   // Signing in again lands here.
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOut(page);
   await page.getByLabel('Email').fill('analyst@example.test');
   await page.getByLabel('Password').fill('secret-123');
   await page.getByRole('button', { name: 'Sign in' }).click();

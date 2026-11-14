@@ -98,5 +98,12 @@ verify_jwt = false
 [functions.journey-ai]
 verify_jwt = false
 
+[functions.journey-invite]
+verify_jwt = false
+
+# Checks the schedule's secret, or the person's own unsubscribe token.
+[functions.journey-notify]
+verify_jwt = false
+
 [functions.journey-extract]
 verify_jwt = false

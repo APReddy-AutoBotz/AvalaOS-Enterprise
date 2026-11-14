@@ -91,3 +91,14 @@ test('what the sources no longer show is offered for removal, unselected, and ne
   assert.ok(applyChanges(current, extracted2, defaults(cs)).steps.some(s => s.id === g.steps[3].id));
   assert.ok(!applyChanges(current, extracted2, new Set([removals[0].id])).steps.some(s => s.id === g.steps[3].id));
 });
+
+test('a changed access route is described in words, never as raw data', () => {
+  const g = gold();
+  const changed = structuredClone(g);
+  const sys = changed.systems.find(s => s.id === 'sys-tracker')!;
+  sys.access = [...sys.access, { method: 'api', name: 'Graph', operations: [], access: 'confirmed', status: 'stated', sources: [] }];
+  const c = proposeChanges(g, changed).changes.find(x => x.element === 'system' && x.currentId === 'sys-tracker')!;
+  assert.ok(c, 'the tracker change is proposed');
+  assert.doesNotMatch(c.detail, /object Object|\{/);
+  assert.match(c.detail, /access: file: reported, not confirmed → file: reported, not confirmed; API Graph: confirmed available/);
+});

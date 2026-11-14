@@ -4,7 +4,7 @@ import type { Fact, ProcessModel, StepTraits } from '../processModel/types.ts';
 import { emptyModel } from '../processModel/empty.ts';
 import { addStep, setProcessMetric, setStepTrait, setTypicalTrait } from '../processModel/patch.ts';
 import { assessProcess } from './process.ts';
-import { buildPortfolio } from './portfolio.ts';
+import { buildPortfolio, cardTotals, processCard } from './portfolio.ts';
 
 /** A rule-based process of one step with the given yearly volume and minutes per case (0 leaves the value unknown). */
 function proc(name: string, perMonth: number, minutes: number): ProcessModel {
@@ -44,4 +44,31 @@ test('payback shows in the portfolio only where the costs are entered', () => {
     { ...item('No costs', 1000, 6), rate },
   ]);
   assert.deepEqual(p.rows.map(r => [r.name, r.payback]), [['Costed', { best: 6, worst: 6 }], ['No costs', null]]);
+});
+
+test('a process card: the lead approach, the hours, and the steps by how they would be done', () => {
+  const card = processCard(assessProcess(proc('Big', 5000, 6)))!;
+  assert.equal(card.lead, 'rpa');
+  assert.equal(card.steps, 1);
+  assert.deepEqual(card.split, { rules: 1, ai: 0, people: 0 });
+  assert.equal(card.fit, 1);
+  assert.equal(Math.round(card.hours!), 6000);
+  // A step that needs a person's judgment stays with people; the three parts always add up to the steps.
+  let m = proc('Mixed', 5000, 6);
+  m = addStep(m, { step: { name: 'Decide the exception', taskType: 'user' } }).model;
+  m = setStepTrait(m, { stepId: m.steps[1].id, trait: 'judgment', value: true }).model;
+  const mixed = processCard(assessProcess(m))!;
+  assert.equal(mixed.steps, 2);
+  assert.equal(mixed.split.rules + mixed.split.ai + mixed.split.people, 2);
+  assert.equal(mixed.split.people, 1);
+  assert.equal(mixed.fit, 0.5);
+});
+
+test('no card until there is a step to assess; totals count only what is known', () => {
+  assert.equal(processCard(assessProcess(emptyModel('Empty'))), null);
+  const unknown = processCard(assessProcess(proc('Unknown value', 0, 0)))!;
+  assert.equal(unknown.hours, null);
+  const totals = cardTotals([processCard(assessProcess(proc('Big', 5000, 6))), unknown, null]);
+  assert.equal(totals.assessed, 2);
+  assert.equal(Math.round(totals.hours), 6000);
 });

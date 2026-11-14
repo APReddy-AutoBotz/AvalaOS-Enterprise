@@ -4,20 +4,29 @@
 // POST { action: 'run', workspaceId, task, segments[] }     -> runs a registered task with strict output
 // POST { action: 'run', workspaceId, task, image }          -> the same, for tasks that read an image (a data URL)
 // POST { action: 'transcribe', workspaceId, audio }         -> the text of a recorded answer (a data URL)
+// POST { action: 'allowance', workspaceId }                 -> which key the workspace uses and, on the platform
+//                                                              key, the monthly allowance and this month's use
 //
 // The caller's own token decides access (RLS). A caller presenting the project's secret key is a
 // trusted server (it already has full database access): membership is not checked and no user is
 // logged. The service key is otherwise used only to read the monthly budget and write the usage log.
-// The OpenAI key never leaves this function.
+// Provider keys (the platform's OPENAI_API_KEY, or a workspace's own key read from the Vault by the
+// service role, see domain/ai/providers.ts) never leave this function. A workspace with its own key never
+// falls back to the platform key, and only calls on the platform key count against its monthly allowance.
 // Deployed with verify_jwt = false because the function authenticates the caller itself.
 
 import {
-  validateRequest, buildOpenAIRequest, buildImageRequest, parseOpenAIResponse, verifyExcerpts,
+  validateRequest, buildOpenAIRequest, buildImageRequest, verifyExcerpts,
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
+import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
+import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
+import {
+  chooseConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
+  unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
+} from '../../../domain/ai/providers.ts';
 
-const OPENAI_URL = 'https://api.openai.com/v1';
 const TIMEOUT_MS = 120_000;
 const BACKOFF_MS = [1000, 3000];
 
@@ -100,36 +109,54 @@ async function logUsage(row: Record<string, unknown>): Promise<void> {
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-async function openai(path: string, init: RequestInit): Promise<Response> {
+/** The workspace's own AI connection (with its key, read by the service role), or null when it has none. */
+async function workspaceConnection(workspaceId: string) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/workspace_ai_connection`, {
+    method: 'POST', headers: serviceHeaders(), body: JSON.stringify({ target_workspace: workspaceId }),
+  });
+  // 404: the lookup itself does not exist yet (database not migrated), so no workspace can have a key.
+  if (res.status === 404) { await res.body?.cancel(); return null; }
+  if (!res.ok) throw new Error(`AI settings lookup failed (${res.status})`);
+  const found = await res.json();
+  return found ? { ...validateAiChoice(found), apiKey: String(found.apiKey ?? '') } : null;
+}
+
+async function noteWorkspaceAi(workspaceId: string, fields: Record<string, unknown>) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/workspace_ai_settings?workspace_id=eq.${workspaceId}`, {
+    method: 'PATCH', headers: { ...serviceHeaders(), Prefer: 'return=minimal' }, body: JSON.stringify(fields),
+  });
+  if (!res.ok) console.error('workspace_ai_settings update failed', res.status);
+}
+
+async function post(url: string, headers: Record<string, string>, body: BodyInit): Promise<Response> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
   try {
-    return await fetch(`${OPENAI_URL}${path}`, {
-      ...init,
-      signal: ctl.signal,
-      headers: { Authorization: `Bearer ${env('OPENAI_API_KEY')}`, 'Content-Type': 'application/json' },
-    });
+    // Never follow a redirect: a key goes only to the address it was checked for.
+    return await fetch(url, { method: 'POST', signal: ctl.signal, headers, body, redirect: 'error' });
   } finally {
     clearTimeout(timer);
   }
 }
 
-/** One provider call with retries on transient statuses. */
-async function callResponses(body: Record<string, unknown>): Promise<{ parsed: ParsedResponse; attempts: number }> {
+/** One provider call with retries on transient statuses. The body is a Responses API body; providerRequest translates it for Anthropic. */
+async function callResponses(conn: AiConnection, body: Record<string, unknown>): Promise<{ parsed: ParsedResponse; attempts: number }> {
+  const target = providerRequest(conn, body);
+  const payload = JSON.stringify(target.body);
   let attempts = 0;
   for (;;) {
     attempts++;
     let res: Response;
     try {
-      res = await openai('/responses', { method: 'POST', body: JSON.stringify(body) });
+      res = await post(target.url, target.headers, payload);
     } catch (e) {
       if (attempts <= BACKOFF_MS.length) { await sleep(BACKOFF_MS[attempts - 1]); continue; }
       return { parsed: { ok: false, code: 'PROVIDER_ERROR', message: `Provider unreachable: ${(e as Error).name}`, usage: { input: 0, output: 0 } }, attempts };
     }
     if (isRetryableStatus(res.status) && attempts <= BACKOFF_MS.length) { await res.body?.cancel(); await sleep(BACKOFF_MS[attempts - 1]); continue; }
     const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
-    if (!res.ok && !json?.error) json.error = { message: `HTTP ${res.status}` };
-    return { parsed: parseOpenAIResponse(json), attempts };
+    if (!res.ok && !json?.error) json.error = { message: typeof json?.message === 'string' ? json.message.slice(0, 300) : `HTTP ${res.status}` };
+    return { parsed: parseProviderReply(conn, json), attempts };
   }
 }
 
@@ -139,7 +166,6 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
   if (!SUPABASE_URL || !PUBLISHABLE_KEY || !SECRET_KEY) return fail(500, 'NOT_CONFIGURED', 'Supabase environment is incomplete.');
-  if (!env('OPENAI_API_KEY')) return fail(500, 'NOT_CONFIGURED', 'The AI provider key is not set.');
 
   const body = await req.json().catch(() => null);
   const v = validateRequest(body, TASKS);
@@ -159,22 +185,75 @@ Deno.serve(async (req: Request) => {
     userId = user.id;
   }
 
-  const model = env('OPENAI_MODEL') || 'gpt-5.5';
+  // The workspace's own key when it has one (never falling back to the platform's), otherwise the platform key.
+  let conn: AiConnection | null;
+  try {
+    conn = chooseConnection(await workspaceConnection(request.workspaceId), { apiKey: env('OPENAI_API_KEY'), model: env('OPENAI_MODEL') || 'gpt-5.5' });
+  } catch (e) {
+    return fail(500, 'AI_SETTINGS_UNAVAILABLE', (e as Error).message);
+  }
+  if (!conn) return fail(500, 'NOT_CONFIGURED', 'No AI provider key is set.');
+  const model = conn.model;
 
+  // AI use and limits (Settings): no provider call, so no address check. The allowance is a server setting.
+  if (request.action === 'allowance') {
+    const onPlatform = usesPlatformAllowance(conn);
+    let used: number | null = null;
+    if (onPlatform) { try { used = await tokensUsedThisMonth(request.workspaceId); } catch { used = null; } }
+    return reply(200, {
+      ok: true, source: conn.source, provider: conn.provider,
+      budget: onPlatform ? Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000) : null, used,
+    });
+  }
+
+  // An address an admin typed (an OpenAI-compatible endpoint) must resolve only to public addresses, checked
+  // before every call. Where the runtime cannot look the name up, the call is refused rather than made blind.
+  const host = hostToCheck(conn);
+  if (host) {
+    try {
+      const resolve = Deno.resolveDns;
+      if (!resolve) throw new EndpointError('This server cannot check the endpoint\'s address, so it does not call it.');
+      await assertPublicHost(host, (h, t) => resolve(h, t));
+    } catch (e) {
+      if (request.action === 'health' && conn.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_tested_at: new Date().toISOString(), last_test_ok: false });
+      return fail(422, 'ENDPOINT_NOT_ALLOWED', e instanceof EndpointError ? e.message : 'The endpoint\'s address could not be checked.');
+    }
+  }
+  const usage = (row: Record<string, unknown>) => logUsage({ ...row, provider: conn!.provider, key_source: conn!.source });
+
+  // "Test this key": a tiny real request through the same address, key and model the workspace uses.
   if (request.action === 'health') {
-    const res = await openai(`/models/${encodeURIComponent(model)}`, { method: 'GET' });
-    await res.body?.cancel();
-    if (res.status === 401) return fail(502, 'PROVIDER_AUTH', 'The AI provider rejected the key.');
-    if (res.status === 404) return fail(502, 'MODEL_UNAVAILABLE', `Model ${model} is not available to this key.`);
-    if (!res.ok) return fail(502, 'PROVIDER_ERROR', `Provider returned ${res.status}.`);
-    return reply(200, { ok: true, model, tasks: Object.keys(TASKS) });
+    const target = providerRequest(conn, testRequestBody(conn));
+    let status = 0;
+    try {
+      const res = await post(target.url, target.headers, JSON.stringify(target.body));
+      status = res.status;
+      await res.body?.cancel();
+    } catch { status = 0; }
+    const ok = status >= 200 && status < 300;
+    if (conn.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_tested_at: new Date().toISOString(), last_test_ok: ok });
+    if (status === 401 || status === 403) return fail(502, 'PROVIDER_AUTH', 'The AI provider rejected the key.');
+    if (status === 404) return fail(502, 'MODEL_UNAVAILABLE', `The provider has no model or deployment named ${model} for this key.`);
+    if (status === 429) return fail(502, 'PROVIDER_LIMIT', 'The key works, but the provider says its rate limit or quota is used up.');
+    if (!ok) return fail(502, 'PROVIDER_ERROR', status ? `The provider returned ${status}.` : 'The provider could not be reached.');
+    return reply(200, { ok: true, model, provider: conn.provider, source: conn.source, tasks: Object.keys(TASKS) });
   }
 
   const budget = Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000);
-  if (request.action === 'transcribe') {
+  const checkAllowance = async (): Promise<Response | null> => {
+    if (!usesPlatformAllowance(conn!)) return null;
     try {
       if (monthlyBudgetExceeded(await tokensUsedThisMonth(request.workspaceId), budget)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
     } catch (e) { return fail(500, 'BUDGET_UNAVAILABLE', (e as Error).message); }
+    return null;
+  };
+  const used = async () => { if (conn!.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_used_at: new Date().toISOString() }); };
+
+  if (request.action === 'transcribe') {
+    const off = unsupported(conn, 'transcription');
+    if (off) return fail(422, 'NOT_SUPPORTED_BY_PROVIDER', off);
+    const over = await checkAllowance();
+    if (over) return over;
     const [head, data] = request.audio!.split(',');
     const mime = head.slice(5).split(';')[0];
     const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
@@ -182,47 +261,51 @@ Deno.serve(async (req: Request) => {
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: mime }), `answer.${ext}`);
     const tmodel = env('OPENAI_TRANSCRIBE_MODEL') || 'gpt-4o-transcribe';
+    const ttarget = transcriptionTarget(conn);
     form.append('model', tmodel);
     const started = Date.now();
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
-    let ok = false, text = '', code = 'PROVIDER_ERROR', usage = { input: 0, output: 0 };
+    let ok = false, text = '', code = 'PROVIDER_ERROR', tokens = { input: 0, output: 0 };
     try {
-      const res = await fetch(`${OPENAI_URL}/audio/transcriptions`, { method: 'POST', body: form, signal: ctl.signal, headers: { Authorization: `Bearer ${env('OPENAI_API_KEY')}` } });
+      const res = await fetch(ttarget.url, { method: 'POST', body: form, signal: ctl.signal, headers: ttarget.headers, redirect: 'error' });
       const json = await res.json().catch(() => ({}));
       ok = res.ok && typeof json.text === 'string';
       text = ok ? json.text : '';
-      usage = { input: Number(json?.usage?.input_tokens ?? 0) || 0, output: Number(json?.usage?.output_tokens ?? 0) || 0 };
+      tokens = { input: Number(json?.usage?.input_tokens ?? 0) || 0, output: Number(json?.usage?.output_tokens ?? 0) || 0 };
       if (!ok) code = res.status === 401 ? 'PROVIDER_AUTH' : 'PROVIDER_ERROR';
     } catch { ok = false; } finally { clearTimeout(timer); }
-    await logUsage({ workspace_id: request.workspaceId, user_id: userId, task: 'transcribe', model: tmodel, status: ok ? 'ok' : 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : code, duration_ms: Date.now() - started });
+    await usage({ workspace_id: request.workspaceId, user_id: userId, task: 'transcribe', model: tmodel, status: ok ? 'ok' : 'provider_error', input_tokens: tokens.input, output_tokens: tokens.output, attempts: 1, error_code: ok ? null : code, duration_ms: Date.now() - started });
     if (!ok) return fail(502, code, 'The recording could not be transcribed. Try again, or type the answer.');
+    await used();
     return reply(200, { ok: true, text, model: tmodel });
   }
 
-  try {
-    if (monthlyBudgetExceeded(await tokensUsedThisMonth(request.workspaceId), budget)) {
-      return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
-    }
-  } catch (e) {
-    return fail(500, 'BUDGET_UNAVAILABLE', (e as Error).message);
-  }
-
   const task = TASKS[request.task!];
+  const off = unsupported(conn, taskNeed(task));
+  if (off) return fail(422, 'NOT_SUPPORTED_BY_PROVIDER', off);
+  const over = await checkAllowance();
+  if (over) return over;
+
   const segments = request.segments ?? [];
   const openaiBody = task.input === 'image' ? buildImageRequest(task, request.image!, model) : buildOpenAIRequest(task, segments, model);
   const effort = task.reasoningEffort || env('OPENAI_REASONING_EFFORT') || 'low';
-  if (/^(gpt-5|o\d)/.test(model)) openaiBody.reasoning = { effort };
+  if (takesReasoningEffort(model)) openaiBody.reasoning = { effort };
+  // An input the provider cannot take (an image over Anthropic's size limit) is refused before any call.
+  try { providerRequest(conn, openaiBody); } catch (e) {
+    if (e instanceof ProviderRequestError) return fail(e.code === 'TOO_LARGE' ? 413 : 400, e.code, e.message);
+    throw e;
+  }
 
   const started = Date.now();
-  let { parsed, attempts } = await callResponses(openaiBody);
+  let { parsed, attempts } = await callResponses(conn, openaiBody);
   if (!parsed.ok && parsed.code === 'INVALID_OUTPUT') {
-    const again = await callResponses(openaiBody);
+    const again = await callResponses(conn, openaiBody);
     attempts += again.attempts;
     parsed = again.parsed;
   }
 
-  await logUsage({
+  await usage({
     workspace_id: request.workspaceId,
     user_id: userId,
     task: task.id,
@@ -236,6 +319,7 @@ Deno.serve(async (req: Request) => {
   });
 
   if (!parsed.ok) return fail(502, parsed.code, parsed.message);
+  await used();
   if (task.input === 'image') return reply(200, { ok: true, data: parsed.data, dropped: [], usage: parsed.usage, model });
   const { data, dropped } = verifyExcerpts(parsed.data, task.verifyArrays, segments);
   return reply(200, { ok: true, data, dropped, usage: parsed.usage, model });

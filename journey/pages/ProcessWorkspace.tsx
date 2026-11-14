@@ -2,14 +2,19 @@
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
+import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
+import { AskPanel } from '../process/AskPanel.tsx';
 import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
+import { AskAvalaButton, Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
 import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
+import { useImpactContext } from '../process/ImpactNote.tsx';
+import type { AppList } from '../process/ApplicationOffer.tsx';
+import type { Application } from '../../domain/workspace/applications.ts';
 import { SourcesStage } from '../process/SourcesStage.tsx';
 import { AssessmentStage } from '../process/AssessmentStage.tsx';
 import { FlowsStage } from '../process/FlowsStage.tsx';
@@ -31,11 +36,12 @@ interface Loaded {
   model: ProcessModel | null;
 }
 
-export function ProcessWorkspace({ store, nav, processId, stage }: { store: JourneyStore; nav: Nav; processId: string; stage: StageId }) {
+export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: { store: JourneyStore; nav: Nav; processId: string; stage: StageId; onWorkspace?: (workspaceId: string) => void }) {
   const [data, setData] = React.useState<Loaded | null | 'missing'>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [asking, setAsking] = React.useState(false);
   const [me, setMe] = React.useState('');
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.email ?? '')).catch(() => {}); }, [store]);
 
@@ -67,6 +73,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
     }
   }, [store, processId]);
   React.useEffect(() => { load(); }, [load]);
+  // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
+  const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
+  React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -85,6 +94,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   const approved = revisions.find(r => r.state === 'approved');
   const current = working ?? approved;
   const canEdit = workspace !== null && workspace.role !== 'viewer';
+  // Only the stages of the parts the organisation uses; a stage that is off says so (nothing is deleted).
+  const shownStages = stagesFor(workspace?.modules);
+  const stageOff = !shownStages.includes(stage);
   const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
   const hasSteps = Boolean(model && model.steps.length > 0);
 
@@ -105,6 +117,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           {canApprove && working && (
             <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
           )}
+          {model && hasSteps && shownStages.length > 0 && <AskAvalaButton onClick={() => setAsking(true)} aria-haspopup="dialog" />}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
       </div>
@@ -116,7 +129,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           a stage that is still waiting for the process steps is shown quieter, and can still be opened. */}
       <nav aria-label="Stages" className="mt-5">
         <ol className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white px-1.5">
-          {STAGES.map((s, i) => {
+          {STAGES.filter(s => shownStages.includes(s.id)).map((s, i) => {
             const here = s.id === stage;
             const done = s.id === 'sources' ? sources.length > 0 : s.id === 'process' ? hasSteps : false;
             const waiting = !done && !here && s.id !== 'sources' && (s.id === 'process' ? false : !hasSteps);
@@ -145,6 +158,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
 
       <ErrorNote message={error} />
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
+        {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
           ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
@@ -157,25 +171,38 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           : stage === 'work-items' && model && model.steps.length > 0
           ? <WorkItemsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} canEdit={canEdit} onOpenBoard={id => nav.go({ page: 'board', projectId: id })} />
           : stage === 'flows' && model && model.steps.length > 0
-          ? <FlowsStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
+          ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
           : stage === 'process' && model
-          ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
+          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
-        </SourceContext.Provider>
+        </SourceContext.Provider>}
       </section>
 
+      {asking && model && <AskPanel store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} onClose={() => setAsking(false)}
+        onOpen={t => {
+          setAsking(false);
+          if (t.kind === 'item') nav.go({ page: 'board', projectId: t.projectId, itemId: t.itemId });
+          else nav.go({ page: 'process', processId: process.id, stage: t.kind === 'assessment' ? 'assessment' : t.kind === 'requirement' && shownStages.includes('documents') ? 'documents' : 'process' });
+        }} />}
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }
 
-function ProcessStage({ store, processId, model, working, canEdit, me, onSaved }: {
-  store: JourneyStore; processId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
+function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
+  const impact = useImpactContext(store, processId, workspaceId);
+  const [apps, setApps] = React.useState<Application[] | null>(null);
+  React.useEffect(() => { store.listApplications(workspaceId).then(setApps).catch(() => setApps(null)); }, [store, workspaceId]);
+  const appList = React.useMemo<AppList | null>(() => (apps ? {
+    apps,
+    add: async input => { const saved = await store.saveApplication(workspaceId, input); setApps(cur => [...(cur ?? []), saved]); },
+  } : null), [apps, store, workspaceId]);
   return (
-    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} />
+    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
   );
 }
 

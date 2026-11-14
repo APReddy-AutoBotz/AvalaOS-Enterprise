@@ -185,8 +185,7 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await page.keyboard.press('Escape');
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'People' }).click();
+  await page.goto('/settings/people');
   const people = page.getByTestId('people');
   for (const [email, role] of [['karthik.raman@kaveri-ic.example', 'Developer'], ['sunita.rao@kaveri-ic.example', 'Viewer']] as const) {
     await people.getByLabel('Work email').fill(email);
@@ -202,11 +201,18 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await settle(page);
   await snap(page, 'audit');
 
+  await page.getByRole('link', { name: 'Processes' }).first().click();
   await page.getByRole('tab', { name: 'Portfolio' }).click();
   await settle(page);
   await snap(page, 'portfolio');
   await page.getByRole('link', { name: 'My work' }).click();
-  await expect(page.getByRole('heading', { name: 'My work', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
   await settle(page);
   await snap(page, 'my-work');
+
+  // The demo at /demo starts from this state. CI prints it on agent branches; it is committed as
+  // public/demo-data/sample.json when the tour is refreshed (tests/e2e/demo.spec.ts checks the committed one).
+  const sample = await page.evaluate(() => localStorage.getItem('avala.journey.memory.v1'));
+  fs.mkdirSync('test-results/demo', { recursive: true });
+  fs.writeFileSync('test-results/demo/sample.json', JSON.stringify(JSON.parse(sample!)));
 });

@@ -3,11 +3,10 @@ import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
 import { DEFAULT_SETTINGS, SETTING_LIMITS, SettingsError, validateSettings, type AssessmentSettings, type SettingsRecord } from '../../domain/assess/settings.ts';
 import { Button, ErrorNote, messageOf, Spinner, when } from '../ui.tsx';
-import { DocumentBranding } from './DocumentBranding.tsx';
 
 const KEYS = Object.keys(SETTING_LIMITS) as (keyof AssessmentSettings)[];
 
-export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; workspace: Workspace }) {
+export function AssessmentSettingsPanel({ store, workspace }: { store: JourneyStore; workspace: Workspace }) {
   const [record, setRecord] = React.useState<SettingsRecord | null>(null);
   const [draft, setDraft] = React.useState<Record<keyof AssessmentSettings, string> | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -36,7 +35,7 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
 
   return (
     <section className="max-w-3xl space-y-4" data-testid="workspace-settings">
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
         <h2 className="font-display text-lg font-semibold text-slate-900">Assessment settings</h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">The lines every assessment in <span className="font-medium">{workspace.name}</span> is measured against. They change the value in people, the priority and the portfolio, never the recommended approach.</p>
         <p className="mt-2 text-xs text-slate-500" data-testid="settings-state">{record.custom ? `Set for this workspace${record.updatedAt ? `, last changed ${when(record.updatedAt)}` : ''}.` : 'The defaults apply until an admin sets these.'}{isAdmin ? '' : ' Only an admin can change them.'}</p>
@@ -67,7 +66,6 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
           )}
         </form>
       </div>
-      <DocumentBranding store={store} workspace={workspace} />
     </section>
   );
 }

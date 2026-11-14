@@ -12,9 +12,11 @@ declare
   org jsonb; ws uuid; p uuid; r1 uuid; r2 uuid; proj uuid; prop uuid; wi uuid; n int; passed int := 0;
 begin
   -- 1. Sign-up creates a profile.
-  insert into auth.users (id, email, raw_user_meta_data) values
-    (u1, 'u1-' || u1 || '@example.test', '{"full_name":"Test One"}'),
-    (u2, 'u2-' || u2 || '@example.test', '{}');
+  insert into auth.users (id, email, raw_user_meta_data, invited_at, email_confirmed_at) values
+    (u1, 'u1-' || u1 || '@example.test', '{"full_name":"Test One"}', now(), now()),
+    (u2, 'u2-' || u2 || '@example.test', '{}', now(), now());
+  -- Organizations are the platform owner's to create; with no owner listed, as in a new deployment, the test user may.
+  delete from app_private.platform_owners;
   select count(*) into n from public.profiles where id in (u1, u2);
   if n <> 2 then raise exception 'TEST FAIL 1: profiles not created (%)', n; end if;
   if (select display_name from public.profiles where id = u1) <> 'Test One' then raise exception 'TEST FAIL 1b: display name'; end if;

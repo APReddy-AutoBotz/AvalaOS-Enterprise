@@ -6,6 +6,9 @@
 // With reduced motion nothing moves or advances on its own and both screens of a stage are shown.
 import React from 'react';
 import { SiteFooter, focus, useGo } from './site.tsx';
+import { PLANS } from '../../domain/workspace/modules.ts';
+import { AI_PROVIDERS, type AiProvider } from '../../domain/ai/providers.ts';
+import { CONTACT_EMAIL } from '../../domain/site/trust.ts';
 
 const NAVY = '#002C4B';
 const AMBER = '#E69F00';
@@ -197,9 +200,51 @@ const OUTPUTS = [
   ['Four documents', 'Business requirements, process definition, functional requirements and solution design, in your branding, as Word.'],
   ['As-Is and To-Be flows', 'Drawn from the process model. The As-Is flow can be edited, and both download as BPMN for other tools.'],
   ['A reviewed backlog', 'Epics, stories, tasks and spikes with acceptance criteria. You can merge, split and reject before anything reaches the board.'],
-  ['A Delivery board', 'Six status columns, owners, estimates and dates, with export to Jira and Azure DevOps as CSV.'],
+  ['A Delivery board', 'Six status columns, owners, estimates and dates, sprints, labels, comments and each item\'s history. Import from Jira, export to Jira and Azure DevOps as CSV.'],
   ['A portfolio view', 'Every assessed process side by side, by value against ease of implementation.'],
 ];
+
+// What the page says about the parts and the AI comes from the product's own lists, so it cannot claim
+// more than the product does: the four set-ups (domain/workspace/modules.ts) and the providers, with only
+// those the extraction check has been run with called available (domain/ai/providers.ts, `checked`).
+const PART_NOTES: Record<string, string> = {
+  full: 'One record from the first transcript to the last work item.',
+  'assess-documents': 'For teams that build in their own tools.',
+  assess: 'Find out what to automate first, and how.',
+  board: 'A board your team can run on its own. Bring your Jira work over from a CSV export.',
+};
+const providers = (Object.keys(AI_PROVIDERS) as AiProvider[]).map(p => ({ id: p, label: AI_PROVIDERS[p].label, ready: AI_PROVIDERS[p].checked }));
+const AI_POINTS: [string, string][] = [
+  ['Our allowance, or your key', 'Start on the AvalaOS allowance. When your company wants its own provider, an admin connects your key in Settings.'],
+  ['Your key stays on the server', 'Stored encrypted and never sent back to the browser. People see only its last four characters and when it was last used.'],
+  ['No quiet switch-over', 'If your key stops working, the work stops and says why. It never moves to our key without you.'],
+  ['AI only where it reads or drafts', 'AI reads your sources and drafts text a person checks. The scores and the recommendation come from fixed tables, never from AI.'],
+];
+const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why AvalaOS'], ['#start', 'Ways to start'], ['#ai', 'Your AI'], ['/demo', 'Demo']];
+
+/** The page's links: in the bar on a wide screen, behind Menu on a narrow one. */
+function SiteNav({ go }: { go: { href: string; label: string } }) {
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open]);
+  const link = `rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 ${focus} focus-visible:outline-white`;
+  return (
+    <nav aria-label="Main" className="relative flex items-center gap-1 text-sm font-semibold">
+      {NAV.map(([href, label]) => <a key={href} href={href} className={`hidden lg:block ${link}`}>{label}</a>)}
+      <button type="button" aria-expanded={open} aria-controls="site-menu" onClick={() => setOpen(!open)} className={`lg:hidden ${link}`}>Menu</button>
+      {open && (
+        <ul id="site-menu" className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl bg-[#002C4B] p-2 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] ring-1 ring-white/15 lg:hidden">
+          {NAV.map(([href, label]) => <li key={href}><a href={href} onClick={() => setOpen(false)} className={`block ${link}`}>{label}</a></li>)}
+        </ul>
+      )}
+      <a href={go.href} className={`ml-1 rounded-lg border border-white/30 px-4 py-2 text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>{go.label}</a>
+    </nav>
+  );
+}
 
 export default function HomePage() {
   const go = useGo();
@@ -212,11 +257,7 @@ export default function HomePage() {
       <div className="overflow-hidden bg-[#001B2F] text-white">
         <header className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
           <a href="/" className={`rounded ${focus} focus-visible:outline-white`}><img src="/brand/avala-os-logo-light.svg" alt="Avala OS, home" className="h-10 w-auto" /></a>
-          <nav aria-label="Main" className="flex items-center gap-2 text-sm font-semibold">
-            <a href="#tour" className={`hidden rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 sm:block ${focus} focus-visible:outline-white`}>Product tour</a>
-            <a href="#why" className={`hidden rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 sm:block ${focus} focus-visible:outline-white`}>Why AvalaOS</a>
-            <a href={go.href} className={`rounded-lg border border-white/30 px-4 py-2 text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>{go.label}</a>
-          </nav>
+          <SiteNav go={go} />
         </header>
 
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-10 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:pb-28 lg:pt-16">
@@ -226,6 +267,7 @@ export default function HomePage() {
             <p className="mt-2 text-lg leading-8 text-slate-300">AvalaOS scores each step for RPA, API, AI or a person, and shows its reasons.</p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               <a href={go.href} className={cta}>{go.label}</a>
+              <a href="/demo" className={`rounded-lg border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Try the demo</a>
               <a href="#tour" className={`rounded-lg px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Watch the 30-second tour</a>
             </div>
             {!signedIn && <p className="mt-5 text-sm text-slate-300">AvalaOS is by invitation. Ask your workspace admin to invite you.</p>}
@@ -294,6 +336,52 @@ export default function HomePage() {
                 <div key={t} className="grid gap-1 py-5 sm:grid-cols-[14rem_minmax(0,1fr)] sm:gap-8">
                   <dt className="font-display text-xl font-semibold text-[#002C4B]">{t}</dt>
                   <dd className="text-lg text-slate-800">{x}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
+        <section id="start" aria-labelledby="start-h" className="scroll-mt-6">
+          <div className="mx-auto max-w-7xl px-6 py-20">
+            <div className="grid gap-8 lg:grid-cols-2 lg:gap-16">
+              <h2 id="start-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Start with one part, or use it all</h2>
+              <p className="text-lg leading-8 text-slate-700">Use the whole journey, or only the part you need today and add the rest later. Nothing is lost when you switch parts on or off.</p>
+            </div>
+            <ul aria-label="Ways to start" className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {PLANS.map((p, i) => (
+                <li key={p.id} className={`flex flex-col rounded-2xl p-6 ring-1 ring-inset ${i === 0 ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white ring-slate-200'}`}>
+                  <h3 className={`font-display text-xl font-semibold ${i === 0 ? 'text-white' : 'text-[#002C4B]'}`}>{p.label}</h3>
+                  <p className={`mt-2 text-sm font-semibold ${i === 0 ? 'text-[#F2B21E]' : 'text-[#9A6700]'}`}>{PART_NOTES[p.id]}</p>
+                  <p className={`mt-3 text-sm leading-6 ${i === 0 ? 'text-slate-200' : 'text-slate-600'}`}>{p.what}</p>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-8 text-base text-slate-700">AvalaOS is by invitation. <a href={`mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('An invitation to AvalaOS')}`} className={`font-semibold text-[#002C4B] underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-[#002C4B]`}>Ask for an invitation</a> and say which part you want to start with.</p>
+          </div>
+        </section>
+
+        <section id="ai" aria-labelledby="ai-h" className="scroll-mt-6 bg-slate-50">
+          <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-16">
+            <div>
+              <h2 id="ai-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Your AI, your key</h2>
+              <p className="mt-5 text-lg leading-8 text-slate-700">Connect the AI provider your company already trusts, with its own key. Your process documents then go to that provider and nowhere else.</p>
+              <div className="mt-8">
+                <p className="text-sm font-semibold text-slate-900">Available now</p>
+                <ul aria-label="AI providers available now" className="mt-2 flex flex-wrap gap-2">
+                  {providers.filter(p => p.ready).map(p => <li key={p.id} className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-900 ring-1 ring-inset ring-emerald-200">{p.label}</li>)}
+                </ul>
+                <p className="mt-5 text-sm font-semibold text-slate-900">Coming once each passes our extraction check</p>
+                <ul aria-label="AI providers coming" className="mt-2 flex flex-wrap gap-2">
+                  {providers.filter(p => !p.ready).map(p => <li key={p.id} className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300">{p.label}</li>)}
+                </ul>
+              </div>
+            </div>
+            <dl className="grid gap-px self-start overflow-hidden rounded-2xl bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-2">
+              {AI_POINTS.map(([t, x]) => (
+                <div key={t} className="bg-white p-6">
+                  <dt className="font-display text-lg font-semibold text-[#002C4B]">{t}</dt>
+                  <dd className="mt-2 text-base leading-7 text-slate-700">{x}</dd>
                 </div>
               ))}
             </dl>

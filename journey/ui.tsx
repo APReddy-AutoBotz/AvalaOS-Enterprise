@@ -3,7 +3,28 @@ import React from 'react';
 
 export const cx = (...c: (string | false | null | undefined)[]) => c.filter(Boolean).join(' ');
 
-export function Button({ variant = 'primary', className, ...props }: React.ComponentProps<'button'> & { variant?: 'primary' | 'secondary' | 'ghost' }) {
+/** A card on the page: white, rounded, with a soft shadow. Add the padding where it is used. */
+export const CARD = 'rounded-2xl border border-slate-200 bg-white shadow-card';
+
+/**
+ * The head of a main page: where you are, the page's title, one line that sums it up, and beside them
+ * the page's figures or its main action. Light throughout; navy is the colour of the title only.
+ */
+export function PageHead({ eyebrow, title, summary, children }: { eyebrow: string; title: string; summary?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="flex flex-wrap items-end gap-x-12 gap-y-5">
+      <div className="min-w-0 flex-1 basis-96">
+        <p className="text-[13px] font-medium text-slate-500">{eyebrow}</p>
+        <h1 className="mt-1.5 font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{title}</h1>
+        {summary && <p className="mt-2 text-[17px] leading-7 text-slate-700">{summary}</p>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// `accent` is the brand amber with navy text (contrast above 6:1): the one action a page leads with.
+export function Button({ variant = 'primary', className, ...props }: React.ComponentProps<'button'> & { variant?: 'primary' | 'secondary' | 'ghost' | 'accent' }) {
   return (
     <button
       {...props}
@@ -12,9 +33,65 @@ export function Button({ variant = 'primary', className, ...props }: React.Compo
         variant === 'primary' && 'bg-[#002C4B] text-white hover:bg-[#073B60]',
         variant === 'secondary' && 'border border-slate-300 bg-white text-slate-800 hover:bg-slate-50',
         variant === 'ghost' && 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+        variant === 'accent' && 'bg-[#E69F00] text-[#002C4B] shadow-sm hover:bg-[#F2B233]',
         className,
       )}
     />
+  );
+}
+
+/** The Ask Avala mark: two sparks, drawn in the current colour. */
+export function AvalaSpark({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M8 2.5c.4 2.9 1.6 4.9 5 5.5-3.4.6-4.6 2.6-5 5.5-.4-2.9-1.6-4.9-5-5.5 3.4-.6 4.6-2.6 5-5.5Z" />
+      <path d="M15 11.5c.2 1.6.9 2.6 2.5 3-1.6.4-2.3 1.4-2.5 3-.2-1.6-.9-2.6-2.5-3 1.6-.4 2.3-1.4 2.5-3Z" />
+    </svg>
+  );
+}
+
+/** The Ask Avala button: the brand amber with navy text (contrast above 6:1), so it stands apart from the page's actions. */
+export function AskAvalaButton(props: React.ComponentProps<'button'>) {
+  return (
+    <button type="button" {...props}
+      className="inline-flex items-center gap-2 rounded-lg bg-[#E69F00] px-3.5 py-2 text-sm font-semibold text-[#002C4B] shadow-sm transition-colors hover:bg-[#F2B233] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#002C4B]">
+      <AvalaSpark />
+      Ask Avala
+    </button>
+  );
+}
+
+/**
+ * A button that opens a small panel under it (the workspace switcher, the account menu). Closes on
+ * Escape, on a click outside, and when a choice calls `close`. A disclosure, not an ARIA menu: what is
+ * inside is ordinary buttons, links and fields, reached with Tab.
+ */
+export function Menu({ label, button, buttonClassName, children, testId, onClose }: {
+  label: string; button: React.ReactNode; buttonClassName?: string; testId?: string; onClose?: () => void;
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const box = React.useRef<HTMLDivElement>(null);
+  const trigger = React.useRef<HTMLButtonElement>(null);
+  const close = React.useCallback(() => { setOpen(false); onClose?.(); }, [onClose]);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { close(); trigger.current?.focus(); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open, close]);
+  return (
+    <div ref={box} className="relative">
+      <button ref={trigger} type="button" aria-label={label} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}
+        className={cx('focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#002C4B]', buttonClassName)}>{button}</button>
+      {open && (
+        <div data-testid={testId} className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-lg">
+          {children(close)}
+        </div>
+      )}
+    </div>
   );
 }
 

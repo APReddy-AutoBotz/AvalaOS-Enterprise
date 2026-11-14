@@ -1,6 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { INTERNAL, primaryText, shot, signInAndCreateProcess } from './helpers.ts';
+import { INTERNAL, openSettings, primaryText, shot, signInAndCreateProcess } from './helpers.ts';
 
 const saved = (page: Page) => expect(page.getByTestId('save-state').first()).not.toHaveText('Saving…');
 const stage = (page: Page, name: string) => page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name }).click();
@@ -237,7 +237,7 @@ test('a process known only as a whole is assessed as one step from answers given
   await shot(page, '36-portfolio');
 
   // An admin lowers the value line: up to 192 hours could now be on either side of it; the approach is unchanged.
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await openSettings(page, 'Assessment');
   await expect(page.getByTestId('settings-state')).toContainText('defaults apply');
   await page.getByLabel('High value starts at').fill('100');
   await page.getByLabel('Hours a full-time person works in a year').fill('100');
@@ -248,12 +248,12 @@ test('a process known only as a whole is assessed as one step from answers given
   await page.getByRole('button', { name: 'Save settings' }).click();
   await expect(page.getByRole('status')).toContainText('Saved');
   await shot(page, '37-settings');
+  await page.reload();
+  await expect(page.getByLabel('High value starts at')).toHaveValue('100');
+  await page.getByRole('link', { name: 'Processes' }).first().click();
   await page.getByRole('tab', { name: 'Portfolio' }).click();
   await expect(prow).toContainText('Rule-based RPA');
   await expect(prow).toContainText('Quick win or Fill-in');
-  await page.reload();
-  await page.getByRole('tab', { name: 'Settings' }).click();
-  await expect(page.getByLabel('High value starts at')).toHaveValue('100');
 });
 
 test('the documents follow the model: PDD with one row per step, BRD, open items and Markdown download', async ({ page }) => {
@@ -332,8 +332,7 @@ test('closing the gaps: answers in a guided session update the model and the doc
 test('an admin sets how documents look: organisation, colour and logo show on the document and the Word download still works', async ({ page }) => {
   await buildProcess(page);
   const processUrl = page.url();
-  await page.getByRole('link', { name: 'Processes' }).first().click();
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await openSettings(page, 'Documents');
   const brand = page.getByTestId('document-branding');
   await brand.getByLabel('Organisation name').fill('Northwind Shared Services');
   await brand.getByLabel('Accent colour hex').fill('#7A1F5C');
@@ -363,8 +362,7 @@ test('an admin sets how documents look: organisation, colour and logo show on th
 test('an admin uses the company\'s section structure: renamed, hidden and own sections show in the PDD, renumbered', async ({ page }) => {
   await buildProcess(page);
   const processUrl = page.url();
-  await page.getByRole('link', { name: 'Processes' }).first().click();
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await openSettings(page, 'Documents');
   const box = page.getByTestId('document-sections');
   await box.getByLabel('Title of section 2.4').fill('Current procedure');
   await box.getByLabel('Hide section 1.4').check();

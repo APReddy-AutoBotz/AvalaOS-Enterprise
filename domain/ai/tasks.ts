@@ -6,6 +6,7 @@ import { stepTraits } from '../assess/traits.ts';
 import { profileFacts } from '../assess/profileFacts.ts';
 import { answerFromNotes } from '../questions/notes.ts';
 import { draftNarrative } from '../docs/narrative.ts';
+import { askProcess } from '../assistant/ask.ts';
 
 const str = { type: 'string' } as const;
 
@@ -52,4 +53,5 @@ export const TASKS: Record<string, TaskDefinition> = {
   [profileFacts.id]: profileFacts,
   [answerFromNotes.id]: answerFromNotes,
   [draftNarrative.id]: draftNarrative,
+  [askProcess.id]: askProcess,
 };

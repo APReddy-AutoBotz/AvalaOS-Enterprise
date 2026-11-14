@@ -13,7 +13,13 @@ test('journey paths parse and format both ways; other paths belong to the rest o
   assert.deepEqual(parseJourneyPath(`/process/${ID}`), { page: 'process', processId: ID, stage: 'sources' });
   assert.deepEqual(parseJourneyPath('/processes/'), { page: 'processes' });
   assert.deepEqual(parseJourneyPath('/signin'), { page: 'signin' });
+  assert.deepEqual(parseJourneyPath('/reset-password'), { page: 'reset-password' });
+  assert.equal(journeyPath({ page: 'reset-password' }), '/reset-password');
   assert.deepEqual(parseJourneyPath('/work/'), { page: 'work' });
+  assert.deepEqual(parseJourneyPath('/settings'), { page: 'settings', section: 'people' });
+  assert.deepEqual(parseJourneyPath('/settings/ai/'), { page: 'settings', section: 'ai' });
+  assert.equal(journeyPath({ page: 'settings', section: 'parts' }), '/settings/parts');
+  assert.equal(parseJourneyPath('/settings/billing'), null);
   assert.equal(journeyPath({ page: 'work' }), '/work');
   for (const other of ['/', '/catalog', `/process/${ID}/v2`, '/process/not-a-uuid/sources', `/process/${ID}/sources/extra`, '/processes/x']) {
     assert.equal(parseJourneyPath(other), null, other);

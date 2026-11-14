@@ -1,4 +1,5 @@
 import type { AuditEntry } from '../../domain/people/roles.ts';
+import { monthStart } from '../../domain/ai/usage.ts';
 import { documentSettingsFrom, validateBranding } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
 // The real store: Supabase auth, row level security for reads, and the model RPCs for writes.
@@ -11,19 +12,34 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { WorkItem } from '../../domain/workitems/board.ts';
 
-const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at';
+const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at, sort_order, labels, sprint_id';
 const itemFrom = (r: any): WorkItem => ({
   id: r.id, projectId: r.project_id, parentId: r.parent_id, type: r.item_type, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [],
   status: r.status, priority: r.priority, ownerId: r.owner_id, estimateHours: r.estimate_hours === null ? null : Number(r.estimate_hours), startDate: r.start_date, dueDate: r.due_date,
   processId: r.process_id, stepIds: r.step_ids ?? [], requirements: r.details?.requirements ?? [], snapshot: r.details?.snapshot ?? {}, updatedAt: r.updated_at,
+  sortOrder: Number(r.sort_order ?? 0), labels: r.labels ?? [], sprintId: r.sprint_id ?? null,
 });
+const SPRINT_COLUMNS = 'id, project_id, name, goal, starts_on, ends_on, state, started_at, closed_at';
+const sprintFrom = (r: any): Sprint => ({ id: r.id, projectId: r.project_id, name: r.name, goal: r.goal, startsOn: r.starts_on, endsOn: r.ends_on, state: r.state, startedAt: r.started_at, closedAt: r.closed_at });
+const COMMENT_COLUMNS = 'id, work_item_id, author_id, body, created_at, edited_at';
+const commentFrom = (r: any): ItemComment => ({ id: r.id, workItemId: r.work_item_id, authorId: r.author_id, body: r.body, createdAt: r.created_at, editedAt: r.edited_at });
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
 import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
+import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
+import type { Sprint } from '../../domain/workitems/sprints.ts';
+import type { Module } from '../../domain/workspace/modules.ts';
+import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
+const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
+const applicationFrom = (r: Record<string, any>): Application => ({
+  id: r.id, name: r.name, aliases: r.aliases ?? [], kind: r.kind, access: Array.isArray(r.access) ? r.access : [],
+  uiAllowed: r.ui_allowed ?? null, remote: r.remote ?? null, notes: r.notes ?? '', updatedAt: r.updated_at, updatedBy: r.updated_by ?? null,
+});
+
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
   const code = error?.code ?? '';
   const status = /^PT\d{3}$/.test(code) ? Number(code.slice(2)) : code === '42501' ? 403 : error?.status ?? fallback;
@@ -79,6 +95,15 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       return { needsConfirmation: !data.session };
     },
     async signOut() { await db.auth.signOut(); },
+    async requestPasswordReset(email) {
+      const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
+      // Only a rate limit is worth telling the person; anything else would say whether the address has an account.
+      if (error && error.status === 429) fail({ message: 'Too many requests. Wait a few minutes and try again.', status: 429 });
+    },
+    async setNewPassword(password) {
+      const { error } = await db.auth.updateUser({ password });
+      if (error) fail({ message: error.message, status: error.status ?? 400 });
+    },
     async signInProviders() {
       try {
         const res = await fetch(`${url}/auth/v1/settings`, { headers: { apikey: publishableKey } });
@@ -97,13 +122,29 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (!auth.user) throw new StoreError(401, 'Sign in again.');
       const { data, error } = await db
         .from('workspace_members')
-        .select('role, job, can_approve, workspaces(id, name, organizations(name))')
+        .select('role, job, can_approve, workspaces(id, name, organization_id, organizations(name, modules, created_by))')
         .eq('user_id', auth.user.id);
       if (error) fail(error);
       return (data ?? []).flatMap((m: any): Workspace[] => (m.workspaces ? [{
         id: m.workspaces.id, name: m.workspaces.name, organizationName: m.workspaces.organizations?.name ?? '',
         role: m.role, canApprove: Boolean(m.can_approve), job: m.job ?? null,
+        organizationId: m.workspaces.organization_id, canAddWorkspace: m.workspaces.organizations?.created_by === auth.user!.id, ...(m.workspaces.organizations?.modules ? { modules: m.workspaces.organizations.modules } : {}),
       }] : [])).sort((a, b) => a.organizationName.localeCompare(b.organizationName) || a.name.localeCompare(b.name));
+    },
+    async createWorkspace(organizationId, name) {
+      const { data, error } = await db.rpc('create_workspace', { target_organization: organizationId, workspace_name: name });
+      if (error) fail(error);
+      return data as string;
+    },
+    async setOrganizationModules(organizationId, modules) {
+      const { data, error } = await db.rpc('set_organization_modules', { target_organization: organizationId, org_modules: modules });
+      if (error) fail(error);
+      return data as Module[];
+    },
+    async canCreateOrganization() {
+      const { data, error } = await db.rpc('can_create_organization');
+      if (error) fail(error);
+      return data === true;
     },
     async createOrganization(organizationName, workspaceName) {
       const { data, error } = await db.rpc('create_organization', { organization_name: organizationName, workspace_name: workspaceName });
@@ -303,6 +344,64 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { error } = await db.rpc('remove_member', { target_workspace: workspaceId, target_user: userId });
       if (error) fail(error);
     },
+    async sendInviteEmail(workspaceId, email) {
+      await call('journey-invite', { workspaceId, email });
+    },
+    async getWorkspaceAi(workspaceId) {
+      const { data, error } = await db.from('workspace_ai_settings')
+        .select('provider, model, endpoint, key_hint, updated_at, last_used_at, last_tested_at, last_test_ok').eq('workspace_id', workspaceId).maybeSingle();
+      if (error) fail(error);
+      return data ? {
+        provider: data.provider, model: data.model, endpoint: data.endpoint ?? null, keyHint: data.key_hint, updatedAt: data.updated_at,
+        lastUsedAt: data.last_used_at ?? null, lastTestedAt: data.last_tested_at ?? null, lastTestOk: data.last_test_ok ?? null,
+      } : null;
+    },
+    async saveWorkspaceAi(workspaceId, input) {
+      const { error } = await db.rpc('set_workspace_ai', { target_workspace: workspaceId, ai_provider: input.provider, ai_model: input.model, ai_endpoint: input.endpoint, api_key: input.apiKey ?? null });
+      if (error) fail(error);
+    },
+    async clearWorkspaceAi(workspaceId) {
+      const { error } = await db.rpc('clear_workspace_ai', { target_workspace: workspaceId });
+      if (error) fail(error);
+    },
+    async testWorkspaceAi(workspaceId) {
+      const r = await call('journey-ai', { action: 'health', workspaceId });
+      return { model: String(r?.model ?? ''), source: r?.source === 'workspace' ? 'workspace' : 'platform' };
+    },
+    async getNeedsEmail() {
+      const { data: auth } = await db.auth.getUser();
+      if (!auth.user) return null;
+      const { data, error } = await db.from('notification_settings').select('needs_email').eq('user_id', auth.user.id).maybeSingle();
+      if (error) return null; // not available (yet): the page leaves the choice out
+      return data ? Boolean(data.needs_email) : true; // no row yet: on, as for everyone
+    },
+    async setNeedsEmail(on) {
+      const { error } = await db.rpc('set_needs_email', { email_on: on });
+      if (error) fail(error);
+    },
+    async getAiUsage(workspaceId) {
+      const MAX = 10_000;
+      const from = monthStart(new Date()).toISOString();
+      const [{ data, error }, allowance] = await Promise.all([
+        db.from('ai_usage').select('created_at, task, user_id, input_tokens, output_tokens, status, key_source')
+          .eq('workspace_id', workspaceId).gte('created_at', from).order('created_at', { ascending: false }).limit(MAX),
+        call('journey-ai', { action: 'allowance', workspaceId }).catch(() => null),
+      ]);
+      if (error) fail(error);
+      const rows = (data ?? []).map((r: any) => ({
+        createdAt: r.created_at, task: r.task, userId: r.user_id ?? null, inputTokens: Number(r.input_tokens) || 0,
+        outputTokens: Number(r.output_tokens) || 0, status: r.status, keySource: r.key_source === 'workspace' ? 'workspace' as const : 'platform' as const,
+      }));
+      return {
+        rows,
+        partial: rows.length >= MAX,
+        allowance: allowance?.ok ? {
+          source: allowance.source === 'workspace' ? 'workspace' : 'platform',
+          budget: typeof allowance.budget === 'number' ? allowance.budget : null,
+          used: typeof allowance.used === 'number' ? allowance.used : null,
+        } : null,
+      };
+    },
     async cancelInvite(workspaceId, email) {
       const { error } = await db.rpc('cancel_invite', { target_workspace: workspaceId, invite_email: email });
       if (error) fail(error);
@@ -322,9 +421,134 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (e.estimateHours !== undefined) row.estimate_hours = e.estimateHours;
       if (e.startDate !== undefined) row.start_date = e.startDate;
       if (e.dueDate !== undefined) row.due_date = e.dueDate;
+      if (e.parentId !== undefined) row.parent_id = e.parentId;
+      if (e.labels !== undefined) row.labels = e.labels;
+      if (e.sprintId !== undefined) row.sprint_id = e.sprintId;
       const { data, error } = await db.from('delivery_work_items').update(row).eq('id', id).select(ITEM_COLUMNS).single();
       if (error) fail(error);
       return itemFrom(data);
+    },
+    async createWorkItem(projectId, n) {
+      const { data: project, error: e1 } = await db.from('delivery_projects').select('workspace_id').eq('id', projectId).single();
+      if (e1) fail(e1);
+      const { data, error } = await db.from('delivery_work_items').insert({
+        workspace_id: project.workspace_id, project_id: projectId, item_type: n.type, title: n.title, description: n.description,
+        parent_id: n.parentId, owner_id: n.ownerId, priority: n.priority, estimate_hours: n.estimateHours, start_date: n.startDate,
+        due_date: n.dueDate, status: n.status, sort_order: n.sortOrder, labels: n.labels,
+      }).select(ITEM_COLUMNS).single();
+      if (error) fail(error);
+      return itemFrom(data);
+    },
+    async deleteWorkItem(id) {
+      const { data, error } = await db.from('delivery_work_items').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'This item could not be deleted. Deleting needs the editor or admin role.');
+    },
+    async listComments(workItemId) {
+      const { data, error } = await db.from('delivery_work_item_comments').select(COMMENT_COLUMNS).eq('work_item_id', workItemId).order('created_at');
+      if (error) fail(error);
+      return (data ?? []).map(commentFrom);
+    },
+    async addComment(workItemId, body) {
+      const { data: item, error: e1 } = await db.from('delivery_work_items').select('workspace_id').eq('id', workItemId).single();
+      if (e1) fail(e1);
+      const { data, error } = await db.from('delivery_work_item_comments').insert({ workspace_id: item.workspace_id, work_item_id: workItemId, body }).select(COMMENT_COLUMNS).single();
+      if (error) fail(error);
+      return commentFrom(data);
+    },
+    async editComment(id, body) {
+      const { data, error } = await db.from('delivery_work_item_comments').update({ body }).eq('id', id).select(COMMENT_COLUMNS);
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment can edit it.');
+      return commentFrom(data[0]);
+    },
+    async deleteComment(id) {
+      const { data, error } = await db.from('delivery_work_item_comments').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+    },
+    async listApplications(workspaceId) {
+      const { data, error } = await db.from('workspace_applications').select(APP_COLUMNS).eq('workspace_id', workspaceId).order('name');
+      if (error) fail(error);
+      return (data ?? []).map(applicationFrom);
+    },
+    async saveApplication(workspaceId, input, id) {
+      const { data: rows, error: e0 } = await db.from('workspace_applications').select('id, name, aliases').eq('workspace_id', workspaceId);
+      if (e0) fail(e0);
+      const v = validateApplication(input, (rows ?? []).map(r => ({ id: r.id, name: r.name, aliases: r.aliases ?? [] })), id);
+      const row = { name: v.name, aliases: v.aliases, kind: v.kind, access: v.access, ui_allowed: v.uiAllowed, remote: v.remote, notes: v.notes };
+      const q = id ? db.from('workspace_applications').update(row).eq('id', id) : db.from('workspace_applications').insert({ workspace_id: workspaceId, ...row });
+      const { data, error } = await q.select(APP_COLUMNS);
+      if (error) {
+        if ((error as { code?: string }).code === '23505') throw new StoreError(409, `"${v.name}" is already on the list.`);
+        fail(error);
+      }
+      if (!data?.length) throw new StoreError(403, 'Changing the applications list needs the editor or admin role.');
+      return applicationFrom(data[0]);
+    },
+    async deleteApplication(id) {
+      const { data, error } = await db.from('workspace_applications').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Changing the applications list needs the editor or admin role.');
+    },
+    async listSprints(projectId) {
+      const { data, error } = await db.from('delivery_sprints').select(SPRINT_COLUMNS).eq('project_id', projectId).order('created_at');
+      if (error) fail(error);
+      return (data ?? []).map(sprintFrom);
+    },
+    async createSprint(projectId, v) {
+      const { data: project, error: e1 } = await db.from('delivery_projects').select('workspace_id').eq('id', projectId).single();
+      if (e1) fail(e1);
+      const { data, error } = await db.from('delivery_sprints').insert({ workspace_id: project.workspace_id, project_id: projectId, name: v.name, goal: v.goal, starts_on: v.startsOn, ends_on: v.endsOn }).select(SPRINT_COLUMNS).single();
+      if (error) fail(error);
+      return sprintFrom(data);
+    },
+    async updateSprint(id, v) {
+      const row: Record<string, unknown> = {};
+      if (v.name !== undefined) row.name = v.name;
+      if (v.goal !== undefined) row.goal = v.goal;
+      if (v.startsOn !== undefined) row.starts_on = v.startsOn;
+      if (v.endsOn !== undefined) row.ends_on = v.endsOn;
+      if (v.state !== undefined) row.state = v.state;
+      const { data, error } = await db.from('delivery_sprints').update(row).eq('id', id).select(SPRINT_COLUMNS);
+      if (error) {
+        if ((error as { code?: string }).code === '23505') throw new StoreError(409, 'Another sprint is already running on this board. Complete it first.');
+        fail(error);
+      }
+      if (!data?.length) throw new StoreError(403, 'Changing a sprint needs the editor or admin role.');
+      return sprintFrom(data[0]);
+    },
+    async closeSprint(id, moveTo) {
+      const { data, error } = await db.rpc('close_sprint', { target_sprint: id, move_to: moveTo });
+      if (error) fail(error);
+      return Number(data ?? 0);
+    },
+    async deleteSprint(id) {
+      const { data, error } = await db.from('delivery_sprints').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Deleting a sprint needs the editor or admin role.');
+    },
+    async importWorkItems(projectId, planned) {
+      if (!planned.length) return 0;
+      const { data: project, error: e1 } = await db.from('delivery_projects').select('workspace_id').eq('id', projectId).single();
+      if (e1) fail(e1);
+      const { data: last, error: e2 } = await db.from('delivery_work_items').select('sort_order').eq('project_id', projectId).order('sort_order', { ascending: false }).limit(1);
+      if (e2) fail(e2);
+      const base = Number(last?.[0]?.sort_order ?? 0);
+      const ids = planned.map(() => crypto.randomUUID());
+      // One statement: the parent links are checked at its end, so the import lands whole or not at all.
+      const { error } = await db.from('delivery_work_items').insert(planned.map((p, n) => ({
+        id: ids[n], workspace_id: project.workspace_id, project_id: projectId, parent_id: p.parent === null ? null : ids[p.parent], item_type: p.type,
+        title: p.title, description: p.description, status: p.status, priority: p.priority, owner_id: p.ownerId, estimate_hours: p.estimateHours,
+        start_date: p.startDate, due_date: p.dueDate, labels: p.labels, sort_order: base + n + 1,
+      })));
+      if (error) fail(error);
+      return planned.length;
+    },
+    async listItemHistory(workItemId) {
+      const { data, error } = await db.from('delivery_work_item_events').select('id, work_item_id, actor_id, kind, field, old_value, new_value, created_at').eq('work_item_id', workItemId).order('id', { ascending: false }).limit(200);
+      if (error) fail(error);
+      return (data ?? []).map((r: any): ItemEvent => ({ id: String(r.id), workItemId: r.work_item_id, actorId: r.actor_id, kind: r.kind, field: r.field, oldValue: r.old_value, newValue: r.new_value, createdAt: r.created_at }));
     },
     async listProposals(processId) {
       const { data, error } = await db.from('work_item_proposals').select('derivation_key, item_type, parent_key, title, description, acceptance_criteria, step_ids, requirement_codes, state, rejected_reason, user_edited, sort_order, confirmed_work_item_id, base_hash').eq('process_id', processId).not('derivation_key', 'is', null).order('sort_order');

@@ -62,3 +62,36 @@ export function buildPortfolio(items: { id: string; name: string; assessment: Pr
   if (valued.length >= 2) for (const r of valued) { if (sum / totalHours >= PRIORITY.pareto) break; ids.push(r.id); sum += r.hours!; }
   return { rows, assessed: rows.length, totalHours, pareto: { ids, share: totalHours ? sum / totalHours : 0, of: valued.length } };
 }
+
+/**
+ * What a process's card shows on My work and the Processes page: the lead approach, the hours and how
+ * the steps people do today would be done. Null until the process has a step to assess.
+ */
+export interface ProcessCard {
+  lead: Approach | null;
+  /** Share of steps recommended for automation. */
+  fit: number;
+  /** Upper end of the hours a year automation could take; null when not known. */
+  hours: number | null;
+  exact: boolean;
+  /** Steps people do today. */
+  steps: number;
+  /** Those steps by how they would be done: rules (RPA or an API), AI (assisted or agentic), or kept with people. */
+  split: { rules: number; ai: number; people: number };
+}
+
+export function processCard(a: ProcessAssessment): ProcessCard | null {
+  if (a.assessed === 0) return null;
+  const v = a.priority.value, c = a.counts;
+  return {
+    lead: a.lead, fit: a.automationFit, steps: a.assessed,
+    hours: v.computable ? v.value!.hours[1] : null, exact: v.computable ? v.value!.exact : false,
+    split: { rules: c.rpa + c.api, ai: c.ai_assist + c.agent, people: c.human },
+  };
+}
+
+/** Across several cards: how many processes are assessed, and the hours a year where the value is known (upper ends). */
+export function cardTotals(cards: (ProcessCard | null)[]): { assessed: number; hours: number } {
+  const have = cards.filter((c): c is ProcessCard => c !== null);
+  return { assessed: have.length, hours: have.reduce((t, c) => t + (c.hours ?? 0), 0) };
+}

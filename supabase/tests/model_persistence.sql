@@ -20,9 +20,11 @@ declare
   parity_expected jsonb := '{"schemaVersion": 1, "meta": {"name": "Parity check", "objective": {"value": null, "status": "unknown", "sources": []}, "owner": {"value": "AP manager", "status": "user-confirmed", "sources": []}, "scopeIn": [], "scopeOut": [], "metrics": []}, "roles": [], "systems": [], "events": [], "steps": [{"id": "s-2", "name": "Check vendor ~ GSTIN / bank", "description": "", "roleIds": [], "systemIds": [], "taskType": "user", "inputs": [], "outputs": [], "ruleIds": [], "exceptionIds": [], "status": "user-confirmed", "sources": []}, {"id": "s-3", "name": "Post invoice", "description": "", "roleIds": [], "systemIds": [], "taskType": "user", "inputs": [], "outputs": [], "ruleIds": [], "exceptionIds": [], "status": "user-confirmed", "sources": []}, {"id": "s-4", "name": "Check duplicate", "description": "", "roleIds": [], "systemIds": [], "taskType": "business_rule", "inputs": [], "outputs": [], "ruleIds": [], "exceptionIds": [], "status": "user-confirmed", "sources": []}], "gateways": [], "flows": [{"id": "f-2", "from": "s-3", "to": "s-4"}], "rules": [], "exceptions": [], "dataObjects": [], "painPoints": [], "controls": [], "risks": [], "openQuestions": [], "conflicts": []}'::jsonb;
 
 begin
-  insert into auth.users (id, email) values
-    (admin_u, 'a-' || admin_u || '@example.test'), (editor_u, 'e-' || editor_u || '@example.test'),
-    (viewer_u, 'v-' || viewer_u || '@example.test'), (outsider_u, 'o-' || outsider_u || '@example.test');
+  insert into auth.users (id, email, invited_at, email_confirmed_at) values
+    (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()),
+    (viewer_u, 'v-' || viewer_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
+  -- Organizations are the platform owner's to create; with no owner listed, as in a new deployment, the test user may.
+  delete from app_private.platform_owners;
 
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';

@@ -11,8 +11,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        display: ['Outfit', 'sans-serif'],
+        // The names the installed fonts go by (@fontsource-variable, loaded in index.tsx). Under any other
+        // name the browser does not find them and falls back to a system font.
+        sans: ['"Inter Variable"', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
+        display: ['"Outfit Variable"', '"Inter Variable"', 'ui-sans-serif', 'system-ui', 'sans-serif'],
       },
       colors: {
         primary: {
@@ -72,6 +74,8 @@ export default {
         elev1: '0 1px 2px rgba(0,0,0,0.06)',
         elev2: '0 10px 24px rgba(0,0,0,.08)',
         elev3: '0 14px 34px rgba(0,0,0,0.12)',
+        card: '0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.05)',
+        attention: '0 1px 2px rgba(15,23,42,0.04), 0 10px 28px rgba(230,159,0,0.14)',
       },
       blur: {
         0: '0',

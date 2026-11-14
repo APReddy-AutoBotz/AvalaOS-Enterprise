@@ -1,0 +1,58 @@
+-- Bring your own key, second provider: Anthropic (Claude). The key goes only to api.anthropic.com
+-- (domain/ai/providers.ts, domain/ai/anthropic.ts); like OpenAI, it takes a model id and no endpoint.
+-- The settings screen offers it only to the platform owner until the extraction eval has been run with it.
+
+alter table public.workspace_ai_settings drop constraint workspace_ai_settings_provider_check;
+alter table public.workspace_ai_settings add constraint workspace_ai_settings_provider_check
+  check (provider in ('openai', 'azure_openai', 'anthropic'));
+
+create or replace function public.set_workspace_ai(target_workspace uuid, ai_provider text, ai_model text, ai_endpoint text default null, api_key text default null)
+returns jsonb
+language plpgsql security definer set search_path = '' as $$
+declare
+  model text := trim(coalesce(ai_model, ''));
+  endpoint text := nullif(lower(trim(coalesce(ai_endpoint, ''))), '');
+  new_key text := nullif(trim(coalesce(api_key, '')), '');
+  current public.workspace_ai_settings;
+  key_secret uuid;
+  saved public.workspace_ai_settings;
+begin
+  if not app_private.is_workspace_admin(target_workspace) then
+    raise exception 'Only an admin can change the AI provider.' using errcode = '42501';
+  end if;
+  if ai_provider is null or ai_provider not in ('openai', 'azure_openai', 'anthropic') then
+    raise exception 'Choose a provider.' using errcode = '22023';
+  end if;
+  if ai_provider <> 'azure_openai' then endpoint := null; end if;
+  if ai_provider = 'azure_openai' and endpoint is null then
+    raise exception 'Enter the endpoint of your Azure OpenAI resource.' using errcode = '22023';
+  end if;
+  if new_key is not null and (length(new_key) not between 20 and 400 or new_key ~ '\s') then
+    raise exception 'Paste the whole API key.' using errcode = '22023';
+  end if;
+
+  select * into current from public.workspace_ai_settings where workspace_id = target_workspace;
+  select secret_id into key_secret from app_private.workspace_ai_keys where workspace_id = target_workspace;
+  if new_key is null and (key_secret is null or current.provider is distinct from ai_provider) then
+    raise exception 'Paste the API key for this provider.' using errcode = '22023';
+  end if;
+
+  if new_key is not null then
+    if key_secret is null then
+      key_secret := vault.create_secret(new_key, 'workspace-ai-' || target_workspace, 'Avala OS: AI provider key of a workspace', null);
+      insert into app_private.workspace_ai_keys (workspace_id, secret_id) values (target_workspace, key_secret);
+    else
+      perform vault.update_secret(key_secret, new_key, null, null, null);
+    end if;
+  end if;
+
+  insert into public.workspace_ai_settings (workspace_id, provider, model, endpoint, key_hint, updated_by, updated_at)
+  values (target_workspace, ai_provider, model, endpoint, coalesce(right(new_key, 4), current.key_hint), (select auth.uid()), now())
+  on conflict (workspace_id) do update set
+    provider = excluded.provider, model = excluded.model, endpoint = excluded.endpoint, key_hint = excluded.key_hint,
+    updated_by = excluded.updated_by, updated_at = excluded.updated_at,
+    last_tested_at = null, last_test_ok = null
+  returning * into saved;
+
+  return jsonb_build_object('provider', saved.provider, 'model', saved.model, 'endpoint', saved.endpoint, 'keyHint', saved.key_hint, 'updatedAt', saved.updated_at);
+end $$;

@@ -49,15 +49,22 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
     run(async () => {
       const r = await store.invitePerson(workspace.id, addr, choice(role));
       setEmail('');
-      setNotice(r.state === 'member' ? `${addr} is in the workspace as ${role.label}.` : `Invitation saved for ${addr}. They get the ${role.label} role when they sign up with this address.`);
+      if (r.state === 'member') { setNotice(`${addr} is in the workspace as ${role.label}.`); return; }
+      const saved = `Invitation saved for ${addr}. They get the ${role.label} role when they sign up with this address.`;
+      try {
+        await store.sendInviteEmail(workspace.id, addr);
+        setNotice(`${saved} We emailed them the invitation.`);
+      } catch (err) {
+        setNotice(`${saved} The invitation email was not sent (${messageOf(err)}), so let them know yourself.`);
+      }
     });
   };
 
   return (
     <section className="max-w-4xl space-y-4" data-testid="people">
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
         <h2 className="font-display text-lg font-semibold text-slate-900">People in {workspace.name}</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-600">A role decides what a person may do. Where a process names its analyst, architect and approver, that decides what they see first.</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">A role decides what a person may do. Where a process names its analyst, architect and approver, that decides what they see first. People here see only this workspace: for a client, use a workspace of its own.</p>
         <ul className="mt-4 divide-y divide-slate-100" data-testid="people-list">
           {people.members.map(m => {
             const role = roleOf({ access: m.role, canApprove: m.canApprove, job: m.job });
@@ -84,6 +91,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{i.email}</span>
                   <Tag tone="warn">{roleOf({ access: i.role, canApprove: i.canApprove, job: i.job }).label}</Tag>
                   <span className="text-xs text-slate-500">{ago(i.at)}</span>
+                  <Button variant="ghost" disabled={busy} aria-label={`Email the invitation to ${i.email} again`} onClick={() => run(() => store.sendInviteEmail(workspace.id, i.email), `Invitation emailed again to ${i.email}.`)}>Send again</Button>
                   <Button variant="ghost" disabled={busy} onClick={() => run(() => store.cancelInvite(workspace.id, i.email))}>Cancel</Button>
                 </li>
               ))}
@@ -93,7 +101,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
       </div>
 
       {isAdmin ? (
-        <form onSubmit={invite} className="rounded-xl border border-slate-200 bg-white p-6">
+        <form onSubmit={invite} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
           <h3 className="font-display text-base font-semibold text-slate-900">Add someone</h3>
           <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
             <div className="flex-1"><Field label="Work email" type="email" required placeholder="name@company.com" value={email} onChange={e => setEmail(e.target.value)} /></div>
@@ -110,7 +118,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
         <p className="text-sm text-slate-500">Only an admin can add people or change roles.</p>
       )}
 
-      <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
         <h3 className="font-display text-base font-semibold text-slate-900">What each role can do</h3>
         <dl className="mt-3 grid gap-x-8 gap-y-3 sm:grid-cols-2">
           {ROLES.map(r => (<div key={r.key}><dt className="text-sm font-semibold text-slate-900">{r.label}</dt><dd className="text-sm leading-5 text-slate-600">{r.summary}</dd></div>))}
@@ -118,7 +126,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
       </div>
 
       {isAdmin && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card">
           <div className="flex items-center justify-between gap-3">
             <h3 className="font-display text-base font-semibold text-slate-900">Audit trail</h3>
             <Button variant="ghost" onClick={() => setShowAudit(v => !v)} aria-expanded={showAudit}>{showAudit ? 'Hide' : 'Show'}</Button>

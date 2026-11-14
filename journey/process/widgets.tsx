@@ -81,14 +81,16 @@ export function RefChips({ ids, options, onChange, label, disabled }: {
 }
 
 /** A delete button that asks once more inline instead of opening a browser dialog. */
-export function ConfirmDelete({ what, onDelete, disabled }: { what: string; onDelete: () => void; disabled?: boolean }) {
-  const [asking, setAsking] = React.useState(false);
+/** A delete that asks first; `impact` says what the delete would change downstream, worked out when asked. */
+export function ConfirmDelete({ what, onDelete, disabled, impact }: { what: string; onDelete: () => void; disabled?: boolean; impact?: () => string | null }) {
+  const [asking, setAsking] = React.useState<{ impact: string | null } | null>(null);
   if (disabled) return null;
-  if (!asking) return <button type="button" aria-label={`Delete ${what}`} onClick={() => setAsking(true)} className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button>;
+  if (!asking) return <button type="button" aria-label={`Delete ${what}`} onClick={() => setAsking({ impact: impact?.() ?? null })} className="rounded px-1.5 py-0.5 text-xs text-slate-500 hover:bg-red-50 hover:text-red-700">Delete</button>;
   return (
-    <span className="inline-flex items-center gap-1 text-xs">
-      <button type="button" onClick={() => { setAsking(false); onDelete(); }} className="rounded bg-red-600 px-1.5 py-0.5 font-semibold text-white hover:bg-red-700">Delete {what}?</button>
-      <button type="button" onClick={() => setAsking(false)} className="rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100">Keep</button>
+    <span className="inline-flex flex-wrap items-center justify-end gap-1 text-xs">
+      {asking.impact && <span data-testid="delete-impact" className="block w-full max-w-xs whitespace-normal text-right text-slate-600">{asking.impact}</span>}
+      <button type="button" onClick={() => { setAsking(null); onDelete(); }} className="rounded bg-red-600 px-1.5 py-0.5 font-semibold text-white hover:bg-red-700">Delete {what}?</button>
+      <button type="button" onClick={() => setAsking(null)} className="rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100">Keep</button>
     </span>
   );
 }

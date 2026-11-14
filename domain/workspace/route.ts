@@ -12,22 +12,41 @@ export const STAGES = [
 
 export type StageId = (typeof STAGES)[number]['id'];
 
+/** The sections of a workspace's Settings page, in the order of its side menu. */
+export const SETTINGS = [
+  { id: 'people', label: 'People' },
+  { id: 'applications', label: 'Applications' },
+  { id: 'assessment', label: 'Assessment' },
+  { id: 'ai', label: 'AI' },
+  { id: 'documents', label: 'Documents' },
+  { id: 'parts', label: 'Parts of Avala OS' },
+] as const;
+export type SettingsSection = (typeof SETTINGS)[number]['id'];
+
 export type JourneyRoute =
   | { page: 'signin' }
+  | { page: 'reset-password' }
   | { page: 'work' }
   | { page: 'processes' }
+  | { page: 'settings'; section: SettingsSection }
   | { page: 'process'; processId: string; stage: StageId }
   | { page: 'board'; projectId?: string; itemId?: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const isStage = (s: string): s is StageId => STAGES.some(x => x.id === s);
+const isSection = (s: string): s is SettingsSection => SETTINGS.some(x => x.id === s);
 
 /** The journey route for a path, or null when the path belongs to the rest of the application. */
 export function parseJourneyPath(pathname: string): JourneyRoute | null {
   const parts = pathname.replace(/\/+$/, '').split('/').filter(Boolean);
   if (parts[0] === 'signin' && parts.length === 1) return { page: 'signin' };
+  if (parts[0] === 'reset-password' && parts.length === 1) return { page: 'reset-password' };
   if (parts[0] === 'work' && parts.length === 1) return { page: 'work' };
   if (parts[0] === 'processes' && parts.length === 1) return { page: 'processes' };
+  if (parts[0] === 'settings' && parts.length <= 2) {
+    const section = parts[1] ?? 'people';
+    return isSection(section) ? { page: 'settings', section } : null;
+  }
   if (parts[0] === 'board' && parts.length <= 3 && (!parts[1] || UUID.test(parts[1])) && (!parts[2] || UUID.test(parts[2]))) {
     return { page: 'board', ...(parts[1] ? { projectId: parts[1].toLowerCase() } : {}), ...(parts[2] ? { itemId: parts[2].toLowerCase() } : {}) };
   }
@@ -41,8 +60,10 @@ export function parseJourneyPath(pathname: string): JourneyRoute | null {
 export function journeyPath(route: JourneyRoute): string {
   switch (route.page) {
     case 'signin': return '/signin';
+    case 'reset-password': return '/reset-password';
     case 'work': return '/work';
     case 'processes': return '/processes';
+    case 'settings': return `/settings/${route.section}`;
     case 'process': return `/process/${route.processId}/${route.stage}`;
     case 'board': return `/board${route.projectId ? `/${route.projectId}` : ''}${route.projectId && route.itemId ? `/${route.itemId}` : ''}`;
   }

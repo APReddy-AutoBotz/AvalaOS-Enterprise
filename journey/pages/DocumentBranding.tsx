@@ -46,7 +46,7 @@ export function DocumentBranding({ store, workspace }: { store: JourneyStore; wo
 
   return (
     <>
-    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="document-branding">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="document-branding">
       <h2 className="font-display text-lg font-semibold text-slate-900">How documents look</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">Your organisation's look for the BRD, PDD, FRD and SDD, on screen and in Word. Upload your company's Word template to use its fonts and heading styles.{isAdmin ? '' : ' Only an admin can change it.'}</p>
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">

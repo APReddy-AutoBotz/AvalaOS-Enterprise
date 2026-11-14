@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { INTERNAL, primaryText, shot, signInAndCreateProcess } from './helpers.ts';
+import { INTERNAL, primaryText, shot, signInAndCreateProcess, signOut } from './helpers.ts';
 
 test('a process has one workspace with one assessment stage, and internal labels appear only in History', async ({ page }) => {
   await signInAndCreateProcess(page);
@@ -56,7 +56,7 @@ test('an unknown process says so, and every other path (except the public homepa
   for (const path of ['/sandbox', '/assess/guided']) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/work$/);
-    await expect(page.getByRole('link', { name: 'Vendor invoice processing' })).toBeVisible();
+    await expect(page.getByTestId('my-processes').getByRole('link', { name: 'Vendor invoice processing' })).toBeVisible();
   }
   await shot(page, `05-processes-list`);
 });
@@ -64,7 +64,7 @@ test('an unknown process says so, and every other path (except the public homepa
 test('signing out returns to sign in and protects journey pages', async ({ page }) => {
   await signInAndCreateProcess(page);
   const url = page.url();
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOut(page);
   await expect(page).toHaveURL(/\/signin$/);
   await page.goto(url);
   await expect(page).toHaveURL(/\/signin$/);

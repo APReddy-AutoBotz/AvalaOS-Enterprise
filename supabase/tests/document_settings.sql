@@ -8,8 +8,10 @@ declare
   outsider_u uuid := gen_random_uuid();
   ws uuid; n int; passed int := 0;
 begin
-  insert into auth.users (id, email) values
-    (admin_u, 'a-' || admin_u || '@example.test'), (editor_u, 'e-' || editor_u || '@example.test'), (outsider_u, 'o-' || outsider_u || '@example.test');
+  insert into auth.users (id, email, invited_at, email_confirmed_at) values
+    (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
+  -- Organizations are the platform owner's to create; with no owner listed, as in a new deployment, the test user may.
+  delete from app_private.platform_owners;
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   ws := (public.create_organization('Settings test', 'AP') ->> 'workspaceId')::uuid;

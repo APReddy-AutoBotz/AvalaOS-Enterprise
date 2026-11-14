@@ -10,13 +10,40 @@ import type { Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
-import type { Project, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
+import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
+import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
+import type { Sprint, validateSprint } from '../../domain/workitems/sprints.ts';
+import type { PlannedItem } from '../../domain/workitems/jiraImport.ts';
+import type { Module } from '../../domain/workspace/modules.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
+import type { AiProvider } from '../../domain/ai/providers.ts';
+import type { Allowance, UsageRow } from '../../domain/ai/usage.ts';
+import type { Application, ApplicationInput } from '../../domain/workspace/applications.ts';
 
 export interface Me { id: string; email: string }
-export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null }
+/** A workspace's own AI provider. The key is never here: only its last four characters. */
+export interface WorkspaceAi {
+  provider: AiProvider; model: string; endpoint: string | null; keyHint: string;
+  updatedAt: string; lastUsedAt: string | null; lastTestedAt: string | null; lastTestOk: boolean | null;
+}
+/** This month's AI use in a workspace: its usage rows (members may read them) and the platform allowance. */
+export interface AiUsage {
+  rows: UsageRow[];
+  /** Null when the server could not say (it is the only place that knows the allowance). */
+  allowance: (Allowance & { source: 'workspace' | 'platform' }) | null;
+  /** True when there were more rows than were read. */
+  partial: boolean;
+}
+export interface Workspace {
+  id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null;
+  organizationId?: string;
+  /** The person made the organisation, so may add workspaces to it (one per client: people see only the workspaces they are in). */
+  canAddWorkspace?: boolean;
+  /** The parts of Avala OS its organisation uses (domain/workspace/modules.ts); missing means all of them. */
+  modules?: Module[];
+}
 /** A person in a workspace, as others see them: a name, never an email address. */
 export interface Member { userId: string; name: string; role: Workspace['role'] }
 /** A person as an admin sees them in the People screen. `email` is set for admins only. */
@@ -78,7 +105,7 @@ export class StoreError extends Error {
 }
 
 export interface JourneyStore {
-  readonly kind: 'supabase' | 'memory';
+  readonly kind: 'supabase' | 'memory' | 'demo';
   currentUser(): Promise<Me | null>;
   onAuthChange(listener: (me: Me | null) => void): () => void;
   signIn(email: string, password: string): Promise<void>;
@@ -88,6 +115,10 @@ export interface JourneyStore {
   /** Leaves for the provider's sign-in page; the provider sends the person back to /signin. */
   signInWithProvider(provider: ProviderId): Promise<void>;
   signOut(): Promise<void>;
+  /** Emails a link to choose a new password, if an account uses the address (never says whether one does). */
+  requestPasswordReset(email: string): Promise<void>;
+  /** Sets a new password for the signed-in person (after following the emailed link). */
+  setNewPassword(password: string): Promise<void>;
 
   listWorkspaces(): Promise<Workspace[]>;
   /** The people in a workspace, for assigning work. */
@@ -101,9 +132,30 @@ export interface JourneyStore {
   /** Admins only. Their work items stay on the board, unassigned. */
   removePerson(workspaceId: string, userId: string): Promise<void>;
   cancelInvite(workspaceId: string, email: string): Promise<void>;
+  /** The workspace's own AI provider, or null when it uses the platform's (members read). */
+  getWorkspaceAi(workspaceId: string): Promise<WorkspaceAi | null>;
+  /** Admins only. The key is sent once and kept encrypted on the server; omit it to keep the current key (same provider only). */
+  saveWorkspaceAi(workspaceId: string, input: { provider: AiProvider; model: string; endpoint: string | null; apiKey?: string }): Promise<void>;
+  /** Admins only. Deletes the key; the workspace goes back to the platform's AI and its monthly allowance. */
+  clearWorkspaceAi(workspaceId: string): Promise<void>;
+  /** A tiny real request with the workspace's provider (or the platform's), to prove the key works. */
+  testWorkspaceAi(workspaceId: string): Promise<{ model: string; source: 'workspace' | 'platform' }>;
+  /** Whether the signed-in person gets the weekday "Needs you" email; null when it cannot be read. */
+  getNeedsEmail(): Promise<boolean | null>;
+  setNeedsEmail(on: boolean): Promise<void>;
+  /** This calendar month's AI use (UTC) and, from the server, the platform allowance. Members. */
+  getAiUsage(workspaceId: string): Promise<AiUsage>;
+  /** Admins only. Emails the invitation for an open invite (server function journey-invite); throws when email is not set up. */
+  sendInviteEmail(workspaceId: string, email: string): Promise<void>;
   /** Admins only. Membership changes and approvals, newest first. */
   auditLog(workspaceId: string): Promise<AuditEntry[]>;
+  /** Whether the signed-in person may create an organization (only the platform owner, once one is listed). */
+  canCreateOrganization(): Promise<boolean>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
+  /** The organisation's creator adds a workspace and becomes its admin. Returns its id. */
+  createWorkspace(organizationId: string, name: string): Promise<string>;
+  /** The platform owner only: which parts the organisation uses (one of the four set-ups). Nothing is deleted. */
+  setOrganizationModules(organizationId: string, modules: Module[]): Promise<Module[]>;
 
   /** The assessment settings of a workspace; the defaults when none are set. */
   getSettings(workspaceId: string): Promise<SettingsRecord>;
@@ -177,4 +229,33 @@ export interface JourneyStore {
   confirmProposals(processId: string, projectId: string, keys: string[]): Promise<{ created: number; skipped: number }>;
   listWorkItems(projectId: string): Promise<WorkItem[]>;
   updateWorkItem(id: string, edit: WorkItemEdit): Promise<WorkItem>;
+  /** An item a person adds by hand (checked by validateNewItem); editors and admins. */
+  createWorkItem(projectId: string, item: ReturnType<typeof validateNewItem>): Promise<WorkItem>;
+  /** Deletes an item for good; the items directly under it stay, without a parent. Editors and admins. */
+  deleteWorkItem(id: string): Promise<void>;
+  /** Comments on an item, oldest first. Every member reads and adds them. */
+  listComments(workItemId: string): Promise<ItemComment[]>;
+  addComment(workItemId: string, body: string): Promise<ItemComment>;
+  /** The author only. */
+  editComment(id: string, body: string): Promise<ItemComment>;
+  /** The author or an admin. */
+  deleteComment(id: string): Promise<void>;
+  /** What changed on an item and who changed it, written by the database (members read). */
+  listItemHistory(workItemId: string): Promise<ItemEvent[]>;
+  /** A board's sprints (domain/workitems/sprints.ts). Members read; editors and admins change them. */
+  /** The workspace's applications list, by name. Members read; editors and admins write. */
+  listApplications(workspaceId: string): Promise<Application[]>;
+  /** Adds an application, or changes one when `id` is given; validated first. */
+  saveApplication(workspaceId: string, input: ApplicationInput, id?: string): Promise<Application>;
+  deleteApplication(id: string): Promise<void>;
+  listSprints(projectId: string): Promise<Sprint[]>;
+  createSprint(projectId: string, s: ReturnType<typeof validateSprint>): Promise<Sprint>;
+  /** Rename, set the goal or dates, or start it (one sprint runs at a time). */
+  updateSprint(id: string, s: Partial<ReturnType<typeof validateSprint>> & { state?: 'active' }): Promise<Sprint>;
+  /** Completes the running sprint; its unfinished work moves to the planned sprint given, or the backlog. Returns how many moved. */
+  closeSprint(id: string, moveTo: string | null): Promise<number>;
+  /** Its work goes back to the backlog. */
+  deleteSprint(id: string): Promise<void>;
+  /** Adds the items of an import (planJiraImport) in one go, all or nothing, after the board's items. Editors and admins. */
+  importWorkItems(projectId: string, items: PlannedItem[]): Promise<number>;
 }

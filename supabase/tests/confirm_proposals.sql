@@ -8,7 +8,9 @@ declare
   ws uuid; p uuid; proj uuid; r jsonb; n int; epic_item uuid; story_parent uuid; passed int := 0;
   batch uuid := gen_random_uuid();
 begin
-  insert into auth.users (id, email) values (admin_u, 'a-' || admin_u || '@example.test'), (viewer_u, 'v-' || viewer_u || '@example.test');
+  insert into auth.users (id, email, invited_at, email_confirmed_at) values (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (viewer_u, 'v-' || viewer_u || '@example.test', now(), now());
+  -- Organizations are the platform owner's to create; with no owner listed, as in a new deployment, the test user may.
+  delete from app_private.platform_owners;
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   execute 'set local role authenticated';
   ws := (public.create_organization('Board test', 'AP') ->> 'workspaceId')::uuid;

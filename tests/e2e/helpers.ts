@@ -32,3 +32,16 @@ export async function signInAndCreateProcess(page: Page) {
   await expect(page).toHaveURL(/\/process\/[0-9a-f-]{36}\/sources$/);
 }
 
+
+/** Opens a section of Settings from the top bar, as a person would (no page load, so the demo keeps its changes). */
+export async function openSettings(page: Page, section: 'People' | 'Applications' | 'Assessment' | 'AI' | 'Documents' | 'Parts of Avala OS' = 'People') {
+  await page.getByRole('banner').getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: section, exact: true }).click();
+}
+
+/** Sign out is in the account menu. */
+export async function signOut(page: Page) {
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
+  await page.getByRole('button', { name: 'Sign out' }).click();
+}

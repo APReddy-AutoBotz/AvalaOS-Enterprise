@@ -8,6 +8,7 @@ import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
 import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
 import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
+import { mergeApplication, type Application } from '../workspace/applications.ts';
 
 export interface OpResult {
   model: ProcessModel;
@@ -488,6 +489,19 @@ export function setSystemUiAllowed(model: ProcessModel, args: { systemId: string
     const sys = m.systems.find(s => s.id === args.systemId);
     if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
     sys.uiAllowed = confirmed(args.value);
+  });
+}
+
+/**
+ * A person accepts the workspace's applications list entry for a system: missing ways in are added,
+ * availability and operations follow the list, and the screen facts are set where the list knows
+ * them, each marked as confirmed by a person. What it changes is shown first (`applicationOffer`).
+ */
+export function adoptApplication(model: ProcessModel, args: { systemId: string; app: Application }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    mergeApplication(sys, args.app);
   });
 }
 

@@ -619,14 +619,14 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 - Prove source reading on three to five real processes and fix what breaks (the largest risk in this plan).
 - A screen for AI use and limits per workspace.
 - Email notifications for "Needs you".
-- Per-process access, so a client sees only its own processes.
-- Error monitoring and a backup check.
+- Per-process access, so a client sees only its own processes (done, November 2026, as a workspace per client: people see only the workspaces they are in, which the database already enforces; grants on single processes inside one workspace stay possible later).
+- Error monitoring and a backup check (done, November 2026: a nightly encrypted dump with a restore check, because the Free plan keeps no backups; Sentry's free plan for errors in the browser, while the edge functions' errors stay in the Supabase logs for now).
 
 ### Phase C: features that add the most value
 
 1. The Avala assistant, below, starting read-only. It absorbs the gap-closing interview.
-2. Change impact preview.
-3. Organisation system registry.
+2. Change impact preview (built, November 2026: before a delete or a canvas save, and straight after an inline edit, since edits save as they are made).
+3. Organisation system registry (built, November 2026, as one list per workspace, since a workspace is one client: Settings → Applications; a process that names an application on the list offers its facts and a person accepts them, and a process's application can be added to the list).
 4. Tracker push to Jira and Azure DevOps with status coming back.
 5. Review comments on document sections.
 6. Platform packs (UiPath, Power Automate).
@@ -635,7 +635,7 @@ Later: process variants, recordings and event logs as sources, benefit tracking,
 
 ### Bring your own key (BYOK)
 
-- Each workspace chooses its AI provider and supplies its own key or endpoint: OpenAI, Azure OpenAI, Anthropic, Amazon Bedrock, or an OpenAI-compatible endpoint the company already runs. The platform default remains for workspaces that set none, within its monthly budget.
+- Each workspace chooses its AI provider and supplies its own key or endpoint: OpenAI, Azure OpenAI, Anthropic, Amazon Bedrock, Mistral AI (its light models suggested), or an OpenAI-compatible endpoint the company already runs. The platform default remains for workspaces that set none, within its monthly budget.
 - Keys are written by an admin, stored encrypted on the server, and never returned to the browser (show only the last four characters and when it was last used). All calls keep going through `journey-ai`; nothing else may call a provider.
 - Each task in `domain/ai/tasks.ts` declares what it needs (text, vision, transcription). A provider that lacks one turns that feature off with a plain message, never a silent fallback to the platform key.
 - Usage is metered per workspace and per provider. A "test this key" button checks it before saving.
@@ -649,5 +649,31 @@ An assistant on top of the platform, in the way Rovo sits on Jira, using the wor
 - It never decides. Scores stay arithmetic from the fixed tables; the assistant explains them and cannot change them.
 - It changes nothing on its own. Anything it proposes (an answer to an open question, a section draft, a work item) goes through the existing patch operations and review screens, and a person confirms it. It acts with the signed-in person's role and no more.
 - Source documents are untrusted: text inside a transcript or procedure is content to read, never an instruction to the assistant.
-- Order: (1) read-only questions with citations; (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+- Order: (1) read-only questions with citations (built, November 2026: "Ask Avala" on a process); (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+
+### Ask Avala across the platform (agreed November 2026, parked until after the next release)
+
+The assistant is called Ask Avala. Today it answers about one process. The next step puts one "Ask Avala" button in the top bar that answers about where the person is:
+
+- on a process: that process (as today);
+- on the Delivery board: the board (what is blocked or overdue, what is in the sprint, who owns what);
+- on Processes, Portfolio or My work: the workspace (which process to automate first, which processes use an application, what is waiting on whom).
+
+The rules do not change: read-only, every sentence cites a fact, and what the record does not hold is said, never guessed. It never reaches past the one workspace, so a client's workspace stays sealed, and it sees only what the person asking may see. Workspace answers come from each process's summary (its assessment, priority and open questions) and the board; a process's source passages are read only when the question names that process. Parked until the single-process answers have been tried on real processes after the release; no schema change.
+
+### Packaging: start with the part you need (agreed November 2026)
+
+The platform is sold as one product a customer can start small with, not as separate tools. Its edge is the one process record: every stage reads it, and a change upstream marks what depends on it "needs review". Selling the stages as unrelated tools would hide that and put each against bigger single-purpose products.
+
+- **Bundles.** Assess (sources, process, assessment); Assess and Documents (adds BRD, PDD, FRD, SDD and flows); the full journey (adds work items and the Delivery board); and the Delivery board on its own, for small teams (below). Sources and the process record come with every bundle except the board on its own.
+- **Switches per organisation (done, November 2026).** Each organisation has the parts it uses switched on; a stage that is off is not shown, and nothing is deleted when a part is switched off. While sign-up is by invitation, the platform owner sets them; payment comes later. Already on Jira or Azure DevOps? The export (and, later, the tracker push) sends the work there.
+- **Homepage (built, November 2026; goes live with the next release).** Two sections, each claiming only what the product does at release: "Your AI, your key" (BYOK: the platform's AI or the organisation's own key, stored encrypted and shown only by its last four characters; providers not yet checked are named as coming) and "Start with one part, or use it all" (the bundles). The board on its own is not called a Jira replacement until step 2 below is in.
+
+### The Delivery board on its own (agreed November 2026)
+
+For small companies that find per-seat tracker prices too high: the same board, usable without a process.
+
+1. **Manage items (done):** add an epic, story, task, bug or sub-task by hand; put an item under another, as in Jira (epics on top, a sub-task always under a story, task or bug); delete an item, its direct children staying without a parent; priority on cards. Viewers read; editors and admins change.
+2. **Work together (done, November 2026):** comments and an item history; labels; sprints; import from a Jira CSV; "assigned to you" in the weekday email.
+3. **Later:** attachments, the team's own status columns, simple reports (burndown, cycle time).
 
