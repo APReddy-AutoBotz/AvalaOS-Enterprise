@@ -115,7 +115,8 @@ jobs:
           # Prove the encrypted file opens with the passphrase, then restore from what it contains.
           mkdir -p check
           printf '%s' "$PASSPHRASE" | gpg --batch --pinentry-mode loopback --passphrase-fd 0 --decrypt "avala-$STAMP.tar.gpg" | tar -C check -xf -
-          cp check/app.dump check/auth.dump backup/
+          # New names: the dumps already in backup/ belong to the container's user and cannot be overwritten.
+          cp check/app.dump backup/restore-app.dump && cp check/auth.dump backup/restore-auth.dump
           # What a Supabase database has that plain Postgres lacks: its roles, the extensions schema, and the
           # vault table a few functions name. The restored data, not these, is what is checked.
           $PG psql "$SCRATCH" -v ON_ERROR_STOP=1 -q -c "
@@ -125,8 +126,8 @@ jobs:
             create extension if not exists \"uuid-ossp\" schema extensions;
             create schema vault; create table vault.secrets (id uuid primary key, name text, secret text);
             create view vault.decrypted_secrets as select id, name, secret as decrypted_secret from vault.secrets;"
-          $PG pg_restore --no-owner --no-privileges -d "$SCRATCH" auth.dump 2> backup/auth-restore.log || true
-          $PG pg_restore --no-owner --no-privileges -d "$SCRATCH" app.dump 2> backup/app-restore.log || true
+          $PG pg_restore --no-owner --no-privileges -d "$SCRATCH" restore-auth.dump 2> backup/auth-restore.log || true
+          $PG pg_restore --no-owner --no-privileges -d "$SCRATCH" restore-app.dump 2> backup/app-restore.log || true
           echo "Restore notes: $(grep -c 'error:' backup/auth-restore.log || true) in auth, $(grep -c 'error:' backup/app-restore.log || true) in the app's schemas."
           grep -h 'error:' backup/auth-restore.log backup/app-restore.log | sed -E 's/DETAIL.*//' | sort | uniq -c | head -20 || true
           # The check: every table is back with the same number of rows.
