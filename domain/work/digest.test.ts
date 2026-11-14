@@ -77,3 +77,35 @@ test('no valid address: nothing sent and nothing recorded, so the next run tries
   const d = needsDigest(base({ needs, to: 'not-an-address', seen: ['old'] }));
   assert.deepEqual([d.email, d.keys], [null, ['old']]);
 });
+
+const item = (id: string, over: Partial<import('./digest.ts').AssignedItem> = {}) => ({ id, title: `Item ${id}`, type: 'story', projectId: 'pr1', project: 'Website', assignedBy: 'Ben Iyer', ...over });
+
+test('work someone else gave a person on the board is emailed once, with who gave it and a link', async () => {
+  const { itemKey } = await import('./digest.ts');
+  const first = needsDigest(base({ assigned: [item('i1', { title: 'Pay by card' })] }));
+  assert.equal(first.email?.subject, 'Ben Iyer assigned you "Pay by card" in Finance');
+  assert.match(first.email!.text, /Here is new work given to you in Finance \(Acme\) on Avala OS\./);
+  assert.match(first.email!.text, /Assigned to you on the board\n- Pay by card \(Story in Website\), from Ben Iyer\n  https:\/\/avalaos\.com\/board\/pr1\/i1/);
+  assert.match(first.email!.html, /href="https:\/\/avalaos\.com\/board\/pr1\/i1"/);
+  assert.deepEqual(first.keys, [itemKey({ id: 'i1' })]);
+  // Still open the next day: not again.
+  assert.equal(needsDigest(base({ assigned: [item('i1')], seen: first.keys })).email, null);
+  // A second item comes: only the new one is listed.
+  const next = needsDigest(base({ assigned: [item('i1'), item('i2'), item('i3', { assignedBy: '' })], seen: first.keys }));
+  assert.equal(next.email?.subject, '2 board items were assigned to you in Finance');
+  assert.ok(!next.email!.text.includes('Item i1'));
+  assert.match(next.email!.text, /- Item i3 \(Story in Website\)\n/);
+});
+
+test('new assignments ride along with process needs; a long list is cut with a count', () => {
+  const needs = namedNeeds(ana, [proc('p1', { openQuestions: 3 })]);
+  const d = needsDigest(base({ needs, assigned: Array.from({ length: 12 }, (_, n) => item(`i${n}`)) }));
+  assert.equal(d.email?.subject, 'Something needs you in Finance · 12 assigned to you');
+  assert.match(d.email!.text, /- and 2 more on My work/);
+  assert.equal((d.email!.text.match(/\(Story in Website\)/g) ?? []).length, 10);
+  // The needs were seen already; only an assignment is new: the subject says so, nothing is marked "New".
+  const later = needsDigest(base({ needs, assigned: [item('x')], seen: namedNeeds(ana, [proc('p1', { openQuestions: 3 })]).map(needKey) }));
+  assert.equal(later.email?.subject, 'Ben Iyer assigned you "Item x" in Finance');
+  assert.ok(!later.email!.text.includes('New:'));
+  assert.match(later.email!.text, /- 3 open questions to answer/);
+});

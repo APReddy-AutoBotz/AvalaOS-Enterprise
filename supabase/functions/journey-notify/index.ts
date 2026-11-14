@@ -1,7 +1,8 @@
 // journey-notify: the weekday "Needs you" email, and the link that stops it.
 //
 // POST { action: 'digest' } with header x-digest-secret   -> runs the digest (the schedule calls this; see
-//      migration needs_email). For each person and workspace: what needs them by name (domain/work/digest.ts);
+//      migration needs_email). For each person and workspace: what needs them by name and the board work someone
+//      else gave them (domain/work/digest.ts, migration assigned_email);
 //      an email only when something is new since the last run; what they have now is recorded.
 // POST { action: 'unsubscribe', token }                     -> stops these emails for the person whose link it is
 //      (the /unsubscribe page). Also POST ?unsubscribe=<token>: the one-click header mail apps use (RFC 8058).
@@ -12,7 +13,7 @@
 // service role may call. Deployed with verify_jwt = false: the digest checks the schedule's secret, and an
 // unsubscribe needs only the person's own token.
 
-import { namedNeeds, needsDigest } from '../../../domain/work/digest.ts';
+import { namedNeeds, needsDigest, type AssignedItem } from '../../../domain/work/digest.ts';
 import type { ProcessFacts } from '../../../domain/work/home.ts';
 import type { AccessLevel, Job } from '../../../domain/people/roles.ts';
 
@@ -59,6 +60,7 @@ async function unsubscribe(token: unknown): Promise<Response> {
 
 interface PersonRow { workspaceId: string; workspace: string; organization: string; userId: string; email: string; name: string; access: AccessLevel; job: Job | null; canApprove: boolean; emailOn: boolean; token: string }
 interface ProcessRow extends ProcessFacts { workspaceId: string }
+interface AssignedRow extends AssignedItem { workspaceId: string; ownerId: string }
 
 async function digest(): Promise<Response> {
   const resendKey = env('RESEND_API_KEY');
@@ -69,6 +71,7 @@ async function digest(): Promise<Response> {
   const input = await rpc('needs_digest_input', {});
   const people: PersonRow[] = input.people ?? [];
   const processes: ProcessRow[] = input.processes ?? [];
+  const assignedRows: AssignedRow[] = input.assigned ?? [];
   const seen = new Map<string, string[]>((input.seen ?? []).map((s: any) => [`${s.userId}:${s.workspaceId}`, s.keys ?? []]));
 
   const record: { userId: string; workspaceId: string; keys: string[]; sent: boolean }[] = [];
@@ -76,9 +79,10 @@ async function digest(): Promise<Response> {
   for (const p of people) {
     const mine = processes.filter(x => x.workspaceId === p.workspaceId);
     const needs = namedNeeds({ userId: p.userId, access: p.access, job: p.job, canApprove: p.canApprove }, mine);
+    const assigned = assignedRows.filter(a => a.workspaceId === p.workspaceId && a.ownerId === p.userId);
     const unsubscribeUrl = `${site}/unsubscribe?token=${p.token}`;
     const d = needsDigest({
-      to: p.email, name: p.name, workspace: p.workspace, organization: p.organization, needs,
+      to: p.email, name: p.name, workspace: p.workspace, organization: p.organization, needs, assigned,
       seen: seen.get(`${p.userId}:${p.workspaceId}`) ?? [], emailOn: p.emailOn, siteUrl: site, unsubscribeUrl,
     });
     if (!d.email) { record.push({ userId: p.userId, workspaceId: p.workspaceId, keys: d.keys, sent: false }); continue; }
