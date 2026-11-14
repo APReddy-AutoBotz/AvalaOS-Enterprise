@@ -31,7 +31,7 @@ export function SettingsPage({ store, nav, workspace, section, base = '' }: { st
   return (
     <div data-testid="settings">
       <PageHead eyebrow={`${workspace.organizationName} · ${workspace.name}`} title="Settings" summary={`Who works in ${workspace.name}, the applications it works in, and how its assessments, AI and documents are set up.`} />
-      <div className="mt-8 grid gap-x-8 gap-y-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
+      <div className="mt-8 grid grid-cols-[minmax(0,1fr)] gap-x-8 gap-y-5 lg:grid-cols-[15rem_minmax(0,1fr)]">
         <nav aria-label="Settings sections" className={cx(CARD, 'p-2 lg:sticky lg:top-6 lg:self-start')}>
           <ul className="flex gap-1 overflow-x-auto lg:flex-col">
             {sections.map(s => (
