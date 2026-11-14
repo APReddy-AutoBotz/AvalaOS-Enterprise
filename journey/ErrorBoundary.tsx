@@ -4,6 +4,8 @@ import React from 'react';
 import { report } from './monitoring.ts';
 
 export class ErrorBoundary extends React.Component<{ children: React.ReactNode }, { failed: boolean }> {
+  // React's own types are not installed here, so the props are declared (no field is created at run time).
+  declare readonly props: { children: React.ReactNode };
   state = { failed: false };
   static getDerivedStateFromError() { return { failed: true }; }
   componentDidCatch(error: unknown) { report(error); }
