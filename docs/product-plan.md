@@ -620,7 +620,7 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 - A screen for AI use and limits per workspace.
 - Email notifications for "Needs you".
 - Per-process access, so a client sees only its own processes.
-- Error monitoring and a backup check.
+- Error monitoring and a backup check (error monitoring: Sentry's free plan in the browser, November 2026; the edge functions' errors stay in the Supabase logs for now).
 
 ### Phase C: features that add the most value
 
