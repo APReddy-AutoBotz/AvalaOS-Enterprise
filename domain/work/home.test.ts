@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { WorkItem } from '../workitems/board.ts';
-import { dutyOf, itemsFor, needsFor, processesFor, type Person, type ProcessFacts } from './home.ts';
+import { dutyOf, homeSummary, itemsFor, namedOn, needsByProcess, needsFor, openOn, processesFor, type Person, type ProcessFacts } from './home.ts';
 
 const ba: Person = { userId: 'ba', access: 'editor', canApprove: false, job: 'business_analyst' };
 const sa: Person = { userId: 'sa', access: 'editor', canApprove: false, job: 'solution_architect' };
@@ -65,4 +65,31 @@ test('my items: only mine, open, not epics; overdue first, then soonest due, the
   const out = itemsFor('dev', items, '2026-11-13');
   assert.deepEqual(out.map(o => o.item.id), ['overdue', 'soon-high', 'soon-low', 'later', 'undated']);
   assert.deepEqual(out.map(o => o.overdue), [true, false, false, false, false]);
+});
+
+test('needs are grouped by process, in the order the processes appear', () => {
+  const needs = needsFor(admin, [proc(), proc({ id: 'p2', name: 'Refunds', status: 'none', openQuestions: 0, proposalsWaiting: 0 })]);
+  const groups = needsByProcess(needs);
+  assert.deepEqual(groups.map(g => [g.processName, g.needs.length]), [['Vendor invoices', 3], ['Refunds', 1]]);
+});
+
+test('the summary counts what the page lists, and says so when nothing waits', () => {
+  const two = needsFor(admin, [proc(), proc({ id: 'p2', name: 'Refunds', status: 'none', openQuestions: 0, proposalsWaiting: 0 })]);
+  assert.equal(homeSummary(two, []), '4 things need you across 2 processes.');
+  const one = needsFor(admin, [proc({ status: 'approved', proposalsWaiting: 0 })]);
+  assert.equal(homeSummary(one, [{ overdue: true }, { overdue: false }]), '1 thing needs you on Vendor invoices. 2 board items are yours, 1 overdue.');
+  assert.equal(homeSummary([], [{ overdue: false }]), '1 board item is yours.');
+  assert.equal(homeSummary([], []), 'Nothing needs you right now.');
+});
+
+test('a process row says what is open, from counts only', () => {
+  assert.deepEqual(openOn(proc()), ['3 open questions', '5 work items to confirm']);
+  assert.deepEqual(openOn(proc({ status: 'none', openQuestions: 0, proposalsWaiting: 0 })), ['No sources yet']);
+  assert.deepEqual(openOn(proc({ status: 'approved', openQuestions: 1, proposalsWaiting: 0 })), ['1 open question']);
+  assert.deepEqual(openOn(proc({ status: 'approved', openQuestions: 0, proposalsWaiting: 0 })), []);
+});
+
+test('the people named on a process: each once, with every duty they hold', () => {
+  assert.deepEqual(namedOn(proc({ analystId: 'ba', architectId: 'sa', approverId: 'ba' })), [{ userId: 'ba', duties: ['analyst', 'approver'] }, { userId: 'sa', duties: ['architect'] }]);
+  assert.deepEqual(namedOn(proc()), []);
 });

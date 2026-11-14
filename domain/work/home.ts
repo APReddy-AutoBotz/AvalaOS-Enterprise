@@ -68,3 +68,51 @@ export function itemsFor(userId: string, items: WorkItem[], today: string): { it
       || (RANK[a.item.priority ?? 'low'] - RANK[b.item.priority ?? 'low'])
       || a.item.title.localeCompare(b.item.title));
 }
+
+/** What needs a person, grouped by process in the order the processes first appear. */
+export function needsByProcess(needs: Need[]): { processId: string; processName: string; needs: Need[] }[] {
+  const groups = new Map<string, { processId: string; processName: string; needs: Need[] }>();
+  for (const n of needs) {
+    const g = groups.get(n.processId) ?? { processId: n.processId, processName: n.processName, needs: [] };
+    g.needs.push(n);
+    groups.set(n.processId, g);
+  }
+  return [...groups.values()];
+}
+
+/**
+ * The line under "My work": how much is waiting, counted from what the page lists below it.
+ * "3 things need you across 2 processes. 11 board items are yours, 2 overdue."
+ */
+export function homeSummary(needs: Need[], items: { overdue: boolean }[]): string {
+  const parts: string[] = [];
+  if (needs.length) {
+    const processes = new Set(needs.map(n => n.processId)).size;
+    parts.push(`${needs.length === 1 ? '1 thing needs' : `${needs.length} things need`} you${processes > 1 ? ` across ${processes} processes` : ` on ${needs[0]!.processName}`}.`);
+  }
+  if (items.length) {
+    const overdue = items.filter(i => i.overdue).length;
+    parts.push(`${items.length === 1 ? '1 board item is' : `${items.length} board items are`} yours${overdue ? `, ${overdue} overdue` : ''}.`);
+  }
+  return parts.length ? parts.join(' ') : 'Nothing needs you right now.';
+}
+
+/** What is open on a process, for its row in the list: counted facts only, in the order the work is done. */
+export function openOn(p: Pick<ProcessFacts, 'status' | 'openQuestions' | 'proposalsWaiting'>): string[] {
+  const out: string[] = [];
+  if (p.status === 'none') out.push('No sources yet');
+  if (p.openQuestions > 0) out.push(plural(p.openQuestions, 'open question', 'open questions'));
+  if (p.proposalsWaiting > 0) out.push(`${plural(p.proposalsWaiting, 'work item', 'work items')} to confirm`);
+  return out;
+}
+
+/** The people named on a process, in the order analyst, architect, approver; a person holding two duties is listed once. */
+export function namedOn(p: Pick<ProcessFacts, 'analystId' | 'architectId' | 'approverId'>): { userId: string; duties: Duty[] }[] {
+  const out: { userId: string; duties: Duty[] }[] = [];
+  for (const [duty, id] of [['analyst', p.analystId], ['architect', p.architectId], ['approver', p.approverId]] as const) {
+    if (!id) continue;
+    const have = out.find(x => x.userId === id);
+    if (have) have.duties.push(duty); else out.push({ userId: id, duties: [duty] });
+  }
+  return out;
+}
