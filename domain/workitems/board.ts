@@ -32,6 +32,8 @@ export interface WorkItem {
   requirements: string[];
   snapshot: Record<string, string>;
   updatedAt: string;
+  /** Order on the board; new items go last. */
+  sortOrder?: number;
 }
 export interface Project { id: string; name: string; description: string }
 
@@ -39,10 +41,102 @@ export class BoardError extends Error {}
 export const BOARD_LIMITS = { title: 300, description: 8000, project: 200 } as const;
 
 /** What a person may change on a board item. Owner, estimate and dates may stay empty. */
-export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null }
+export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null; parentId?: string | null }
 
-export function validateEdit(item: WorkItem, e: WorkItemEdit): WorkItemEdit {
+// ---- Items a person adds by hand (the board on its own, without a process) ------------------------
+
+export type ItemType = WorkItem['type'];
+/** The kinds a person adds by hand, as in Jira. Spikes and decisions come from a process's work items. */
+export const MANUAL_TYPES = ['epic', 'story', 'task', 'bug', 'subtask'] as const satisfies readonly ItemType[];
+export type ManualType = (typeof MANUAL_TYPES)[number];
+
+/**
+ * Where an item may sit, as in Jira: an epic has no parent; a story, task or bug sits under an epic or
+ * nowhere; a sub-task sits under a story, task or bug, never on its own. Spikes and decisions follow
+ * the task rule.
+ */
+const PARENT_KINDS: Record<ItemType, readonly ItemType[]> = {
+  epic: [], story: ['epic'], task: ['epic', 'story'], bug: ['epic', 'story'], spike: ['epic', 'story'], decision: ['epic', 'story'],
+  subtask: ['story', 'task', 'bug', 'spike', 'decision'],
+};
+export const needsParent = (type: ItemType) => type === 'subtask';
+
+/** The items a given kind may be put under, on this board (never the item itself or anything under it). */
+export function allowedParents(type: ItemType, items: WorkItem[], selfId?: string): WorkItem[] {
+  const below = selfId ? descendantsOf(selfId, items) : new Set<string>();
+  return items.filter(i => PARENT_KINDS[type].includes(i.type) && i.id !== selfId && !below.has(i.id));
+}
+
+/** Every item under this one, at any depth. */
+export function descendantsOf(id: string, items: WorkItem[]): Set<string> {
+  const out = new Set<string>();
+  const walk = (pid: string) => { for (const i of items) if (i.parentId === pid && !out.has(i.id)) { out.add(i.id); walk(i.id); } };
+  walk(id);
+  return out;
+}
+
+function parentProblem(type: ItemType, parentId: string | null | undefined, items: WorkItem[], selfId?: string): string | null {
+  if (!parentId) return needsParent(type) ? 'Choose the story, task or bug this sub-task belongs to.' : null;
+  const parent = items.find(i => i.id === parentId);
+  if (!parent) return 'That parent is not on this board.';
+  if (!allowedParents(type, items, selfId).some(i => i.id === parentId)) {
+    if (type === 'epic') return 'An epic cannot sit under another item.';
+    const article = /^[aeiou]/.test(typeWord(parent.type)) ? 'an' : 'a';
+    return `A ${typeWord(type)} cannot sit under ${article} ${typeWord(parent.type)}${selfId && descendantsOf(selfId, items).has(parentId) ? ' that is under it' : ''}.`;
+  }
+  return null;
+}
+const typeWord = (t: ItemType) => ({ epic: 'epic', story: 'story', task: 'task', bug: 'bug', subtask: 'sub-task', spike: 'spike', decision: 'decision' })[t];
+
+export interface NewWorkItem {
+  type: ManualType;
+  title: string;
+  description?: string;
+  parentId?: string | null;
+  ownerId?: string | null;
+  priority?: WorkItem['priority'];
+  estimateHours?: number | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+}
+
+/** Checks an item a person adds and gives it its place: the end of To do. */
+export function validateNewItem(n: NewWorkItem, items: WorkItem[]): Required<NewWorkItem> & { status: WorkStatus; sortOrder: number } {
+  if (!MANUAL_TYPES.includes(n.type)) throw new BoardError('Choose what kind of item this is.');
+  const title = (n.title ?? '').trim();
+  if (!title) throw new BoardError('Give the item a title.');
+  if (title.length > BOARD_LIMITS.title) throw new BoardError('The title is too long.');
+  const description = n.description ?? '';
+  if (description.length > BOARD_LIMITS.description) throw new BoardError('The description is too long.');
+  const problem = parentProblem(n.type, n.parentId, items);
+  if (problem) throw new BoardError(problem);
+  if (n.priority !== undefined && n.priority !== null && !['high', 'medium', 'low'].includes(n.priority)) throw new BoardError('Unknown priority.');
+  const estimate = n.estimateHours ?? null;
+  if (estimate !== null && !(estimate >= 0 && estimate < 100000)) throw new BoardError('The estimate must be a number of hours.');
+  const start = n.startDate || null, due = n.dueDate || null;
+  if (start && due && due < start) throw new BoardError('The due date is before the start date.');
+  const last = Math.max(0, ...items.map(i => i.sortOrder ?? 0));
+  return {
+    type: n.type, title, description, parentId: n.parentId || null, ownerId: n.ownerId || null, priority: n.priority ?? null,
+    estimateHours: estimate, startDate: start, dueDate: due, status: 'todo', sortOrder: last + 1,
+  };
+}
+
+/** What deleting an item does to the rest, in words for the confirmation. */
+export function deleteEffect(item: WorkItem, items: WorkItem[]): string {
+  const under = items.filter(i => i.parentId === item.id);
+  const what = `Delete this ${typeWord(item.type)}? This cannot be undone.`;
+  if (!under.length) return what;
+  return `${what} The ${under.length === 1 ? 'item' : `${under.length} items`} directly under it ${under.length === 1 ? 'stays' : 'stay'} on the board without a parent.`;
+}
+
+export function validateEdit(item: WorkItem, e: WorkItemEdit, items: WorkItem[] = []): WorkItemEdit {
   const out: WorkItemEdit = { ...e };
+  if (e.parentId !== undefined) {
+    out.parentId = e.parentId || null;
+    const problem = parentProblem(item.type, out.parentId, items, item.id);
+    if (problem) throw new BoardError(problem);
+  }
   if (e.title !== undefined) {
     out.title = e.title.trim();
     if (!out.title) throw new BoardError('Give the item a title.');

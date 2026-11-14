@@ -10,7 +10,7 @@ import type { Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
-import type { Project, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
+import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
@@ -213,4 +213,8 @@ export interface JourneyStore {
   confirmProposals(processId: string, projectId: string, keys: string[]): Promise<{ created: number; skipped: number }>;
   listWorkItems(projectId: string): Promise<WorkItem[]>;
   updateWorkItem(id: string, edit: WorkItemEdit): Promise<WorkItem>;
+  /** An item a person adds by hand (checked by validateNewItem); editors and admins. */
+  createWorkItem(projectId: string, item: ReturnType<typeof validateNewItem>): Promise<WorkItem>;
+  /** Deletes an item for good; the items directly under it stay, without a parent. Editors and admins. */
+  deleteWorkItem(id: string): Promise<void>;
 }
