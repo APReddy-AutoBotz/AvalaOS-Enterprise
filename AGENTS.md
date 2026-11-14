@@ -42,7 +42,7 @@ The owner is not a developer. These were agreed in November 2026 and hold in eve
 - **Never handle passwords or keys.** The owner types them into the provider's own page. Never ask for one in chat and never put one in the repository, which is public: backups are encrypted and logs never show data.
 - **A short plan before building**, in plain words, then the work.
 - **Report in plain words:** what changed on screen, what was checked and how, what was not checked. No internal labels.
-- **Next up:** "Ask Avala: the plan" in `docs/product-plan.md`, stage 1. Its measure is built (`eval/ask/`, see The Avala assistant below); next are the baseline run on the live process scope, then the button in the top bar.
+- **Next up:** "Ask Avala: the plan" in `docs/product-plan.md`, stage 1. Its measure is built (`eval/ask/`, see The Avala assistant below) and the baseline on the live process scope is recorded (`eval/README.md`, "Baseline": every target met except "the record does not hold it", 8 of 12, where the answer gave a related fact and named the gap; about 16,000 tokens a question). Next: settle that rule with the owner, bring the tokens per question down and measure it, then the button in the top bar.
 
 ## Where things are
 

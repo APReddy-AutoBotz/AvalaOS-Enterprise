@@ -13,12 +13,20 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildOpenAIRequest } from '../../domain/ai/gateway.ts';
 import { askProcess, askSegments, readAnswer, type Fact } from '../../domain/assistant/ask.ts';
 import { factsFor, loadQuestions, loadSample, plantedFor, type Sample } from './sample.ts';
 import { holders, judge, KINDS, KIND_ORDER, renderScorecard, scorecard, ungrounded, type Outcome, type Question, type QuestionSet } from './scorer.ts';
 
 const CONCURRENCY = 4;
-const approxTokens = (facts: Fact[], question: string) => Math.round((facts.reduce((n, f) => n + f.id.length + f.text.length + 30, 0) + question.length + askProcess.instructions.length) / 4);
+/**
+ * About how many tokens the gateway sends for one question: the request it would build, at 3.4
+ * characters a token (measured on the baseline run; ids and quoted names take more tokens than prose).
+ */
+function approxTokens(facts: Fact[], question: string): number {
+  const body = buildOpenAIRequest(askProcess, askSegments(question, facts), '');
+  return Math.round((String(body.instructions).length + String(body.input).length + JSON.stringify(body.text).length) / 3.4);
+}
 
 interface Server { url: string; key: string; workspaceId: string }
 const headers = (key: string): Record<string, string> =>
@@ -147,7 +155,19 @@ async function main() {
   const card = scorecard(outcomes);
   const text = renderScorecard(card, { model, key: keyWords(before) });
   if (flag('--json')) console.log(JSON.stringify({ model, key: before.source, provider: before.provider, card, outcomes }, null, 2));
-  else console.log(`\n${text}`);
+  else {
+    console.log(`\n${text}`);
+    // Every answer, so the ones that passed can be read too: a rule can pass an answer a person would not.
+    const group = !!process.env.GITHUB_ACTIONS;
+    console.log(group ? '::group::Every answer' : '\nEvery answer:');
+    for (const o of outcomes) {
+      console.log(`\n${o.id}${card.runs > 1 ? ` (run ${o.run})` : ''} ${o.pass ? 'passed' : 'NOT PASSED'}: ${o.question}`);
+      if (o.error) console.log(`  the request failed: ${o.error}`);
+      for (const s of o.answer?.sentences ?? []) console.log(`  ${s.text} [${s.fact.id}]`);
+      if (o.answer?.missing) console.log(`  Not in the record: ${o.answer.missing}`);
+    }
+    if (group) console.log('::endgroup::');
+  }
   const summary = process.env.GITHUB_STEP_SUMMARY;
   if (summary) fs.appendFileSync(summary, `${text}\n`);
   const out = value('--out');
