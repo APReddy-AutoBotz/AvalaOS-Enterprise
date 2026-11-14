@@ -143,3 +143,12 @@ export const askProcess: TaskDefinition = {
   maxOutputTokens: 3000,
   verifyArrays: ['sentences'],
 };
+
+/**
+ * A failed question in plain words. A server that does not know the task yet (an older `journey-ai`,
+ * as on a preview before the release) says so instead of listing its tasks.
+ */
+export function askFailure(message: string): string {
+  if (/unknown task|UNKNOWN_TASK/i.test(message)) return 'Ask Avala is not switched on on the server yet. It goes live with the next release; until then questions cannot be answered here.';
+  return message;
+}

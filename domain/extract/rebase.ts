@@ -110,7 +110,21 @@ function mapRefs(x: Any, map: Map<string, string>): Any {
   return y;
 }
 
-const show = (v: unknown) => (Array.isArray(v) ? v.join(', ') : v === null || v === undefined ? 'unknown' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+const ACCESS_WORDS: Record<string, string> = { confirmed: 'confirmed available', reported: 'reported, not confirmed', unknown: 'unknown', confirmed_absent: 'not available' };
+/** One item of a list in words: an access route as "API API_X: confirmed available", a named thing by its name. Never raw data. */
+function showItem(v: unknown): string {
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    if (typeof o.method === 'string' && typeof o.access === 'string') {
+      const what = [o.method === 'api' || o.method === 'ui' ? o.method.toUpperCase() : o.method, typeof o.name === 'string' ? o.name : ''].filter(Boolean).join(' ');
+      return `${what}: ${ACCESS_WORDS[o.access] ?? o.access}`;
+    }
+    for (const k of ['name', 'label', 'question', 'text', 'value']) if (typeof o[k] === 'string' && o[k]) return o[k] as string;
+    return 'details';
+  }
+  return v === null || v === undefined ? 'unknown' : String(v);
+}
+const show = (v: unknown) => (Array.isArray(v) ? v.map(showItem).join('; ') || 'none' : showItem(v));
 
 function plan(current: ProcessModel, extracted: ProcessModel): Plan {
   if (isEmpty(current)) {

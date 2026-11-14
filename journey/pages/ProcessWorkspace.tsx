@@ -8,7 +8,7 @@ import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
+import { AskAvalaButton, Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
 import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
@@ -112,7 +112,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           {canApprove && working && (
             <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
           )}
-          {model && hasSteps && shownStages.length > 0 && <Button variant="secondary" onClick={() => setAsking(true)} aria-haspopup="dialog">Ask Avala</Button>}
+          {model && hasSteps && shownStages.length > 0 && <AskAvalaButton onClick={() => setAsking(true)} aria-haspopup="dialog" />}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
       </div>

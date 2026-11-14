@@ -6,7 +6,7 @@ import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import type { Override } from '../../domain/assess/decisions.ts';
-import { AskError, askFacts, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Passage, type Target } from '../../domain/assistant/ask.ts';
+import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Passage, type Target } from '../../domain/assistant/ask.ts';
 import { STATUS_LABEL } from '../../domain/workitems/board.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
@@ -65,7 +65,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
       const answer = readAnswer(r.data, facts);
       setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer } : x)));
     } catch (x) {
-      setTurns(t => t.map((y, i) => (i === t.length - 1 ? { ...y, error: messageOf(x) } : y)));
+      setTurns(t => t.map((y, i) => (i === t.length - 1 ? { ...y, error: askFailure(messageOf(x)) } : y)));
     } finally { setBusy(false); }
   };
 
