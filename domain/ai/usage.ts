@@ -36,6 +36,7 @@ export const WORK_OF_TASK: Record<string, string> = {
   draftNarrative: 'Drafting document text',
   askProcess: 'Ask Avala',
   askBoard: 'Ask Avala',
+  askWorkspace: 'Ask Avala',
 };
 export const workOf = (task: string) => WORK_OF_TASK[task] ?? 'Other AI work';
 

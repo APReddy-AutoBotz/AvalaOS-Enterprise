@@ -6,11 +6,12 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { askFacts, validateQuestion, type AskContext, type Fact } from '../../domain/assistant/ask.ts';
 import { createMemoryStore } from '../../journey/store/memoryStore.ts';
 import { loadAskRecord } from '../../journey/process/askRecord.ts';
-import { boardSubject } from '../../journey/process/askSubjects.ts';
+import { boardSubject, workspaceSubject } from '../../journey/process/askSubjects.ts';
 import { boardFacts, type BoardContext } from '../../domain/assistant/board.ts';
+import { namedProcess, workspaceFacts, type WorkspaceContext } from '../../domain/assistant/workspace.ts';
 import type { Planted, Question, QuestionSet } from './scorer.ts';
 
-export interface Sample { processName: string; model: ProcessModel; record: Omit<AskContext, 'model'>; board: BoardContext }
+export interface Sample { processId: string; processName: string; model: ProcessModel; record: Omit<AskContext, 'model'>; board: BoardContext; workspace: WorkspaceContext }
 
 export async function loadSample(): Promise<Sample> {
   const demo = JSON.parse(fs.readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8'));
@@ -28,7 +29,13 @@ export async function loadSample(): Promise<Sample> {
   const project = (await store.listProjects(workspace.id))[0];
   if (!project) throw new Error('The sample has no board.');
   const board = { ...(await boardSubject(store, { workspaceId: workspace.id, project }).load()) as BoardContext, today: '2026-11-14' };
-  return { processName: process.name, model, record: await loadAskRecord(store, { processId: process.id, workspaceId: workspace.id, model, sources }), board };
+  // The whole workspace as the panel reads it away from a process or board.
+  const ws = await workspaceSubject(store, { workspace: { id: workspace.id, name: workspace.name }, processesInUse: true, boardsInUse: true }).load() as { ctx: WorkspaceContext };
+  return {
+    processId: process.id, processName: process.name, model, board,
+    record: await loadAskRecord(store, { processId: process.id, workspaceId: workspace.id, model, sources }),
+    workspace: { ...ws.ctx, today: '2026-11-14' },
+  };
 }
 
 export function loadQuestions(): QuestionSet {
@@ -41,6 +48,12 @@ export const plantedFor = (q: Question, set: QuestionSet): Planted | undefined =
 export function factsFor(q: Question, sample: Sample, set: QuestionSet): { question: string; facts: Fact[] } {
   const question = validateQuestion(q.question);
   if (q.scope === 'board') return { question, facts: boardFacts(question, sample.board) };
+  if (q.scope === 'workspace') {
+    // As the panel does: the process's own record joins only when the question names it.
+    const named = namedProcess(question, sample.workspace.processes) === sample.processId
+      ? { processId: sample.processId, facts: askFacts(question, { model: sample.model, ...sample.record }) } : null;
+    return { question, facts: workspaceFacts(question, sample.workspace, named) };
+  }
   const p = plantedFor(q, set);
   const passages = [...(sample.record.passages ?? []), ...(p ? [{ sourceKey: p.sourceKey, sourceTitle: p.sourceTitle, locator: p.locator as never, text: p.text }] : [])];
   return { question, facts: askFacts(question, { model: sample.model, ...sample.record, passages }) };

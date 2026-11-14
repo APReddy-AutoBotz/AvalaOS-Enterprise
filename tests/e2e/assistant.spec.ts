@@ -1,5 +1,6 @@
 // The Avala assistant's panel, on the demo's sample case. "Ask Avala" is in the top bar on every page:
-// on a process it asks about that process, on the Delivery board about that board; elsewhere the person picks one. Answers need the server's AI,
+// on a process it asks about that process, on the Delivery board about that board; elsewhere about the
+// whole workspace, and the person can pick a process or a board instead. Answers need the server's AI,
 // which the in-browser store does not have, so this checks the panel and that it says so plainly; how
 // facts are built and answers read is tested in domain/assistant/ask.test.ts.
 import AxeBuilder from '@axe-core/playwright';
@@ -7,7 +8,7 @@ import { test, expect } from '@playwright/test';
 
 const ask = (page: import('@playwright/test').Page) => page.getByRole('banner').getByRole('button', { name: 'Ask Avala' });
 
-test('Ask Avala is in the top bar: away from a process it asks which one, on a process it asks about that one', async ({ page }) => {
+test('Ask Avala is in the top bar: away from a process it asks about the workspace, on a process about that one', async ({ page }) => {
   await page.goto('/demo/processes');
   const button = ask(page);
   // Set apart from the page's actions: the brand amber.
@@ -16,8 +17,13 @@ test('Ask Avala is in the top bar: away from a process it asks which one, on a p
   let panel = page.getByTestId('ask-panel');
   await expect(page.getByRole('heading', { name: 'Ask Avala' })).toBeVisible();
   const about = panel.getByLabel('Asking about');
-  await expect(about).toHaveValue('');
-  await expect(panel).toContainText('Choose a process or a board to ask about');
+  await expect(about).toHaveValue('w');
+  await expect(about.locator('option:checked')).toHaveText('The whole workspace');
+  await expect(panel).toContainText('Ask about this workspace');
+  const whole = panel.getByRole('group', { name: 'Questions to start with' });
+  await expect(whole.getByRole('button')).toHaveCount(3);
+  await whole.getByRole('button', { name: 'Which processes are quick wins?' }).click();
+  await expect(panel.getByTestId('ask-turn').getByRole('alert')).toContainText('need the server');
   await about.selectOption({ label: 'Vendor invoice processing' });
   await expect(panel).toContainText('Answers come only from its record');
   await expect(panel.getByRole('group', { name: 'Questions to start with' }).getByRole('button')).toHaveCount(3);
@@ -31,6 +37,11 @@ test('Ask Avala is in the top bar: away from a process it asks which one, on a p
   panel = page.getByTestId('ask-panel');
   await expect(panel.getByLabel('Asking about').locator('option:checked')).toHaveText('Vendor invoice processing');
   await expect(panel).toContainText('it changes nothing');
+  // One click widens to the whole workspace, and back.
+  await panel.getByLabel('Asking about').selectOption('w');
+  await expect(page.getByTestId('ask-panel')).toContainText('Ask about this workspace');
+  await page.getByTestId('ask-panel').getByLabel('Asking about').selectOption({ label: 'Vendor invoice processing' });
+  panel = page.getByTestId('ask-panel');
   const start = panel.getByRole('group', { name: 'Questions to start with' });
   await expect(start.getByRole('button')).toHaveCount(3);
   const result = await new AxeBuilder({ page }).include('[data-testid="ask-panel"]').withTags(['wcag2a', 'wcag2aa']).analyze();

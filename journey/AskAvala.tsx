@@ -1,7 +1,7 @@
 // "Ask Avala" in the top bar, on every page (docs/product-plan.md, "Ask Avala: the plan", stage 1). The
 // panel says what it is asking about: on a process page, that process; on the Delivery board, that board;
-// elsewhere the person picks a process or a board (domain/assistant/scope.ts). The whole workspace comes
-// next in the plan. The answering itself is journey/process/AskPanel.tsx, the same for every subject.
+// elsewhere the whole workspace (domain/assistant/scope.ts). The person can pick another process or board,
+// or widen to the whole workspace. The answering itself is journey/process/AskPanel.tsx, the same for all.
 import React from 'react';
 import type { JourneyStore, ProcessRow, SourceRow, Workspace } from './store/types.ts';
 import type { Project } from '../domain/workitems/board.ts';
@@ -11,7 +11,7 @@ import { askable, askScope, pickOf } from '../domain/assistant/scope.ts';
 import { navFor, stagesFor } from '../domain/workspace/modules.ts';
 import type { Nav } from './JourneyApp.tsx';
 import { AskPanel } from './process/AskPanel.tsx';
-import { boardSubject, processSubject } from './process/askSubjects.ts';
+import { boardSubject, processSubject, workspaceSubject } from './process/askSubjects.ts';
 import { SidePanel } from './process/widgets.tsx';
 import { AskAvalaButton, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
@@ -59,7 +59,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   // The board page without a project shows the first one; so does asking about it.
   let scope = askScope(nav.route, picked);
   if (scope.kind === 'board' && !scope.projectId && projects?.[0]) scope = { kind: 'board', projectId: projects[0].id };
-  if ((scope.kind === 'process' && !stages.length) || (scope.kind === 'board' && !boards)) scope = { kind: 'choose' };
+  if ((scope.kind === 'process' && !stages.length) || (scope.kind === 'board' && !boards)) scope = { kind: 'workspace' };
   const processId = scope.kind === 'process' ? scope.processId : null;
   const projectId = scope.kind === 'board' ? scope.projectId : null;
   const project = projectId ? projects?.find(p => p.id === projectId) ?? null : null;
@@ -71,34 +71,40 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     return () => { live = false; };
   }, [store, processId]);
 
+  const whole = scope.kind === 'workspace';
   const subject = React.useMemo(() => {
+    if (whole) return { workspaceId: workspace.id, subject: workspaceSubject(store, { workspace: { id: workspace.id, name: workspace.name }, processesInUse: stages.length > 0, boardsInUse: boards }) };
     if (project) return { workspaceId: workspace.id, subject: boardSubject(store, { workspaceId: workspace.id, project: { id: project.id, name: project.name } }) };
     if (processId && loaded && loaded !== 'missing' && askable(loaded.model)) {
       const workspaceId = loaded.process.workspaceId;
       return { workspaceId, subject: processSubject(store, { processId, workspaceId, model: loaded.model!, sources: loaded.sources }) };
     }
     return null;
-  }, [store, workspace.id, project, processId, loaded]);
+  }, [store, workspace.id, workspace.name, whole, stages.length, boards, project, processId, loaded]);
 
   // A citation leads to where its fact lives; the panel closes so the page is in view.
-  const onOpen = (t: Target) => {
+  const onOpen = (t: Target, inProcess: string | null = processId) => {
     onClose();
-    if (t.kind === 'item') nav.go({ page: 'board', projectId: t.projectId, itemId: t.itemId });
+    if (t.kind === 'within') { onOpen(t.target, t.processId); return; }
+    if (t.kind === 'open-process') nav.go({ page: 'process', processId: t.processId, stage: 'process' });
+    else if (t.kind === 'applications' || t.kind === 'people') nav.go({ page: 'settings', section: t.kind });
+    else if (t.kind === 'portfolio') nav.go({ page: 'processes' });
+    else if (t.kind === 'item') nav.go({ page: 'board', projectId: t.projectId, itemId: t.itemId });
     else if (t.kind === 'board') nav.go({ page: 'board', projectId: t.projectId });
-    else if (!processId) { if (t.kind === 'platform' && projectId) nav.go({ page: 'board', projectId }); }
-    else if (t.kind === 'platform') nav.go({ page: 'process', processId, stage: stages.includes(t.stage) ? t.stage : 'process' });
-    else nav.go({ page: 'process', processId, stage: t.kind === 'assessment' ? 'assessment' : t.kind === 'requirement' && stages.includes('documents') ? 'documents' : 'process' });
+    else if (!inProcess) { if (t.kind === 'platform' && projectId) nav.go({ page: 'board', projectId }); }
+    else if (t.kind === 'platform') nav.go({ page: 'process', processId: inProcess, stage: stages.includes(t.stage) ? t.stage : 'process' });
+    else nav.go({ page: 'process', processId: inProcess, stage: t.kind === 'assessment' ? 'assessment' : t.kind === 'requirement' && stages.includes('documents') ? 'documents' : 'process' });
   };
 
   // A process open on a page but not of this workspace (opened by a link) is still offered.
   const processOptions = processes && loaded && loaded !== 'missing' && !processes.some(p => p.id === loaded.process.id) ? [...processes, loaded.process] : processes ?? [];
-  const what = boards && stages.length ? 'a process or a board' : boards ? 'a board' : 'a process';
   const about = (
     <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
       <label htmlFor="ask-about" className="text-sm text-slate-600">Asking about</label>
       <select id="ask-about" value={pickOf(scope)} onChange={e => setPicked(e.target.value || null)} disabled={!processes || !projects}
         className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-900 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20">
-        {!pickOf(scope) && <option value="">{`Choose ${what}`}</option>}
+        {!pickOf(scope) && <option value="">Choose a board</option>}
+        <option value="w">The whole workspace</option>
         {processOptions.length > 0 && <optgroup label="Processes">{processOptions.map(p => <option key={p.id} value={`p:${p.id}`}>{p.name}</option>)}</optgroup>}
         {(projects ?? []).length > 0 && <optgroup label="Delivery board">{projects!.map(p => <option key={p.id} value={`b:${p.id}`}>{p.name}</option>)}</optgroup>}
       </select>
@@ -113,14 +119,11 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     );
   }
   const lists = Boolean(processes && projects);
-  const nothing = lists && !processOptions.length && !projects!.length;
   return (
     <SidePanel title="Ask Avala" onClose={onClose} wide>
       <div data-testid="ask-panel">
         {about}
         <ErrorNote message={error} />
-        {scope.kind === 'choose' && lists && !nothing && <p className="text-sm leading-6 text-slate-600">Choose {what} to ask about. Answers come only from its record and from how Avala OS works, and each sentence links to where it came from.</p>}
-        {nothing && <p className="text-sm leading-6 text-slate-600">This workspace has nothing to ask about yet. Add a process{boards ? ' or put work on a board' : ''}, then ask about it here.</p>}
         {scope.kind === 'board' && lists && !project && (projectId ? <p className="text-sm leading-6 text-slate-600">That board is not in this workspace.</p> : null)}
         {processId && loaded === 'missing' && <p className="text-sm leading-6 text-slate-600">That process is not in your workspaces.</p>}
         {processId && loaded && loaded !== 'missing' && !askable(loaded.model) && <p className="text-sm leading-6 text-slate-600">{loaded.process.name} has no steps yet, so its record holds nothing to answer from. Add its sources and read them into the process first.</p>}

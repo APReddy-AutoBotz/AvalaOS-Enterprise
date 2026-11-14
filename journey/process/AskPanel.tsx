@@ -47,11 +47,13 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
     setError(null);
     let q: string;
     try { q = validateQuestion(text, subject.noun); } catch (x) { setError(x instanceof AskError ? x.message : messageOf(x)); return; }
-    const facts = subject.facts(q, record);
+    // The last answered turns go along so a follow-up ("and who owns it?") is understood; they are never cited.
+    const earlier = turns.filter(t => t.answer).map(t => ({ question: t.question, answer: t.answer! }));
     setBusy(true); setQuestion('');
     setTurns(t => [...t, { question: q }]);
     try {
-      const r = await store.runAiTask(workspaceId, subject.task.id, askSegments(q, facts) as never);
+      const facts = await subject.facts(q, record);
+      const r = await store.runAiTask(workspaceId, subject.task.id, askSegments(q, facts, earlier) as never);
       const answer = readAnswer(r.data, facts);
       setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer } : x)));
     } catch (x) {
@@ -74,7 +76,7 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
           )}
           {turns.map((t, n) => {
             // Two questions to ask next, by rule from what the last answer cited, never one already asked.
-            const next = t.answer && n === turns.length - 1 && !busy ? followUps(t.answer, turns.map(x => x.question), stages) : [];
+            const next = t.answer && n === turns.length - 1 && !busy ? followUps(t.answer, turns.map(x => x.question), stages, 2, subject.kind) : [];
             return (
               <section key={n} aria-label={`Question ${n + 1}`} data-testid="ask-turn">
                 <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>

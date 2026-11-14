@@ -12,30 +12,34 @@ export function citedFacts(answer: Answer): Fact[] {
   return [...new Map(answer.sentences.map(s => [s.fact.id, s.fact])).values()];
 }
 
-type Place = StageId | 'board' | null;
-/** Where a fact lives on screen: a stage of the process, the board, or nowhere to open (a source passage). */
-export function placeOf(t: Target): Place {
+export type Place = StageId | 'board' | 'open-process' | 'applications' | 'people' | 'portfolio';
+/** Where a fact lives on screen: a stage of the process, the board, a page of the workspace, or nowhere to open (a source passage). */
+export function placeOf(t: Target): Place | null {
   switch (t.kind) {
     case 'step': case 'process': return 'process';
     case 'assessment': return 'assessment';
     case 'requirement': return 'documents';
     case 'platform': return t.stage;
     case 'item': case 'board': return 'board';
+    case 'open-process': case 'applications': case 'people': case 'portfolio': return t.kind;
+    case 'within': return placeOf(t.target);
     default: return null;
   }
 }
 
-const OPEN: Record<StageId | 'board', string> = {
+const OPEN: Record<Place, string> = {
   sources: 'Open the sources', process: 'Open the process steps', assessment: 'Open the assessment', documents: 'Open the documents',
   flows: 'Open the flows', 'work-items': 'Open the work items', board: 'Open the board item',
+  'open-process': 'Open the process', applications: 'Open the applications list', people: 'Open People', portfolio: 'Open the processes',
 };
+const isStage = (p: Place): p is StageId => STAGES.some(s => s.id === p);
 
 /** Places by how many cited facts live there, most first; ties keep the order they were first cited. */
-function placesOf(answer: Answer, stages: StageId[]): (StageId | 'board')[] {
-  const count = new Map<StageId | 'board', number>();
+function placesOf(answer: Answer, stages: StageId[]): Place[] {
+  const count = new Map<Place, number>();
   for (const f of citedFacts(answer)) {
     const p = placeOf(f.target);
-    if (p && (p === 'board' || stages.includes(p))) count.set(p, (count.get(p) ?? 0) + 1);
+    if (p && (!isStage(p) || stages.includes(p))) count.set(p, (count.get(p) ?? 0) + 1);
   }
   return [...count.entries()].sort((a, b) => b[1] - a[1]).map(([p]) => p);
 }
@@ -45,11 +49,12 @@ export function answerAction(answer: Answer, stages: StageId[]): { label: string
   const best = placesOf(answer, stages)[0];
   if (!best) return null;
   const fact = citedFacts(answer).find(f => placeOf(f.target) === best)!;
-  return { label: fact.target.kind === 'board' ? 'Open the board' : OPEN[best], target: fact.target };
+  const inner = fact.target.kind === 'within' ? fact.target.target : fact.target;
+  return { label: inner.kind === 'board' ? 'Open the board' : OPEN[best], target: fact.target };
 }
 
 /** Questions the record can answer, by where the cited facts live. */
-const NEXT: Record<StageId | 'board' | 'none', string[]> = {
+const NEXT: Record<Place | 'none', string[]> = {
   assessment: ['Which steps stay with people, and why?', 'What could rule-based RPA alone do across this process?', 'What would change the recommendation?'],
   process: ['Who does each step today?', 'Which exceptions does this process have?'],
   documents: ['Which requirements are human checks?', 'Which requirements come from exceptions?'],
@@ -58,14 +63,26 @@ const NEXT: Record<StageId | 'board' | 'none', string[]> = {
   board: ['Which board items have no owner?', 'Which work is still to do?'],
   sources: ['What is still unknown about this process?'],
   none: ['What is still unknown about this process?', 'Why is this the recommended approach?'],
+  'open-process': ['Which processes have no approver named?', 'What is open across the workspace?'],
+  portfolio: ['Which processes are quick wins?', 'Which processes carry most of the hours?'],
+  applications: ['Which applications are on the list, and how are they reached?', 'Which processes use each application?'],
+  people: ['Who are the admins of this workspace?', 'Which processes have no analyst named?'],
+};
+/** When the answer's facts lead nowhere in particular, by what is asked about. */
+const FALLBACK: Record<'process' | 'board' | 'workspace', string[]> = {
+  process: NEXT.none,
+  board: ['What is blocked or overdue?', 'Which open items have no owner?', 'What is in progress, and who owns it?'],
+  workspace: ['Which processes are quick wins?', 'What is open across the workspace?', 'Which processes have no approver named?'],
 };
 
 /** Two questions to ask next, none already asked in the panel, from where this answer's facts live. */
-export function followUps(answer: Answer, asked: string[], stages: StageId[], max = 2): string[] {
+export function followUps(answer: Answer, asked: string[], stages: StageId[], max = 2, scope: 'process' | 'board' | 'workspace' = 'process'): string[] {
   const seen = new Set(asked.map(q => q.trim().toLowerCase()));
   const out: string[] = [];
-  for (const p of [...placesOf(answer, stages), 'none' as const]) {
-    for (const q of NEXT[p]) {
+  // On the board or the workspace, a process stage's questions ("…about this process") would not fit.
+  const places = placesOf(answer, stages).filter(p => scope === 'process' || !isStage(p));
+  for (const list of [...places.map(p => NEXT[p]), FALLBACK[scope]]) {
+    for (const q of list) {
       if (out.length >= max) return out;
       if (!seen.has(q.toLowerCase()) && !out.includes(q)) out.push(q);
     }
