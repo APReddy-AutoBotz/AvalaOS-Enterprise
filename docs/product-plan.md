@@ -619,8 +619,8 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 - Prove source reading on three to five real processes and fix what breaks (the largest risk in this plan).
 - A screen for AI use and limits per workspace.
 - Email notifications for "Needs you".
-- Per-process access, so a client sees only its own processes.
-- Error monitoring and a backup check (error monitoring: Sentry's free plan in the browser, November 2026; the edge functions' errors stay in the Supabase logs for now).
+- Per-process access, so a client sees only its own processes (done, November 2026, as a workspace per client: people see only the workspaces they are in, which the database already enforces; grants on single processes inside one workspace stay possible later).
+- Error monitoring and a backup check (done, November 2026: a nightly encrypted dump with a restore check, because the Free plan keeps no backups; Sentry's free plan for errors in the browser, while the edge functions' errors stay in the Supabase logs for now).
 
 ### Phase C: features that add the most value
 

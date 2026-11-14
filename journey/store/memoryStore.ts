@@ -149,7 +149,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       throw new StoreError(501, `${providerLabel(provider)} sign-in needs the server; this is the in-browser store.`);
     },
 
-    async listWorkspaces() { requireMe(); return state.workspaces; },
+    async listWorkspaces() { requireMe(); return state.workspaces.map(w => ({ canAddWorkspace: true, ...w })); },
     async setProcessPeople(processId, people) {
       requireMe();
       const { p, w } = workspaceOf(processId);
@@ -166,13 +166,23 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     async createOrganization(organizationName, workspaceName) {
       requireMe();
       const id = uuid();
-      const w: Workspace = { id, name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true, organizationId: id, modules: ['assess', 'documents', 'board'] };
+      const w: Workspace = { id, name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true, organizationId: id, modules: ['assess', 'documents', 'board'], canAddWorkspace: true };
       if (!w.organizationName) throw new StoreError(400, 'Name the organization.');
       state.workspaces.push(w);
       save();
       return { workspaceId: w.id };
     },
 
+    async createWorkspace(organizationId, name) {
+      requireMe();
+      const first = state.workspaces.find(w => (w.organizationId ?? w.id) === organizationId);
+      if (!first) throw new StoreError(404, 'Organisation not found');
+      if (!name.trim() || name.trim().length > 120) throw new StoreError(400, 'Workspace name must be 1 to 120 characters');
+      const w: Workspace = { id: uuid(), name: name.trim(), organizationName: first.organizationName, role: 'admin', canApprove: true, organizationId, modules: first.modules, canAddWorkspace: true };
+      state.workspaces.push(w);
+      save();
+      return w.id;
+    },
     async setOrganizationModules(organizationId, modules) {
       requireMe();
       const list = state.workspaces.filter(w => (w.organizationId ?? w.id) === organizationId);

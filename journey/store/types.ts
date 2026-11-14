@@ -38,6 +38,8 @@ export interface AiUsage {
 export interface Workspace {
   id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null;
   organizationId?: string;
+  /** The person made the organisation, so may add workspaces to it (one per client: people see only the workspaces they are in). */
+  canAddWorkspace?: boolean;
   /** The parts of Avala OS its organisation uses (domain/workspace/modules.ts); missing means all of them. */
   modules?: Module[];
 }
@@ -149,6 +151,8 @@ export interface JourneyStore {
   /** Whether the signed-in person may create an organization (only the platform owner, once one is listed). */
   canCreateOrganization(): Promise<boolean>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
+  /** The organisation's creator adds a workspace and becomes its admin. Returns its id. */
+  createWorkspace(organizationId: string, name: string): Promise<string>;
   /** The platform owner only: which parts the organisation uses (one of the four set-ups). Nothing is deleted. */
   setOrganizationModules(organizationId: string, modules: Module[]): Promise<Module[]>;
 
