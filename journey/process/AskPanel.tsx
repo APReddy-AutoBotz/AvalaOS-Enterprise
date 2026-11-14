@@ -4,9 +4,10 @@
 import React from 'react';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Target } from '../../domain/assistant/ask.ts';
+import { answerGroups, AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Target } from '../../domain/assistant/ask.ts';
 import { loadAskRecord } from './askRecord.ts';
-import { answerAction, citedFacts, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
+import { answerAction, citedFacts, figureTiles, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
+import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
@@ -78,7 +79,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
                 <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
                 {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
                 {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
-                {t.answer && <AnswerView answer={t.answer} stages={stages} onOpen={onOpen} />}
+                {t.answer && <AnswerView answer={t.answer} assessment={record?.assessment} stages={stages} onOpen={onOpen} />}
                 {next.length > 0 && (
                   <div role="group" aria-label="Ask next" className="mt-4 flex flex-wrap gap-2">
                     {next.map(q => <button key={q} type="button" onClick={() => ask(q)} className="rounded-full border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50">{q}</button>)}
@@ -110,7 +111,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
  * most of the facts live, and the sources as compact chips that show their quote when opened. The layout
  * is decided by rule (domain/assistant/present.ts); nothing here is written by the AI.
  */
-function AnswerView({ answer, stages, onOpen }: { answer: Answer; stages: StageId[]; onOpen: (t: Target) => void }) {
+function AnswerView({ answer, assessment, stages, onOpen }: { answer: Answer; assessment?: ProcessAssessment | null; stages: StageId[]; onOpen: (t: Target) => void }) {
   const cited = citedFacts(answer);
   const num = (id: string) => cited.findIndex(f => f.id === id) + 1;
   const [shown, setShown] = React.useState<string | null>(null);
@@ -119,13 +120,40 @@ function AnswerView({ answer, stages, onOpen }: { answer: Answer; stages: StageI
   }
   const action = answerAction(answer, stages);
   const open = cited.find(f => f.id === shown) ?? null;
+  const tiles = figureTiles(answer, assessment);
+  const cite = (x: Answer['sentences'][number]) => (
+    <sup className="ml-0.5"><a href={`#cite-${x.fact.id}`} onClick={() => setShown(x.fact.id)} className="font-semibold text-[#002C4B] no-underline hover:underline" aria-label={`Source ${num(x.fact.id)}: ${x.fact.label}`}>{num(x.fact.id)}</a></sup>
+  );
   return (
     <div className="mt-3" data-testid="ask-answer">
-      <p className="text-sm leading-7 text-slate-800">
-        {answer.sentences.map((s, i) => (
-          <React.Fragment key={i}>{i > 0 && ' '}{s.text}<sup className="ml-0.5"><a href={`#cite-${s.fact.id}`} onClick={() => setShown(s.fact.id)} className="font-semibold text-[#002C4B] no-underline hover:underline" aria-label={`Source ${num(s.fact.id)}: ${s.fact.label}`}>{num(s.fact.id)}</a></sup></React.Fragment>
-        ))}
-      </p>
+      {answer.lead ? (
+        <>
+          {/* The direct answer first; the figures beside it are worked out by rule, never by the AI. */}
+          <p className="border-l-[3px] border-[#E69F00] pl-3 text-[15px] font-semibold leading-7 text-slate-900" data-testid="ask-lead">{answer.lead.text}{cite(answer.lead)}</p>
+          {tiles.length > 0 && (
+            <dl className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+              {tiles.map(t => (
+                <div key={t.label} className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
+                  <dt className="text-xs text-slate-500">{t.label}</dt>
+                  <dd className="font-display text-lg font-semibold text-[#002C4B]">{t.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {answerGroups(answer).map((g, gi) => (
+            <div key={gi} className="mt-3">
+              {g.heading && <p className="text-xs font-semibold text-slate-500">{g.heading}</p>}
+              <ul className="mt-1 space-y-1">
+                {g.sentences.map((x, i) => <li key={i} className="flex gap-2 text-sm leading-6 text-slate-800"><span aria-hidden="true" className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-slate-400" /><span>{x.text}{cite(x)}</span></li>)}
+              </ul>
+            </div>
+          ))}
+        </>
+      ) : (
+        <p className="text-sm leading-7 text-slate-800">
+          {answer.sentences.map((x, i) => <React.Fragment key={i}>{i > 0 && ' '}{x.text}{cite(x)}</React.Fragment>)}
+        </p>
+      )}
       {answer.missing && <p className="mt-2 text-sm text-amber-900"><span className="font-semibold">Not in the record:</span> {answer.missing}</p>}
       {action && (
         <Button variant="secondary" className="mt-3" onClick={() => onOpen(action.target)}>
