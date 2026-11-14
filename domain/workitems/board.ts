@@ -34,6 +34,8 @@ export interface WorkItem {
   updatedAt: string;
   /** Order on the board; new items go last. */
   sortOrder?: number;
+  /** Labels as in Jira (`parseLabels`). */
+  labels?: string[];
 }
 export interface Project { id: string; name: string; description: string }
 
@@ -41,7 +43,7 @@ export class BoardError extends Error {}
 export const BOARD_LIMITS = { title: 300, description: 8000, project: 200 } as const;
 
 /** What a person may change on a board item. Owner, estimate and dates may stay empty. */
-export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null; parentId?: string | null }
+export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null; parentId?: string | null; labels?: string[] }
 
 // ---- Items a person adds by hand (the board on its own, without a process) ------------------------
 
@@ -98,6 +100,7 @@ export interface NewWorkItem {
   estimateHours?: number | null;
   startDate?: string | null;
   dueDate?: string | null;
+  labels?: string[];
 }
 
 /** Checks an item a person adds and gives it its place: the end of To do. */
@@ -118,7 +121,7 @@ export function validateNewItem(n: NewWorkItem, items: WorkItem[]): Required<New
   const last = Math.max(0, ...items.map(i => i.sortOrder ?? 0));
   return {
     type: n.type, title, description, parentId: n.parentId || null, ownerId: n.ownerId || null, priority: n.priority ?? null,
-    estimateHours: estimate, startDate: start, dueDate: due, status: 'todo', sortOrder: last + 1,
+    estimateHours: estimate, startDate: start, dueDate: due, labels: parseLabels(n.labels ?? []), status: 'todo', sortOrder: last + 1,
   };
 }
 
@@ -142,6 +145,7 @@ export function validateEdit(item: WorkItem, e: WorkItemEdit, items: WorkItem[] 
     if (!out.title) throw new BoardError('Give the item a title.');
     if (out.title.length > BOARD_LIMITS.title) throw new BoardError('The title is too long.');
   }
+  if (e.labels !== undefined) out.labels = parseLabels(e.labels);
   if (e.description !== undefined && e.description.length > BOARD_LIMITS.description) throw new BoardError('The description is too long.');
   if (e.status !== undefined && !COLUMNS.some(c => c.id === e.status)) throw new BoardError('Unknown status.');
   if (e.estimateHours !== undefined && e.estimateHours !== null && !(e.estimateHours >= 0 && e.estimateHours < 100000)) throw new BoardError('The estimate must be a number of hours.');
@@ -226,4 +230,31 @@ export function initials(name: string): string {
   const words = name.trim().split(/[\s._-]+/).filter(Boolean);
   if (!words.length) return '?';
   return (words.length === 1 ? words[0].slice(0, 2) : words[0][0] + words[words.length - 1][0]).toUpperCase();
+}
+
+// ---- Labels ---------------------------------------------------------------------------------------
+
+export const LABEL_LIMITS = { count: 20, length: 40 } as const;
+
+/**
+ * Labels as in Jira: words without spaces or commas. A person types them separated by spaces or commas;
+ * repeats are dropped (ignoring case, the first spelling is kept), order is kept.
+ */
+export function parseLabels(input: string | string[]): string[] {
+  const parts = (Array.isArray(input) ? input : [input]).flatMap(s => s.split(/[\s,]+/)).filter(Boolean);
+  const seen = new Set<string>(), out: string[] = [];
+  for (const p of parts) {
+    if (p.length > LABEL_LIMITS.length) throw new BoardError(`A label can be at most ${LABEL_LIMITS.length} characters: "${p.slice(0, 20)}…"`);
+    const k = p.toLowerCase();
+    if (!seen.has(k)) { seen.add(k); out.push(p); }
+  }
+  if (out.length > LABEL_LIMITS.count) throw new BoardError(`An item can have at most ${LABEL_LIMITS.count} labels.`);
+  return out;
+}
+
+/** Every label on the board, most used first, for suggestions and the filter. */
+export function boardLabels(items: Pick<WorkItem, 'labels'>[]): string[] {
+  const count = new Map<string, number>();
+  for (const i of items) for (const l of i.labels ?? []) count.set(l, (count.get(l) ?? 0) + 1);
+  return [...count].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
 }

@@ -16,6 +16,7 @@ import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem } from '../../domain/workitems/board.ts';
+import { changedFields, type ItemComment, type ItemEvent } from '../../domain/workitems/collab.ts';
 import { providerLabel } from '../../domain/auth/providers.ts';
 import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
 
@@ -39,6 +40,8 @@ interface State {
   /** Only what the browser may know of a key: its last four characters. */
   ai?: Record<string, WorkspaceAi>;
   needsEmail?: boolean;
+  comments?: ItemComment[];
+  itemEvents?: ItemEvent[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -85,6 +88,19 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
   };
 
   const nameOf = () => requireMe().email.split('@')[0]!;
+  /** The workspace of a board item, for the member rules. */
+  const itemWorkspace = (workItemId: string) => {
+    const item = (state.workItems ?? []).find(i => i.id === workItemId);
+    const project = item && (state.projects ?? []).find(p => p.id === item.projectId);
+    const w = project && state.workspaces.find(x => x.id === project.workspaceId);
+    if (!w) throw new StoreError(404, 'Work item not found.');
+    return w;
+  };
+  // History, as the database's trigger writes it (changedFields mirrors app_private.log_work_item_change).
+  let eventSeq = Math.max(0, ...(state.itemEvents ?? []).map(x => Number(x.id)));
+  const pushEvent = (e: Omit<ItemEvent, 'id' | 'createdAt' | 'actorId'>) => (state.itemEvents ??= []).push({ ...e, id: String(++eventSeq), actorId: state.me?.id ?? null, createdAt: now() });
+  const logCreated = (workItemId: string) => pushEvent({ workItemId, kind: 'created', field: null, oldValue: null, newValue: null });
+  const logChange = (before: WorkItem, after: WorkItem) => { for (const c of changedFields(before, after)) pushEvent({ workItemId: after.id, kind: 'changed', ...c }); };
   const peopleOf = (workspaceId: string) => {
     const me = requireMe();
     const w = state.workspaces.find(x => x.id === workspaceId);
@@ -314,6 +330,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
           const parent = list.find(x => x.key === p.parentKey && x.state === 'confirmed')?.workItemId ?? null;
           const item: WorkItem = { id: crypto.randomUUID(), projectId, parentId: parent, type: p.type, title: p.title, description: p.description, acceptance: p.acceptance, status: 'todo', priority: null, ownerId: null, estimateHours: null, startDate: null, dueDate: null, processId, stepIds: p.stepIds, requirements: p.requirements, snapshot: Object.fromEntries(reqs.filter(r => p.requirements.includes(r.code)).map(r => [r.code, r.statement])), updatedAt: new Date().toISOString() };
           (state.workItems ??= []).push(item);
+          logCreated(item.id);
           p.state = 'confirmed'; p.workItemId = item.id;
           created++; pending = pending.filter(k => k !== p.key);
         }
@@ -406,7 +423,9 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       const item = (state.workItems ?? []).find(i => i.id === id);
       if (!item) throw new StoreError(404, 'Work item not found.');
+      const before = structuredClone(item);
       Object.assign(item, Object.fromEntries(Object.entries(e).filter(([, v]) => v !== undefined)), { updatedAt: new Date().toISOString() });
+      logChange(before, item);
       save();
       return structuredClone(item);
     },
@@ -419,9 +438,10 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       const item: WorkItem = {
         id: crypto.randomUUID(), projectId, parentId: n.parentId, type: n.type, title: n.title, description: n.description, acceptance: [], status: n.status,
         priority: n.priority, ownerId: n.ownerId, estimateHours: n.estimateHours, startDate: n.startDate, dueDate: n.dueDate, processId: null, stepIds: [],
-        requirements: [], snapshot: {}, updatedAt: new Date().toISOString(), sortOrder: n.sortOrder,
+        requirements: [], snapshot: {}, updatedAt: new Date().toISOString(), sortOrder: n.sortOrder, labels: n.labels,
       };
       (state.workItems ??= []).push(item);
+      logCreated(item.id);
       save();
       return structuredClone(item);
     },
@@ -433,9 +453,45 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (!item || !w) throw new StoreError(404, 'Work item not found.');
       if (w.role === 'viewer') throw new StoreError(403, 'Deleting needs the editor or admin role.');
       state.workItems = (state.workItems ?? []).filter(i => i.id !== id);
-      for (const i of state.workItems) if (i.parentId === id) i.parentId = null; // as the database: on delete set null
+      for (const i of state.workItems) if (i.parentId === id) { const before = structuredClone(i); i.parentId = null; logChange(before, i); } // as the database: on delete set null
+      state.comments = (state.comments ?? []).filter(c => c.workItemId !== id);
+      state.itemEvents = (state.itemEvents ?? []).filter(x => x.workItemId !== id);
       for (const list of Object.values(state.proposals ?? {})) for (const p of list) if (p.workItemId === id) p.workItemId = null;
       save();
+    },
+    async listComments(workItemId) {
+      requireMe();
+      itemWorkspace(workItemId);
+      return structuredClone((state.comments ?? []).filter(c => c.workItemId === workItemId));
+    },
+    async addComment(workItemId, body) {
+      const me = requireMe();
+      itemWorkspace(workItemId);
+      const c: ItemComment = { id: uuid(), workItemId, authorId: me.id, body, createdAt: now(), editedAt: null };
+      (state.comments ??= []).push(c);
+      save();
+      return structuredClone(c);
+    },
+    async editComment(id, body) {
+      const me = requireMe();
+      const c = (state.comments ?? []).find(x => x.id === id);
+      if (!c || c.authorId !== me.id) throw new StoreError(403, 'Only the person who wrote a comment can edit it.');
+      if (c.body !== body) { c.body = body; c.editedAt = now(); }
+      save();
+      return structuredClone(c);
+    },
+    async deleteComment(id) {
+      const me = requireMe();
+      const c = (state.comments ?? []).find(x => x.id === id);
+      if (!c) throw new StoreError(404, 'Comment not found.');
+      if (c.authorId !== me.id && itemWorkspace(c.workItemId).role !== 'admin') throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+      state.comments = (state.comments ?? []).filter(x => x.id !== id);
+      save();
+    },
+    async listItemHistory(workItemId) {
+      requireMe();
+      itemWorkspace(workItemId);
+      return structuredClone((state.itemEvents ?? []).filter(x => x.workItemId === workItemId).reverse());
     },
     async listProposals(processId) {
       requireMe();

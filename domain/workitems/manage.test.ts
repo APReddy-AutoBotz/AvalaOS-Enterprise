@@ -12,7 +12,7 @@ const board = [mk('E1', 'epic', null, 1), mk('S1', 'story', 'E1', 2), mk('T1', '
 test('a person adds an epic, story, task, bug or sub-task; it starts in To do, last on the board', () => {
   assert.deepEqual([...MANUAL_TYPES], ['epic', 'story', 'task', 'bug', 'subtask']);
   const v = validateNewItem({ type: 'bug', title: '  Totals do not match  ', priority: 'high' }, board);
-  assert.deepEqual(v, { type: 'bug', title: 'Totals do not match', description: '', parentId: null, ownerId: null, priority: 'high', estimateHours: null, startDate: null, dueDate: null, status: 'todo', sortOrder: 8 });
+  assert.deepEqual(v, { type: 'bug', title: 'Totals do not match', description: '', parentId: null, ownerId: null, priority: 'high', estimateHours: null, startDate: null, dueDate: null, labels: [], status: 'todo', sortOrder: 8 });
   assert.equal(validateNewItem({ type: 'story', title: 'Post invoice', parentId: 'E1', estimateHours: 3, startDate: '2026-11-16', dueDate: '2026-11-20' }, board).parentId, 'E1');
   assert.equal(validateNewItem({ type: 'epic', title: 'First epic' }, []).sortOrder, 1);
 });
