@@ -93,14 +93,15 @@ const privacy: TrustPage = {
         'These companies process data for us to run Avala OS:',
         {
           list: [
-            'Supabase: the database, sign-in, sign-in emails and the server functions. The database is hosted in Sydney, Australia.',
+            'Supabase: the database, sign-in and the server functions. The database is hosted in Sydney, Australia.',
+            'Resend: sending emails from avalaos.com (sign-up confirmations, password resets, invitations and the "Needs you" emails). It receives the address each email goes to and the email itself, and sends from its Tokyo, Japan region.',
             'OpenAI: the AI requests described above.',
             'Netlify: hosting of the website.',
-            'Sentry: reports of errors in the website, so we can fix them. A report says what failed and on which page. It does not include what you typed or your account, and before it leaves your browser we remove email addresses and the tokens in links. It is used only to fix the product.',
+            'Sentry: reports of errors in the website, so we can fix them. A report says what failed and on which page. It does not include what you typed or your account, and before it leaves your browser we remove email addresses and the tokens in links. It is used only to fix the product. Reports are stored in the European Union, and IP addresses are not stored.',
             'Google and Microsoft: only when you choose to sign in with them, to confirm who you are.',
           ],
         },
-        'They may process data outside India, including in Australia and the United States. We will update this list before adding a provider that handles workspace content.',
+        'They may process data outside India, including in Australia, Japan, the European Union and the United States. We will update this list before adding a provider that handles workspace content.',
       ],
     },
     {
