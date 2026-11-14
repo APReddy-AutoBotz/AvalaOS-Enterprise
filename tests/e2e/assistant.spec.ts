@@ -124,3 +124,30 @@ test('on a process, Ask Avala goes through the open questions one at a time, mos
   await panel.getByRole('tab', { name: 'Ask' }).click();
   await expect(panel.getByRole('group', { name: 'Questions to start with' })).toBeVisible();
 });
+
+test('on a process, Ask Avala suggests changes to review where they are made, and never applies one itself', async ({ page }) => {
+  await page.goto('/demo/processes');
+  await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
+  await ask(page).click();
+  const panel = page.getByTestId('ask-panel');
+  await panel.getByRole('tab', { name: 'Suggestions' }).click();
+  const tab = panel.getByTestId('suggestions');
+  await expect(tab).toContainText('nothing is changed from here');
+  const result = await new AxeBuilder({ page }).include('[data-testid="ask-panel"]').withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
+  // Looking in the sources reads them with AI, which the demo does not have.
+  await tab.getByRole('button', { name: 'Look in the sources for answers' }).click();
+  await expect(tab.getByRole('alert')).toContainText('Reading the sources needs the server');
+  // Any suggestion by rule can be dismissed, and brought back.
+  const cards = tab.getByTestId('suggestion');
+  const n = await cards.count();
+  if (n > 0) {
+    await expect(cards.first().getByRole('button', { name: 'Review and apply' })).toBeVisible();
+    await cards.first().getByRole('button', { name: 'Dismiss' }).click();
+    await expect(cards).toHaveCount(n - 1);
+    await tab.getByRole('button', { name: 'Show dismissed suggestions again' }).click();
+    await expect(cards).toHaveCount(n);
+  } else {
+    await expect(tab.getByTestId('suggestions-none')).toBeVisible();
+  }
+});

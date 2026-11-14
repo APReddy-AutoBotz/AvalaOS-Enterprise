@@ -25,6 +25,8 @@ import { interviewQueue, interviewSegments, readInterview } from '../../domain/q
 import { triage } from '../../domain/questions/triage.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { judgeInterview, loadInterviewCases, type InterviewOutcome } from './interview.ts';
+import { answerSuggestions, sourceSegments } from '../../domain/assistant/suggest.ts';
+import { casePassages, judgeSuggestions, loadSuggestCases, type SuggestOutcome } from './suggest.ts';
 import { factsFor, loadQuestions, loadSample, plantedFor, type Sample } from './sample.ts';
 import { holders, judge, KINDS, KIND_ORDER, renderScorecard, scorecard, ungrounded, type Outcome, type Question, type QuestionSet } from './scorer.ts';
 
@@ -184,6 +186,34 @@ async function interview(server: Server, sample: Sample, only?: string[]) {
   }
 }
 
+/**
+ * The suggestions' cases (eval/ask/suggest.json): made-up passages read with the sample's open questions as
+ * the Suggestions tab reads them. Target: every expected answer suggested, nothing the passages do not state.
+ */
+async function suggest(server: Server, sample: Sample, only?: string[]) {
+  const items = interviewQueue(triage(sample.model, assessProcess(sample.model)));
+  const cases = loadSuggestCases().filter(c => !only?.length || only.includes(c.id));
+  const outcomes: SuggestOutcome[] = [];
+  let tokens = 0, asked = 0;
+  await pool(cases, CONCURRENCY, async c => {
+    const { segments, ids, passageOf } = sourceSegments(sample.model, items, casePassages(c));
+    // As in the tab: when no passage bears on an open question, nothing is sent and nothing suggested.
+    if (passageOf.size === 0) { outcomes.push(judgeSuggestions(c, [])); return; }
+    asked++;
+    const r = await gateway(server, { action: 'run', task: answerFromNotes.id, segments });
+    if (r.status !== 200 || !r.json?.ok) { outcomes.push({ id: c.id, pass: false, reasons: [`${r.status} ${r.json?.error?.code ?? ''}`], suggested: [], unsupported: false }); return; }
+    tokens += Number(r.json.usage?.input ?? 0) + Number(r.json.usage?.output ?? 0);
+    outcomes.push(judgeSuggestions(c, answerSuggestions(sample.model, items, ids, ((r.json.data as { answers?: NoteFinding[] })?.answers ?? []), passageOf)));
+  });
+  outcomes.sort((a, b) => a.id.localeCompare(b.id));
+  const unsupported = outcomes.filter(o => o.unsupported).map(o => o.id);
+  console.log(`Suggestions: ${outcomes.filter(o => o.pass).length} of ${outcomes.length} cases as expected. Suggested what the passages do not state (target: none): ${unsupported.length ? unsupported.join(', ') : 'none'}. ${asked} read with AI, ${tokens.toLocaleString('en')} tokens.`);
+  for (const o of outcomes) {
+    const c = cases.find(x => x.id === o.id)!;
+    console.log(`\n${o.id} ${o.pass ? 'passed' : 'NOT PASSED'}\n  Passages: ${c.passages.join(' | ')}${o.suggested.map(x => `\n  Suggested: ${x}`).join('')}${o.reasons.map(x => `\n  - ${x}`).join('')}`);
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const flag = (name: string) => args.includes(name);
@@ -195,12 +225,13 @@ async function main() {
   const questions = only ? set.questions.filter(q => only.includes(q.id) || only.includes(q.kind)) : set.questions;
   if (!questions.length && !flag('--record')) throw new Error('No question matches --only.');
 
-  if (!flag('--live') && !flag('--check') && !flag('--record') && !flag('--interview')) { describeSet(questions, sample, set); return; }
+  if (!flag('--live') && !flag('--check') && !flag('--record') && !flag('--interview') && !flag('--suggest')) { describeSet(questions, sample, set); return; }
 
   const server = await connect();
   const before = await allowance(server);
   console.log(`The workspace's AI runs on ${keyWords(before)}.${before.budget ? ` This month ${Number(before.used ?? 0).toLocaleString('en')} of ${before.budget.toLocaleString('en')} tokens of its allowance are used.` : ''}`);
   if (flag('--check')) { console.log('Sign-in and workspace are in order. No AI was called.'); return; }
+  if (flag('--suggest')) { await suggest(server, sample, value('--only')?.split(',').map(s => s.trim()).filter(Boolean)); return; }
   if (flag('--interview')) { await interview(server, sample, value('--only')?.split(',').map(s => s.trim()).filter(Boolean)); return; }
   if (flag('--record')) { await record(server, sample, set, value('--only')?.split(',').map(s => s.trim()).filter(Boolean)); return; }
 

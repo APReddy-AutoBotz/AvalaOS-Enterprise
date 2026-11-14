@@ -81,7 +81,7 @@ export type Reading =
  * when it is short enough that saying so is all it does. Such an answer is no value, whatever a
  * free-text reading makes of it: "No idea, honestly." is never offered as the answer to record.
  */
-const NOT_KNOWN = /\b(?:not sure|unsure|no idea|no clue|(?:do not|don't|dont|do n't) know|not known|can(?:no|')t say|have to (?:check|ask|find out)|need to (?:check|ask|find out)|will (?:check|ask|find out)|i'll (?:check|ask|find out)|ask (?:procurement|it|finance|hr|the|someone|them))\b/i;
+const NOT_KNOWN = /\b(?:not sure|unsure|no idea|no clue|(?:do not|don't|dont|do n't) know|not known|can(?:no|')t say|have to (?:check|ask|find out)|need to (?:check|ask|find out)|will (?:check|ask|find out)|i'll (?:check|ask|find out)|ask (?:procurement|it|finance|hr|the|someone|them)|not (?:yet )?(?:agreed|decided|confirmed|settled)|nothing (?:is |has been )?(?:agreed|decided)|still (?:being )?(?:discussed|under discussion|open)|under discussion|to be (?:decided|confirmed|agreed)|tbd|tbc)\b/i;
 export const saysNotKnown = (answer: string) => NOT_KNOWN.test(answer) && answer.trim().split(/\s+/).length <= 20;
 
 export const UNANSWERED = 'I could not find an answer to record, so nothing is recorded. You can skip this question or leave it with the person who knows.';
@@ -104,8 +104,14 @@ export const willRecord = (p: Proposal) => `This will record: ${p.display}`;
  * The edit for a proposal the person accepted: the value written to the question's target and the
  * question closed with the answer and the person's own words, so the record shows where it came from.
  */
-export function interviewEdit(model: ProcessModel, item: TriageItem, p: Proposal): { op: Op; summary: string } | null {
-  return buildAnswer(item, model, p.answer, `in their words: "${p.quote.replace(/\s+/g, ' ').trim()}"`);
+export function interviewEdit(model: ProcessModel, item: TriageItem, p: Proposal, from?: string): { op: Op; summary: string } | null {
+  const quote = p.quote.replace(/\s+/g, ' ').trim();
+  // An answer Ask Avala found in a source keeps the source and its words, and History says who suggested it.
+  if (from) {
+    const edit = buildAnswer(item, model, p.answer, `from ${from}: "${quote}"`);
+    return edit && { op: edit.op, summary: `Suggested by Ask Avala from ${from}; confirmed: ${item.question}` };
+  }
+  return buildAnswer(item, model, p.answer, `in their words: "${quote}"`);
 }
 
 /** The heading over a question: its place and why it is asked first. */
