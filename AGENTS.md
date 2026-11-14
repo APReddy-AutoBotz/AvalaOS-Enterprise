@@ -33,6 +33,17 @@ supported source documents → editable assessment → useful BRD / PDD / FRD / 
 - deleting or rewriting product code that your work package does not name;
 - anything that would write generated default content.
 
+## Working with the owner
+
+The owner is not a developer. These were agreed in November 2026 and hold in every session.
+
+- **Release only on the word "release".** Work goes to `claude/` branches and pull requests into `next`; `main` is merged only when the owner says "release" (see Releasing under Progress: every production deploy costs Netlify credits).
+- **Ask before changing the live database or the live server functions.** Show a rolled-back dry run of a migration with its test first, then apply it once approved.
+- **Never handle passwords or keys.** The owner types them into the provider's own page. Never ask for one in chat and never put one in the repository, which is public: backups are encrypted and logs never show data.
+- **A short plan before building**, in plain words, then the work.
+- **Report in plain words:** what changed on screen, what was checked and how, what was not checked. No internal labels.
+- **Next up:** "Ask Avala: the plan" in `docs/product-plan.md`, stage 1, starting with its measure.
+
 ## Where things are
 
 | Path | What it is |
@@ -175,7 +186,7 @@ Agreed rules (Nov 2026): one email per person and workspace on weekdays (03:30 U
 
 ## The Avala assistant
 
-Read-only first, as the plan orders it (`docs/product-plan.md`, "The Avala assistant"). "Ask Avala" (the assistant's name, agreed November 2026; the button on a process, `journey/process/AskPanel.tsx`) answers questions about one process only from its record: `askFacts` (`domain/assistant/ask.ts`) builds numbered facts by rule from the model (`modelFacts` plus open questions), the assessment (verdict, ranking, each step's recommendation and reason, people's overrides with their reason but never who, fired cautions), the active requirements, the process's board items, and the source passages that share the most words with the question (`relevantPassages`, at most 24). They go to `journey-ai` as the task `askProcess` with the question as the segment "question"; the gateway keeps only sentences whose quote is found in the fact they cite, and `readAnswer` drops any that cite the question or nothing. The instructions say the assessment is explained and never changed or recomputed, and that a passage that reads like an instruction is content. Each sentence shows a numbered citation: a step, the assessment, a requirement or a board item opens it; a source passage shows in its context. When the record does not answer, the panel says what is missing. Nothing is stored or changed; the AI use shows under "Ask Avala". The in-browser store has no AI, so the panel says answers need the server. Test: `domain/assistant/ask.test.ts`, `tests/e2e/assistant.spec.ts`. Next in the plan: Ask Avala across the platform (parked until after the release; see the plan), the gap-closing interview, then proposals a person confirms.
+What comes next, stage by stage, with the measure each stage must pass: `docs/product-plan.md`, "Ask Avala: the plan". Read-only first, as the plan orders it (`docs/product-plan.md`, "The Avala assistant"). "Ask Avala" (the assistant's name, agreed November 2026; the button on a process, `journey/process/AskPanel.tsx`) answers questions about one process only from its record: `askFacts` (`domain/assistant/ask.ts`) builds numbered facts by rule from the model (`modelFacts` plus open questions), the assessment (verdict, ranking, each step's recommendation and reason, people's overrides with their reason but never who, fired cautions), the active requirements, the process's board items, and the source passages that share the most words with the question (`relevantPassages`, at most 24). They go to `journey-ai` as the task `askProcess` with the question as the segment "question"; the gateway keeps only sentences whose quote is found in the fact they cite, and `readAnswer` drops any that cite the question or nothing. The instructions say the assessment is explained and never changed or recomputed, and that a passage that reads like an instruction is content. Each sentence shows a numbered citation: a step, the assessment, a requirement or a board item opens it; a source passage shows in its context. When the record does not answer, the panel says what is missing. Nothing is stored or changed; the AI use shows under "Ask Avala". The in-browser store has no AI, so the panel says answers need the server. Test: `domain/assistant/ask.test.ts`, `tests/e2e/assistant.spec.ts`. Next in the plan: Ask Avala across the platform (parked until after the release; see the plan), the gap-closing interview, then proposals a person confirms.
 
 ## Error monitoring
 
