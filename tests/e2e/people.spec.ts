@@ -3,8 +3,7 @@ import { shot, signInAndCreateProcess } from './helpers.ts';
 
 test('an admin invites people by role, cannot demote the last admin, and sees it in the audit trail', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'People' }).click();
+  await page.goto('/settings/people');
   const people = page.getByTestId('people');
   await expect(people.getByTestId('people-list')).toContainText('analyst');
   await expect(people.getByLabel('Role of analyst')).toHaveValue('admin');

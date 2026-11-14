@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { shot, signInAndCreateProcess } from './helpers.ts';
+import { shot, signInAndCreateProcess, signOut } from './helpers.ts';
 
 test('signing in lands on My work; what needs you comes from the process, and naming someone moves it to them', async ({ page }) => {
   await signInAndCreateProcess(page);
@@ -25,7 +25,7 @@ test('signing in lands on My work; what needs you comes from the process, and na
   await shot(page, '62-my-work-named');
 
   // Signing in again lands here.
-  await page.getByRole('button', { name: 'Sign out' }).click();
+  await signOut(page);
   await page.getByLabel('Email').fill('analyst@example.test');
   await page.getByLabel('Password').fill('secret-123');
   await page.getByRole('button', { name: 'Sign in' }).click();

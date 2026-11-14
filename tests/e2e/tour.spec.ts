@@ -185,8 +185,7 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await page.keyboard.press('Escape');
 
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'People' }).click();
+  await page.goto('/settings/people');
   const people = page.getByTestId('people');
   for (const [email, role] of [['karthik.raman@kaveri-ic.example', 'Developer'], ['sunita.rao@kaveri-ic.example', 'Viewer']] as const) {
     await people.getByLabel('Work email').fill(email);
@@ -202,6 +201,7 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await settle(page);
   await snap(page, 'audit');
 
+  await page.getByRole('link', { name: 'Processes' }).first().click();
   await page.getByRole('tab', { name: 'Portfolio' }).click();
   await settle(page);
   await snap(page, 'portfolio');

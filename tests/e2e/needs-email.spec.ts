@@ -1,18 +1,21 @@
-// The weekday "Needs you" email: a person's own choice in My work, and the page the email's link opens.
+// The weekday "Needs you" email: a person's own choice in the account menu, and the page the email's link opens.
 // The digest itself runs on the server (journey-notify) and is checked by domain/work/digest.test.ts and
 // supabase/tests/needs_email.sql.
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 import { signInAndCreateProcess } from './helpers.ts';
 
-test('a person turns the weekday email off and on in My work, and the choice is kept', async ({ page }) => {
+test('a person turns the weekday email off and on in the account menu, and the choice is kept', async ({ page }) => {
   await signInAndCreateProcess(page);
   await page.goto('/work');
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
+  await expect(page.getByTestId('account-menu')).toContainText('analyst@example.test');
   const choice = page.getByTestId('needs-email').getByRole('checkbox', { name: /Email me on weekdays when something new needs me/ });
   await expect(choice).toBeChecked();
   await choice.uncheck();
   await expect(choice).not.toBeChecked();
   await page.reload();
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
   await expect(page.getByTestId('needs-email').getByRole('checkbox')).not.toBeChecked();
   await page.getByTestId('needs-email').getByRole('checkbox').check();
   await expect(page.getByTestId('needs-email').getByRole('checkbox')).toBeChecked();

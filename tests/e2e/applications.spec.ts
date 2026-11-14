@@ -2,12 +2,11 @@
 // Rules: domain/workspace/applications.ts; database: workspace_applications.
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
-import { signInAndCreateProcess } from './helpers.ts';
+import { openSettings, signInAndCreateProcess } from './helpers.ts';
 
 test('an application is added with its ways in, shown in words, kept unique, edited and deleted', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await openSettings(page, 'Applications');
   const list = page.getByTestId('applications-list');
   await expect(list).toContainText('No applications yet.');
 
@@ -46,7 +45,6 @@ test('an application is added with its ways in, shown in words, kept unique, edi
   await list.getByRole('button', { name: 'Save changes' }).click();
   await expect(row).toContainText('not through a remote desktop');
   await page.reload();
-  await page.getByRole('tab', { name: 'Settings' }).click();
   await expect(page.getByTestId('application-row')).toContainText('not through a remote desktop');
 
   // Delete asks first.
@@ -69,8 +67,7 @@ test('a process adds its application to the list, and later takes the list\'s fa
   await expect(sapRow.getByTestId('on-list')).toHaveText('On the applications list');
 
   // The list learns something new: SAP is reached through a remote desktop.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await openSettings(page, 'Applications');
   const list = page.getByTestId('applications-list');
   await list.getByRole('button', { name: 'Edit SAP S/4HANA' }).click();
   await list.getByLabel('Reached through a remote desktop').selectOption({ label: 'Yes (Citrix or similar)' });
@@ -80,7 +77,6 @@ test('a process adds its application to the list, and later takes the list\'s fa
   // Back on the process (the demo keeps changes only until a reload, so by the links): the fact is
   // offered, with what it changes, and taken only on Accept.
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
-  await page.getByRole('tab', { name: 'Processes' }).click();
   await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
   await page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name: 'Process' }).click();
   await page.getByRole('tab', { name: /^Roles and systems/ }).click();

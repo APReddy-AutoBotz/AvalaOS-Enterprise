@@ -3,16 +3,10 @@ import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
 import { DEFAULT_SETTINGS, SETTING_LIMITS, SettingsError, validateSettings, type AssessmentSettings, type SettingsRecord } from '../../domain/assess/settings.ts';
 import { Button, ErrorNote, messageOf, Spinner, when } from '../ui.tsx';
-import { DocumentBranding } from './DocumentBranding.tsx';
-import { AiProviderSettings } from './AiProviderSettings.tsx';
-import { AiUsagePanel } from './AiUsage.tsx';
-import { OrganizationParts } from './OrganizationParts.tsx';
-import { ApplicationsList } from './ApplicationsList.tsx';
-import { has } from '../../domain/workspace/modules.ts';
 
 const KEYS = Object.keys(SETTING_LIMITS) as (keyof AssessmentSettings)[];
 
-export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; workspace: Workspace }) {
+export function AssessmentSettingsPanel({ store, workspace }: { store: JourneyStore; workspace: Workspace }) {
   const [record, setRecord] = React.useState<SettingsRecord | null>(null);
   const [draft, setDraft] = React.useState<Record<keyof AssessmentSettings, string> | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -25,10 +19,6 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
     store.getSettings(workspace.id).then(r => { setRecord(r); setDraft(toDraft(r.settings)); }).catch(e => setError(messageOf(e)));
   }, [store, workspace.id]);
 
-  if (!has(workspace.modules, 'assess')) return (
-    // The board on its own uses no assessment, documents or AI.
-    <section className="max-w-3xl space-y-4" data-testid="workspace-settings"><OrganizationParts store={store} workspace={workspace} /></section>
-  );
   if (!record || !draft) return error ? <ErrorNote message={error} /> : <Spinner />;
   const save = async (values: Record<keyof AssessmentSettings, string>) => {
     setError(null); setSaved(false);
@@ -45,7 +35,6 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
 
   return (
     <section className="max-w-3xl space-y-4" data-testid="workspace-settings">
-      <OrganizationParts store={store} workspace={workspace} />
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="font-display text-lg font-semibold text-slate-900">Assessment settings</h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">The lines every assessment in <span className="font-medium">{workspace.name}</span> is measured against. They change the value in people, the priority and the portfolio, never the recommended approach.</p>
@@ -77,10 +66,6 @@ export function WorkspaceSettings({ store, workspace }: { store: JourneyStore; w
           )}
         </form>
       </div>
-      <ApplicationsList store={store} workspace={workspace} />
-      <AiProviderSettings store={store} workspace={workspace} />
-      <AiUsagePanel store={store} workspace={workspace} />
-      {has(workspace.modules, 'documents') && <DocumentBranding store={store} workspace={workspace} />}
     </section>
   );
 }

@@ -39,6 +39,40 @@ export function AskAvalaButton(props: React.ComponentProps<'button'>) {
   );
 }
 
+/**
+ * A button that opens a small panel under it (the workspace switcher, the account menu). Closes on
+ * Escape, on a click outside, and when a choice calls `close`. A disclosure, not an ARIA menu: what is
+ * inside is ordinary buttons, links and fields, reached with Tab.
+ */
+export function Menu({ label, button, buttonClassName, children, testId, onClose }: {
+  label: string; button: React.ReactNode; buttonClassName?: string; testId?: string; onClose?: () => void;
+  children: (close: () => void) => React.ReactNode;
+}) {
+  const [open, setOpen] = React.useState(false);
+  const box = React.useRef<HTMLDivElement>(null);
+  const trigger = React.useRef<HTMLButtonElement>(null);
+  const close = React.useCallback(() => { setOpen(false); onClose?.(); }, [onClose]);
+  React.useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) close(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { close(); trigger.current?.focus(); } };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [open, close]);
+  return (
+    <div ref={box} className="relative">
+      <button ref={trigger} type="button" aria-label={label} aria-expanded={open} onClick={() => (open ? close() : setOpen(true))}
+        className={cx('focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#002C4B]', buttonClassName)}>{button}</button>
+      {open && (
+        <div data-testid={testId} className="absolute right-0 z-30 mt-2 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-200 bg-white p-1.5 text-left shadow-lg">
+          {children(close)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Field({ label, hint, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string }) {
   const id = React.useId();
   return (

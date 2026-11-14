@@ -6,67 +6,18 @@ import { revisionStatus } from '../../domain/workspace/route.ts';
 
 const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 import { Portfolio } from './Portfolio.tsx';
-import { WorkspaceSettings } from './WorkspaceSettings.tsx';
-import { PeoplePage } from './PeoplePage.tsx';
-import { PARTS_CHANGED } from './OrganizationParts.tsx';
-import { has } from '../../domain/workspace/modules.ts';
+import { has, offMessage } from '../../domain/workspace/modules.ts';
+import { remember } from '../workspaceChoice.ts';
 
-const WORKSPACE_KEY = 'avala.journey.workspace';
-export const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
-export const remember = (id: string) => { try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ } };
-
-export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav }) {
-  const [workspaces, setWorkspaces] = React.useState<Workspace[] | null>(null);
-  const [workspaceId, setWorkspaceId] = React.useState<string | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const loadWorkspaces = React.useCallback(async () => {
-    try {
-      const list = await store.listWorkspaces();
-      setWorkspaces(list);
-      const pick = list.find(w => w.id === remembered()) ?? list[0];
-      setWorkspaceId(pick?.id ?? null);
-    } catch (e) {
-      setError(messageOf(e));
-    }
-  }, [store]);
-  React.useEffect(() => { loadWorkspaces(); }, [loadWorkspaces]);
-  // When the platform owner changes what an organisation uses, read it again (the selection is kept).
-  React.useEffect(() => {
-    const again = () => { store.listWorkspaces().then(setWorkspaces).catch(() => {}); };
-    window.addEventListener(PARTS_CHANGED, again);
-    return () => window.removeEventListener(PARTS_CHANGED, again);
-  }, [store]);
-
-  if (error) return <ErrorNote message={error} />;
-  if (!workspaces) return <Spinner />;
-  if (workspaces.length === 0) return <FirstRun store={store} onCreated={loadWorkspaces} />;
-  const workspace = workspaces.find(w => w.id === workspaceId)!;
-
+/** The processes of the workspace the person is in: the list, and the portfolio that compares them. */
+export function ProcessesPage({ store, nav, workspace }: { store: JourneyStore; nav: Nav; workspace: Workspace }) {
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-500">{workspace.organizationName}</p>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{has(workspace.modules, 'assess') ? 'Processes' : 'Workspace'}</h1>
-        </div>
-        <div className="flex flex-wrap items-end gap-3">
-          {workspaces.length > 1 && (
-            <label className="text-sm text-slate-600">
-              <span className="mr-2">Workspace</span>
-              <select
-                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-                value={workspace.id}
-                onChange={e => { setWorkspaceId(e.target.value); remember(e.target.value); }}
-              >
-                {workspaces.map(w => <option key={w.id} value={w.id}>{w.organizationName} · {w.name}</option>)}
-              </select>
-            </label>
-          )}
-          {workspace.canAddWorkspace && <NewWorkspace store={store} workspace={workspace} onCreated={async id => { remember(id); await loadWorkspaces(); }} />}
-        </div>
-      </div>
-      <React.Fragment key={workspace.id}><ProcessList store={store} nav={nav} workspace={workspace} /></React.Fragment>
+      <p className="text-sm text-slate-500">{workspace.organizationName} · {workspace.name}</p>
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">Processes</h1>
+      {has(workspace.modules, 'assess')
+        ? <ProcessList store={store} nav={nav} workspace={workspace} />
+        : <div className="mt-6"><EmptyState title="Not switched on">{offMessage('processes', workspace.organizationName)}</EmptyState></div>}
     </div>
   );
 }
@@ -77,10 +28,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   const [adding, setAdding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const assess = has(workspace.modules, 'assess');
-  const [view, setView] = React.useState<'list' | 'portfolio' | 'people' | 'settings'>(assess ? 'list' : 'people');
-  // Without the assessment (the board on its own) the page keeps only People and Settings.
-  React.useEffect(() => { if (!assess && (view === 'list' || view === 'portfolio')) setView('people'); }, [assess, view]);
+  const [view, setView] = React.useState<'list' | 'portfolio'>('list');
   const canEdit = workspace.role !== 'viewer';
 
   const [status, setStatus] = React.useState<Record<string, ReturnType<typeof revisionStatus>>>({});
@@ -118,7 +66,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
       {processes !== null && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div role="tablist" aria-label="Views" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
-            {([['list', 'Processes'], ['portfolio', 'Portfolio'], ['people', 'People'], ['settings', 'Settings']] as const).filter(([id]) => assess || id === 'people' || id === 'settings').map(([id, label]) => (
+            {([['list', 'List'], ['portfolio', 'Portfolio']] as const).map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
                 className={cx('rounded-md px-3.5 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
             ))}
@@ -126,7 +74,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
           {canEdit && view === 'list' && processes.length > 0 && !adding && <Button onClick={() => setAdding(true)}>Add process</Button>}
         </div>
       )}
-      {!assess && view !== 'people' && view !== 'settings' ? null : view === 'people' && processes !== null ? <PeoplePage store={store} workspace={workspace} /> : view === 'settings' && processes !== null ? <WorkspaceSettings store={store} workspace={workspace} /> : processes === null ? <Spinner /> : processes.length === 0 ? (
+      {processes === null ? <Spinner /> : processes.length === 0 ? (
         <EmptyState title="No processes yet" action={canEdit ? addForm : undefined}>
           {canEdit ? 'Add the process you want to assess. You will add its transcripts, procedures and flowcharts next.' : 'Nobody has added a process to this workspace yet.'}
         </EmptyState>
@@ -164,32 +112,6 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
         </>
       )}
     </section>
-  );
-}
-
-/**
- * Another workspace in the same organisation, for example one per client: people see only the workspaces
- * they are invited to, so a client added to its own workspace sees only its own processes and boards.
- */
-function NewWorkspace({ store, workspace, onCreated }: { store: JourneyStore; workspace: Workspace; onCreated: (id: string) => Promise<void> }) {
-  const [open, setOpen] = React.useState(false);
-  const [name, setName] = React.useState('');
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  if (!open) return <Button variant="secondary" onClick={() => setOpen(true)}>New workspace</Button>;
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true); setError(null);
-    try { const id = await store.createWorkspace(workspace.organizationId ?? workspace.id, name.trim()); setOpen(false); setName(''); await onCreated(id); }
-    catch (x) { setError(messageOf(x)); } finally { setBusy(false); }
-  };
-  return (
-    <form onSubmit={submit} className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4" data-testid="new-workspace">
-      <Field label="New workspace" placeholder="e.g. a client, or Finance Operations" required maxLength={120} value={name} onChange={e => setName(e.target.value)} autoFocus />
-      <p className="mt-2 text-xs leading-5 text-slate-500">People see only the workspaces they are invited to. Give each client a workspace of its own and invite its people there: they see only its processes and boards. You become its admin.</p>
-      <ErrorNote message={error} />
-      <div className="mt-3 flex gap-2"><Button type="submit" disabled={busy || !name.trim()}>Create workspace</Button><Button type="button" variant="ghost" onClick={() => { setOpen(false); setName(''); setError(null); }}>Cancel</Button></div>
-    </form>
   );
 }
 
