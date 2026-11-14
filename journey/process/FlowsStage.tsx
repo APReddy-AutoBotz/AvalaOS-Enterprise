@@ -12,6 +12,8 @@ import { applyFlowPlan, lintFlow, planFlowEdits, type FlowPlan } from '../../dom
 import { useModelEditor } from './useModelEditor.ts';
 import type { CanvasApi } from './BpmnCanvas.tsx';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
+import { impactSummary } from '../../domain/docs/impact.ts';
+import { ImpactDetails, previewImpact, useImpactContext } from './ImpactNote.tsx';
 
 const BpmnCanvas = React.lazy(() => import('./BpmnCanvas.tsx'));
 type View = 'asis' | 'tobe' | 'edit';
@@ -22,8 +24,8 @@ const save = (blob: Blob, name: string) => {
   URL.revokeObjectURL(url);
 };
 
-export function FlowsStage({ store, processId, model: loaded, working, canEdit, onSaved }: {
-  store: JourneyStore; processId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; onSaved: () => void;
+export function FlowsStage({ store, processId, workspaceId, model: loaded, working, canEdit, onSaved }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; onSaved: () => void;
 }) {
   const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
   const model = editor.model;
@@ -35,6 +37,8 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [note, setNote] = React.useState<string | null>(null);
+  const impactCtx = useImpactContext(store, processId, workspaceId);
+  const impact = React.useMemo(() => (plan && plan.changes.length ? previewImpact(impactCtx, model, m => applyFlowPlan(m, plan)) : null), [plan, impactCtx, model]);
 
   const pictures = React.useMemo(() => {
     const a = assessProcess(model);
@@ -110,6 +114,12 @@ export function FlowsStage({ store, processId, model: loaded, working, canEdit, 
               {plan.changes.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-slate-800">{plan.changes.map((c, i) => <li key={i}>{c}</li>)}</ul>}
               {plan.warnings.length > 0 && <ul className="mt-3 space-y-1 text-sm text-amber-900">{plan.warnings.map((w, i) => <li key={i}>⚠ {w}</li>)}</ul>}
               {plan.lint.length > 0 && <details className="mt-3 text-sm text-slate-700"><summary className="cursor-pointer font-semibold">{plan.lint.length} {plan.lint.length === 1 ? 'thing' : 'things'} to check in the flow</summary><ul className="mt-1 list-disc pl-5">{plan.lint.map((l, i) => <li key={i}>{l}</li>)}</ul></details>}
+              {impact && (
+                <details className="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="flow-impact">
+                  <summary className="cursor-pointer"><span className="font-semibold text-slate-900">What this changes downstream.</span> {impactSummary(impact)}</summary>
+                  <div className="mt-2"><ImpactDetails impact={impact} /></div>
+                </details>
+              )}
               <p className="mt-3 text-xs text-slate-500">Removing a step also removes it from exceptions, controls and open questions. Systems, facts and sources of kept steps are not changed.</p>
               <div className="mt-3 flex gap-2">
                 <Button onClick={applyPlan} disabled={busy || !plan.changes.length}>{busy ? 'Saving…' : `Save ${plan.changes.length} ${plan.changes.length === 1 ? 'change' : 'changes'}`}</Button>

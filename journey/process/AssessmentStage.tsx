@@ -22,6 +22,7 @@ import { Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
 import { AssessmentReport } from './AssessmentReport.tsx';
 import { AssessmentWhy } from './AssessmentWhy.tsx';
 import { AssessmentInputs } from './AssessmentInputs.tsx';
+import { LastChangeImpact, useImpactContext } from './ImpactNote.tsx';
 import { AssessmentPriority } from './AssessmentPriority.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
 
@@ -55,6 +56,9 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
+  // The preview reads the decisions as they are on screen, overrides made here included.
+  const loadedImpact = useImpactContext(store, processId, workspaceId);
+  const impact = React.useMemo(() => (loadedImpact && decisions ? { ...loadedImpact, decisions, ...(settings ? { settings } : {}) } : null), [loadedImpact, decisions, settings]);
 
   const save = async (next: Decisions) => {
     setError(null);
@@ -144,6 +148,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
     <div className="space-y-6">
       {tabs}
       <ErrorNote message={error ?? editor.error} />
+      <LastChangeImpact editor={editor} context={impact} />
       <AssessmentInputs model={editor.model} result={result} editor={editor} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits} />
     </div>
   );

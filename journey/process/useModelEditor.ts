@@ -16,7 +16,10 @@ export interface ModelEditor {
   clearError(): void;
   /** Applies an edit; resolves true when it was saved. */
   apply(op: ModelOp, summary: string): Promise<boolean>;
+  /** The last saved edit, for showing what it changed downstream. */
+  lastChange: LastChange | null;
 }
+export interface LastChange { before: ProcessModel; after: ProcessModel; summary: string; at: number }
 
 interface Draft { revisionId: string; seq: number; model: ProcessModel }
 
@@ -24,6 +27,7 @@ export function useModelEditor(store: JourneyStore, processId: string, initial: 
   const [model, setModel] = React.useState(initial.model);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [lastChange, setLastChange] = React.useState<LastChange | null>(null);
   const draft = React.useRef<Draft | null>(initial.working ? { revisionId: initial.working.id, seq: initial.working.seq, model: initial.model } : null);
   const queue = React.useRef<Promise<unknown>>(Promise.resolve());
   const pending = React.useRef(0);
@@ -56,6 +60,7 @@ export function useModelEditor(store: JourneyStore, processId: string, initial: 
       try {
         const { seq } = await store.savePatch(d.revisionId, d.seq, r.patch, 'user', summary);
         draft.current = { revisionId: d.revisionId, seq, model: r.model };
+        setLastChange({ before: d.model, after: r.model, summary, at: Date.now() });
         return true;
       } catch (e) {
         if (e instanceof StoreError && e.status === 409 && attempt === 0) {
@@ -81,5 +86,5 @@ export function useModelEditor(store: JourneyStore, processId: string, initial: 
     return p;
   };
 
-  return { model, saving, error, clearError: () => setError(null), apply };
+  return { model, saving, error, clearError: () => setError(null), apply, lastChange };
 }

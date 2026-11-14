@@ -625,7 +625,7 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 ### Phase C: features that add the most value
 
 1. The Avala assistant, below, starting read-only. It absorbs the gap-closing interview.
-2. Change impact preview.
+2. Change impact preview (built, November 2026: before a delete or a canvas save, and straight after an inline edit, since edits save as they are made).
 3. Organisation system registry.
 4. Tracker push to Jira and Azure DevOps with status coming back.
 5. Review comments on document sections.
@@ -674,6 +674,6 @@ The platform is sold as one product a customer can start small with, not as sepa
 For small companies that find per-seat tracker prices too high: the same board, usable without a process.
 
 1. **Manage items (done):** add an epic, story, task, bug or sub-task by hand; put an item under another, as in Jira (epics on top, a sub-task always under a story, task or bug); delete an item, its direct children staying without a parent; priority on cards. Viewers read; editors and admins change.
-2. **Work together (in progress):** comments and an item history (done); labels (done); sprints (done); import from a Jira CSV (done); "assigned to you" in the weekday email (done).
+2. **Work together (done, November 2026):** comments and an item history; labels; sprints; import from a Jira CSV; "assigned to you" in the weekday email.
 3. **Later:** attachments, the team's own status columns, simple reports (burndown, cycle time).
 
