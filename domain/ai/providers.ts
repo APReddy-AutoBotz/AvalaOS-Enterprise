@@ -18,7 +18,7 @@ export const BEDROCK_ANTHROPIC_VERSION = 'bedrock-2023-05-31';
 const BEDROCK_TARGET = { label: 'Amazon Bedrock', maxImageBytes: 3.75 * 1024 * 1024 };
 import { EndpointError, parseChatResponse, toChatRequest, validateCompatibleEndpoint } from './compatible.ts';
 
-export type AiProvider = 'openai' | 'azure_openai' | 'anthropic' | 'openai_compatible' | 'bedrock';
+export type AiProvider = 'openai' | 'azure_openai' | 'anthropic' | 'openai_compatible' | 'bedrock' | 'mistral';
 export type AiNeed = 'text' | 'vision' | 'transcription';
 
 export interface ProviderInfo {
@@ -33,6 +33,8 @@ export interface ProviderInfo {
   endpointHint?: string;
   /** Which key to paste, when the provider has more than one kind. */
   keyAdvice?: string;
+  /** Model names to offer with one click, lighter ones last. A person may still type any other. */
+  suggestedModels?: { id: string; note: string }[];
   can: Record<AiNeed, boolean>;
   /** The extraction eval (eval/README.md) has been run with this provider, so workspaces may choose it. */
   checked: boolean;
@@ -72,7 +74,22 @@ export const AI_PROVIDERS: Record<AiProvider, ProviderInfo> = {
     keyAdvice: 'Use a long-term Amazon Bedrock API key; short-term keys expire within 12 hours.',
     can: { text: true, vision: true, transcription: false }, checked: false,
   },
+  mistral: {
+    label: 'Mistral AI', modelLabel: 'Model', modelHint: 'The Mistral model id. Smaller models cost less and answer faster, and may read less well; the extraction check shows how well.',
+    // Chat Completions at api.mistral.ai with response_format json_schema (Mistral's structured outputs),
+    // the same translation as an OpenAI-compatible endpoint, with images as a data URL string.
+    needsEndpoint: false,
+    suggestedModels: [
+      { id: 'mistral-small-latest', note: 'Small' },
+      { id: 'ministral-14b-latest', note: 'Light, 14B' },
+      { id: 'ministral-8b-latest', note: 'Light, 8B' },
+      { id: 'ministral-3b-latest', note: 'Lightest, 3B' },
+    ],
+    can: { text: true, vision: true, transcription: false }, checked: false,
+  },
 };
+
+export const MISTRAL_CHAT_URL = 'https://api.mistral.ai/v1/chat/completions';
 
 /** The providers a person may choose: those checked by the eval, and the rest only for the platform owner. */
 export const selectableProviders = (platformOwner: boolean): AiProvider[] =>
@@ -181,6 +198,9 @@ export function providerRequest(c: AiConnection, body: Record<string, unknown>):
       body: { anthropic_version: BEDROCK_ANTHROPIC_VERSION, ...rest },
     };
   }
+  if (c.provider === 'mistral') {
+    return { url: MISTRAL_CHAT_URL, headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json' }, body: toChatRequest(body, { imageUrlAsString: true }) };
+  }
   if (c.provider === 'openai_compatible') {
     // validateCompatibleEndpoint again: the stored address is checked on every use, not only when saved.
     return { url: `${validateCompatibleEndpoint(c.endpoint)}/chat/completions`, headers: { Authorization: `Bearer ${c.apiKey}`, 'Content-Type': 'application/json' }, body: toChatRequest(body) };
@@ -190,7 +210,7 @@ export function providerRequest(c: AiConnection, body: Record<string, unknown>):
 
 /** The provider's reply in the gateway's shape. */
 export const parseProviderReply = (c: AiConnection, json: unknown): ParsedResponse =>
-  (c.provider === 'anthropic' || c.provider === 'bedrock' ? parseAnthropicResponse(json) : c.provider === 'openai_compatible' ? parseChatResponse(json) : parseOpenAIResponse(json));
+  (c.provider === 'anthropic' || c.provider === 'bedrock' ? parseAnthropicResponse(json) : c.provider === 'openai_compatible' || c.provider === 'mistral' ? parseChatResponse(json) : parseOpenAIResponse(json));
 
 /** The host to check against private addresses before a call (assertPublicHost), for addresses an admin typed. */
 export const hostToCheck = (c: AiConnection): string | null =>

@@ -1,5 +1,5 @@
 // Settings → AI provider: a workspace uses Avala OS's AI (within a monthly allowance) or its own key: OpenAI,
-// Azure OpenAI, Anthropic, Claude on Amazon Bedrock, or an OpenAI-compatible endpoint it runs. Admins set the key once; it is kept encrypted on the server and only its
+// Azure OpenAI, Anthropic, Claude on Amazon Bedrock, Mistral AI, or an OpenAI-compatible endpoint it runs. Admins set the key once; it is kept encrypted on the server and only its
 // last four characters are ever shown. A provider not yet checked by the extraction eval is listed only for
 // the platform owner (the person who may create organizations). Rules in domain/ai/providers.ts.
 import React from 'react';
@@ -99,6 +99,17 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
             {!info.checked && <span className="mt-1 block text-xs text-slate-500" data-testid="ai-provider-unchecked">{owner ? 'Only you see this provider: it is offered to workspaces once the extraction check has been run with it.' : 'This provider has not been checked for extraction quality yet.'}</span>}
           </label>
           <Field label={info.modelLabel} value={model} onChange={e => setModel(e.target.value)} hint={info.modelHint} autoComplete="off" spellCheck={false} />
+          {info.suggestedModels && (
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600" data-testid="ai-model-suggestions">
+              <span>Suggested:</span>
+              {info.suggestedModels.map(m => (
+                <button key={m.id} type="button" onClick={() => setModel(m.id)} aria-pressed={model === m.id}
+                  className={`rounded-lg border px-2 py-1 font-mono ${model === m.id ? 'border-[#002C4B] bg-[#002C4B]/5 text-[#002C4B]' : 'border-slate-300 bg-white hover:bg-slate-50'}`}>
+                  {m.id} <span className="font-sans text-slate-500">· {m.note}</span>
+                </button>
+              ))}
+            </div>
+          )}
           {info.needsEndpoint && <Field label={info.endpointLabel ?? 'Endpoint'} value={endpoint} onChange={e => setEndpoint(e.target.value)} placeholder={info.endpointPlaceholder} hint={info.endpointHint} autoComplete="off" spellCheck={false} />}
           <Field label="API key" type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} autoComplete="new-password" spellCheck={false}
             placeholder={keepsKey ? `Leave empty to keep the key ending ${current!.keyHint}` : 'Paste the key'}

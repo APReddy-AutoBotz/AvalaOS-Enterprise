@@ -84,8 +84,11 @@ export async function assertPublicHost(host: string, resolve: Resolve): Promise<
 
 // ---- Chat Completions ---------------------------------------------------------------------------
 
-/** A Responses API body as a Chat Completions body. */
-export function toChatRequest(body: Record<string, any>): Record<string, unknown> {
+/**
+ * A Responses API body as a Chat Completions body. `imageUrlAsString`: Mistral's API takes an image as
+ * `image_url: "<data URL>"`; OpenAI-style servers take `image_url: { url }`.
+ */
+export function toChatRequest(body: Record<string, any>, opts: { imageUrlAsString?: boolean } = {}): Record<string, unknown> {
   const messages: unknown[] = [];
   if (typeof body.instructions === 'string' && body.instructions) messages.push({ role: 'system', content: body.instructions });
   if (typeof body.input === 'string') messages.push({ role: 'user', content: body.input });
@@ -93,7 +96,7 @@ export function toChatRequest(body: Record<string, any>): Record<string, unknown
     for (const m of body.input) {
       const content = typeof m?.content === 'string' ? m.content : (Array.isArray(m?.content) ? m.content : []).map((p: any) => {
         if (p?.type === 'input_text') return { type: 'text', text: String(p.text ?? '') };
-        if (p?.type === 'input_image') return { type: 'image_url', image_url: { url: String(p.image_url ?? '') } };
+        if (p?.type === 'input_image') return { type: 'image_url', image_url: opts.imageUrlAsString ? String(p.image_url ?? '') : { url: String(p.image_url ?? '') } };
         throw new EndpointError(`Unsupported content part ${String(p?.type)}.`);
       });
       messages.push({ role: m?.role === 'assistant' ? 'assistant' : 'user', content });
