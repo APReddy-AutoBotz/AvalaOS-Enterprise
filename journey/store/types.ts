@@ -20,6 +20,7 @@ import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
 import type { AiProvider } from '../../domain/ai/providers.ts';
 import type { Allowance, UsageRow } from '../../domain/ai/usage.ts';
+import type { Application, ApplicationInput } from '../../domain/workspace/applications.ts';
 
 export interface Me { id: string; email: string }
 /** A workspace's own AI provider. The key is never here: only its last four characters. */
@@ -242,6 +243,11 @@ export interface JourneyStore {
   /** What changed on an item and who changed it, written by the database (members read). */
   listItemHistory(workItemId: string): Promise<ItemEvent[]>;
   /** A board's sprints (domain/workitems/sprints.ts). Members read; editors and admins change them. */
+  /** The workspace's applications list, by name. Members read; editors and admins write. */
+  listApplications(workspaceId: string): Promise<Application[]>;
+  /** Adds an application, or changes one when `id` is given; validated first. */
+  saveApplication(workspaceId: string, input: ApplicationInput, id?: string): Promise<Application>;
+  deleteApplication(id: string): Promise<void>;
   listSprints(projectId: string): Promise<Sprint[]>;
   createSprint(projectId: string, s: ReturnType<typeof validateSprint>): Promise<Sprint>;
   /** Rename, set the goal or dates, or start it (one sprint runs at a time). */
