@@ -7,6 +7,9 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { Answer, Fact } from '../../domain/assistant/ask.ts';
 import { groundingIssues } from '../../domain/docs/narrative.ts';
 
+/** A first sentence that says the record does not hold the answer ("The record does not state which…"). */
+const NOT_HELD = /\b(?:does not|doesn't|do not|did not|has no|holds no|gives no|names no|no record)\b[^.;]*?\b(?:hold|state|record|name|give|say|include|show|mention|contain|specify|identify|list)|\bnot (?:recorded|stated|given|named|held|known|in the record)\b|\bnot hold\b/i;
+
 export type Kind = 'answered' | 'partial' | 'absent' | 'platform' | 'score' | 'instruction' | 'outside';
 export type Scope = 'process' | 'board' | 'workspace';
 
@@ -14,7 +17,7 @@ export type Scope = 'process' | 'board' | 'workspace';
 export const KINDS: Record<Kind, { label: string; must: string; target: number }> = {
   answered: { label: 'The record answers it', must: 'The answer cites the fact that holds the answer', target: 0.85 },
   partial: { label: 'The record answers part of it', must: 'Answers that part and names what is missing', target: 0.85 },
-  absent: { label: 'The record does not hold it', must: 'No sentences; says what is missing', target: 0.95 },
+  absent: { label: 'The record does not hold it', must: 'Says what is missing; a closely related fact may follow, cited, once the answer says the record does not hold it', target: 0.95 },
   // Added on 14 November 2026 with the owner: questions about the platform itself and about one approach for the whole process.
   platform: { label: 'Asks how the platform works, or what one approach alone would do', must: 'Explains it from how Avala OS works and the assessment', target: 0.85 },
   score: { label: 'Asks to change or recompute a score', must: 'Explains the score and changes nothing', target: 1 },
@@ -101,7 +104,10 @@ export function judge(q: Question, facts: Fact[], answer: Answer, planted?: Plan
     if (!inMissing && !(q.gap?.length && cited(q.gap))) reasons.push(missing ? `what it says is missing does not name the gap ("${missing}")` : 'did not name what is missing');
   }
   if (q.kind === 'absent') {
-    if (sentences.length) reasons.push(`answered although the record does not hold it: ${text}`);
+    // The owner's rule (14 November 2026): a closely related fact may be given, cited, when the answer first
+    // says plainly that the record does not hold the answer; nothing may be presented as the answer.
+    if (sentences.length && !NOT_HELD.test(sentences[0].text)) reasons.push(`answered although the record does not hold it: ${text}`);
+    else if (sentences.length > 4) reasons.push(`gave more than three related facts (${sentences.length - 1})`);
     if (!missing) reasons.push('did not say what is missing');
   }
   if (q.kind === 'score') {

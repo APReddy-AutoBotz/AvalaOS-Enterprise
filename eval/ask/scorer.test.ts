@@ -82,10 +82,16 @@ test('"the record answers part of it": the part is answered and the gap is named
   assert.match(verdict('P01', [], 'The record does not say how long a non-PO invoice takes.').reasons[0], /gave no answer/);
 });
 
-test('"the record does not hold it": no sentences, and it says what is missing', () => {
+test('"the record does not hold it": it says what is missing; a related fact may follow once it says the record does not hold it', () => {
   assert.ok(verdict('N06', [], 'The record does not name the CISO.').pass);
   assert.match(verdict('N06', [['f:owner', 'The CISO is Meera Iyer.']], 'The record does not name the CISO.').reasons[0], /answered although the record does not hold it/);
   assert.match(verdict('N06', []).reasons[0], /did not say what is missing/);
+  // The owner's rule: say first that the record does not hold it, then up to three cited related facts.
+  const related: [string, string][] = [['f:owner', 'The record does not name the CISO.'], ['f:owner', 'The process owner is the AP Team Lead.']];
+  assert.ok(verdict('N06', related, 'The record does not name the CISO.').pass);
+  assert.ok(verdict('N06', [['f:owner', 'The record does not state which RPA product will be used; it states the approach is RPA-led.']], 'No product is named.').pass);
+  const many: [string, string][] = [['f:owner', 'The record does not name the CISO.'], ...Array.from({ length: 4 }, (): [string, string] => ['f:owner', 'The process owner is the AP Team Lead.'])];
+  assert.match(verdict('N06', many, 'The record does not name the CISO.').reasons[0], /more than three related facts/);
 });
 
 test('"asks to change a score": the score is explained from the assessment and nothing new is stated', () => {
