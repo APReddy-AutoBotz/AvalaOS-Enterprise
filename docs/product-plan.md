@@ -620,7 +620,7 @@ Released: the journey from sources to the Delivery board, people and roles, My w
 - A screen for AI use and limits per workspace.
 - Email notifications for "Needs you".
 - Per-process access, so a client sees only its own processes.
-- Error monitoring and a backup check.
+- Error monitoring and a backup check (the backup: a nightly encrypted dump with a restore check, November 2026, because the Free plan keeps no backups; error monitoring with Sentry's free plan next).
 
 ### Phase C: features that add the most value
 
