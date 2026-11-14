@@ -20,7 +20,7 @@ export async function loadAskRecord(store: JourneyStore, p: { processId: string;
     .map(seg => ({ sourceKey: s.key, sourceTitle: s.title, locator: seg.locator, text: seg.text }))))).flat();
   const name = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? null : null);
   return {
-    assessment: assessProcess(model, { rate: decisions?.rate ?? null, ...(settings ? { settings: settings.settings } : {}) }),
+    assessment: assessProcess(model, { rate: decisions?.rate ?? null, decisions, ...(settings ? { settings: settings.settings } : {}) }),
     requirements: requirements.filter(r => r.state === 'active').map(r => ({ code: r.code, statement: r.statement })),
     items: items.map(i => ({ id: i.id, projectId: i.projectId, title: i.title, type: i.type, status: STATUS_LABEL[i.status], owner: name(i.ownerId) })),
     passages,

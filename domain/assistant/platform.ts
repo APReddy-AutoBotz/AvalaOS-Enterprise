@@ -14,8 +14,11 @@ const fact = (id: string, stage: StageId, text: string): PlatformFact => ({ id: 
 export const PLATFORM_FACTS: PlatformFact[] = [
   // domain/flowchart/svg.ts flowPicture without modes; domain/docs/pdd.ts section 2.
   fact('as-is', 'flows', 'the As-Is flow and the As-Is map describe how the work is done today. They change only when the process itself is edited (its steps, roles, decisions and flows), never because a different automation approach is chosen.'),
-  // domain/docs/common.ts modeOf: pdd.ts section 3, sdd.ts automationUnits, workitems/derive.ts.
-  fact('to-be', 'documents', 'the To-Be process in the Process Definition Document (its To-Be map, the delivery model, the detailed To-Be steps and what is in and out of scope for automation), the automation units of the Solution Design Document and the work proposals are built from the approach in effect for each step: the assessment\'s recommendation, or the approach a person chose instead.'),
+  // domain/assess/process.ts assessProcess with decisions, used by journey/process/FlowsStage.tsx,
+  // DocumentsStage.tsx, WorkItemsStage.tsx and domain/docs/common.ts modeOf (pdd.ts section 3, sdd.ts, workitems/derive.ts).
+  fact('to-be', 'documents', 'everything built for the future process follows the approach in effect for each step: the assessment\'s recommendation, or the approach a person chose instead. That is the To-Be map on the Flows stage and in the Process Definition Document (with its delivery model, detailed To-Be steps and scope for automation), the functional requirements, the automation units of the Solution Design Document and the work proposals.'),
+  // journey/process/AssessmentStage.tsx Hero; domain/assess/process.ts lead.
+  fact('verdict', 'assessment', 'when people have chosen approaches for steps, the Assessment stage shows the approach and the split of steps with those choices, and shows the scoring\'s own recommendation underneath. The scores and the ranking of approaches stay those of the scoring.'),
   // journey/process/AssessmentStage.tsx StepDetail; domain/assess/decisions.ts withOverride.
   fact('override', 'assessment', 'a person who can edit the process can choose a different approach for a step in the Assessment stage: select the step, choose the approach under "Override recommendation" and give the reason. The step then shows "Overridden by" with their name, its scores stay as computed, and the override can be removed.'),
   // The same: an override is one step's.
@@ -23,7 +26,7 @@ export const PLATFORM_FACTS: PlatformFact[] = [
   // domain/assess/scoring.ts; journey/process/AssessmentInputs.tsx.
   fact('scores', 'assessment', 'scores are computed by fixed scoring tables from the recorded facts of each step and application, such as whether the rules are written down, whether the input is structured, whether an API is confirmed and whether robots may use an application\'s screens. A score changes only when one of those facts changes, in the Assessment stage under Inputs. Ask Avala cannot change a score.'),
   // domain/requirements/derive.ts.
-  fact('requirements', 'documents', 'a functional requirement is derived for each step recommended for automation, each human check and each exception. Its statement says what the solution shall do and does not name the approach.'),
+  fact('requirements', 'documents', 'a functional requirement is derived for each step whose approach in effect is automation, each human check and each exception. Its statement says what the solution shall do and does not name the approach; where a person chose the approach, its rationale says so.'),
   // domain/docs/edits.ts; journey/process/DocumentsStage.tsx.
   fact('edits-kept', 'documents', 'documents are rebuilt from the process, the assessment and the choices people made. Text a person edited in a section is kept; when the generated text under it changes, the section is marked "Needs review" and the person chooses Keep mine, Take update or Edit mine.'),
   // domain/docs/changes.ts; the model_approve rule.
