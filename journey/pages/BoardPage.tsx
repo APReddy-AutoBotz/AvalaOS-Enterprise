@@ -200,7 +200,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         </div>
       </div>
       <ErrorNote message={error} />
-      {shownSprint && items && <SprintBar key={shownSprint.id + shownSprint.state} sprint={shownSprint} sprints={sprints} items={items} canEdit={canEdit} onStart={() => startSprint(shownSprint)} onComplete={() => setCompleting(shownSprint)} />}
+      {shownSprint && items && <React.Fragment key={shownSprint.id + shownSprint.state}><SprintBar sprint={shownSprint} sprints={sprints} items={items} canEdit={canEdit} onStart={() => startSprint(shownSprint)} onComplete={() => setCompleting(shownSprint)} /></React.Fragment>}
       {!projects.length && <EmptyState title="No projects yet">Start a project with New project, then add epics, stories, tasks and bugs to it. Work items confirmed from a process also arrive on a project's board.</EmptyState>}
       {project && !items && <Spinner />}
       {project && items && !items.length && <EmptyState title="Nothing on this board yet">{canEdit ? 'Add an item with New item, or confirm work items from a process. New items arrive in To do.' : 'Items appear here when the team adds them.'}</EmptyState>}
