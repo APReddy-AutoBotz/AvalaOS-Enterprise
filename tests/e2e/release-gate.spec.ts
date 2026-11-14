@@ -3,7 +3,7 @@
 // accessibility problems that stop people using it (serious or critical, WCAG 2 A and AA).
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Page } from '@playwright/test';
-import { INTERNAL, primaryText, signInAndCreateProcess } from './helpers.ts';
+import { INTERNAL, openSettings, primaryText, signInAndCreateProcess } from './helpers.ts';
 
 const stage = (page: Page, name: string) => page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name }).click();
 const corpus = (name: string) => `eval/corpus/ap-invoice/sources/${name}`;
@@ -116,10 +116,21 @@ test('release gate: sources to documents to the board, accessible throughout', a
   await scan('My work');
   await page.getByRole('link', { name: 'Processes' }).first().click();
   await scan('Processes');
-  await page.getByRole('tab', { name: 'People' }).click();
+  await openSettings(page, 'People');
   await scan('People');
-  await page.getByRole('tab', { name: 'Settings' }).click();
-  await scan('Settings');
+  for (const section of ['Applications', 'Assessment', 'AI', 'Documents', 'Parts of Avala OS'] as const) {
+    await openSettings(page, section);
+    await scan(`Settings: ${section}`);
+  }
+  // The menus of the top bar, open.
+  await page.getByRole('button', { name: 'Account', exact: true }).click();
+  await expect(page.getByTestId('account-menu')).toBeVisible();
+  await scan('Account menu');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button', { name: /^Workspace: / }).click();
+  await expect(page.getByTestId('workspace-menu')).toBeVisible();
+  await scan('Workspace menu');
+  await page.keyboard.press('Escape');
 
   expect(problems, `Accessibility problems:\n${problems.join('\n')}`).toEqual([]);
 });

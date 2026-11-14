@@ -1,7 +1,7 @@
 // Start with the part you need: the four set-ups, what each shows, and what is said when a part is off.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { ModulesError, navFor, offMessage, planOf, PLANS, stagesFor, validateModules } from './modules.ts';
+import { ModulesError, navFor, offMessage, planOf, PLANS, settingsFor, stagesFor, validateModules } from './modules.ts';
 
 test('four set-ups, in a fixed order; nothing else is accepted', () => {
   assert.deepEqual(PLANS.map(p => p.modules.join('+')), ['assess+documents+board', 'assess+documents', 'assess', 'board']);
@@ -19,11 +19,17 @@ test('each set-up shows its stages; work items need the documents and the board'
   assert.deepEqual(stagesFor(['board']), []);
 });
 
-test('the main navigation shows a page when any of the person\'s organisations uses it', () => {
-  assert.deepEqual(navFor([{ modules: ['board'] }]), { processes: false, board: true, workspaceOnly: true });
-  assert.deepEqual(navFor([{ modules: ['assess'] }]), { processes: true, board: false, workspaceOnly: false });
-  assert.deepEqual(navFor([{ modules: ['assess'] }, { modules: ['board'] }]), { processes: true, board: true, workspaceOnly: false });
-  assert.deepEqual(navFor([]), { processes: true, board: true, workspaceOnly: false });
+test('the main navigation follows the workspace the person is in', () => {
+  assert.deepEqual(navFor({ modules: ['board'] }), { processes: false, board: true });
+  assert.deepEqual(navFor({ modules: ['assess'] }), { processes: true, board: false });
+  assert.deepEqual(navFor({}), { processes: true, board: true });
+  assert.deepEqual(navFor(null), { processes: true, board: true });
+});
+
+test('Settings shows People and the parts always, and the rest with the part they belong to', () => {
+  assert.deepEqual(settingsFor(undefined), ['people', 'applications', 'assessment', 'ai', 'documents', 'parts']);
+  assert.deepEqual(settingsFor(['assess']), ['people', 'applications', 'assessment', 'ai', 'parts']);
+  assert.deepEqual(settingsFor(['board']), ['people', 'parts']);
 });
 
 test('a part that is off says so, and that nothing was deleted', () => {

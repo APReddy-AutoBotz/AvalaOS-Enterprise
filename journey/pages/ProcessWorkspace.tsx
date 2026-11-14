@@ -36,7 +36,7 @@ interface Loaded {
   model: ProcessModel | null;
 }
 
-export function ProcessWorkspace({ store, nav, processId, stage }: { store: JourneyStore; nav: Nav; processId: string; stage: StageId }) {
+export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: { store: JourneyStore; nav: Nav; processId: string; stage: StageId; onWorkspace?: (workspaceId: string) => void }) {
   const [data, setData] = React.useState<Loaded | null | 'missing'>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -73,6 +73,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
     }
   }, [store, processId]);
   React.useEffect(() => { load(); }, [load]);
+  // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
+  const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
+  React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);

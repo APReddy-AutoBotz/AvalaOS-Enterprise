@@ -2,7 +2,7 @@
 // the part they need: Assess; Assess and Documents; the full journey; or the Delivery board on its own.
 // The platform owner sets it per organisation (migration organization_modules). A part that is off is
 // not shown; nothing in it is deleted, and switching it on again brings it all back.
-import type { StageId } from './route.ts';
+import type { SettingsSection, StageId } from './route.ts';
 
 export type Module = 'assess' | 'documents' | 'board';
 export const MODULES: readonly Module[] = ['assess', 'documents', 'board'];
@@ -41,13 +41,18 @@ export function stagesFor(modules: readonly string[] | undefined): StageId[] {
   return out;
 }
 
-/** Main navigation for a person across their workspaces: a page shows when any of their organisations uses it. */
-export function navFor(workspaces: { modules?: readonly string[] }[]): { processes: boolean; board: boolean; workspaceOnly: boolean } {
-  const list = workspaces.length ? workspaces : [{}];
-  const processes = list.some(w => has(w.modules, 'assess'));
-  const board = list.some(w => has(w.modules, 'board'));
-  // With no processes anywhere, the Processes page still holds People and Settings, so it is named for them.
-  return { processes, board, workspaceOnly: !processes };
+/** Main navigation for the workspace a person is in: a page shows when its organisation uses that part. My work and Settings always show. */
+export function navFor(workspace: { modules?: readonly string[] } | null): { processes: boolean; board: boolean } {
+  return { processes: has(workspace?.modules, 'assess'), board: has(workspace?.modules, 'board') };
+}
+
+/** The Settings sections shown with these parts: People and the parts themselves always; the rest belong to the assessment or the documents. */
+export function settingsFor(modules: readonly string[] | undefined): SettingsSection[] {
+  const out: SettingsSection[] = ['people'];
+  if (has(modules, 'assess')) out.push('applications', 'assessment', 'ai');
+  if (has(modules, 'documents')) out.push('documents');
+  out.push('parts');
+  return out;
 }
 
 /** What to say on a page whose part is off for this organisation. */

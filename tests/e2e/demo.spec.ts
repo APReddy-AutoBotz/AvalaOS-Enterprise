@@ -52,8 +52,7 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
 });
 
 test('in the demo, changes work but are not kept: a reload starts again and nothing is stored', async ({ page }) => {
-  await page.goto('/demo/processes');
-  await page.getByRole('tab', { name: 'People' }).click();
+  await page.goto('/demo/settings/people');
   const people = page.getByTestId('people');
   await people.getByLabel('Work email').fill('visitor@example.test');
   await people.getByLabel('Role for the new person').selectOption({ label: 'Viewer' });
@@ -62,7 +61,6 @@ test('in the demo, changes work but are not kept: a reload starts again and noth
 
   expect(await page.evaluate(() => localStorage.getItem('avala.journey.memory.v1'))).toBeNull();
   await page.reload();
-  await page.getByRole('tab', { name: 'People' }).click();
   await expect(page.getByTestId('people')).toBeVisible();
   await expect(page.getByText('visitor@example.test')).toHaveCount(0);
 });

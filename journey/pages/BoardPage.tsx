@@ -7,6 +7,7 @@
 import React from 'react';
 import type { JourneyStore, Member, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
+import type { Workspaces } from '../TopBar.tsx';
 import { allowedParents, BoardError, boardLabels, COLUMNS, criterionParts, deleteEffect, initials, joinStory, lanesOf, MANUAL_TYPES, needsParent, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateNewItem, validateProjectName, type ManualType, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
@@ -17,8 +18,6 @@ import { JiraImportDialog } from './JiraImport.tsx';
 import { has, offMessage } from '../../domain/workspace/modules.ts';
 import { defaultView, inView, sprintChoices, sprintOrder, type Sprint, type SprintView } from '../../domain/workitems/sprints.ts';
 
-const WORKSPACE_KEY = 'avala.journey.workspace';
-const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
 const MAIN: WorkStatus[] = ['todo', 'in_progress', 'in_review', 'testing', 'ready_for_release', 'done'];
 const TRACK = 'grid grid-cols-[repeat(6,minmax(13.5rem,1fr))] gap-[3px]';
 
@@ -29,7 +28,7 @@ const StatusLabel = ({ status, className }: { status: WorkStatus; className?: st
   <span className={cx('inline-flex items-center gap-1.5 whitespace-nowrap text-xs text-slate-600', className)}><span className={cx('h-1.5 w-1.5 rounded-full', STATUS_DOT[status])} aria-hidden />{STATUS_LABEL[status]}</span>
 );
 const ChangedTag = () => <Tag tone="warn">Upstream changed</Tag>;
-export function BoardPage({ store, nav, projectId, itemId }: { store: JourneyStore; nav: Nav; projectId?: string; itemId?: string }) {
+export function BoardPage({ store, nav, ws, projectId, itemId }: { store: JourneyStore; nav: Nav; ws: Workspaces; projectId?: string; itemId?: string }) {
   const [workspace, setWorkspace] = React.useState<Workspace | null>(null);
   const [projects, setProjects] = React.useState<Project[] | null>(null);
   const [items, setItems] = React.useState<WorkItem[] | null>(null);
@@ -47,8 +46,6 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [creating, setCreating] = React.useState(false);
   const [label, setLabel] = React.useState('');
   const [off, setOff] = React.useState<string | null>(null);
-  const [boardWorkspaces, setBoardWorkspaces] = React.useState<Workspace[]>([]);
-  const [allProjects, setAllProjects] = React.useState<Record<string, Project[]>>({});
   const [sprints, setSprints] = React.useState<Sprint[]>([]);
   const [view, setView] = React.useState<SprintView>('all');
   const [sprintsOpen, setSprintsOpen] = React.useState(false);
@@ -59,29 +56,23 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.id ?? '')).catch(() => {}); }, [store]);
 
   React.useEffect(() => {
-    store.listWorkspaces().then(async list => {
-      // The boards of the workspaces whose organisation uses the board. A link to a project opens its own
-      // workspace; otherwise the remembered workspace, else the first.
-      const withBoard = list.filter(x => has(x.modules, 'board'));
-      if (!withBoard.length && list[0]) { setOff(offMessage('board', list[0].organizationName)); setProjects([]); return; }
-      const all = Object.fromEntries(await Promise.all(withBoard.map(async x => [x.id, await store.listProjects(x.id)] as const)));
-      const w = (projectId ? withBoard.find(x => all[x.id]!.some(p => p.id === projectId)) : undefined)
-        ?? withBoard.find(x => x.id === remembered()) ?? withBoard[0] ?? null;
-      setBoardWorkspaces(withBoard); setAllProjects(all);
-      setWorkspace(w);
-      setProjects(w ? all[w.id]! : []);
-      if (w) store.listMembers(w.id).then(setMembers).catch(() => {});
-    }).catch(e => setError(messageOf(e)));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- the project only picks the workspace on arrival
+    (async () => {
+      // The board of the workspace the person is in (the top bar switches it; this page is shown anew
+      // for each). A link to a project of another workspace moves the top bar to that workspace.
+      const cur = ws.current;
+      const mine = has(cur.modules, 'board') ? await store.listProjects(cur.id) : [];
+      if (projectId && !mine.some(p => p.id === projectId)) {
+        for (const other of ws.list.filter(x => x.id !== cur.id && has(x.modules, 'board'))) {
+          if ((await store.listProjects(other.id)).some(p => p.id === projectId)) { ws.show(other.id); return; }
+        }
+      }
+      if (!has(cur.modules, 'board')) { setOff(offMessage('board', cur.organizationName)); setProjects([]); return; }
+      setWorkspace(cur);
+      setProjects(mine);
+      store.listMembers(cur.id).then(setMembers).catch(() => {});
+    })().catch(e => setError(messageOf(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the workspace is fixed for this page; the project only matters on arrival
   }, [store]);
-  const switchWorkspace = (id: string) => {
-    const w = boardWorkspaces.find(x => x.id === id);
-    if (!w) return;
-    try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ }
-    setWorkspace(w); setProjects(allProjects[id] ?? []); setMembers([]); setWho(''); setLabel('');
-    store.listMembers(id).then(setMembers).catch(() => {});
-    nav.go({ page: 'board', ...(allProjects[id]?.[0] ? { projectId: allProjects[id]![0]!.id } : {}) });
-  };
   const project = projects?.find(p => p.id === projectId) ?? null;
   React.useEffect(() => {
     if (projects && !projectId && projects[0]) nav.go({ page: 'board', projectId: projects[0].id }, { replace: true });
@@ -120,7 +111,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
     setError(null);
     try {
       const p = await store.createProject(workspace.id, validateProjectName(newName));
-      setProjects(cur => [...(cur ?? []), p]); setAllProjects(cur => ({ ...cur, [workspace.id]: [...(cur[workspace.id] ?? []), p] })); setNewName(''); setAdding(false);
+      setProjects(cur => [...(cur ?? []), p]); setNewName(''); setAdding(false);
       nav.go({ page: 'board', projectId: p.id });
     } catch (x) { setError(x instanceof BoardError ? x.message : messageOf(x)); }
   };
@@ -158,11 +149,6 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
     <section className="space-y-5" data-testid="board">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="font-display text-2xl font-semibold text-slate-900">Delivery board</h1>
-        {boardWorkspaces.length > 1 && workspace && (
-          <select aria-label="Workspace" value={workspace.id} onChange={e => switchWorkspace(e.target.value)} className={cx(field, 'max-w-[18rem]')}>
-            {boardWorkspaces.map(w => <option key={w.id} value={w.id}>{w.organizationName} · {w.name}</option>)}
-          </select>
-        )}
         {projects.length > 0 && (
           <select aria-label="Project" value={projectId ?? ''} onChange={e => nav.go({ page: 'board', projectId: e.target.value })} className={cx(field, 'max-w-[18rem] font-medium')}>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}

@@ -11,8 +11,7 @@ const OPENAI_KEY = ['sk', 'proj', '0123456789abcdefghijklmnopqrstuvZZ77'].join('
 
 test('an admin connects an Azure OpenAI key, sees only its last four characters, and can go back to the platform AI', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.goto('/settings/ai');
   const ai = page.getByTestId('ai-provider');
   await expect(ai.getByTestId('ai-provider-state')).toContainText("uses Avala OS's AI, within a monthly allowance");
 
@@ -62,8 +61,7 @@ const ANTHROPIC_KEY = ['sk', 'ant', 'api03', '0123456789abcdefghijklmnopqrstuvwx
 
 test('a provider not yet checked by the eval is listed only for the platform owner, and an Anthropic key needs no endpoint', async ({ page }) => {
   await signInAndCreateProcess(page); // the in-browser store treats the first account as the platform owner
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.goto('/settings/ai');
   const ai = page.getByTestId('ai-provider');
   await expect(ai.getByTestId('ai-provider-state')).toContainText('own OpenAI or Azure OpenAI key');
 
@@ -81,8 +79,7 @@ test('a provider not yet checked by the eval is listed only for the platform own
 
 test('an OpenAI-compatible endpoint must be a public https address; a served model name may hold a slash', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.goto('/settings/ai');
   const ai = page.getByTestId('ai-provider');
   await ai.getByLabel('Provider').selectOption({ label: 'OpenAI-compatible endpoint (being checked)' });
   await ai.getByLabel('Model').fill('meta-llama/Llama-3.3-70B-Instruct');
@@ -98,8 +95,7 @@ test('an OpenAI-compatible endpoint must be a public https address; a served mod
 
 test('Claude on Amazon Bedrock takes an AWS Region instead of an address', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.goto('/settings/ai');
   const ai = page.getByTestId('ai-provider');
   await ai.getByLabel('Provider').selectOption({ label: 'Amazon Bedrock (Claude) (being checked)' });
   await ai.getByLabel('Model or inference profile').fill('global.anthropic.claude-sonnet-5-5');
@@ -115,8 +111,7 @@ test('Claude on Amazon Bedrock takes an AWS Region instead of an address', async
 
 test('AI use this month is shown to members, and says plainly when nothing has been recorded', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.goto('/settings/ai');
   const usage = page.getByTestId('ai-usage');
   await expect(usage.getByRole('heading', { name: 'AI use this month' })).toBeVisible();
   // The in-browser store has no AI: nothing recorded and no allowance from the server.
@@ -128,8 +123,7 @@ test('AI use this month is shown to members, and says plainly when nothing has b
 
 test('Mistral offers its light models with one click and needs no endpoint', async ({ page }) => {
   await signInAndCreateProcess(page);
-  await page.goto('/processes');
-  await page.getByRole('tab', { name: 'Settings' }).click();
+  await page.goto('/settings/ai');
   const ai = page.getByTestId('ai-provider');
   await ai.getByLabel('Provider').selectOption({ label: 'Mistral AI (being checked)' });
   await expect(ai.getByLabel('Endpoint')).toHaveCount(0);

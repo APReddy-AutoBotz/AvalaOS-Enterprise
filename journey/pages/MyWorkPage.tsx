@@ -11,7 +11,6 @@ import { roleOf } from '../../domain/people/roles.ts';
 import { itemsFor, needsFor, processesFor, type Duty, type Person, type ProcessFacts } from '../../domain/work/home.ts';
 import { revisionStatus } from '../../domain/workspace/route.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag, TypeGlyph } from '../ui.tsx';
-import { FirstRun, remember, remembered } from './ProcessesPage.tsx';
 import { has } from '../../domain/workspace/modules.ts';
 
 const DUTY: Record<Duty, string> = { analyst: 'Analyst', architect: 'Architect', approver: 'Approver' };
@@ -21,45 +20,13 @@ const dueText = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(
 
 interface Loaded { facts: (ProcessFacts & { statusLabel: string; statusTone: keyof typeof STATUS_TONE })[]; items: WorkItem[]; names: Map<string, string> }
 
-export function MyWorkPage({ store, nav }: { store: JourneyStore; nav: Nav }) {
-  const [workspaces, setWorkspaces] = React.useState<Workspace[] | null>(null);
-  const [workspaceId, setWorkspaceId] = React.useState<string | null>(null);
-  const [me, setMe] = React.useState<{ id: string; email: string } | null>(null);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const loadWorkspaces = React.useCallback(async () => {
-    try {
-      const [list, user] = await Promise.all([store.listWorkspaces(), store.currentUser()]);
-      setMe(user);
-      setWorkspaces(list);
-      setWorkspaceId((list.find(w => w.id === remembered()) ?? list[0])?.id ?? null);
-    } catch (e) { setError(messageOf(e)); }
-  }, [store]);
-  React.useEffect(() => { loadWorkspaces(); }, [loadWorkspaces]);
-
-  if (error) return <ErrorNote message={error} />;
-  if (!workspaces || !me) return <Spinner />;
-  if (workspaces.length === 0) return <FirstRun store={store} onCreated={loadWorkspaces} />;
-  const workspace = workspaces.find(w => w.id === workspaceId)!;
-
+export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneyStore; nav: Nav; workspace: Workspace; userId: string }) {
   return (
     <div>
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-sm text-slate-500">{workspace.organizationName} · {workspace.name}</p>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">My work</h1>
-          <p className="mt-1 text-sm text-slate-600">You are {article(roleOf({ access: workspace.role, canApprove: workspace.canApprove, job: workspace.job ?? null }).label)} here.</p>
-        </div>
-        {workspaces.length > 1 && (
-          <label className="text-sm text-slate-600">
-            <span className="mr-2">Workspace</span>
-            <select className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm" value={workspace.id} onChange={e => { setWorkspaceId(e.target.value); remember(e.target.value); }}>
-              {workspaces.map(w => <option key={w.id} value={w.id}>{w.organizationName} · {w.name}</option>)}
-            </select>
-          </label>
-        )}
-      </div>
-      <React.Fragment key={workspace.id}><Home store={store} nav={nav} workspace={workspace} userId={me.id} /></React.Fragment>
+      <p className="text-sm text-slate-500">{workspace.organizationName} · {workspace.name}</p>
+      <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">My work</h1>
+      <p className="mt-1 text-sm text-slate-600">You are {article(roleOf({ access: workspace.role, canApprove: workspace.canApprove, job: workspace.job ?? null }).label)} here.</p>
+      <Home store={store} nav={nav} workspace={workspace} userId={userId} />
     </div>
   );
 }
@@ -185,34 +152,6 @@ function Home({ store, nav, workspace, userId }: { store: JourneyStore; nav: Nav
 
       {nothing && <EmptyState title="Nothing is waiting on you">Processes you are named on, and board items assigned to you, will appear here. Open Processes to see everything in this workspace.</EmptyState>}
       {!nothing && needs.length === 0 && <p className="text-sm text-slate-500" role="status">Nothing needs you right now.</p>}
-      <p className="text-sm text-slate-500">
-        <a href="/processes" className="font-medium text-[#002C4B] hover:underline" onClick={e => { e.preventDefault(); nav.go({ page: 'processes' }); }}>All processes</a>
-        {' · '}
-        <a href="/board" className="font-medium text-[#002C4B] hover:underline" onClick={e => { e.preventDefault(); nav.go({ page: 'board' }); }}>Delivery board</a>
-      </p>
-      <NeedsEmail store={store} />
-    </div>
-  );
-}
-
-/** The person's own choice: the weekday email when something new needs them (domain/work/digest.ts). */
-function NeedsEmail({ store }: { store: JourneyStore }) {
-  const [on, setOn] = React.useState<boolean | null>(null);
-  const [busy, setBusy] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-  React.useEffect(() => { store.getNeedsEmail().then(setOn).catch(() => setOn(null)); }, [store]);
-  if (on === null) return null;
-  const change = async (next: boolean) => {
-    setBusy(true); setError(null);
-    try { await store.setNeedsEmail(next); setOn(next); } catch (e) { setError(messageOf(e)); } finally { setBusy(false); }
-  };
-  return (
-    <div className="border-t border-slate-200 pt-4" data-testid="needs-email">
-      <label className="flex items-start gap-2 text-sm text-slate-700">
-        <input type="checkbox" className="mt-1" checked={on} disabled={busy} onChange={e => change(e.target.checked)} />
-        <span>Email me on weekdays when something new needs me on a process I am named on.</span>
-      </label>
-      <ErrorNote message={error} />
     </div>
   );
 }
