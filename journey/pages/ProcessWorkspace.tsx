@@ -1,5 +1,6 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
+import { useProcessChanged } from '../processChanged.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
@@ -71,9 +72,16 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
     }
   }, [store, processId]);
   React.useEffect(() => { load(); }, [load]);
+  // Answers recorded from the Ask Avala panel show here at once.
+  useProcessChanged(processId, load);
   // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
   const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
   React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);
+  // On a narrow screen the stage rail scrolls sideways: keep the open stage in view.
+  const loaded = Boolean(data && data !== 'missing');
+  React.useEffect(() => {
+    if (loaded) document.querySelector('nav[aria-label="Stages"] [aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
+  }, [stage, loaded]);
 
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -100,15 +108,16 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
 
   return (
     <div>
-      <nav aria-label="Breadcrumb" className="text-sm text-slate-500">
+      {/* The page head of the main pages (PageHead): a quiet line above, the name in navy. */}
+      <nav aria-label="Breadcrumb" className="text-[13px] font-medium text-slate-500">
         <a href="/processes" className="hover:text-slate-800" onClick={e => { e.preventDefault(); nav.go({ page: 'processes' }); }}>Processes</a>
         <span className="mx-2 text-slate-300" aria-hidden>/</span>
         <span className="text-slate-700">{process.name}</span>
       </nav>
 
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{process.name}</h1>
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+          <h1 className="min-w-0 break-words font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{process.name}</h1>
           <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
         </div>
         <div className="flex items-center gap-2">
