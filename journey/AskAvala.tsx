@@ -12,10 +12,15 @@ import { navFor, stagesFor } from '../domain/workspace/modules.ts';
 import type { Nav } from './JourneyApp.tsx';
 import { AskPanel } from './process/AskPanel.tsx';
 import { boardSubject, processSubject, workspaceSubject } from './process/askSubjects.ts';
+import { InterviewPanel } from './process/InterviewPanel.tsx';
+import { useProcessChanged } from './processChanged.ts';
+import { assessProcess } from '../domain/assess/process.ts';
+import { triage } from '../domain/questions/triage.ts';
+import { interviewQueue } from '../domain/questions/interview.ts';
 import { SidePanel } from './process/widgets.tsx';
 import { AskAvalaButton, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
-interface LoadedProcess { process: ProcessRow; model: ProcessModel | null; sources: SourceRow[] }
+interface LoadedProcess { process: ProcessRow; model: ProcessModel | null; sources: SourceRow[]; working: { id: string; seq: number } | null }
 
 /** The process's current model (the working draft, else the approved revision) and its sources, as the process page reads them. */
 async function loadProcess(store: JourneyStore, processId: string): Promise<LoadedProcess | null> {
@@ -23,7 +28,8 @@ async function loadProcess(store: JourneyStore, processId: string): Promise<Load
   if (!process) return null;
   const [revisions, sources] = await Promise.all([store.listRevisions(processId), store.listSources(processId)]);
   const current = revisions.find(r => r.state === 'working') ?? revisions.find(r => r.state === 'approved');
-  return { process, model: current ? await store.getModel(current.id) : null, sources };
+  const draft = revisions.find(r => r.state === 'working');
+  return { process, model: current ? await store.getModel(current.id) : null, sources, working: draft ? { id: draft.id, seq: draft.seq } : null };
 }
 
 export function AskAvala({ store, nav, workspace }: { store: JourneyStore; nav: Nav; workspace: Workspace }) {
@@ -48,6 +54,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   const [projects, setProjects] = React.useState<Project[] | null>(null);
   const [loaded, setLoaded] = React.useState<LoadedProcess | null | 'missing'>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // On a process: asking questions, or the interview through its open questions (stage 2).
+  const [view, setView] = React.useState<'ask' | 'interview'>('ask');
 
   React.useEffect(() => {
     let live = true;
@@ -64,12 +72,15 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   const projectId = scope.kind === 'board' ? scope.projectId : null;
   const project = projectId ? projects?.find(p => p.id === projectId) ?? null : null;
 
+  // Read again when an answer is recorded (from the interview here, or the page), quietly: the panel stays.
+  const [version, setVersion] = React.useState(0);
+  useProcessChanged(processId ?? '', React.useCallback(() => setVersion(v => v + 1), []));
   React.useEffect(() => {
     let live = true;
-    setLoaded(null);
+    if (version === 0) setLoaded(null);
     if (processId) loadProcess(store, processId).then(r => { if (live) setLoaded(r ?? 'missing'); }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
-  }, [store, processId]);
+  }, [store, processId, version]);
 
   const whole = scope.kind === 'workspace';
   const subject = React.useMemo(() => {
@@ -111,10 +122,35 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     </div>
   );
 
+  // The interview's tab, with how many open questions wait, on a process that has steps.
+  const proc = processId && loaded && loaded !== 'missing' && askable(loaded.model) ? loaded : null;
+  const openCount = proc ? interviewQueue(triage(proc.model!, assessProcess(proc.model!))).length : 0;
+  const tabs = proc && (
+    <div role="tablist" aria-label="Ask Avala" className="mb-4 flex gap-1 border-b border-slate-200">
+      {(['ask', 'interview'] as const).map(v => (
+        <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)}
+          className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${view === v ? 'border-[#E69F00] text-[#002C4B]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
+          {v === 'ask' ? 'Ask' : `Open questions${openCount ? ` (${openCount})` : ''}`}
+        </button>
+      ))}
+    </div>
+  );
+  if (proc && view === 'interview') {
+    return (
+      <SidePanel title="Ask Avala" onClose={onClose} wide>
+        <div data-testid="ask-panel">
+          {about}{tabs}
+          <React.Fragment key={proc.process.id}>
+            <InterviewPanel store={store} process={proc.process} workspace={workspace} model={proc.model!} working={proc.working} />
+          </React.Fragment>
+        </div>
+      </SidePanel>
+    );
+  }
   if (subject) {
     return (
       <React.Fragment key={pickOf(scope)}>
-        <AskPanel store={store} workspaceId={subject.workspaceId} subject={subject.subject} about={about} stages={stages} onOpen={onOpen} onClose={onClose} />
+        <AskPanel store={store} workspaceId={subject.workspaceId} subject={subject.subject} about={<>{about}{tabs}</>} stages={stages} onOpen={onOpen} onClose={onClose} />
       </React.Fragment>
     );
   }
