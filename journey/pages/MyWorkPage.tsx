@@ -70,7 +70,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
   const needs = needsFor(person, data.facts);
   const groups = needsByProcess(needs);
   const mine = itemsFor(userId, data.items, today());
-  const { mine: myProcesses, unassigned } = processesFor(person, data.facts);
+  const { mine: myProcesses, unassigned } = processesFor<LoadedFacts>(person, data.facts);
   const nothing = needs.length === 0 && mine.length === 0 && myProcesses.length === 0 && unassigned.length === 0;
   const name = data.names.get(userId);
   const nameOf = (id: string) => data.names.get(id) ?? 'Someone no longer in this workspace';

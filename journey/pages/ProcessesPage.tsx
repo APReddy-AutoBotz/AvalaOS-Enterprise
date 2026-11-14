@@ -225,7 +225,7 @@ function ProcessCardView({ p, f, nameOf, open }: { p: ProcessRow; f: LoadedFacts
         <div className="mt-auto pt-5">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-slate-100 pt-4">
             <span className="min-w-0 flex-1 basis-56"><People facts={f} nameOf={nameOf} /></span>
-            {openNow.length > 0 && <span className="flex flex-wrap gap-2">{openNow.map(t => <OpenChip key={t}>{t}</OpenChip>)}</span>}
+            {openNow.length > 0 && <span className="flex flex-wrap gap-2">{openNow.map(t => <React.Fragment key={t}><OpenChip>{t}</OpenChip></React.Fragment>)}</span>}
           </div>
         </div>
       )}
