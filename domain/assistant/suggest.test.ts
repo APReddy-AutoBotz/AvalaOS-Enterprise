@@ -44,6 +44,10 @@ test('an answer a passage states is suggested with the passage and its place; in
   assert.deepEqual(s.target.kind, 'answer');
   assert.deepEqual(answerSuggestions(m, [role], ids, [f({ certainty: 'inferred' })], passageOf), [], 'inferred is not suggested');
   assert.deepEqual(answerSuggestions(m, [role], ids, [f({ segmentId: 'q:1' })], passageOf), [], 'quoting the question is not a source');
+  // A passage that says the matter is not decided answers nothing.
+  const free = { ...role, kind: 'free' as const };
+  const undecided = 'Buyer turnaround is still being discussed with procurement; nothing is agreed yet.';
+  assert.deepEqual(answerSuggestions(m, [free], ids, [f({ value: undecided, excerpt: undecided })], passageOf), []);
   // Confirmed, the record keeps the source and its words, and History says Ask Avala suggested it.
   const edit = interviewEdit(m, role, (s.target as Extract<typeof s.target, { kind: 'answer' }>).proposal, 'SOP vendor invoices, 5.3')!;
   assert.match(edit.summary, /^Suggested by Ask Avala from SOP vendor invoices, 5\.3; confirmed: /);

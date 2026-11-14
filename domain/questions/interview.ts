@@ -81,7 +81,7 @@ export type Reading =
  * when it is short enough that saying so is all it does. Such an answer is no value, whatever a
  * free-text reading makes of it: "No idea, honestly." is never offered as the answer to record.
  */
-const NOT_KNOWN = /\b(?:not sure|unsure|no idea|no clue|(?:do not|don't|dont|do n't) know|not known|can(?:no|')t say|have to (?:check|ask|find out)|need to (?:check|ask|find out)|will (?:check|ask|find out)|i'll (?:check|ask|find out)|ask (?:procurement|it|finance|hr|the|someone|them))\b/i;
+const NOT_KNOWN = /\b(?:not sure|unsure|no idea|no clue|(?:do not|don't|dont|do n't) know|not known|can(?:no|')t say|have to (?:check|ask|find out)|need to (?:check|ask|find out)|will (?:check|ask|find out)|i'll (?:check|ask|find out)|ask (?:procurement|it|finance|hr|the|someone|them)|not (?:yet )?(?:agreed|decided|confirmed|settled)|nothing (?:is |has been )?(?:agreed|decided)|still (?:being )?(?:discussed|under discussion|open)|under discussion|to be (?:decided|confirmed|agreed)|tbd|tbc)\b/i;
 export const saysNotKnown = (answer: string) => NOT_KNOWN.test(answer) && answer.trim().split(/\s+/).length <= 20;
 
 export const UNANSWERED = 'I could not find an answer to record, so nothing is recorded. You can skip this question or leave it with the person who knows.';

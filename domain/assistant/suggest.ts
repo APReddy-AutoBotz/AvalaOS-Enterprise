@@ -17,6 +17,7 @@ import type { Segment } from '../ai/gateway.ts';
 import type { StageId } from '../workspace/route.ts';
 import { can, type Action, type MemberFacts } from '../people/roles.ts';
 import { notesSegments, proposalsFrom, type NoteFinding, type Proposal } from '../questions/notes.ts';
+import { saysNotKnown } from '../questions/interview.ts';
 import type { TriageItem } from '../questions/triage.ts';
 import type { NotPlanned } from '../workitems/derive.ts';
 import { applicationOffer, matchApplication, type Application } from '../workspace/applications.ts';
@@ -72,7 +73,8 @@ export function sourceSegments(model: ProcessModel, items: TriageItem[], passage
 /** Answers the sources state outright, one per question, with the passage; never an inferred one. */
 export function answerSuggestions(model: ProcessModel, items: TriageItem[], ids: Map<string, string>, findings: NoteFinding[], passageOf: Map<string, Passage>): Suggestion[] {
   const stated = findings.filter(f => f.certainty === 'stated' && passageOf.has(f.segmentId));
-  return proposalsFrom(model, items, ids, stated).map(p => {
+  // A passage that says it is not decided yet ("still being discussed; nothing is agreed") answers nothing.
+  return proposalsFrom(model, items, ids, stated).filter(p => !saysNotKnown(p.quote) && !saysNotKnown(p.display)).map(p => {
     const f = stated.find(x => ids.get(x.questionId.replace(/^q:/, '')) === p.itemKey)!;
     const source = where(passageOf.get(f.segmentId)!);
     return {
