@@ -40,9 +40,11 @@ async function connect(): Promise<Server> {
   const name = process.env.ASK_EVAL_WORKSPACE_NAME ?? '';
   if (!workspaceId) {
     if (!name) throw new Error('Name the workspace the AI use counts against: ASK_EVAL_WORKSPACE (its id) or ASK_EVAL_WORKSPACE_NAME.');
-    const res = await fetch(`${url}/rest/v1/workspaces?select=id&name=eq.${encodeURIComponent(name)}`, { headers: headers(key) });
+    // By name, whatever its capitals ("Avala Check" is "Avala check"); the pattern's own wildcards are then ruled out.
+    const same = (a: string) => a.trim().toLowerCase() === name.trim().toLowerCase();
+    const res = await fetch(`${url}/rest/v1/workspaces?select=id,name&name=ilike.${encodeURIComponent(name.trim())}`, { headers: headers(key) });
     if (!res.ok) throw new Error(`The server did not accept the sign-in (${res.status}).`);
-    const rows = (await res.json()) as { id: string }[];
+    const rows = ((await res.json()) as { id: string; name: string }[]).filter(r => same(r.name));
     console.log('Signed in to the server.');
     if (rows.length === 0) throw new Error(`There is no workspace named "${name}" yet.`);
     if (rows.length > 1) throw new Error(`More than one workspace is named "${name}"; give its id in ASK_EVAL_WORKSPACE.`);
