@@ -657,7 +657,7 @@ The platform is sold as one product a customer can start small with, not as sepa
 
 - **Bundles.** Assess (sources, process, assessment); Assess and Documents (adds BRD, PDD, FRD, SDD and flows); the full journey (adds work items and the Delivery board); and the Delivery board on its own, for small teams (below). Sources and the process record come with every bundle except the board on its own.
 - **Switches per organisation (done, November 2026).** Each organisation has the parts it uses switched on; a stage that is off is not shown, and nothing is deleted when a part is switched off. While sign-up is by invitation, the platform owner sets them; payment comes later. Already on Jira or Azure DevOps? The export (and, later, the tracker push) sends the work there.
-- **Homepage.** Two sections, each claiming only what the product does at release: "Your AI, your key" (BYOK: the platform's AI or the organisation's own key, stored encrypted and shown only by its last four characters; providers not yet checked are named as coming) and "Start with one part, or use it all" (the bundles). The board on its own is not called a Jira replacement until step 2 below is in.
+- **Homepage (built, November 2026; goes live with the next release).** Two sections, each claiming only what the product does at release: "Your AI, your key" (BYOK: the platform's AI or the organisation's own key, stored encrypted and shown only by its last four characters; providers not yet checked are named as coming) and "Start with one part, or use it all" (the bundles). The board on its own is not called a Jira replacement until step 2 below is in.
 
 ### The Delivery board on its own (agreed November 2026)
 
