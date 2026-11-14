@@ -12,6 +12,7 @@ import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../u
 import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
+import { useImpactContext } from '../process/ImpactNote.tsx';
 import { SourcesStage } from '../process/SourcesStage.tsx';
 import { AssessmentStage } from '../process/AssessmentStage.tsx';
 import { FlowsStage } from '../process/FlowsStage.tsx';
@@ -165,9 +166,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           : stage === 'work-items' && model && model.steps.length > 0
           ? <WorkItemsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} canEdit={canEdit} onOpenBoard={id => nav.go({ page: 'board', projectId: id })} />
           : stage === 'flows' && model && model.steps.length > 0
-          ? <FlowsStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
+          ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
           : stage === 'process' && model
-          ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
+          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
         </SourceContext.Provider>}
       </section>
@@ -183,13 +184,14 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   );
 }
 
-function ProcessStage({ store, processId, model, working, canEdit, me, onSaved }: {
-  store: JourneyStore; processId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
+function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
+  const impact = useImpactContext(store, processId, workspaceId);
   return (
-    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} />
+    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} />
   );
 }
 

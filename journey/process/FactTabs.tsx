@@ -29,7 +29,7 @@ export function RulesTab(ctx: TabContext) {
               <td className="min-w-56 px-1 py-1"><InlineText multiline value={r.condition} label={`Condition of ${r.name}`} disabled={!canEdit} onSave={v => setRule(r.id, 'condition', v, `Changed condition of ${r.name}`)} /></td>
               <td className="min-w-56 px-1 py-1"><InlineText multiline value={r.action} label={`Action of ${r.name}`} disabled={!canEdit} onSave={v => setRule(r.id, 'action', v, `Changed action of ${r.name}`)} /></td>
               <td className="px-3 py-2"><StatusBadge status={r.status} /><div><SourcesButton count={r.sources.length} what={r.name} onClick={() => showSources(r.name, r.sources)} /></div></td>
-              <td className="px-3 py-2 text-right"><ConfirmDelete what={`rule ${r.name}`} disabled={!canEdit} onDelete={() => editor.apply(m => removeElement(m, { kind: 'rule', id: r.id }), `Deleted rule ${r.name}`)} /></td>
+              <td className="px-3 py-2 text-right"><ConfirmDelete what={`rule ${r.name}`} disabled={!canEdit} impact={() => ctx.impactOf(m => removeElement(m, { kind: 'rule', id: r.id }))} onDelete={() => editor.apply(m => removeElement(m, { kind: 'rule', id: r.id }), `Deleted rule ${r.name}`)} /></td>
             </tr>
           ))}
         </TableShell>
@@ -82,7 +82,7 @@ export function ExceptionsTab(ctx: TabContext) {
           <td className="min-w-48 px-1 py-1"><InlineText multiline value={x.handling} label={`Handling of ${x.name}`} disabled={!canEdit} onSave={v => set(x.id, 'handling', v, `Changed handling of ${x.name}`)} /></td>
           <td className="px-3 py-2"><Select value={x.routedToRoleId ?? ''} options={roles} label={`${x.name} is routed to`} disabled={!canEdit} onChange={v => set(x.id, 'routedToRoleId', v || undefined, `Changed routing of ${x.name}`)} /></td>
           <td className="px-3 py-2"><StatusBadge status={x.status} /><div><SourcesButton count={x.sources.length} what={x.name} onClick={() => showSources(x.name, x.sources)} /></div></td>
-          <td className="px-3 py-2 text-right"><ConfirmDelete what={`exception ${x.name}`} disabled={!canEdit} onDelete={() => editor.apply(m => removeElement(m, { kind: 'exception', id: x.id }), `Deleted exception ${x.name}`)} /></td>
+          <td className="px-3 py-2 text-right"><ConfirmDelete what={`exception ${x.name}`} disabled={!canEdit} impact={() => ctx.impactOf(m => removeElement(m, { kind: 'exception', id: x.id }))} onDelete={() => editor.apply(m => removeElement(m, { kind: 'exception', id: x.id }), `Deleted exception ${x.name}`)} /></td>
         </tr>
       ))}
     </TableShell>
@@ -121,7 +121,7 @@ export function DataTab(ctx: TabContext) {
               <td className="px-3 py-2"><Select value={d.structured === null ? '' : d.structured ? 'yes' : 'no'} options={[{ value: '', label: 'Unknown' }, { value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]} label={`${d.name} is structured`} disabled={!canEdit} onChange={v => setData(d.id, 'structured', (v as string) === '' ? null : v === 'yes', `Changed ${d.name}`)} /></td>
               <td className="px-1 py-1"><InlineText value={d.classification ?? ''} placeholder="Not stated" label={`Classification of ${d.name}`} disabled={!canEdit} onSave={v => setData(d.id, 'classification', v, `Classified ${d.name}`)} /></td>
               <td className="px-3 py-2"><StatusBadge status={d.status} /><div><SourcesButton count={d.sources.length} what={d.name} onClick={() => showSources(d.name, d.sources)} /></div></td>
-              <td className="px-3 py-2 text-right"><ConfirmDelete what={`data ${d.name}`} disabled={!canEdit} onDelete={() => editor.apply(m => removeElement(m, { kind: 'data', id: d.id }), `Deleted data ${d.name}`)} /></td>
+              <td className="px-3 py-2 text-right"><ConfirmDelete what={`data ${d.name}`} disabled={!canEdit} impact={() => ctx.impactOf(m => removeElement(m, { kind: 'data', id: d.id }))} onDelete={() => editor.apply(m => removeElement(m, { kind: 'data', id: d.id }), `Deleted data ${d.name}`)} /></td>
             </tr>
           ))}
         </TableShell>
