@@ -5,6 +5,7 @@ import React from 'react';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
+import type { Override } from '../../domain/assess/decisions.ts';
 import { AskError, askFacts, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Passage, type Target } from '../../domain/assistant/ask.ts';
 import { STATUS_LABEL } from '../../domain/workitems/board.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
@@ -43,7 +44,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
         requirements: requirements.filter(r => r.state === 'active').map(r => ({ code: r.code, statement: r.statement })),
         items: items.map(i => ({ id: i.id, projectId: i.projectId, title: i.title, type: i.type, status: STATUS_LABEL[i.status], owner: name(i.ownerId) })),
         passages,
-        overrides: Object.values(decisions?.overrides ?? {}).map(o => ({ stepId: o.stepId, approach: o.approach, rationale: o.rationale })),
+        overrides: (decisions ? Object.values(decisions.overrides) as Override[] : []).map(o => ({ stepId: o.stepId, approach: o.approach, rationale: o.rationale })),
       });
     })().catch(e => { if (live) setLoadError(messageOf(e)); });
     return () => { live = false; };
