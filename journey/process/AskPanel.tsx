@@ -54,7 +54,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   return (
     <SidePanel title="Ask Avala" onClose={onClose} wide>
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
-        <p className="text-sm leading-6 text-slate-600">Ask about this process. Answers come only from its record: its steps, assessment, requirements, board items and sources. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.</p>
+        <p className="text-sm leading-6 text-slate-600">Ask about this process. Answers come only from its record (its steps, assessment, requirements, board items and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.</p>
         <ErrorNote message={loadError} />
         {!record && !loadError && <div className="mt-6"><Spinner /></div>}
         <div className="mt-5 flex-1 space-y-6" aria-live="polite">

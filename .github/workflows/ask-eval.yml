@@ -1,7 +1,8 @@
 # The Ask Avala measure (eval/ask, eval/README.md): asks the question set on the sample case through
 # the live AI gateway and prints the scorecard. It uses AI, so it never runs on its own: only from
 # "Run workflow", or on a claude/ branch when the commit message contains [ask-eval] (once),
-# [ask-eval 2] (twice, up to 5) or [ask-eval check] (sign-in and workspace only, no AI is called).
+# [ask-eval 2] (twice, up to 5), [ask-eval only:platform,score] (only those kinds or question ids) or
+# [ask-eval check] (sign-in and workspace only, no AI is called).
 #
 # The AI use is counted against one workspace, named below; with its own AI provider connected, the
 # measure runs on that provider. The run signs in as a trusted server with the project's server key,
@@ -21,6 +22,9 @@ on:
       runs:
         description: How many times to ask the whole set (1 to 5)
         default: '1'
+      only:
+        description: Only these kinds or question ids, separated by commas (empty for the whole set)
+        default: ''
 
 concurrency:
   group: ask-eval
@@ -39,6 +43,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       ASK_EVAL_WORKSPACE_NAME: ${{ inputs.workspace || 'Avala check' }}
       RUNS: ${{ inputs.runs }}
+      ONLY: ${{ inputs.only }}
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +63,11 @@ jobs:
           if [ -z "$runs" ] && [[ "$COMMIT_MESSAGE" =~ \[ask-eval\ ([1-5])\] ]]; then runs="${BASH_REMATCH[1]}"; fi
           runs="${runs:-1}"
           case "$runs" in [1-5]) ;; *) echo "::error::Runs must be 1 to 5."; exit 1 ;; esac
+          only="${ONLY:-}"
+          if [ -z "$only" ] && [[ "$COMMIT_MESSAGE" =~ \[ask-eval\ only:([A-Za-z0-9,_-]+)\] ]]; then only="${BASH_REMATCH[1]}"; fi
+          if [ -n "$only" ] && ! [[ "$only" =~ ^[A-Za-z0-9,_-]+$ ]]; then echo "::error::Only takes kinds or question ids separated by commas."; exit 1; fi
+          args=("$mode" --runs "$runs")
+          if [ -n "$only" ]; then args+=(--only "$only"); fi
 
           # The server key the functions themselves hold: the project's secret key named "default",
           # else the older service key. Nothing of the reply is printed.
@@ -69,4 +79,4 @@ jobs:
           fi
           echo "::add-mask::$key"
 
-          ASK_EVAL_URL="https://$PROJECT_REF.supabase.co" ASK_EVAL_KEY="$key" node eval/ask/run.ts "$mode" --runs "$runs"
+          ASK_EVAL_URL="https://$PROJECT_REF.supabase.co" ASK_EVAL_KEY="$key" node eval/ask/run.ts "${args[@]}"

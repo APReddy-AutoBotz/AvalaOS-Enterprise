@@ -1,5 +1,6 @@
 // The Avala assistant, first step (docs/product-plan.md, "The Avala assistant"): read-only questions about
-// one process, answered only from its record, every sentence citing where it came from.
+// one process, answered only from its record and from the fixed description of how Avala OS works
+// (platform.ts), every sentence citing where it came from.
 //
 // - The facts are built here, by rule, from the model, the assessment (computed by the fixed tables; the
 //   assistant explains it and cannot change it), the requirements, the board items and the source
@@ -12,11 +13,13 @@
 import type { TaskDefinition } from '../ai/gateway.ts';
 import type { ProcessModel, SourceLocator, SourceRef } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
-import { APPROACH_LABEL } from '../assess/scoring.ts';
+import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, type Approach } from '../assess/scoring.ts';
 import { modelFacts } from '../docs/narrative.ts';
 import { orderedSteps } from '../processModel/selectors.ts';
+import type { StageId } from '../workspace/route.ts';
+import { PLATFORM_FACTS, PLATFORM_LABEL } from './platform.ts';
 
-export const ASK_LIMITS = { question: 500, passages: 24, passageChars: 1200, facts: 260, totalChars: 150_000 } as const;
+export const ASK_LIMITS = { question: 500, passages: 24, passageChars: 1200, facts: 280, totalChars: 150_000 } as const;
 export class AskError extends Error {}
 
 export function validateQuestion(q: string): string {
@@ -44,7 +47,9 @@ export type Target =
   | { kind: 'assessment'; stepId?: string }
   | { kind: 'requirement'; code: string }
   | { kind: 'item'; itemId: string; projectId: string }
-  | { kind: 'source'; ref: SourceRef; title: string };
+  | { kind: 'source'; ref: SourceRef; title: string }
+  /** A rule of the platform: leads to the stage where it shows. */
+  | { kind: 'platform'; stage: StageId };
 export interface Fact { id: string; text: string; label: string; target: Target }
 
 const STOP = new Set('the and for are was were what which who whom how why when where does did this that with from into than then they them their there have has had can could should would will about step steps process our its not but any all who'.split(' '));
@@ -62,6 +67,47 @@ const locatorLabel = (l: SourceLocator) => {
   const x = l as Record<string, unknown>;
   return [x.timestamp, x.speaker, x.section ?? x.heading, x.page !== undefined ? `page ${x.page}` : undefined, x.row !== undefined ? `row ${x.row}` : undefined].filter(v => v !== undefined && v !== '').join(', ');
 };
+
+const count = (n: number) => `${n} ${n === 1 ? 'step' : 'steps'}`;
+const stepList = (nos: number[]) => {
+  const n = [...nos].sort((x, y) => x - y);
+  return `${n.length === 1 ? 'step' : 'steps'} ${n.length <= 1 ? n.join('') : `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}`}`;
+};
+
+/**
+ * What one approach on its own could do across the whole process, by rule from the step scores: the
+ * steps it reaches a recommendable score for, the steps it does not with what holds it back (the same
+ * wording the ranking uses), and the steps that stay with a person whatever is chosen. Teams often
+ * deliver a process with one technology, so "can we do this with RPA only?" needs facts, not a guess.
+ * Steps are given by their number, as the step facts name them.
+ */
+export function singleApproachFacts(a: ProcessAssessment, stepNo: (id: string) => number): { approach: Approach; text: string }[] {
+  const scored = a.steps.filter(s => !s.alreadyAutomated);
+  if (!scored.length) return [];
+  const already = a.steps.filter(s => s.alreadyAutomated);
+  const steps = (of: { stepId: string }[]) => stepList(of.map(s => stepNo(s.stepId)));
+  return AUTOMATION.map(approach => {
+    const fits = scored.filter(s => scoreOf(s, approach) >= FIT.possible);
+    const stay = scored.filter(s => s.mustStayHuman && !fits.includes(s));
+    const not = scored.filter(s => !fits.includes(s) && !stay.includes(s));
+    const why = new Map<string, typeof not>();
+    for (const s of not) {
+      const score = s.scores.find(x => x.approach === approach);
+      const reason = lower((score ? limiter(score) : '').replace(/\.$/, '')) || 'its score is low on what is known';
+      why.set(reason, [...(why.get(reason) ?? []), s]);
+    }
+    const held = [...why].sort((x, y) => y[1].length - x[1].length).map(([reason, of]) => `${count(of.length)} because ${reason} (${steps(of)})`);
+    return {
+      approach,
+      text: [
+        `If ${APPROACH_LABEL[approach]} alone were used for the whole process: of the ${count(scored.length)} people do today, it could do ${fits.length}${fits.length ? ` (${steps(fits)})` : ''}.`,
+        not.length ? `It scores below ${FIT.possible}, the lowest score at which an approach is recommended, for ${held.join('; ')}.` : '',
+        stay.length ? `${count(stay.length)} ${stay.length === 1 ? 'stays' : 'stay'} with a person whatever the approach (${steps(stay)}).` : '',
+        already.length ? `${count(already.length)} ${already.length === 1 ? 'is' : 'are'} already done by a system (${steps(already)}).` : '',
+      ].filter(Boolean).join(' '),
+    };
+  });
+}
 
 /** Every fact the assistant may answer from, with where each one leads. */
 export function askFacts(question: string, ctx: AskContext): Fact[] {
@@ -87,7 +133,9 @@ export function askFacts(question: string, ctx: AskContext): Fact[] {
     }
     for (const o of ctx.overrides ?? []) out.push({ id: `a:override:${o.stepId}`, text: `A person chose ${APPROACH_LABEL[o.approach]} for step "${stepName(o.stepId)}" instead of the recommendation${o.rationale.trim() ? `, because: ${o.rationale.trim().replace(/[.\s]+$/, '')}` : ''}.`, label: `Assessment of step ${stepNo.get(o.stepId)}`, target: { kind: 'assessment', stepId: o.stepId } });
     for (const c of a.cautions.filter(c => c.fired)) out.push({ id: `a:caution:${c.id}`, text: `Caution, ${c.label}: ${c.reason}`, label: 'Assessment', target: { kind: 'assessment' } });
+    for (const f of singleApproachFacts(a, id => stepNo.get(id) ?? 0)) out.push({ id: `a:only:${f.approach}`, text: f.text, label: 'Assessment', target: { kind: 'assessment' } });
   }
+  for (const p of PLATFORM_FACTS) out.push({ id: p.id, text: p.text, label: PLATFORM_LABEL, target: { kind: 'platform', stage: p.stage } });
   for (const r of ctx.requirements ?? []) out.push({ id: `r:${r.code}`, text: `${r.code}: ${r.statement}`, label: r.code, target: { kind: 'requirement', code: r.code } });
   for (const i of ctx.items ?? []) out.push({ id: `w:${i.id}`, text: `Board item (${i.type}) "${i.title}": status ${i.status.replace(/_/g, ' ')}${i.owner ? `, owner ${i.owner}` : ', no owner'}.`, label: `Board: ${i.title}`, target: { kind: 'item', itemId: i.id, projectId: i.projectId } });
   relevantPassages(question, ctx.passages ?? []).forEach((p, n) => {

@@ -34,7 +34,7 @@ test('the question set fits the sample case: every kind is covered and every fac
     const facts = given(q.id);
     const record = [...facts.filter(f => !f.id.startsWith('s:')), ...passages, ...set.planted.map(p => ({ id: `p:${p.id}`, text: p.text }))];
     for (const spec of [...(q.cite ?? []), ...(q.gap ?? [])]) assert.ok(record.some(f => factMatches(spec, f)), `${q.id}: nothing in the record matches "${spec}"`);
-    if (q.kind === 'answered' || q.kind === 'partial') {
+    if (q.kind === 'answered' || q.kind === 'partial' || q.kind === 'platform') {
       assert.ok(q.cite?.length, `${q.id}: says which facts hold the answer`);
       // If this fails after a change to how passages are chosen, the change lost a fact this question needs.
       assert.ok(holders(q, facts).length > 0, `${q.id}: a fact that holds the answer is among the facts sent`);
@@ -62,6 +62,13 @@ test('"the record answers it": passed only when a fact that holds the answer is 
   assert.match(verdict('A01', [], 'The record does not say.').reasons[0], /gave no answer/);
   // A source passage is named by its words, whatever number it was given for this question.
   assert.ok(verdict('A15', [['~retained for eight years', 'Invoices and approvals are kept for eight years.']]).pass);
+});
+
+test('"how the platform works, or one approach alone": passed when the rule of the platform or the assessment fact is cited and said', () => {
+  assert.ok(verdict('W01', [['h:as-is', 'The As-Is flow describes how the work is done today and does not change with the approach chosen.'], ['h:to-be', 'The To-Be process in the documents follows the approach in effect for each step.']]).pass);
+  assert.match(verdict('W01', [['a:verdict', 'The assessment is RPA-led automation, so the As-Is and To-Be flows stay.']]).reasons[0], /did not cite a fact that holds the answer/);
+  assert.ok(verdict('W03', [['a:only:rpa', 'Rule-based RPA alone could not do step 1, because its input is unstructured.']]).pass);
+  assert.match(verdict('W03', [], 'The record does not hold that.').reasons[0], /gave no answer/);
 });
 
 test('"the record answers part of it": the part is answered and the gap is named, in the missing line or by citing the open question', () => {

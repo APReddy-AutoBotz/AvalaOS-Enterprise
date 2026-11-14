@@ -182,6 +182,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         onOpen={t => {
           setAsking(false);
           if (t.kind === 'item') nav.go({ page: 'board', projectId: t.projectId, itemId: t.itemId });
+          // A rule of the platform leads to the stage where it shows, when this workspace uses that stage.
+          else if (t.kind === 'platform') nav.go({ page: 'process', processId: process.id, stage: shownStages.includes(t.stage) ? t.stage : 'process' });
           else nav.go({ page: 'process', processId: process.id, stage: t.kind === 'assessment' ? 'assessment' : t.kind === 'requirement' && shownStages.includes('documents') ? 'documents' : 'process' });
         }} />}
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
