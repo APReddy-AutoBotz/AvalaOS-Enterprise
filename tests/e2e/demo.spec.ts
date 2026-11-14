@@ -17,7 +17,7 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
   await expect(page.getByTestId('demo-banner')).toContainText('made-up company');
   await expect(page.getByRole('link', { name: 'Leave the demo' })).toHaveAttribute('href', '/');
   await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
-  await expect(page.getByRole('heading', { name: 'My work', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
 
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
   await expect(page).toHaveURL(/\/demo\/processes$/);

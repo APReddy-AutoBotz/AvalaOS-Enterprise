@@ -22,7 +22,7 @@ export function AiUsagePanel({ store, workspace }: { store: JourneyStore; worksp
   }, [store, workspace.id]);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="ai-usage">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="ai-usage">
       <h2 className="font-display text-lg font-semibold text-slate-900">AI use this month</h2>
       {error ? <ErrorNote message={error} /> : !data ? <Spinner /> : <UsageBody summary={summarizeUsage(data.usage.rows, new Date(), data.usage.allowance)} usage={data.usage} members={data.members} workspace={workspace} />}
     </div>

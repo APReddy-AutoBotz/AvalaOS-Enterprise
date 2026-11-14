@@ -71,7 +71,7 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
   const showForm = isAdmin && (editing || !current);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-6" data-testid="ai-provider">
+    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="ai-provider">
       <h2 className="font-display text-lg font-semibold text-slate-900">AI provider</h2>
       {current ? (
         <div className="mt-2 space-y-1 text-sm leading-6 text-slate-700" data-testid="ai-provider-state">

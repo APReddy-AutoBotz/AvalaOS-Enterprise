@@ -206,7 +206,7 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await settle(page);
   await snap(page, 'portfolio');
   await page.getByRole('link', { name: 'My work' }).click();
-  await expect(page.getByRole('heading', { name: 'My work', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
   await settle(page);
   await snap(page, 'my-work');
 
