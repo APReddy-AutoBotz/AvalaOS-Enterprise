@@ -544,6 +544,27 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       state.sprints = (state.sprints ?? []).filter(x => x.id !== id);
       save();
     },
+    async importWorkItems(projectId, planned) {
+      requireMe();
+      const project = (state.projects ?? []).find(p => p.id === projectId);
+      const w = project && state.workspaces.find(x => x.id === project.workspaceId);
+      if (!w) throw new StoreError(404, 'Project not found.');
+      if (w.role === 'viewer') throw new StoreError(403, 'Importing needs the editor or admin role.');
+      const members = new Set(peopleOf(w.id).members.map(m => m.userId));
+      if (planned.some(p => p.ownerId && !members.has(p.ownerId))) throw new StoreError(400, 'That person is not a member of this workspace');
+      const base = Math.max(0, ...(state.workItems ?? []).filter(i => i.projectId === projectId).map(i => i.sortOrder ?? 0));
+      const ids = planned.map(() => uuid());
+      planned.forEach((p, n) => {
+        (state.workItems ??= []).push({
+          id: ids[n]!, projectId, parentId: p.parent === null ? null : ids[p.parent]!, type: p.type, title: p.title, description: p.description, acceptance: [],
+          status: p.status, priority: p.priority, ownerId: p.ownerId, estimateHours: p.estimateHours, startDate: p.startDate, dueDate: p.dueDate,
+          processId: null, stepIds: [], requirements: [], snapshot: {}, updatedAt: now(), sortOrder: base + n + 1, labels: p.labels, sprintId: null,
+        });
+        logCreated(ids[n]!);
+      });
+      save();
+      return planned.length;
+    },
     async listItemHistory(workItemId) {
       requireMe();
       itemWorkspace(workItemId);
