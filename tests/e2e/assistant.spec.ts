@@ -6,7 +6,6 @@
 // tested in domain/assistant/*.test.ts; that the recordings still fit the demo in eval/ask/recorded.test.ts.
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
-import { openSettings } from './helpers.ts';
 
 const ask = (page: import('@playwright/test').Page) => page.getByRole('banner').getByRole('button', { name: 'Ask Avala' });
 
@@ -151,26 +150,4 @@ test('on a process, Ask Avala suggests changes to review where they are made, an
   } else {
     await expect(tab.getByTestId('suggestions-none')).toBeVisible();
   }
-});
-
-test('a company section with no text is suggested for drafting, and Review and apply opens it in its editor', async ({ page }) => {
-  await page.goto('/demo/processes');
-  await openSettings(page, 'Documents');
-  const box = page.getByTestId('document-sections');
-  await box.getByTestId('layout-section').filter({ has: page.getByLabel('Title of section 1', { exact: true }) }).getByRole('button', { name: '+ Add after' }).click();
-  await box.getByLabel('Title of your section').fill('Risks');
-  await box.getByRole('button', { name: 'Save PDD sections' }).click();
-  await expect(box.getByRole('status')).toContainText('Saved');
-
-  await page.getByRole('banner').getByRole('link', { name: 'Processes' }).click();
-  await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
-  await ask(page).click();
-  await page.getByTestId('ask-panel').getByRole('tab', { name: 'Suggestions' }).click();
-  const card = page.getByTestId('suggestion').filter({ hasText: '"Risks" in the PDD has no text yet' });
-  await expect(card).toContainText('A section to draft');
-  await card.getByRole('button', { name: 'Review and apply' }).click();
-  // The panel closes and the PDD opens with that section in its editor; nothing was written.
-  await expect(page.getByTestId('ask-panel')).toHaveCount(0);
-  const section = page.getByTestId('doc-section').filter({ has: page.getByRole('heading', { name: /Risks/ }) });
-  await expect(section.getByRole('button', { name: 'Cancel' })).toBeVisible();
 });

@@ -1,7 +1,6 @@
 // The Documents stage: the BRD and PDD of the process, written from the process model and the
 // assessment. Read-only for now; every table follows the model, so correcting a fact in the
 // Process or Assessment stage corrects the documents.
-import { useSectionRequest } from '../processChanged.ts';
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
@@ -133,12 +132,6 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [edits, setEdits] = React.useState<SectionEdit[]>([]);
   const [editing, setEditing] = React.useState<string | null>(null);
   const [editBusy, setEditBusy] = React.useState(false);
-  // An Ask Avala suggestion to draft a section opens it here, in its editor.
-  useSectionRequest(processId, React.useCallback(r => {
-    setType(r.docType as DocType);
-    setEditing(r.sectionId);
-    setTimeout(() => document.getElementById(r.sectionId)?.scrollIntoView({ block: 'start' }), 300);
-  }, []));
   React.useEffect(() => {
     Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId), store.listDocumentEdits(processId)])
       .then(([d, s, ds, r, ed]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));

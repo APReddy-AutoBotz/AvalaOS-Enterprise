@@ -15,12 +15,11 @@ import { planWork } from '../../domain/workitems/plan.ts';
 import { DEFAULT_DOCUMENT_SETTINGS } from '../../domain/docs/branding.ts';
 import type { Passage } from '../../domain/assistant/ask.ts';
 import {
-  answerSuggestions, applicationSuggestions, draftSuggestions, sourceSegments, suggestionsFor, workItemSuggestions, type Suggestion,
+  answerSuggestions, applicationSuggestions, sourceSegments, suggestionsFor, workItemSuggestions, type Suggestion,
 } from '../../domain/assistant/suggest.ts';
 import { Button, ErrorNote, messageOf, Spinner } from '../ui.tsx';
-import type { StageId } from '../../domain/workspace/route.ts';
 
-const KIND_LABEL: Record<Suggestion['kind'], string> = { answer: 'An answer from the sources', 'work-item': 'Work to plan', application: 'From the applications list', draft: 'A section to draft' };
+const KIND_LABEL: Record<Suggestion['kind'], string> = { answer: 'An answer from the sources', 'work-item': 'Work to plan', application: 'From the applications list' };
 
 /** Dismissals are this person's, in this browser: a light convenience, never shared. */
 const dismissedKey = (processId: string) => `avala:dismissed:${processId}`;
@@ -31,10 +30,8 @@ const writeDismissed = (processId: string, keys: string[]) => {
   try { localStorage.setItem(dismissedKey(processId), JSON.stringify(keys.slice(-200))); } catch { /* storage unavailable */ }
 };
 
-export function SuggestionsPanel({ store, process, workspace, model, stages, onReview }: {
+export function SuggestionsPanel({ store, process, workspace, model, onReview }: {
   store: JourneyStore; process: ProcessRow; workspace: Workspace; model: ProcessModel;
-  /** The stages this workspace uses: a suggestion leads only to one of them. */
-  stages: StageId[];
   /** "Review and apply": the panel opens the interview, or the stage where the change is made. */
   onReview: (s: Suggestion) => void;
 }) {
@@ -50,11 +47,10 @@ export function SuggestionsPanel({ store, process, workspace, model, stages, onR
     Promise.all([
       store.getAssessmentDecisions(process.id).catch(() => null), store.listRequirements(process.id).catch(() => []),
       store.getDocumentSettings(process.workspaceId).catch(() => DEFAULT_DOCUMENT_SETTINGS), store.listApplications(process.workspaceId).catch(() => []),
-      store.listDocumentEdits(process.id).catch(() => []),
-    ]).then(([decisions, reqs, docs, apps, edits]) => {
+    ]).then(([decisions, reqs, docs, apps]) => {
       if (!live) return;
       const work = decisions ? workItemSuggestions(planWork(model, decisions, reqs, docs.layouts).cov.notPlanned) : [];
-      setRuled([...work, ...applicationSuggestions(model, apps), ...draftSuggestions(docs.layouts, edits)]);
+      setRuled([...work, ...applicationSuggestions(model, apps)]);
     }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
   }, [store, process.id, process.workspaceId, model]);
@@ -78,8 +74,7 @@ export function SuggestionsPanel({ store, process, workspace, model, stages, onR
   const dismiss = (key: string) => { const next = [...dismissed, key]; setDismissed(next); writeDismissed(process.id, next); };
   if (member.access === 'viewer') return <p className="text-sm leading-6 text-slate-600" data-testid="suggestions-viewer">Suggestions are changes to this process, so they are offered to people who can edit it.</p>;
   if (!ruled) return error ? <ErrorNote message={error} /> : <Spinner />;
-  const usable = (s: Suggestion) => s.target.kind === 'answer' || (s.target.kind === 'section' ? stages.includes('documents') : stages.includes(s.target.stage));
-  const shown = suggestionsFor([...(answers ?? []), ...ruled].filter(usable), member, dismissed);
+  const shown = suggestionsFor([...(answers ?? []), ...ruled], member, dismissed);
 
   return (
     <section aria-label="Suggestions" data-testid="suggestions">

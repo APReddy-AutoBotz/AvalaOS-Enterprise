@@ -15,7 +15,7 @@ import { boardSubject, processSubject, workspaceSubject } from './process/askSub
 import { InterviewPanel } from './process/InterviewPanel.tsx';
 import { SuggestionsPanel } from './process/SuggestionsPanel.tsx';
 import type { Suggestion } from '../domain/assistant/suggest.ts';
-import { requestSection, useProcessChanged } from './processChanged.ts';
+import { useProcessChanged } from './processChanged.ts';
 import { assessProcess } from '../domain/assess/process.ts';
 import { triage } from '../domain/questions/triage.ts';
 import { interviewQueue } from '../domain/questions/interview.ts';
@@ -156,11 +156,6 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     const review = (sg: Suggestion) => {
       if (sg.target.kind === 'answer') { setStart(sg.target); setView('interview'); return; }
       onClose();
-      if (sg.target.kind === 'section') {
-        requestSection({ processId: proc.process.id, docType: sg.target.docType, sectionId: sg.target.sectionId });
-        nav.go({ page: 'process', processId: proc.process.id, stage: 'documents' });
-        return;
-      }
       nav.go({ page: 'process', processId: proc.process.id, stage: stages.includes(sg.target.stage) ? sg.target.stage : 'process' });
     };
     return (
@@ -168,7 +163,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={proc.process.id}>
-            <SuggestionsPanel store={store} process={proc.process} workspace={workspace} model={proc.model!} stages={stages} onReview={review} />
+            <SuggestionsPanel store={store} process={proc.process} workspace={workspace} model={proc.model!} onReview={review} />
           </React.Fragment>
         </div>
       </SidePanel>
