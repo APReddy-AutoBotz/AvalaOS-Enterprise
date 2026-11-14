@@ -125,3 +125,17 @@ test('AI use this month is shown to members, and says plainly when nothing has b
   const result = await new AxeBuilder({ page }).include('[data-testid="ai-usage"]').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
 });
+
+test('Mistral offers its light models with one click and needs no endpoint', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await page.goto('/processes');
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const ai = page.getByTestId('ai-provider');
+  await ai.getByLabel('Provider').selectOption({ label: 'Mistral AI (being checked)' });
+  await expect(ai.getByLabel('Endpoint')).toHaveCount(0);
+  await ai.getByTestId('ai-model-suggestions').getByRole('button', { name: /ministral-3b-latest/ }).click();
+  await expect(ai.getByLabel('Model')).toHaveValue('ministral-3b-latest');
+  await ai.getByLabel('API key').fill(ANTHROPIC_KEY.replace('sk-ant-api03', 'mistralkey'));
+  await ai.getByRole('button', { name: 'Save' }).click();
+  await expect(ai.getByTestId('ai-provider-state')).toContainText('runs on your own Mistral AI key ending QW88, with model ministral-3b-latest');
+});

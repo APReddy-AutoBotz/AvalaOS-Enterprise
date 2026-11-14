@@ -1,4 +1,4 @@
--- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (9 groups)";
+-- Bring your own key. Rolls back; success ends with the error "ALL_TESTS_PASSED (10 groups)";
 -- any other error names the failed check.
 do $test$
 declare
@@ -11,6 +11,7 @@ declare
   key3 text := 'ant-test-' || replace(gen_random_uuid()::text, '-', '') || 'EF56';
   key4 text := 'gw-test-' || replace(gen_random_uuid()::text, '-', '') || 'GH78';
   key5 text := 'ABSK' || replace(gen_random_uuid()::text, '-', '') || 'IJ90';
+  key6 text := 'mistral-test-' || replace(gen_random_uuid()::text, '-', '') || 'KL12';
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
@@ -146,6 +147,17 @@ begin
   execute 'reset role';
   r := public.workspace_ai_connection(ws);
   if r ->> 'apiKey' <> key5 or r ->> 'endpoint' <> 'eu-central-1' then raise exception 'FAILED 9d: %', r ->> 'provider'; end if;
+  passed := passed + 1;
+
+  -- 10. Mistral takes a model id and no endpoint.
+  perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  begin perform public.set_workspace_ai(ws, 'mistral', 'ministral-8b-latest', null, null); raise exception 'FAILED 10a: provider changed without a key';
+  exception when invalid_parameter_value then null; end;
+  r := public.set_workspace_ai(ws, 'mistral', 'ministral-8b-latest', 'https://ignored.example', key6);
+  if r ->> 'provider' <> 'mistral' or r ->> 'endpoint' is not null or r ->> 'keyHint' <> 'KL12' then raise exception 'FAILED 10b: %', r; end if;
+  execute 'reset role';
+  if (public.workspace_ai_connection(ws) ->> 'apiKey') <> key6 then raise exception 'FAILED 10c: key not stored'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;
