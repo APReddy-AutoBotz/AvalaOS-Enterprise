@@ -52,6 +52,9 @@ test('parseOpenAIResponse handles success, truncation, refusal, bad JSON and err
   const msg = (content: unknown[]) => ({ status: 'completed', output: [{ type: 'message', content }], usage: { input_tokens: 10, output_tokens: 5 } });
   const ok = parseOpenAIResponse(msg([{ type: 'output_text', text: '{"roles":[]}' }]));
   assert.deepEqual(ok, { ok: true, data: { roles: [] }, usage: { input: 10, output: 5 } });
+  // What the provider took from its cache of earlier requests is reported, so the measure can show it.
+  const cached = parseOpenAIResponse({ ...msg([{ type: 'output_text', text: '{}' }]), usage: { input_tokens: 2000, output_tokens: 5, input_tokens_details: { cached_tokens: 1536 } } });
+  assert.deepEqual(cached.usage, { input: 2000, output: 5, cached: 1536 });
   const code = (j: unknown) => { const r = parseOpenAIResponse(j); return r.code ?? 'OK'; };
   assert.equal(code({ status: 'incomplete', incomplete_details: { reason: 'max_output_tokens' } }), 'TRUNCATED');
   assert.equal(code(msg([{ type: 'refusal', refusal: 'no' }])), 'REFUSED');

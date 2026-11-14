@@ -145,7 +145,7 @@ test('the scorecard sets each kind against its target, counts a failed request a
   assert.equal(card.kinds.outside.met, false);
   assert.equal(card.met, false);
   assert.equal(card.errors, 1);
-  assert.deepEqual(card.tokens.process, { questions: 52, input: 520_000, output: 10_400, perQuestion: 10_200 });
+  assert.deepEqual(card.tokens.process, { questions: 52, input: 520_000, output: 10_400, cached: 0, perQuestion: 10_200 });
   assert.deepEqual(card.ungrounded, [{ id: 'I0', run: 1, text: 'Priya Nair' }]);
   assert.equal(card.dropped, 2);
   assert.equal(card.failures.length, 3 + 2 + 1 + 1);
@@ -165,4 +165,10 @@ test('an answer that does not lead with a direct answer does not pass', () => {
   const s = { text: 'The AP Team Lead reviews invoices of INR 5,00,000 or more before posting.', quote: 'x', fact, group: '' };
   assert.ok(judge(q, facts, { sentences: [s], missing: '', lead: s }).pass);
   assert.deepEqual(judge(q, facts, { sentences: [s], missing: '', lead: null }).reasons, ['did not lead with a direct answer']);
+});
+
+test('tokens the provider took from its cache are reported per scope', () => {
+  const o = (id: string, cached: number) => ({ id, kind: 'answered' as const, scope: 'process' as const, question: `${id}?`, run: 1, pass: true, reasons: [], tokens: { input: 10_000, output: 200, cached }, dropped: 0, ungrounded: [] });
+  const text = renderScorecard(scorecard([o('A01', 0), o('A02', 8_000)]));
+  assert.match(text, /Tokens per question \(process scope\): 10,200 \(10,000 in, 4,000 of them from the provider's cache \(40%\), 200 out\)\./);
 });
