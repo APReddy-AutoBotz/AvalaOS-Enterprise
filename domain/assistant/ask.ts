@@ -22,9 +22,9 @@ import { PLATFORM_FACTS, PLATFORM_LABEL } from './platform.ts';
 export const ASK_LIMITS = { question: 500, passages: 24, passageChars: 1200, facts: 280, totalChars: 150_000 } as const;
 export class AskError extends Error {}
 
-export function validateQuestion(q: string): string {
+export function validateQuestion(q: string, about = 'this process'): string {
   const t = q.replace(/\s+/g, ' ').trim();
-  if (t.length < 3) throw new AskError('Ask a question about this process.');
+  if (t.length < 3) throw new AskError(`Ask a question about ${about}.`);
   if (t.length > ASK_LIMITS.question) throw new AskError(`Keep the question under ${ASK_LIMITS.question} characters.`);
   return t;
 }
@@ -49,7 +49,9 @@ export type Target =
   | { kind: 'item'; itemId: string; projectId: string }
   | { kind: 'source'; ref: SourceRef; title: string }
   /** A rule of the platform: leads to the stage where it shows. */
-  | { kind: 'platform'; stage: StageId };
+  | { kind: 'platform'; stage: StageId }
+  /** A fact about a whole Delivery board (its counts and sprints): opens the board. */
+  | { kind: 'board'; projectId: string };
 export interface Fact { id: string; text: string; label: string; target: Target }
 
 const STOP = new Set('the and for are was were what which who whom how why when where does did this that with from into than then they them their there have has had can could should would will about step steps process our its not but any all who'.split(' '));

@@ -4,8 +4,8 @@
 import React from 'react';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { answerGroups, AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Target } from '../../domain/assistant/ask.ts';
-import { loadAskRecord } from './askRecord.ts';
+import { answerGroups, AskError, askFailure, askSegments, readAnswer, validateQuestion, type Answer, type Target } from '../../domain/assistant/ask.ts';
+import type { AskSubject } from './askSubjects.ts';
 import { answerAction, citedFacts, figureTiles, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
@@ -13,17 +13,18 @@ import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 
 type Turn = { question: string; answer?: Answer; error?: string };
-const SUGGESTED = ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'];
 
-export function AskPanel({ store, processId, workspaceId, model, sources, about, stages = STAGE_ORDER, onOpen, onClose }: {
-  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[];
-  /** What the panel is asking about, and the choice of another process (the top bar's panel, journey/AskAvala.tsx). */
+export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_ORDER, onOpen, onClose }: {
+  store: JourneyStore; workspaceId: string;
+  /** What is asked about (a process, a board) and how its facts are built: journey/process/askSubjects.ts. */
+  subject: AskSubject;
+  /** What the panel is asking about, and the choice of another (the top bar's panel, journey/AskAvala.tsx). */
   about?: React.ReactNode;
   /** The stages this workspace uses: the answer's action opens only one of them. */
   stages?: StageId[];
   onOpen: (target: Target) => void; onClose: () => void;
 }) {
-  const [record, setRecord] = React.useState<Omit<AskContext, 'model'> | null>(null);
+  const [record, setRecord] = React.useState<unknown>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [turns, setTurns] = React.useState<Turn[]>([]);
   const [question, setQuestion] = React.useState('');
@@ -34,10 +35,10 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
   // The record the answers come from: read once when the panel opens.
   React.useEffect(() => {
     let live = true;
-    loadAskRecord(store, { processId, workspaceId, model, sources }).then(r => { if (live) setRecord(r); })
+    subject.load().then(r => { if (live) setRecord(r); })
       .catch(e => { if (live) setLoadError(messageOf(e)); });
     return () => { live = false; };
-  }, [store, processId, workspaceId, model, sources]);
+  }, [subject]);
 
   React.useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [turns]);
 
@@ -45,12 +46,12 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
     if (!record || busy) return;
     setError(null);
     let q: string;
-    try { q = validateQuestion(text); } catch (x) { setError(x instanceof AskError ? x.message : messageOf(x)); return; }
-    const facts = askFacts(q, { model, ...record });
+    try { q = validateQuestion(text, subject.noun); } catch (x) { setError(x instanceof AskError ? x.message : messageOf(x)); return; }
+    const facts = subject.facts(q, record);
     setBusy(true); setQuestion('');
     setTurns(t => [...t, { question: q }]);
     try {
-      const r = await store.runAiTask(workspaceId, askProcess.id, askSegments(q, facts) as never);
+      const r = await store.runAiTask(workspaceId, subject.task.id, askSegments(q, facts) as never);
       const answer = readAnswer(r.data, facts);
       setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer } : x)));
     } catch (x) {
@@ -62,13 +63,13 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
     <SidePanel title="Ask Avala" onClose={onClose} wide>
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
         {about}
-        <p className="text-sm leading-6 text-slate-600">Ask about this process. Answers come only from its record (its steps, assessment, requirements, board items and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.</p>
+        <p className="text-sm leading-6 text-slate-600">{subject.intro}</p>
         <ErrorNote message={loadError} />
         {!record && !loadError && <div className="mt-6"><Spinner /></div>}
         <div className="mt-5 flex-1 space-y-6" aria-live="polite">
           {record && !turns.length && (
             <div role="group" className="flex flex-wrap gap-2" aria-label="Questions to start with">
-              {SUGGESTED.map(s => <button key={s} type="button" onClick={() => ask(s)} className="rounded-full bg-slate-100 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-200">{s}</button>)}
+              {subject.suggested.map(s => <button key={s} type="button" onClick={() => ask(s)} className="rounded-full bg-slate-100 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-200">{s}</button>)}
             </div>
           )}
           {turns.map((t, n) => {
@@ -79,7 +80,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
                 <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
                 {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
                 {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
-                {t.answer && <AnswerView answer={t.answer} assessment={record?.assessment} stages={stages} onOpen={onOpen} />}
+                {t.answer && <AnswerView answer={t.answer} assessment={record ? subject.assessment(record) : null} stages={stages} onOpen={onOpen} />}
                 {next.length > 0 && (
                   <div role="group" aria-label="Ask next" className="mt-4 flex flex-wrap gap-2">
                     {next.map(q => <button key={q} type="button" onClick={() => ask(q)} className="rounded-full border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50">{q}</button>)}
@@ -92,7 +93,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, about,
         </div>
         <form className="sticky bottom-0 mt-6 border-t border-slate-100 bg-white pt-4" onSubmit={e => { e.preventDefault(); ask(question); }}>
           <label htmlFor="ask-question" className="sr-only">Your question</label>
-          <textarea id="ask-question" rows={2} value={question} maxLength={500} disabled={!record} placeholder="Ask about the steps, the assessment, requirements or sources…"
+          <textarea id="ask-question" rows={2} value={question} maxLength={500} disabled={!record} placeholder={subject.placeholder}
             onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(question); } }}
             className="block w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20" />
           <ErrorNote message={error} />

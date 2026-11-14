@@ -16,16 +16,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildOpenAIRequest } from '../../domain/ai/gateway.ts';
 import { askProcess, askSegments, readAnswer, type Fact } from '../../domain/assistant/ask.ts';
+import { askBoard } from '../../domain/assistant/board.ts';
 import { factsFor, loadQuestions, loadSample, plantedFor, type Sample } from './sample.ts';
 import { holders, judge, KINDS, KIND_ORDER, renderScorecard, scorecard, ungrounded, type Outcome, type Question, type QuestionSet } from './scorer.ts';
 
 const CONCURRENCY = 4;
+const taskOf = (scope: Question['scope']) => (scope === 'board' ? askBoard : askProcess);
 /**
  * About how many tokens the gateway sends for one question: the request it would build, at 3.4
  * characters a token (measured on the baseline run; ids and quoted names take more tokens than prose).
  */
-function approxTokens(facts: Fact[], question: string): number {
-  const body = buildOpenAIRequest(askProcess, askSegments(question, facts), '');
+function approxTokens(facts: Fact[], question: string, scope: Question['scope'] = 'process'): number {
+  const body = buildOpenAIRequest(taskOf(scope), askSegments(question, facts), '');
   return Math.round((String(body.instructions).length + String(body.input).length + JSON.stringify(body.text).length) / 3.4);
 }
 
@@ -77,7 +79,7 @@ async function askOne(server: Server, q: Question, sample: Sample, set: Question
   let last = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const r = await gateway(server, { action: 'run', task: askProcess.id, segments: askSegments(question, facts) });
+      const r = await gateway(server, { action: 'run', task: taskOf(q.scope).id, segments: askSegments(question, facts) });
       if (r.status === 200 && r.json?.ok) {
         const answer = readAnswer(r.json.data, facts);
         const verdict = judge(q, facts, answer, plantedFor(q, set));

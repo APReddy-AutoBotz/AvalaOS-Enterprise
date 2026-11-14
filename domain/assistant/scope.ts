@@ -1,19 +1,26 @@
 // What Ask Avala answers about, from where the person is (docs/product-plan.md, "Ask Avala: the plan",
 // stage 1). The button is in the top bar on every page; the panel says what it is asking about.
 //
-// Today only a process can be asked about: on a process page it is that process; elsewhere the person
-// picks one in the panel. The board and the whole workspace come next in the plan, as scopes of their own.
+// On a process page it is that process; on the Delivery board it is that board; elsewhere the person picks
+// a process or a board in the panel. The whole workspace comes next in the plan, as a scope of its own.
 import type { JourneyRoute } from '../workspace/route.ts';
 
 export type AskScope =
   | { kind: 'process'; processId: string }
-  /** No process is in view: the panel asks which one. */
+  /** A board; with no project yet, the workspace's first board. */
+  | { kind: 'board'; projectId: string | null }
+  /** Nothing is in view: the panel asks what to ask about. */
   | { kind: 'choose' };
 
-/** The scope for a page, or the process the person picked in the panel (which wins). */
+/** A choice in the panel's picker: "p:<process id>" or "b:<board id>". */
+export const pickOf = (s: AskScope): string => (s.kind === 'process' ? `p:${s.processId}` : s.kind === 'board' && s.projectId ? `b:${s.projectId}` : '');
+
+/** The scope for a page, or what the person picked in the panel (which wins). */
 export function askScope(route: JourneyRoute, picked: string | null = null): AskScope {
-  if (picked) return { kind: 'process', processId: picked };
+  if (picked?.startsWith('p:')) return { kind: 'process', processId: picked.slice(2) };
+  if (picked?.startsWith('b:')) return { kind: 'board', projectId: picked.slice(2) };
   if (route.page === 'process') return { kind: 'process', processId: route.processId };
+  if (route.page === 'board') return { kind: 'board', projectId: route.projectId ?? null };
   return { kind: 'choose' };
 }
 

@@ -97,7 +97,7 @@ Measures Ask Avala's answers (`docs/product-plan.md`, "The measure"). A set of q
 
 ## What is asked
 
-`eval/ask/questions.json`: 66 questions about the sample case as the demo holds it (`public/demo-data/sample.json`), read the way the panel reads a process (`loadSample` uses the same store, the same record and the same `askFacts`). Each question says what kind it is and what must happen:
+`eval/ask/questions.json`: 78 questions about the sample case as the demo holds it (`public/demo-data/sample.json`), read the way the panel reads a process (`loadSample` uses the same store, the same record and the same `askFacts`). Twelve of them (ids starting `B`, `"scope": "board"`) ask about the sample's Delivery board instead, read the way the panel reads a board (`boardSubject` in `journey/process/askSubjects.ts`, facts from `boardFacts`, today fixed at 14 November 2026) and sent as the task `askBoard`; the scorecard reports tokens per question for each scope apart (about 7,700 for a board question, against about 17,000 for a process question). Each question says what kind it is and what must happen:
 
 | Kind of question | What must happen | How the script checks it | Target |
 | --- | --- | --- | --- |
