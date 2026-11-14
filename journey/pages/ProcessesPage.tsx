@@ -8,6 +8,8 @@ const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed
 import { Portfolio } from './Portfolio.tsx';
 import { WorkspaceSettings } from './WorkspaceSettings.tsx';
 import { PeoplePage } from './PeoplePage.tsx';
+import { PARTS_CHANGED } from './OrganizationParts.tsx';
+import { has } from '../../domain/workspace/modules.ts';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
 export const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
@@ -29,6 +31,12 @@ export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav })
     }
   }, [store]);
   React.useEffect(() => { loadWorkspaces(); }, [loadWorkspaces]);
+  // When the platform owner changes what an organisation uses, read it again (the selection is kept).
+  React.useEffect(() => {
+    const again = () => { store.listWorkspaces().then(setWorkspaces).catch(() => {}); };
+    window.addEventListener(PARTS_CHANGED, again);
+    return () => window.removeEventListener(PARTS_CHANGED, again);
+  }, [store]);
 
   if (error) return <ErrorNote message={error} />;
   if (!workspaces) return <Spinner />;
@@ -40,7 +48,7 @@ export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav })
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-sm text-slate-500">{workspace.organizationName}</p>
-          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">Processes</h1>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{has(workspace.modules, 'assess') ? 'Processes' : 'Workspace'}</h1>
         </div>
         {workspaces.length > 1 && (
           <label className="text-sm text-slate-600">
@@ -66,7 +74,10 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   const [adding, setAdding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [view, setView] = React.useState<'list' | 'portfolio' | 'people' | 'settings'>('list');
+  const assess = has(workspace.modules, 'assess');
+  const [view, setView] = React.useState<'list' | 'portfolio' | 'people' | 'settings'>(assess ? 'list' : 'people');
+  // Without the assessment (the board on its own) the page keeps only People and Settings.
+  React.useEffect(() => { if (!assess && (view === 'list' || view === 'portfolio')) setView('people'); }, [assess, view]);
   const canEdit = workspace.role !== 'viewer';
 
   const [status, setStatus] = React.useState<Record<string, ReturnType<typeof revisionStatus>>>({});
@@ -104,7 +115,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
       {processes !== null && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div role="tablist" aria-label="Views" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
-            {([['list', 'Processes'], ['portfolio', 'Portfolio'], ['people', 'People'], ['settings', 'Settings']] as const).map(([id, label]) => (
+            {([['list', 'Processes'], ['portfolio', 'Portfolio'], ['people', 'People'], ['settings', 'Settings']] as const).filter(([id]) => assess || id === 'people' || id === 'settings').map(([id, label]) => (
               <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
                 className={cx('rounded-md px-3.5 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
             ))}
@@ -112,7 +123,7 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
           {canEdit && view === 'list' && processes.length > 0 && !adding && <Button onClick={() => setAdding(true)}>Add process</Button>}
         </div>
       )}
-      {view === 'people' && processes !== null ? <PeoplePage store={store} workspace={workspace} /> : view === 'settings' && processes !== null ? <WorkspaceSettings store={store} workspace={workspace} /> : processes === null ? <Spinner /> : processes.length === 0 ? (
+      {!assess && view !== 'people' && view !== 'settings' ? null : view === 'people' && processes !== null ? <PeoplePage store={store} workspace={workspace} /> : view === 'settings' && processes !== null ? <WorkspaceSettings store={store} workspace={workspace} /> : processes === null ? <Spinner /> : processes.length === 0 ? (
         <EmptyState title="No processes yet" action={canEdit ? addForm : undefined}>
           {canEdit ? 'Add the process you want to assess. You will add its transcripts, procedures and flowcharts next.' : 'Nobody has added a process to this workspace yet.'}
         </EmptyState>

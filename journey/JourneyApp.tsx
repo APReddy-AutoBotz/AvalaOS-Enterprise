@@ -12,6 +12,8 @@ import { MyWorkPage } from './pages/MyWorkPage.tsx';
 import { ProcessWorkspace } from './pages/ProcessWorkspace.tsx';
 import { ResetPasswordPage } from './pages/ResetPasswordPage.tsx';
 import { Button, Spinner } from './ui.tsx';
+import { navFor } from '../domain/workspace/modules.ts';
+import { PARTS_CHANGED } from './pages/OrganizationParts.tsx';
 
 // A provider (Google, Microsoft) that could not sign the person in sends them back with the reason in
 // the address. Read it before the store's client starts, then take it out of the address.
@@ -63,6 +65,15 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
   const demo = store.kind === 'demo';
   const [me, setMe] = React.useState<Me | null | undefined>(undefined);
   const afterSignIn = React.useRef<JourneyRoute | null>(null);
+  // The main navigation shows the parts the person's organisations use (domain/workspace/modules.ts).
+  const [parts, setParts] = React.useState(() => navFor([]));
+  React.useEffect(() => {
+    if (!me) return;
+    const read = () => { store.listWorkspaces().then(list => setParts(navFor(list))).catch(() => {}); };
+    read();
+    window.addEventListener(PARTS_CHANGED, read);
+    return () => window.removeEventListener(PARTS_CHANGED, read);
+  }, [store, me]);
 
   React.useEffect(() => {
     let live = true;
@@ -94,7 +105,7 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
           </a>
           {me && nav.route.page !== 'signin' && (
             <nav aria-label="Main" className="mr-auto ml-8 flex gap-1 text-sm">
-              {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).map(([page, label]) => {
+              {([['work', 'My work'], ['processes', parts.workspaceOnly ? 'Workspace' : 'Processes'], ['board', 'Delivery board']] as const).filter(([page]) => page !== 'board' || parts.board).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
                 return <a key={page} href={`${base}/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={here ? 'rounded-md bg-slate-100 px-3 py-1.5 font-semibold text-[#002C4B]' : 'rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-50'}>{label}</a>;
               })}

@@ -2,6 +2,7 @@
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
+import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
 import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
@@ -85,6 +86,9 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
   const approved = revisions.find(r => r.state === 'approved');
   const current = working ?? approved;
   const canEdit = workspace !== null && workspace.role !== 'viewer';
+  // Only the stages of the parts the organisation uses; a stage that is off says so (nothing is deleted).
+  const shownStages = stagesFor(workspace?.modules);
+  const stageOff = !shownStages.includes(stage);
   const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
   const hasSteps = Boolean(model && model.steps.length > 0);
 
@@ -116,7 +120,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           a stage that is still waiting for the process steps is shown quieter, and can still be opened. */}
       <nav aria-label="Stages" className="mt-5">
         <ol className="flex overflow-x-auto rounded-xl border border-slate-200 bg-white px-1.5">
-          {STAGES.map((s, i) => {
+          {STAGES.filter(s => shownStages.includes(s.id)).map((s, i) => {
             const here = s.id === stage;
             const done = s.id === 'sources' ? sources.length > 0 : s.id === 'process' ? hasSteps : false;
             const waiting = !done && !here && s.id !== 'sources' && (s.id === 'process' ? false : !hasSteps);
@@ -145,6 +149,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
 
       <ErrorNote message={error} />
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
+        {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
           ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
@@ -161,7 +166,7 @@ export function ProcessWorkspace({ store, nav, processId, stage }: { store: Jour
           : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
-        </SourceContext.Provider>
+        </SourceContext.Provider>}
       </section>
 
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}

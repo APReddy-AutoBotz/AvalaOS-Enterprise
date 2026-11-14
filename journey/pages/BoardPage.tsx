@@ -14,6 +14,7 @@ import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, T
 import { ItemActivity, LabelsField } from './ItemActivity.tsx';
 import { CompleteSprintDialog, SprintBar, SprintsDialog } from './SprintsPanel.tsx';
 import { JiraImportDialog } from './JiraImport.tsx';
+import { has, offMessage } from '../../domain/workspace/modules.ts';
 import { defaultView, inView, sprintChoices, sprintOrder, type Sprint, type SprintView } from '../../domain/workitems/sprints.ts';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
@@ -45,6 +46,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [who, setWho] = React.useState<string>(''); // '' everyone, 'none' unassigned, else a member
   const [creating, setCreating] = React.useState(false);
   const [label, setLabel] = React.useState('');
+  const [off, setOff] = React.useState<string | null>(null);
   const [sprints, setSprints] = React.useState<Sprint[]>([]);
   const [view, setView] = React.useState<SprintView>('all');
   const [sprintsOpen, setSprintsOpen] = React.useState(false);
@@ -56,7 +58,10 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
 
   React.useEffect(() => {
     store.listWorkspaces().then(async list => {
-      const w = list.find(x => x.id === remembered()) ?? list[0] ?? null;
+      // The board of a workspace whose organisation uses it: the remembered one, else the first that does.
+      const withBoard = list.filter(x => has(x.modules, 'board'));
+      const w = withBoard.find(x => x.id === remembered()) ?? withBoard[0] ?? null;
+      if (!w && list[0]) { setOff(offMessage('board', list[0].organizationName)); setProjects([]); return; }
       setWorkspace(w);
       setProjects(w ? await store.listProjects(w.id) : []);
       if (w) store.listMembers(w.id).then(setMembers).catch(() => {});
@@ -105,6 +110,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
     } catch (x) { setError(x instanceof BoardError ? x.message : messageOf(x)); }
   };
 
+  if (off) return <EmptyState title="Not switched on">{off}</EmptyState>;
   if (!projects) return error ? <ErrorNote message={error} /> : <Spinner />;
   const canEdit = workspace?.role !== 'viewer';
   const open = items?.find(i => i.id === itemId) ?? null;
