@@ -36,6 +36,8 @@ export interface WorkItem {
   sortOrder?: number;
   /** Labels as in Jira (`parseLabels`). */
   labels?: string[];
+  /** The sprint it is planned in (domain/workitems/sprints.ts); none is the backlog. */
+  sprintId?: string | null;
 }
 export interface Project { id: string; name: string; description: string }
 
@@ -43,7 +45,7 @@ export class BoardError extends Error {}
 export const BOARD_LIMITS = { title: 300, description: 8000, project: 200 } as const;
 
 /** What a person may change on a board item. Owner, estimate and dates may stay empty. */
-export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null; parentId?: string | null; labels?: string[] }
+export interface WorkItemEdit { title?: string; description?: string; status?: WorkStatus; priority?: WorkItem['priority']; ownerId?: string | null; estimateHours?: number | null; startDate?: string | null; dueDate?: string | null; parentId?: string | null; labels?: string[]; sprintId?: string | null }
 
 // ---- Items a person adds by hand (the board on its own, without a process) ------------------------
 
@@ -146,6 +148,10 @@ export function validateEdit(item: WorkItem, e: WorkItemEdit, items: WorkItem[] 
     if (out.title.length > BOARD_LIMITS.title) throw new BoardError('The title is too long.');
   }
   if (e.labels !== undefined) out.labels = parseLabels(e.labels);
+  if (e.sprintId !== undefined) {
+    out.sprintId = e.sprintId || null;
+    if (out.sprintId && item.type === 'epic') throw new BoardError('An epic is not put in a sprint; its work is.');
+  }
   if (e.description !== undefined && e.description.length > BOARD_LIMITS.description) throw new BoardError('The description is too long.');
   if (e.status !== undefined && !COLUMNS.some(c => c.id === e.status)) throw new BoardError('Unknown status.');
   if (e.estimateHours !== undefined && e.estimateHours !== null && !(e.estimateHours >= 0 && e.estimateHours < 100000)) throw new BoardError('The estimate must be a number of hours.');

@@ -12,6 +12,8 @@ import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
 import { ItemActivity, LabelsField } from './ItemActivity.tsx';
+import { CompleteSprintDialog, SprintBar, SprintsDialog } from './SprintsPanel.tsx';
+import { defaultView, inView, sprintChoices, sprintOrder, type Sprint, type SprintView } from '../../domain/workitems/sprints.ts';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
 const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
@@ -42,6 +44,10 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [who, setWho] = React.useState<string>(''); // '' everyone, 'none' unassigned, else a member
   const [creating, setCreating] = React.useState(false);
   const [label, setLabel] = React.useState('');
+  const [sprints, setSprints] = React.useState<Sprint[]>([]);
+  const [view, setView] = React.useState<SprintView>('all');
+  const [sprintsOpen, setSprintsOpen] = React.useState(false);
+  const [completing, setCompleting] = React.useState<Sprint | null>(null);
   const [me, setMe] = React.useState('');
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.id ?? '')).catch(() => {}); }, [store]);
 
@@ -59,6 +65,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   }, [projects, projectId, nav]);
   React.useEffect(() => {
     if (!project) { setItems(null); return; }
+    store.listSprints(project.id).then(list => { setSprints(list); setView(defaultView(list)); }).catch(() => { setSprints([]); setView('all'); });
     store.listWorkItems(project.id).then(async list => {
       setItems(list);
       const procs = [...new Set(list.map(i => i.processId).filter((x): x is string => Boolean(x)))];
@@ -102,10 +109,20 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const changesOf = (i: WorkItem) => (i.processId ? upstreamChanges(i, (reqs[i.processId] ?? []).map(r => ({ code: r.code, statement: r.statement, state: r.state }))) : []);
   const q = query.trim().toLowerCase();
   const nameOf = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? 'Someone no longer in this workspace' : null);
-  const matches = (i: WorkItem) => (!who || (who === 'none' ? !i.ownerId : i.ownerId === who))
+  const matches = (i: WorkItem) => inView(i, view) && (!who || (who === 'none' ? !i.ownerId : i.ownerId === who))
     && (!label || (i.labels ?? []).includes(label))
     && (!q || i.title.toLowerCase().includes(q) || i.requirements.some(c => c.toLowerCase().includes(q)) || TYPE[i.type].label.toLowerCase() === q || (nameOf(i.ownerId) ?? '').toLowerCase().includes(q) || (i.labels ?? []).some(l => l.toLowerCase() === q));
-  const filtering = Boolean(q || who || label);
+  const filtering = Boolean(q || who || label || view !== 'all');
+  const shownSprint = sprints.find(x => x.id === view) ?? null;
+  const reloadItems = async () => { if (project) setItems(await store.listWorkItems(project.id)); };
+  const completeSprint = async (sp: Sprint, moveTo: string | null) => {
+    await store.closeSprint(sp.id, moveTo);
+    if (project) setSprints(await store.listSprints(project.id));
+    await reloadItems();
+    setCompleting(null);
+    setView(moveTo ?? 'backlog');
+  };
+  const startSprint = async (sp: Sprint) => { const n = await store.updateSprint(sp.id, { state: 'active' }); setSprints(cur => cur.map(x => (x.id === n.id ? n : x))); };
   const labels = boardLabels(items ?? []);
   const lanes = lanesOf(items ?? []);
   const work = (items ?? []).filter(i => i.type !== 'epic');
@@ -122,7 +139,19 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
           </select>
         )}
-        {work.length > 0 && <Progress done={work.filter(i => i.status === 'done').length} total={work.length} />}
+        {project && items && (sprints.length > 0 || canEdit) && (
+          <span className="flex items-center gap-2">
+            {sprints.length > 0 && (
+              <select aria-label="Sprint" value={view} onChange={e => setView(e.target.value)} className={field}>
+                <option value="all">All work</option>
+                {sprintOrder(sprints).map(x => <option key={x.id} value={x.id}>{x.name}{x.state === 'active' ? ' (active)' : x.state === 'closed' ? ' (completed)' : ''}</option>)}
+                <option value="backlog">Backlog (no sprint)</option>
+              </select>
+            )}
+            <Button variant="ghost" onClick={() => setSprintsOpen(true)}>Sprints</Button>
+          </span>
+        )}
+        {view === 'all' && work.length > 0 && <Progress done={work.filter(i => i.status === 'done').length} total={work.length} />}
         <div className="ml-auto flex flex-wrap items-center gap-2">
           {work.length > 0 && members.length > 0 && (
             <select aria-label="Show work of" value={who} onChange={e => setWho(e.target.value)} className={field}>
@@ -171,6 +200,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         </div>
       </div>
       <ErrorNote message={error} />
+      {shownSprint && items && <SprintBar key={shownSprint.id + shownSprint.state} sprint={shownSprint} sprints={sprints} items={items} canEdit={canEdit} onStart={() => startSprint(shownSprint)} onComplete={() => setCompleting(shownSprint)} />}
       {!projects.length && <EmptyState title="No projects yet">Start a project with New project, then add epics, stories, tasks and bugs to it. Work items confirmed from a process also arrive on a project's board.</EmptyState>}
       {project && !items && <Spinner />}
       {project && items && !items.length && <EmptyState title="Nothing on this board yet">{canEdit ? 'Add an item with New item, or confirm work items from a process. New items arrive in To do.' : 'Items appear here when the team adds them.'}</EmptyState>}
@@ -181,7 +211,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
               {MAIN.map(status => (
                 <div key={status} className="flex items-center gap-2 px-2.5 text-[13px] font-semibold text-slate-700">
                   <span className={cx('h-2 w-2 rounded-full', STATUS_DOT[status])} />{STATUS_LABEL[status]}
-                  <span className="font-normal tabular-nums text-slate-500">{work.filter(i => i.status === status).length}</span>
+                  <span className="font-normal tabular-nums text-slate-500">{work.filter(i => i.status === status && inView(i, view)).length}</span>
                 </div>
               ))}
             </div>
@@ -253,13 +283,19 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                   </section>
                 );
               })}
-              {filtering && !shown.length && <p className="py-10 text-center text-sm text-slate-600">Nothing on this board matches{q ? ` "${query.trim()}"` : ' that choice'}.</p>}
+              {filtering && !shown.length && <p className="py-10 text-center text-sm text-slate-600">{shownSprint && !q && !who && !label
+                ? (shownSprint.state === 'closed' ? 'No work stayed with this sprint.' : 'Nothing in this sprint yet. Put an item in it from the item\'s panel (Sprint).')
+                : view === 'backlog' && !q && !who && !label ? 'Every item is in a sprint.' : `Nothing on this board matches${q ? ` "${query.trim()}"` : ' that choice'}.`}</p>}
             </div>
           </div>
         </div>
       )}
+      {sprintsOpen && project && items && <SprintsDialog store={store} projectId={project.id} sprints={sprints} items={items} canEdit={canEdit}
+        onChange={(next, itemsChanged) => { setSprints(next); if (!next.some(x => x.id === view) && view !== 'backlog') setView('all'); if (itemsChanged) reloadItems(); }}
+        onComplete={sp => setCompleting(sp)} onShow={id => { setView(id); setSprintsOpen(false); }} onClose={() => setSprintsOpen(false)} />}
+      {completing && items && <CompleteSprintDialog sprint={completing} sprints={sprints} items={items} onDone={to => completeSprint(completing, to)} onClose={() => setCompleting(null)} />}
       {creating && project && items && <NewItemDialog items={items} members={members} onAdd={addItem} onClose={() => setCreating(false)} />}
-      {open && project && items && <React.Fragment key={open.id}><ItemPanel store={store} me={me} isAdmin={workspace?.role === 'admin'} labels={labels} item={open} items={items} members={members} canEdit={canEdit} onDelete={() => remove(open)} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
+      {open && project && items && <React.Fragment key={open.id}><ItemPanel sprints={sprints} store={store} me={me} isAdmin={workspace?.role === 'admin'} labels={labels} item={open} items={items} members={members} canEdit={canEdit} onDelete={() => remove(open)} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
     </section>
   );
 }
@@ -285,7 +321,7 @@ function useAutosize(value: string) {
   return ref;
 }
 
-function ItemPanel({ store, me, isAdmin, labels, item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd, onDelete }: { store: JourneyStore; me: string; isAdmin: boolean; labels: string[]; item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void; onDelete: () => Promise<void> }) {
+function ItemPanel({ sprints, store, me, isAdmin, labels, item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd, onDelete }: { sprints: Sprint[]; store: JourneyStore; me: string; isAdmin: boolean; labels: string[]; item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void; onDelete: () => Promise<void> }) {
   const [confirming, setConfirming] = React.useState(false);
   const [writing, setWriting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
@@ -366,6 +402,15 @@ function ItemPanel({ store, me, isAdmin, labels, item, items, members, canEdit, 
                 </select>
               </label>
             )}
+            {item.type !== 'epic' && (sprints.length > 0 || item.sprintId) && (
+              <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Sprint
+                <select aria-label="Sprint" value={item.sprintId ?? ''} disabled={!canEdit} onChange={e => onSave({ sprintId: e.target.value || null })} className={cx(prop, !item.sprintId && 'font-normal text-slate-500')}>
+                  <option value="">Backlog</option>
+                  {sprintChoices(item, sprints).map(x => <option key={x.id} value={x.id}>{x.name}{x.state === 'active' ? ' (active)' : ''}</option>)}
+                  {item.sprintId && !sprintChoices(item, sprints).some(x => x.id === item.sprintId) && <option value={item.sprintId}>{sprints.find(x => x.id === item.sprintId)?.name ?? 'A deleted sprint'} (completed)</option>}
+                </select>
+              </label>
+            )}
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Estimate (hours)
               <input aria-label="Estimate in hours" inputMode="decimal" value={estimate} disabled={!canEdit} placeholder="Not set" onChange={e => setEstimate(e.target.value)} className={prop} />
             </label>
@@ -407,7 +452,7 @@ function ItemPanel({ store, me, isAdmin, labels, item, items, members, canEdit, 
             </ul>
           </>}
 
-          <ItemActivity store={store} item={item} items={items} members={members} me={me} isAdmin={isAdmin} onDirty={setWriting} />
+          <ItemActivity store={store} item={item} items={items} members={members} me={me} isAdmin={isAdmin} sprintName={id => sprints.find(x => x.id === id)?.name} onDirty={setWriting} />
 
           {canEdit && (
             <div className="mt-8 border-t border-slate-100 pt-5" data-testid="item-delete">

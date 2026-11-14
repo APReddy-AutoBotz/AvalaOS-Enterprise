@@ -12,6 +12,7 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
+import type { Sprint, validateSprint } from '../../domain/workitems/sprints.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
@@ -227,4 +228,13 @@ export interface JourneyStore {
   deleteComment(id: string): Promise<void>;
   /** What changed on an item and who changed it, written by the database (members read). */
   listItemHistory(workItemId: string): Promise<ItemEvent[]>;
+  /** A board's sprints (domain/workitems/sprints.ts). Members read; editors and admins change them. */
+  listSprints(projectId: string): Promise<Sprint[]>;
+  createSprint(projectId: string, s: ReturnType<typeof validateSprint>): Promise<Sprint>;
+  /** Rename, set the goal or dates, or start it (one sprint runs at a time). */
+  updateSprint(id: string, s: Partial<ReturnType<typeof validateSprint>> & { state?: 'active' }): Promise<Sprint>;
+  /** Completes the running sprint; its unfinished work moves to the planned sprint given, or the backlog. Returns how many moved. */
+  closeSprint(id: string, moveTo: string | null): Promise<number>;
+  /** Its work goes back to the backlog. */
+  deleteSprint(id: string): Promise<void>;
 }
