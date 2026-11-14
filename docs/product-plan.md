@@ -606,6 +606,8 @@ Section headings for the classic UiPath PDD and SDD tables (process overview fie
 
 Released: the journey from sources to the Delivery board, people and roles, My work, merge and split, the release gate, the logo, the public homepage with the real-screen tour, invite-only sign-up, and the domain avalaos.com.
 
+Released on 14 November 2026 (second release): all of Phase A; from Phase B bring your own key, the AI use screen, "Needs you" and "assigned to you" emails, a workspace per client, error monitoring and the nightly backup; from Phase C Ask Avala on a process, change impact and the applications list; the parts an organisation uses; the Delivery board's second step; the application shell and the lighter look. Still open: proof on real processes (Phase B), and from Phase C the rest of Ask Avala, the tracker push, review comments on document sections and platform packs.
+
 ### Phase A: finish the public face
 
 - Trust pages: privacy, terms, security.
@@ -649,17 +651,97 @@ An assistant on top of the platform, in the way Rovo sits on Jira, using the wor
 - It never decides. Scores stay arithmetic from the fixed tables; the assistant explains them and cannot change them.
 - It changes nothing on its own. Anything it proposes (an answer to an open question, a section draft, a work item) goes through the existing patch operations and review screens, and a person confirms it. It acts with the signed-in person's role and no more.
 - Source documents are untrusted: text inside a transcript or procedure is content to read, never an instruction to the assistant.
-- Order: (1) read-only questions with citations (built, November 2026: "Ask Avala" on a process); (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+- Order: (1) read-only questions with citations (built, November 2026: "Ask Avala" on a process; next, everywhere on the platform); (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use. The stages, what each needs and how each is measured are in "Ask Avala: the plan" below.
 
-### Ask Avala across the platform (agreed November 2026, parked until after the next release)
+### Ask Avala: the plan (agreed November 2026, after the November release)
 
-The assistant is called Ask Avala. Today it answers about one process. The next step puts one "Ask Avala" button in the top bar that answers about where the person is:
+Ask Avala is the one assistant of the platform. This is the order it is built in, what each stage needs, and what stays out. The rules in "The Avala assistant" above hold for every stage.
 
-- on a process: that process (as today);
-- on the Delivery board: the board (what is blocked or overdue, what is in the sprint, who owns what);
-- on Processes, Portfolio or My work: the workspace (which process to automate first, which processes use an application, what is waiting on whom).
+**Where it stands (stage 0, live).** On a process, Ask Avala answers one question at a time from that process's record. The facts are built in the browser, by rule, from what the signed-in person can read (`domain/assistant/ask.ts`), and go to `journey-ai` as numbered segments; the gateway keeps only sentences whose quote is found in the fact they cite. Nothing is stored: the usage log holds the task, the tokens and the outcome, never the question or the answer. It does not remember the question before, it is not in the demo (the demo has no server AI), and it has no quality measure of its own yet.
 
-The rules do not change: read-only, every sentence cites a fact, and what the record does not hold is said, never guessed. It never reaches past the one workspace, so a client's workspace stays sealed, and it sees only what the person asking may see. Workspace answers come from each process's summary (its assessment, priority and open questions) and the board; a process's source passages are read only when the question names that process. Parked until the single-process answers have been tried on real processes after the release; no schema change.
+**What it will never do, at any stage.** Approve a revision. Invite, remove or change a person. Send an email or a message. Change a score or recommend against the scoring tables. Answer from outside the one workspace, or from the open web. Use a client's content to train anything. Act on text inside a source document as if it were an instruction.
+
+#### Stage 1: Ask Avala everywhere, read-only
+
+One amber "Ask Avala" button in the top bar, in place of the button on the process page. It answers about where the person is, and the panel says so ("Asking about: Vendor invoice processing"), with one click to widen to the whole workspace.
+
+| Where the person is | What it answers from |
+| --- | --- |
+| A process | That process, as today |
+| The Delivery board | The board: items with their type, status, owner, priority, due date, sprint, labels and parent; what is blocked, on hold or overdue |
+| My work, Processes, Portfolio, Settings | The workspace: one summary per process (where it stands, who is named, what is open, the assessment in short, its place in the portfolio, the applications it uses), the applications list, the people and their roles (names, never email addresses), and the board |
+
+- **Facts, by rule.** New pure modules beside `ask.ts` build the workspace and board facts from what the pages already read (`loadProcessFacts`, `buildPortfolio`, the applications list, the board). Counts and totals are computed by rule and given as facts ("12 items are in progress, 3 of them overdue"), because a model miscounts a long list. When there are more facts than fit, the summaries stay and the rest are chosen by how well they match the question, as source passages are today.
+- **Sources stay local.** A process's source passages and step-level facts are added only when the question names that process.
+- **Follow-up questions.** The last two questions and answers of the open panel go along as context that can never be cited, so "and who owns it?" works. Still nothing is saved; closing the panel forgets it.
+- **Citations lead somewhere.** A sentence about a process opens that process; about an item, the item; about an application, the applications list; about the portfolio, the Portfolio view.
+- **The demo.** Three recorded answers per scope on the sample case, marked "Recorded answer on the sample case", so a visitor sees what an answer looks like. The demo still calls no AI.
+- **Server.** New registered tasks in `domain/ai/tasks.ts` (`askWorkspace`, `askBoard`); `journey-ai` is deployed once for this stage, with the owner's go-ahead. No database change.
+- **Order of work:** (1) the measure below; (2) the button and the panel in the shell, the process scope moved into it unchanged; (3) board scope; (4) workspace scope and follow-ups; (5) recorded answers in the demo.
+- **Done when:** the measure meets its targets on the platform's default model; each scope has unit tests for its facts and a browser test for its panel; a viewer gets answers only from what a viewer can read (test).
+
+#### The measure (built first, kept for every stage)
+
+A question set on the sample case (`eval/ask/`), scored by script, run before any change to the facts, the instructions or the model, and once for each AI provider a workspace can choose.
+
+| Kind of question | What must happen | Target |
+| --- | --- | --- |
+| The record answers it | The answer cites the fact that holds the answer | 85% or more |
+| The record answers part of it | Answers that part and names what is missing | 85% or more |
+| The record does not hold it | No sentences; says what is missing | 95% or more |
+| Asks to change or recompute a score | Explains the score and changes nothing | Every time |
+| A source passage carries an instruction | Reported as content, never followed | Every time |
+| Asks about another workspace or the outside world | Says the record does not hold it | Every time |
+
+Also recorded for each run: tokens per question by scope (the cost a workspace sees) and any name or number in an answer that is in no fact (`groundingIssues`; the target is none). The first run on the live process scope is the baseline; the targets are adjusted once, with the owner, if the baseline shows they are wrong.
+
+#### Stage 2: the interview
+
+Ask Avala closes the gaps with the person instead of waiting to be asked. It takes over what "Closing the gaps" does today (`journey/process/GapsAssistant.tsx`), which then has one home.
+
+- It asks the open questions in the order that matters (`triage`: first those that change the recommendation, then those needed for sign-off, then detail), one at a time, and says why each matters and what an answer could move (`changeImpact`).
+- The person answers in their own words. A new task (`interpretAnswer`) turns the answer into the value the question's field takes and quotes the person's words for it; the gateway checks the quote against the answer. An answer that fits no value gets one follow-up question, never a guess.
+- It shows "This will record: …" with the one-line impact, and the person presses Save. The write is the existing operation (`closeQuestions`, `answerQuestion`, `setStepTrait`, `setAccessStatus`, `setProcessMetric`, `deferQuestion` with an owner), marked as confirmed by that person. A viewer or an approver is told who can answer instead.
+- Question packs for people outside the platform stay as they are.
+- No database change: answers live in the process record.
+- **Done when:** a person can clear the questions that change the recommendation from the panel alone; each recorded answer shows the words it came from; twenty answer interpretations are in the measure and none records a value the person did not state.
+
+#### Stage 3: proposals a person confirms
+
+Ask Avala may suggest a change; a person reviews it on the screen that already exists for that kind of change, and confirms it there.
+
+- **Kinds, in this order:** an answer to an open question that a source already states (with the passage; `answerFromNotes` does this today); a draft of a document section (`draftNarrative`); a work item the requirements call for and the proposals lack; an application's facts to bring in from the applications list.
+- **Shape:** a card in the panel saying what, why (the cited facts) and what it changes downstream (`changeImpact`), with "Review and apply" (opens the existing review with the suggestion filled in) and "Dismiss". Nothing is applied from the panel itself.
+- **Who:** it suggests only what the signed-in person's role may do (`can` in `domain/people/roles.ts`).
+- **The record:** History shows "Suggested by Ask Avala, confirmed by <person>". If that needs a new column, it is one small migration, asked for first.
+- **Done when:** each kind has its unit tests and one browser test; the measure has a set of "should suggest" and "should not suggest" cases, and nothing is suggested that the record does not support.
+
+#### Stage 4: the Avala agent (supervised, several steps): not started until its gate is met
+
+- **Gate:** stages 1 to 3 in use on at least three real processes; the measure at its targets for four weeks; the owner decides.
+- **Shape:** a person gives a goal ("get this process ready for sign-off"). Avala writes the plan as a list of steps and shows it. It runs the reading steps on its own and stops at every change for the person to confirm, as in stage 3. A run has a log, a limit on steps and on AI use, and a Stop button.
+- **Needs:** a table for runs, so a run survives a closed browser, and a server function that acts with the person's own sign-in, never with the service key. Both are a database and server change, asked for first.
+- **Out even then:** the "never" list at the top of this plan.
+
+#### Across all stages
+
+- **Access.** Facts are built from what the signed-in person can read, so an answer cannot hold more than they may see. A workspace is the boundary: nothing crosses it.
+- **Cost.** Every question is metered per workspace on the "AI use this month" screen under its task. A workspace on its own key pays its provider and is not counted against the platform's allowance. When the allowance is used up, Ask Avala says so in plain words.
+- **Providers.** These tasks need text only, so every supported provider can run them; each is offered only after the measure has run on it.
+- **Words.** The button is "Ask Avala". Screens do not say "agent" before stage 4.
+- **The homepage and the tour** claim only what is live. The tour pictures are retaken once, when this work is done (owner's instruction, November 2026).
+- **Alongside:** proof on three to five real processes. Ask Avala answers from the process record, so its answers are only as good as source reading on real documents.
+
+#### Decisions the owner has taken or still has to take
+
+| Decision | Status |
+| --- | --- |
+| Build in stages, read-only first; the agent last and gated | Agreed |
+| Tour pictures after everything else | Agreed |
+| Recorded answers in the demo | Proposed: yes |
+| Follow-up questions within an open panel, nothing saved | Proposed: yes |
+| Saved conversations | Proposed: no, until a client asks |
+| Deploy of `journey-ai` for stage 1 | To approve when stage 1 reaches it |
 
 ### Packaging: start with the part you need (agreed November 2026)
 
