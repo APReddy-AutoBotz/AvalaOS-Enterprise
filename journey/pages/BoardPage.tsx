@@ -462,7 +462,7 @@ function NewItemDialog({ items, members, onAdd, onClose }: { items: WorkItem[]; 
           </label>
           {type !== 'epic' && (
             <label className="text-sm font-medium text-slate-800">{needsParent(type) ? 'Belongs to' : 'Parent'}
-              <select aria-label="Parent" value={parentId} onChange={e => setParentId(e.target.value)} className={field}>
+              <select aria-label={needsParent(type) ? 'Belongs to' : 'Parent'} value={parentId} onChange={e => setParentId(e.target.value)} className={field}>
                 <option value="">{needsParent(type) ? 'Choose a story, task or bug' : 'None'}</option>
                 {parents.map(p => <option key={p.id} value={p.id}>{WORK_TYPE[p.type].label}: {p.title}</option>)}
               </select>
