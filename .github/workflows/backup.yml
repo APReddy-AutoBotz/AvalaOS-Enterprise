@@ -31,6 +31,10 @@ on:
   schedule:
     - cron: '41 20 * * *' # 02:11 in India, a quiet hour
   workflow_dispatch:
+  # To try a change to this job before it reaches main (scheduled runs happen only from main).
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/backup.yml']
 
 concurrency:
   group: database-backup
