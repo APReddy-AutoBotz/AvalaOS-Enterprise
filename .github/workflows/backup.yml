@@ -1,0 +1,139 @@
+# Nightly database backup with a restore check (Phase B, "a backup check"). The Supabase project is on
+# the Free plan, which keeps no backups of its own, so this job is the only copy outside Supabase.
+#
+# Every night: dump the database (the app's schemas public and app_private, and the auth schema with the
+# accounts), encrypt the dump, keep it as a workflow artifact for 30 days, then restore it into a
+# throwaway Postgres 17 and check that every table of public and app_private holds the same number of
+# rows as the live database did. A failed run emails the repository owner (GitHub's own notice).
+#
+# This repository is public, so its artifacts and logs are public too: the dump is only ever stored
+# encrypted (AES-256, gpg), and the log shows totals and table names, never data.
+#
+# Secrets (Settings -> Secrets and variables -> Actions):
+#   SUPABASE_DB_URL     the Session pooler connection string (Supabase: Connect -> Session pooler), with
+#                       the database password; GitHub's runners reach Supabase only over IPv4.
+#   BACKUP_PASSPHRASE   a long random passphrase (for example `openssl rand -base64 48`), kept somewhere
+#                       safe outside GitHub too: without it no backup can be opened.
+# Until both are set the job says so and stops without failing.
+#
+# Not in the dump: Vault secrets (workspace AI keys are encrypted with the project's own key and must be
+# entered again after a restore into another project), the pg_cron schedule (re-run the schedule part
+# of migration needs_email), and Supabase Storage (the journey does not use it).
+#
+# To restore into a new, empty Supabase project (the dump carries the schema, so the migrations are not
+# applied first):
+#   gpg --decrypt avala-<date>.tar.gpg > avala.tar && tar xf avala.tar
+#   pg_restore --no-owner --no-privileges -d "<new project's Session pooler URL>" auth.dump
+#   pg_restore --no-owner --no-privileges -d "<same URL>" app.dump
+name: Nightly database backup
+
+on:
+  schedule:
+    - cron: '41 20 * * *' # 02:11 in India, a quiet hour
+  workflow_dispatch:
+  # To try a change to this job before it reaches main (scheduled runs happen only from main).
+  push:
+    branches: ['claude/**']
+    paths: ['.github/workflows/backup.yml']
+
+concurrency:
+  group: database-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+      PG: docker run --rm --network host -e PGCONNECT_TIMEOUT=30 -v ${{ github.workspace }}/backup:/backup -w /backup postgres:17
+    services:
+      scratch:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: scratch
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Check the secrets
+        id: ready
+        run: |
+          if [ -z "$DB_URL" ] || [ -z "$PASSPHRASE" ]; then
+            echo "::notice::Backups are not set up yet: add SUPABASE_DB_URL and BACKUP_PASSPHRASE as repository secrets."
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          elif [ "${#PASSPHRASE}" -lt 32 ]; then
+            echo "::error::BACKUP_PASSPHRASE is shorter than 32 characters; this repository is public, so use a long random one."
+            exit 1
+          else
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dump the live database
+        if: steps.ready.outputs.go == 'true'
+        run: |
+          mkdir -p backup
+          $PG pg_dump "$DB_URL" --format=custom --no-owner --no-privileges --schema=public --schema=app_private --file=app.dump
+          $PG pg_dump "$DB_URL" --format=custom --no-owner --no-privileges --schema=auth --file=auth.dump
+          # Row counts of every table of the app's schemas, as they were at the dump, to compare after the restore.
+          $PG psql "$DB_URL" -At -v ON_ERROR_STOP=1 -c "
+            select format('%I.%I', n.nspname, c.relname) from pg_class c join pg_namespace n on n.oid = c.relnamespace
+            where c.relkind in ('r', 'p') and n.nspname in ('public', 'app_private') order by 1" > backup/tables.txt
+          : > backup/live-counts.txt
+          while read -r t; do
+            echo "$t $($PG psql "$DB_URL" -At -v ON_ERROR_STOP=1 -c "select count(*) from $t")" >> backup/live-counts.txt
+          done < backup/tables.txt
+          echo "Dumped $(wc -l < backup/tables.txt) tables, $(awk '{s+=$2} END {print s}' backup/live-counts.txt) rows."
+
+      - name: Encrypt and keep it for 30 days
+        if: steps.ready.outputs.go == 'true'
+        run: |
+          stamp=$(date -u +%Y-%m-%d)
+          tar -C backup -cf "avala-$stamp.tar" app.dump auth.dump live-counts.txt
+          printf '%s' "$PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 --output "avala-$stamp.tar.gpg" "avala-$stamp.tar"
+          rm "avala-$stamp.tar"
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.ready.outputs.go == 'true'
+        with:
+          name: avala-database-${{ env.STAMP }}
+          path: avala-${{ env.STAMP }}.tar.gpg
+          retention-days: 30
+          if-no-files-found: error
+
+      - name: Restore it into a throwaway database and compare
+        if: steps.ready.outputs.go == 'true'
+        env:
+          SCRATCH: postgresql://postgres:scratch@localhost:5432/postgres
+        run: |
+          # Prove the encrypted file opens with the passphrase, then restore from what it contains.
+          mkdir -p check
+          printf '%s' "$PASSPHRASE" | gpg --batch --pinentry-mode loopback --passphrase-fd 0 --decrypt "avala-$STAMP.tar.gpg" | tar -C check -xf -
+          cp check/app.dump check/auth.dump backup/
+          # What a Supabase database has that plain Postgres lacks: its roles, the extensions schema, and the
+          # vault table a few functions name. The restored data, not these, is what is checked.
+          $PG psql "$SCRATCH" -v ON_ERROR_STOP=1 -q -c "
+            create role anon nologin; create role authenticated nologin; create role service_role nologin;
+            create role supabase_auth_admin nologin; create role supabase_admin nologin;
+            create schema extensions; create extension if not exists pgcrypto schema extensions;
+            create extension if not exists \"uuid-ossp\" schema extensions;
+            create schema vault; create table vault.secrets (id uuid primary key, name text, secret text);
+            create view vault.decrypted_secrets as select id, name, secret as decrypted_secret from vault.secrets;"
+          $PG pg_restore --no-owner --no-privileges -d "$SCRATCH" auth.dump 2> backup/auth-restore.log || true
+          $PG pg_restore --no-owner --no-privileges -d "$SCRATCH" app.dump 2> backup/app-restore.log || true
+          echo "Restore notes: $(grep -c 'error:' backup/auth-restore.log || true) in auth, $(grep -c 'error:' backup/app-restore.log || true) in the app's schemas."
+          grep -h 'error:' backup/auth-restore.log backup/app-restore.log | sed -E 's/DETAIL.*//' | sort | uniq -c | head -20 || true
+          # The check: every table is back with the same number of rows.
+          bad=0
+          while read -r t n; do
+            got=$($PG psql "$SCRATCH" -At -c "select count(*) from $t" 2>/dev/null || echo missing)
+            if [ "$got" != "$n" ]; then echo "::error::$t: $n rows live, $got after the restore"; bad=$((bad + 1)); fi
+          done < backup/live-counts.txt
+          if [ "$bad" -gt 0 ]; then echo "::error::$bad tables did not come back whole"; exit 1; fi
+          echo "Restore check passed: $(wc -l < backup/live-counts.txt) tables, $(awk '{s+=$2} END {print s}' backup/live-counts.txt) rows, all back."
