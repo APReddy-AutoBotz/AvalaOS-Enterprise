@@ -167,14 +167,17 @@ export function buildImageRequest(task: TaskDefinition, image: string, model: st
   };
 }
 
+/** Tokens a request used. `cached`: of the input, how many the provider took from its cache of earlier requests (billed at a fraction); reported where the provider says. */
+export interface Usage { input: number; output: number; cached?: number }
 export type ParsedResponse =
-  | { ok: true; data: unknown; usage: { input: number; output: number }; code?: undefined; message?: undefined }
-  | { ok: false; code: 'REFUSED' | 'TRUNCATED' | 'INVALID_OUTPUT' | 'PROVIDER_ERROR'; message: string; usage: { input: number; output: number } };
+  | { ok: true; data: unknown; usage: Usage; code?: undefined; message?: undefined }
+  | { ok: false; code: 'REFUSED' | 'TRUNCATED' | 'INVALID_OUTPUT' | 'PROVIDER_ERROR'; message: string; usage: Usage };
 
 /** Reads an OpenAI Responses API result. */
 export function parseOpenAIResponse(json: unknown): ParsedResponse {
   const r = (json ?? {}) as Record<string, any>;
-  const usage = { input: Number(r.usage?.input_tokens ?? 0), output: Number(r.usage?.output_tokens ?? 0) };
+  const cached = Number(r.usage?.input_tokens_details?.cached_tokens ?? 0);
+  const usage: Usage = { input: Number(r.usage?.input_tokens ?? 0), output: Number(r.usage?.output_tokens ?? 0), ...(cached > 0 ? { cached } : {}) };
   if (r.error) return { ok: false, code: 'PROVIDER_ERROR', message: String(r.error.message ?? 'Provider error'), usage };
   if (r.status === 'incomplete') {
     const reason = r.incomplete_details?.reason ?? 'unknown';

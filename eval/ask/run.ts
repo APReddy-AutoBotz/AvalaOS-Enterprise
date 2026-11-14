@@ -88,7 +88,7 @@ async function askOne(server: Server, q: Question, sample: Sample, set: Question
         const verdict = judge(q, facts, answer, plantedFor(q, set));
         return {
           model: r.json.model,
-          outcome: { ...base, offered, answer, ...verdict, tokens: { input: Number(r.json.usage?.input ?? 0), output: Number(r.json.usage?.output ?? 0) }, dropped: (r.json.dropped ?? []).length, ungrounded: ungrounded(question, facts, answer, sample.model) },
+          outcome: { ...base, offered, answer, ...verdict, tokens: { input: Number(r.json.usage?.input ?? 0), output: Number(r.json.usage?.output ?? 0), cached: Number(r.json.usage?.cached ?? 0) }, dropped: (r.json.dropped ?? []).length, ungrounded: ungrounded(question, facts, answer, sample.model) },
         };
       }
       last = `${r.status} ${r.json?.error?.code ?? ''}: ${String(r.json?.error?.message ?? 'no reply').slice(0, 200)}`;

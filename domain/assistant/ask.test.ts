@@ -53,10 +53,19 @@ test('the facts cover the model, the assessment, requirements, board items and p
   const s = facts.find(f => f.id === 's:1')!;
   assert.equal(s.label, 'Call with AP team, 00:04:34, Meera');
   assert.deepEqual(s.target, { kind: 'source', title: 'Call with AP team', ref: { sourceId: 'call', locator: passages[1]!.locator, excerpt: passages[1]!.text } });
-  // The question goes first, as its own segment; facts follow with their ids.
+  // What does not change between questions goes first (how Avala OS works, then the record), the passages
+  // this question chose after them, and the question last, as its own segment, so a provider can cache the start.
   const segs = askSegments('What is typed into SAP by hand?', facts);
-  assert.deepEqual(segs[0], { id: 'question', text: 'What is typed into SAP by hand?' });
+  assert.deepEqual(segs.at(-1), { id: 'question', text: 'What is typed into SAP by hand?' });
   assert.equal(segs.length, facts.length + 1);
+  const rank = (id: string) => (id.startsWith('h:') ? 0 : id.startsWith('s:') ? 2 : id === 'question' ? 3 : 1);
+  assert.deepEqual(segs.map(x => rank(x.id)), [...segs.map(x => rank(x.id))].sort((a, b) => a - b));
+  assert.ok(segs[0].id.startsWith('h:'));
+  // Two questions about the same record share everything before their passages.
+  const record = { model: gold, assessment, requirements: [{ code: 'FR-001', statement: 'The robot enters each invoice into SAP.' }], items: [{ id: 'i1', projectId: 'p1', title: 'Enter invoices in SAP', type: 'story', status: 'in_progress', owner: 'Ana' }], passages };
+  const other = askSegments('Who approves invoices above tolerance?', askFacts('Who approves invoices above tolerance?', record));
+  const head = (x: typeof segs) => x.filter(y => rank(y.id) < 2);
+  assert.deepEqual(head(other), head(segs));
 });
 
 test('how Avala OS works is given as facts of its own, each leading to the stage where it shows', () => {
@@ -170,7 +179,7 @@ test('a follow-up carries the last two answered turns as context, which can neve
   assert.deepEqual(ctx.map(c => c.id), ['context:1', 'context:2']);
   assert.equal(ctx[1].text, 'Earlier question: three?\nEarlier answer: Third. No date.');
   const segs = askSegments('And who owns it?', [fact], earlier);
-  assert.deepEqual(segs.map(s => s.id), ['question', 'context:1', 'context:2', 'f:x']);
+  assert.deepEqual(segs.map(s => s.id), ['f:x', 'context:1', 'context:2', 'question']);
   // A sentence citing the context is dropped: only facts are answered from.
   const read = readAnswer({ sentences: [{ text: 'From before.', segmentId: 'context:1', excerpt: 'Second', role: 'answer', group: '' }], missing: '' }, [fact]);
   assert.equal(read.sentences.length, 0);

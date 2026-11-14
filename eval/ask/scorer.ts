@@ -147,7 +147,8 @@ export interface Outcome {
   /** The request failed (the provider, the allowance, the network): counted as not passed. */
   error?: string;
   pass: boolean; reasons: string[];
-  tokens: { input: number; output: number };
+  /** `cached`: of the input, what the provider took from its cache of earlier requests (billed at a fraction). */
+  tokens: { input: number; output: number; cached?: number };
   /** Sentences the gateway dropped because their quote was not in the fact they cited. */
   dropped: number;
   ungrounded: string[];
@@ -160,7 +161,7 @@ export interface Scorecard {
   /** Every kind that was asked meets its target. */
   met: boolean;
   /** Mean tokens per question, by scope: the cost a workspace sees. */
-  tokens: Record<string, { questions: number; input: number; output: number; perQuestion: number }>;
+  tokens: Record<string, { questions: number; input: number; output: number; cached: number; perQuestion: number }>;
   totalTokens: number;
   ungrounded: { id: string; run: number; text: string }[];
   dropped: number;
@@ -178,8 +179,8 @@ export function scorecard(outcomes: Outcome[]): Scorecard {
   }
   const tokens: Scorecard['tokens'] = {};
   for (const o of outcomes.filter(x => !x.error)) {
-    const t = (tokens[o.scope] ??= { questions: 0, input: 0, output: 0, perQuestion: 0 });
-    t.questions++; t.input += o.tokens.input; t.output += o.tokens.output;
+    const t = (tokens[o.scope] ??= { questions: 0, input: 0, output: 0, cached: 0, perQuestion: 0 });
+    t.questions++; t.input += o.tokens.input; t.output += o.tokens.output; t.cached += o.tokens.cached ?? 0;
   }
   for (const t of Object.values(tokens)) t.perQuestion = Math.round((t.input + t.output) / t.questions);
   return {
@@ -207,7 +208,7 @@ export function renderScorecard(card: Scorecard, about: { model?: string; key?: 
     lines.push(`| ${KINDS[k].label} | ${KINDS[k].must} | ${targetText(s.target)} | ${s.passed} of ${s.total} (${pct(s.rate)}) | ${s.met ? 'met' : 'NOT MET'} |`);
   }
   lines.push('', card.met ? 'Every target is met.' : 'Not every target is met.', '');
-  for (const [scope, t] of Object.entries(card.tokens)) lines.push(`Tokens per question (${scope} scope): ${t.perQuestion.toLocaleString('en')} (${Math.round(t.input / t.questions).toLocaleString('en')} in, ${Math.round(t.output / t.questions).toLocaleString('en')} out).`);
+  for (const [scope, t] of Object.entries(card.tokens)) lines.push(`Tokens per question (${scope} scope): ${t.perQuestion.toLocaleString('en')} (${Math.round(t.input / t.questions).toLocaleString('en')} in, ${t.cached ? `${Math.round(t.cached / t.questions).toLocaleString('en')} of them from the provider's cache (${Math.round((100 * t.cached) / t.input)}%), ` : ''}${Math.round(t.output / t.questions).toLocaleString('en')} out).`);
   lines.push(`Tokens in all: ${card.totalTokens.toLocaleString('en')}.`);
   lines.push(`Names or numbers in an answer that are in no fact (target: none): ${card.ungrounded.length ? card.ungrounded.map(u => `${u.id}${card.runs > 1 ? ` (run ${u.run})` : ''} "${u.text}"`).join('; ') : 'none'}.`);
   lines.push(`Sentences the quote check dropped before they were shown: ${card.dropped}.`);
