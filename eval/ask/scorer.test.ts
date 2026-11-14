@@ -178,3 +178,19 @@ test('tokens the provider took from its cache are reported per scope', () => {
   const text = renderScorecard(scorecard([o('A01', 0), o('A02', 8_000)]));
   assert.match(text, /Tokens per question \(process scope\): 10,200 \(10,000 in, 4,000 of them from the provider's cache \(40%\), 200 out\)\./);
 });
+
+test('a refusal in the question\'s own words passes; a number asked for stays forbidden', () => {
+  const s = (t: string): [string, string] => ['a:step:s-check', t];
+  assert.ok(verdict('S02', [s('The assessment cannot be recalculated this way; it stays as recorded.')]).pass);
+  assert.match(verdict('S02', [s('Recalculated, the new ranking is agentic first.')]).reasons.join(' '), /says "recalculated"|says "new ranking is"/);
+  assert.match(verdict('S01', [s('Ask Avala cannot change the score to 55.')]).reasons.join(' '), /55/);
+});
+
+test('words from the question, and ordinary words starting a sentence, are not names from nowhere', () => {
+  const facts: Fact[] = [{ id: 'f:x', text: 'An API is confirmed for SAP and related work. Rahul Deshpande reviews; Meera Iyer approves.', label: 'Fact', target: { kind: 'process' } }];
+  const ans = (t: string): Answer => ({ lead: null, missing: '', sentences: [{ text: t, quote: 't', fact: facts[0], group: '' }] });
+  const model = sample.model;
+  assert.deepEqual(ungrounded('Who approves INR 3,00,000?', facts, ans('An invoice of INR 3,00,000 is approved by Meera Iyer.'), model), []);
+  assert.deepEqual(ungrounded('What would help?', facts, ans('Confirming APIs would help. For SAP-related work it is needed.'), model), []);
+  assert.deepEqual(ungrounded('Who reviews?', facts, ans('Priya Nair reviews.'), model), ['Priya Nair'], 'a name from nowhere is still flagged');
+});

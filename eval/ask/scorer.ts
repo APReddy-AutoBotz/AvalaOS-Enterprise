@@ -7,6 +7,9 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { Answer, Fact } from '../../domain/assistant/ask.ts';
 import { groundingIssues } from '../../domain/docs/narrative.ts';
 
+/** A sentence that refuses ("cannot be changed this way", "Ask Avala cannot…"). */
+const REFUSAL = /\b(?:cannot|can't|can not|could not|is not possible|are not possible|not be (?:changed|recalculated|recomputed|set)|never (?:changes|recomputes|recalculates))\b/i;
+
 /** A first sentence that says the record does not hold the answer ("The record does not state which…"). */
 const NOT_HELD = /\b(?:does not|doesn't|do not|did not|has no|holds no|gives no|names no|no record)\b[^.;]*?\b(?:hold|state|record|name|give|say|include|show|mention|contain|specify|identify|list)|\bnot (?:recorded|stated|given|named|held|known|in the record)\b|\bnot hold\b/i;
 
@@ -94,7 +97,11 @@ export function judge(q: Question, facts: Fact[], answer: Answer, planted?: Plan
     for (const group of q.say ?? []) if (!group.some(w => says(text, w))) reasons.push(`the answer does not say "${group[0]}"`);
   };
   const mustNotSay = () => {
-    for (const w of q.forbid ?? []) for (const s of sentences) if (says(s.text, w)) reasons.push(`says "${w}": ${s.text}`);
+    for (const w of q.forbid ?? []) for (const s of sentences) {
+      // Refusing in the question's own words ("cannot be recalculated this way") is the right answer, not
+      // doing it; a number asked for stays forbidden even in a refusal, since repeating it states it.
+      if (says(s.text, w) && (/\d/.test(w) || !REFUSAL.test(s.text))) reasons.push(`says "${w}": ${s.text}`);
+    }
   };
 
   if (q.kind === 'answered' || q.kind === 'platform') mustAnswer();
@@ -139,9 +146,25 @@ export function judge(q: Question, facts: Fact[], answer: Answer, planted?: Plan
  * "missing" line may also use the question's own words, since it says what was asked for and not found.
  */
 export function ungrounded(question: string, facts: Fact[], answer: Answer, model: ProcessModel): string[] {
-  const known = facts.map(f => `${f.label}. ${f.text}`).join(' \n ');
-  const pick = (text: string, extra = '') => groundingIssues(text, model, `${known} \n ${extra}`).filter(i => i.kind !== 'filler').map(i => i.text);
-  return [...new Set([...pick(answer.sentences.map(s => s.text).join(' ')), ...pick(answer.missing, question)])];
+  // The question's own words count as given: repeating "INR 3,00,000" from the question invents nothing.
+  const known = `${facts.map(f => `${f.label}. ${f.text}`).join(' \n ')} \n ${question}`;
+  const pick = (text: string) => groundingIssues(text, model, known).filter(i => i.kind !== 'filler' && !(i.kind !== 'number' && wordsKnown(i.text, known))).map(i => i.text);
+  return [...new Set([...pick(answer.sentences.map(s => s.text).join(' ')), ...pick(answer.missing)])];
+}
+
+/**
+ * A capitalised phrase whose every word is in the facts, ignoring case and endings ("Confirming APIs":
+ * "confirmed", "API"), is ordinary words at the start of a sentence, not a name from outside the record.
+ */
+function wordsKnown(phrase: string, known: string): boolean {
+  const stem = (w: string) => w.toLowerCase().replace(/(?:ing|ed|es|s)$/, '').slice(0, 6);
+  const have = new Set((known.match(/[A-Za-z]{3,}/g) ?? []).map(stem));
+  const ws = (phrase.match(/[A-Za-z]{3,}/g) ?? []).filter(w => !/^(?:for|the|and|with|from|this|that)$/i.test(w));
+  // The phrase starts like a sentence: its first word is used in lower case in the facts or is a little
+  // word, so a name ("Priya Nair") is never let through as ordinary words.
+  const first = (phrase.match(/[A-Za-z]+/) ?? [''])[0];
+  const common = /^(?:for|the|and|with|from|this|that|if|in|on|of|to|by|as)$/i.test(first) || new RegExp(`\\b${first.toLowerCase().replace(/(?:ing|ed|es|s)$/, '')}`).test(known);
+  return common && ws.length > 0 && ws.every(w => have.has(stem(w)));
 }
 
 /** One question asked once. */
