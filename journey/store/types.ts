@@ -11,6 +11,7 @@ import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
+import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
@@ -217,4 +218,13 @@ export interface JourneyStore {
   createWorkItem(projectId: string, item: ReturnType<typeof validateNewItem>): Promise<WorkItem>;
   /** Deletes an item for good; the items directly under it stay, without a parent. Editors and admins. */
   deleteWorkItem(id: string): Promise<void>;
+  /** Comments on an item, oldest first. Every member reads and adds them. */
+  listComments(workItemId: string): Promise<ItemComment[]>;
+  addComment(workItemId: string, body: string): Promise<ItemComment>;
+  /** The author only. */
+  editComment(id: string, body: string): Promise<ItemComment>;
+  /** The author or an admin. */
+  deleteComment(id: string): Promise<void>;
+  /** What changed on an item and who changed it, written by the database (members read). */
+  listItemHistory(workItemId: string): Promise<ItemEvent[]>;
 }

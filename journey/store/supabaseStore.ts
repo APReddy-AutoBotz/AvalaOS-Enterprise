@@ -12,18 +12,21 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { WorkItem } from '../../domain/workitems/board.ts';
 
-const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at, sort_order';
+const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at, sort_order, labels';
 const itemFrom = (r: any): WorkItem => ({
   id: r.id, projectId: r.project_id, parentId: r.parent_id, type: r.item_type, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [],
   status: r.status, priority: r.priority, ownerId: r.owner_id, estimateHours: r.estimate_hours === null ? null : Number(r.estimate_hours), startDate: r.start_date, dueDate: r.due_date,
   processId: r.process_id, stepIds: r.step_ids ?? [], requirements: r.details?.requirements ?? [], snapshot: r.details?.snapshot ?? {}, updatedAt: r.updated_at,
-  sortOrder: Number(r.sort_order ?? 0),
+  sortOrder: Number(r.sort_order ?? 0), labels: r.labels ?? [],
 });
+const COMMENT_COLUMNS = 'id, work_item_id, author_id, body, created_at, edited_at';
+const commentFrom = (r: any): ItemComment => ({ id: r.id, workItemId: r.work_item_id, authorId: r.author_id, body: r.body, createdAt: r.created_at, editedAt: r.edited_at });
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
 import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
+import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -397,6 +400,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (e.startDate !== undefined) row.start_date = e.startDate;
       if (e.dueDate !== undefined) row.due_date = e.dueDate;
       if (e.parentId !== undefined) row.parent_id = e.parentId;
+      if (e.labels !== undefined) row.labels = e.labels;
       const { data, error } = await db.from('delivery_work_items').update(row).eq('id', id).select(ITEM_COLUMNS).single();
       if (error) fail(error);
       return itemFrom(data);
@@ -407,7 +411,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('delivery_work_items').insert({
         workspace_id: project.workspace_id, project_id: projectId, item_type: n.type, title: n.title, description: n.description,
         parent_id: n.parentId, owner_id: n.ownerId, priority: n.priority, estimate_hours: n.estimateHours, start_date: n.startDate,
-        due_date: n.dueDate, status: n.status, sort_order: n.sortOrder,
+        due_date: n.dueDate, status: n.status, sort_order: n.sortOrder, labels: n.labels,
       }).select(ITEM_COLUMNS).single();
       if (error) fail(error);
       return itemFrom(data);
@@ -416,6 +420,34 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('delivery_work_items').delete().eq('id', id).select('id');
       if (error) fail(error);
       if (!data?.length) throw new StoreError(403, 'This item could not be deleted. Deleting needs the editor or admin role.');
+    },
+    async listComments(workItemId) {
+      const { data, error } = await db.from('delivery_work_item_comments').select(COMMENT_COLUMNS).eq('work_item_id', workItemId).order('created_at');
+      if (error) fail(error);
+      return (data ?? []).map(commentFrom);
+    },
+    async addComment(workItemId, body) {
+      const { data: item, error: e1 } = await db.from('delivery_work_items').select('workspace_id').eq('id', workItemId).single();
+      if (e1) fail(e1);
+      const { data, error } = await db.from('delivery_work_item_comments').insert({ workspace_id: item.workspace_id, work_item_id: workItemId, body }).select(COMMENT_COLUMNS).single();
+      if (error) fail(error);
+      return commentFrom(data);
+    },
+    async editComment(id, body) {
+      const { data, error } = await db.from('delivery_work_item_comments').update({ body }).eq('id', id).select(COMMENT_COLUMNS);
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment can edit it.');
+      return commentFrom(data[0]);
+    },
+    async deleteComment(id) {
+      const { data, error } = await db.from('delivery_work_item_comments').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+    },
+    async listItemHistory(workItemId) {
+      const { data, error } = await db.from('delivery_work_item_events').select('id, work_item_id, actor_id, kind, field, old_value, new_value, created_at').eq('work_item_id', workItemId).order('id', { ascending: false }).limit(200);
+      if (error) fail(error);
+      return (data ?? []).map((r: any): ItemEvent => ({ id: String(r.id), workItemId: r.work_item_id, actorId: r.actor_id, kind: r.kind, field: r.field, oldValue: r.old_value, newValue: r.new_value, createdAt: r.created_at }));
     },
     async listProposals(processId) {
       const { data, error } = await db.from('work_item_proposals').select('derivation_key, item_type, parent_key, title, description, acceptance_criteria, step_ids, requirement_codes, state, rejected_reason, user_edited, sort_order, confirmed_work_item_id, base_hash').eq('process_id', processId).not('derivation_key', 'is', null).order('sort_order');

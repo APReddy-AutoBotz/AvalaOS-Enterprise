@@ -7,10 +7,11 @@
 import React from 'react';
 import type { JourneyStore, Member, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { allowedParents, BoardError, COLUMNS, criterionParts, deleteEffect, initials, joinStory, lanesOf, MANUAL_TYPES, needsParent, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateNewItem, validateProjectName, type ManualType, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
+import { allowedParents, BoardError, boardLabels, COLUMNS, criterionParts, deleteEffect, initials, joinStory, lanesOf, MANUAL_TYPES, needsParent, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateNewItem, validateProjectName, type ManualType, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
+import { ItemActivity, LabelsField } from './ItemActivity.tsx';
 
 const WORKSPACE_KEY = 'avala.journey.workspace';
 const remembered = () => { try { return localStorage.getItem(WORKSPACE_KEY); } catch { return null; } };
@@ -40,6 +41,9 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [exporting, setExporting] = React.useState(false);
   const [who, setWho] = React.useState<string>(''); // '' everyone, 'none' unassigned, else a member
   const [creating, setCreating] = React.useState(false);
+  const [label, setLabel] = React.useState('');
+  const [me, setMe] = React.useState('');
+  React.useEffect(() => { store.currentUser().then(u => setMe(u?.id ?? '')).catch(() => {}); }, [store]);
 
   React.useEffect(() => {
     store.listWorkspaces().then(async list => {
@@ -99,8 +103,10 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const q = query.trim().toLowerCase();
   const nameOf = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? 'Someone no longer in this workspace' : null);
   const matches = (i: WorkItem) => (!who || (who === 'none' ? !i.ownerId : i.ownerId === who))
-    && (!q || i.title.toLowerCase().includes(q) || i.requirements.some(c => c.toLowerCase().includes(q)) || TYPE[i.type].label.toLowerCase() === q || (nameOf(i.ownerId) ?? '').toLowerCase().includes(q));
-  const filtering = Boolean(q || who);
+    && (!label || (i.labels ?? []).includes(label))
+    && (!q || i.title.toLowerCase().includes(q) || i.requirements.some(c => c.toLowerCase().includes(q)) || TYPE[i.type].label.toLowerCase() === q || (nameOf(i.ownerId) ?? '').toLowerCase().includes(q) || (i.labels ?? []).some(l => l.toLowerCase() === q));
+  const filtering = Boolean(q || who || label);
+  const labels = boardLabels(items ?? []);
   const lanes = lanesOf(items ?? []);
   const work = (items ?? []).filter(i => i.type !== 'epic');
   // Lanes with work come first; an epic with nothing on the board yet is a single line below them.
@@ -123,6 +129,12 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
               <option value="">Everyone's work</option>
               {members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}
               <option value="none">Unassigned</option>
+            </select>
+          )}
+          {labels.length > 0 && (
+            <select aria-label="Label" value={label} onChange={e => setLabel(e.target.value)} className={field}>
+              <option value="">Any label</option>
+              {labels.map(l => <option key={l} value={l}>{l}</option>)}
             </select>
           )}
           {work.length > 0 && <input type="search" aria-label="Find an item" placeholder="Find by title or FR code" value={query} onChange={e => setQuery(e.target.value)} className={cx(field, 'w-56')} />}
@@ -217,6 +229,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
                                       <button type="button" title={i.title} onClick={() => openItem(i.id)} className="block w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-left shadow-[0_1px_1px_rgba(15,23,42,0.04)] transition-shadow hover:border-slate-300 hover:shadow-[0_3px_10px_rgba(15,23,42,0.09)] focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#002C4B]">
                                         <span className="line-clamp-3 text-[13px] font-medium leading-[1.4] text-slate-900">{i.title}</span>
                                         {changesOf(i).length > 0 && <span className="mt-1.5 block"><ChangedTag /></span>}
+                                        {(i.labels ?? []).length > 0 && <span className="mt-1.5 flex flex-wrap gap-1">{i.labels!.slice(0, 3).map(l => <span key={l} className="rounded bg-slate-100 px-1.5 py-px text-[10.5px] font-medium text-slate-600">{l}</span>)}{i.labels!.length > 3 && <span className="text-[10.5px] text-slate-500">+{i.labels!.length - 3}</span>}</span>}
                                         <span className="mt-2 flex items-center gap-1.5 text-[11px] text-slate-500">
                                           <TypeGlyph type={i.type} />{TYPE[i.type].label}
                                           {i.priority === 'high' && <span className="font-semibold text-red-700">High</span>}
@@ -246,7 +259,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         </div>
       )}
       {creating && project && items && <NewItemDialog items={items} members={members} onAdd={addItem} onClose={() => setCreating(false)} />}
-      {open && project && items && <React.Fragment key={open.id}><ItemPanel item={open} items={items} members={members} canEdit={canEdit} onDelete={() => remove(open)} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
+      {open && project && items && <React.Fragment key={open.id}><ItemPanel store={store} me={me} isAdmin={workspace?.role === 'admin'} labels={labels} item={open} items={items} members={members} canEdit={canEdit} onDelete={() => remove(open)} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
     </section>
   );
 }
@@ -272,8 +285,9 @@ function useAutosize(value: string) {
   return ref;
 }
 
-function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd, onDelete }: { item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void; onDelete: () => Promise<void> }) {
+function ItemPanel({ store, me, isAdmin, labels, item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd, onDelete }: { store: JourneyStore; me: string; isAdmin: boolean; labels: string[]; item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void; onDelete: () => Promise<void> }) {
   const [confirming, setConfirming] = React.useState(false);
+  const [writing, setWriting] = React.useState(false);
   const [deleteError, setDeleteError] = React.useState<string | null>(null);
   const parents = allowedParents(item.type, items, item.id);
   const { story, rest } = splitStory(item.description);
@@ -290,10 +304,10 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
   const children = item.type === 'epic' ? lanesOf(items).find(l => l.epic?.id === item.id)?.items ?? [] : items.filter(i => i.parentId === item.id);
   // Escape closes the panel, unless there is typing that would be lost.
   React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !dirty) onClose(); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !dirty && !writing) onClose(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [dirty, onClose]);
+  }, [dirty, writing, onClose]);
   const quiet = '-mx-2 w-[calc(100%+1rem)] resize-none rounded-md border-0 bg-transparent px-2 py-1 text-slate-900 hover:bg-slate-50 focus:bg-slate-50 focus:outline-none focus:ring-1 focus:ring-slate-300 disabled:hover:bg-transparent';
   const prop = 'w-full border-0 bg-transparent p-0 text-sm font-medium text-slate-900 placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-0';
   const heading = 'text-[13px] font-semibold text-slate-900';
@@ -363,6 +377,8 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
             </label>
           </div>
 
+          <LabelsField labels={item.labels ?? []} suggestions={labels} canEdit={canEdit} onSave={l => onSave({ labels: l })} />
+
           <h3 className={cx(heading, 'mt-7')}>Description</h3>
           <textarea ref={descRef} aria-label="Description" rows={2} value={description} disabled={!canEdit} placeholder={canEdit ? 'Add what the team needs to know.' : ''} onChange={e => setDescription(e.target.value)} className={cx(quiet, 'mt-1 text-sm leading-6 text-slate-800')} />
 
@@ -390,6 +406,8 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
               {item.requirements.map(c => { const r = reqs.find(x => x.code === c); return <li key={c} className="flex gap-3 px-3 py-2.5 leading-6"><span className="w-14 shrink-0 text-xs font-semibold leading-6 text-slate-900">{c}</span><span className="text-slate-700">{r ? r.statement : 'Not found in the process any more.'}</span></li>; })}
             </ul>
           </>}
+
+          <ItemActivity store={store} item={item} items={items} members={members} me={me} isAdmin={isAdmin} onDirty={setWriting} />
 
           {canEdit && (
             <div className="mt-8 border-t border-slate-100 pt-5" data-testid="item-delete">
