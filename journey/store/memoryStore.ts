@@ -1,4 +1,5 @@
 import { leavesNoAdmin, PeopleError, roleOf, validateEmail, type AuditEntry } from '../../domain/people/roles.ts';
+import { findRecorded, NOT_RECORDED, type RecordedAnswer } from '../../domain/assistant/recorded.ts';
 import { documentSettingsFrom, validateBranding, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings, type AssessmentSettings } from '../../domain/assess/settings.ts';
 // In-memory store with the same rules as the database: one working draft per process, approved
@@ -73,6 +74,8 @@ export interface MemoryStoreOptions {
    * and keep every change in memory only, so a reload starts again and nothing reaches local storage.
    */
   demo?: unknown;
+  /** The demo's recorded answers to the suggested questions, played back by runAiTask. */
+  recorded?: RecordedAnswer[];
 }
 
 export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStore {
@@ -331,7 +334,16 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     async transcribe() { throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`); },
     async startExtraction() { throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`); },
     async latestExtraction() { return null; },
-    async runAiTask() { throw new StoreError(501, `AI tasks need the server; they are not available ${where}.`); },
+    async runAiTask(_workspaceId, task, segments) {
+      // The demo answers its suggested questions from what was recorded on the sample case; nothing else.
+      if (options.recorded) {
+        const question = segments.find(s => s.id === 'question')?.text ?? '';
+        const hit = findRecorded(options.recorded, task, question);
+        if (hit) return { data: structuredClone(hit.reply), recorded: true };
+        throw new StoreError(501, NOT_RECORDED);
+      }
+      throw new StoreError(501, `AI tasks need the server; they are not available ${where}.`);
+    },
     async listProjects(workspaceId) {
       requireMe();
       return (state.projects ?? []).filter(p => p.workspaceId === workspaceId).map(({ workspaceId: _w, ...p }) => p);

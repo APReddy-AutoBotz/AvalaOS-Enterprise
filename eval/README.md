@@ -97,6 +97,8 @@ Measures Ask Avala's answers (`docs/product-plan.md`, "The measure"). A set of q
 
 ## What is asked
 
+The same workflow records the demo's answers with `[ask-eval record]` in the commit message (each scope's starter questions, once; `[ask-eval only:workspace]` or `only:R-board-2` to redo some); copy the block between `BEGIN_ASK_ANSWERS` and `END_ASK_ANSWERS` from the log into `public/demo-data/ask-answers.json`, and `npm run test:new` checks it still fits the demo.
+
 `eval/ask/questions.json`: 88 questions about the sample case as the demo holds it (`public/demo-data/sample.json`), read the way the panel reads a process (`loadSample` uses the same store, the same record and the same `askFacts`). Twelve of them (ids starting `B`, `"scope": "board"`) ask about the sample's Delivery board instead, read the way the panel reads a board (`boardSubject` in `journey/process/askSubjects.ts`, facts from `boardFacts`, today fixed at 14 November 2026) and sent as the task `askBoard`; Ten (ids starting `WS`, `"scope": "workspace"`) ask about the whole sample workspace (`workspaceSubject`, facts from `workspaceFacts`; a question that names the process gets its record as the panel does). The scorecard reports tokens per question for each scope apart (about 8,100 for a board question and 17,800 for a process question in the live check of 14 November 2026; a workspace question about 3,200, or about 19,900 when it names a process). Each question says what kind it is and what must happen:
 
 | Kind of question | What must happen | How the script checks it | Target |

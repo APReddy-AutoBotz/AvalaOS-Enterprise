@@ -9,6 +9,8 @@ import { DEMO_BASE } from '../../domain/site/pages.ts';
 import { Spinner } from '../ui.tsx';
 
 export const DEMO_DATA = '/demo-data/sample.json';
+/** Ask Avala's recorded answers to the suggested questions on the sample case (domain/assistant/recorded.ts). */
+export const DEMO_ANSWERS = '/demo-data/ask-answers.json';
 
 export default function DemoApp() {
   const [store, setStore] = React.useState<JourneyStore | null>(null);
@@ -17,9 +19,11 @@ export default function DemoApp() {
   React.useEffect(() => {
     document.title = 'Demo | Avala OS';
     let live = true;
+    // The recorded answers are a nicety: without them the demo still runs, and Ask Avala says it needs the server.
+    const answers = fetch(DEMO_ANSWERS).then(r => (r.ok ? r.json() : [])).then(a => (Array.isArray(a) ? a : [])).catch(() => []);
     fetch(DEMO_DATA)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(sample => { if (live) setStore(createMemoryStore({ demo: sample })); })
+      .then(async sample => { const recorded = await answers; if (live) setStore(createMemoryStore({ demo: sample, recorded: recorded.length ? recorded : undefined })); })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
   }, []);

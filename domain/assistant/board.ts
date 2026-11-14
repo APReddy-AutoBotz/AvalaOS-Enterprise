@@ -48,7 +48,7 @@ export function boardFacts(question: string, ctx: BoardContext): Fact[] {
   const statusCounts = Object.entries(STATUS_LABEL).map(([s, label]) => [label, items.filter(i => i.status === s).length] as const).filter(([, n]) => n > 0);
   const types = [...new Set(items.map(i => i.type))].map(t => plural(items.filter(i => i.type === t).length, KIND[t] ?? t, KINDS[t]));
   summary('summary', items.length
-    ? `The board "${project.name}" has ${plural(items.length, 'item')}: ${statusCounts.map(([l, n]) => `${n} ${l.toLowerCase()}`).join(', ')}. By kind: ${types.join(', ')}.`
+    ? `The board "${project.name}" has ${plural(items.length, 'item')}: ${statusCounts.map(([l, n]) => `${n} ${l.toLowerCase()}`).join(', ')}. By kind: ${types.join(', ')}. Open (not done): ${open.length}.`
     : `The board "${project.name}" has no items yet.`);
   const blocked = open.filter(i => i.status === 'blocked'), held = open.filter(i => i.status === 'on_hold');
   const overdue = open.filter(i => i.dueDate && i.dueDate < today);

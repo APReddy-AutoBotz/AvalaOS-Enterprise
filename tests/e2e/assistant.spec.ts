@@ -1,8 +1,9 @@
 // The Avala assistant's panel, on the demo's sample case. "Ask Avala" is in the top bar on every page:
 // on a process it asks about that process, on the Delivery board about that board; elsewhere about the
-// whole workspace, and the person can pick a process or a board instead. Answers need the server's AI,
-// which the in-browser store does not have, so this checks the panel and that it says so plainly; how
-// facts are built and answers read is tested in domain/assistant/ask.test.ts.
+// whole workspace, and the person can pick a process or a board instead. The demo has no AI: it answers
+// the suggested questions from answers recorded on the sample case (public/demo-data/ask-answers.json),
+// marked as such, and says any other question needs the server. How facts are built and answers read is
+// tested in domain/assistant/*.test.ts; that the recordings still fit the demo in eval/ask/recorded.test.ts.
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
 
@@ -22,8 +23,10 @@ test('Ask Avala is in the top bar: away from a process it asks about the workspa
   await expect(panel).toContainText('Ask about this workspace');
   const whole = panel.getByRole('group', { name: 'Questions to start with' });
   await expect(whole.getByRole('button')).toHaveCount(3);
-  await whole.getByRole('button', { name: 'Which processes are quick wins?' }).click();
-  await expect(panel.getByTestId('ask-turn').getByRole('alert')).toContainText('need the server');
+  await whole.getByRole('button', { name: 'Where does each process stand?' }).click();
+  // The demo answers its suggested questions from what was recorded on the sample case.
+  await expect(panel.getByTestId('ask-recorded')).toHaveText('Recorded answer on the sample case');
+  await expect(panel.getByTestId('ask-lead')).toBeVisible();
   await about.selectOption({ label: 'Vendor invoice processing' });
   await expect(panel).toContainText('Answers come only from its record');
   await expect(panel.getByRole('group', { name: 'Questions to start with' }).getByRole('button')).toHaveCount(3);
@@ -49,7 +52,14 @@ test('Ask Avala is in the top bar: away from a process it asks about the workspa
   await start.getByRole('button', { name: 'Why is this the recommended approach?' }).click();
   const turn = panel.getByTestId('ask-turn');
   await expect(turn).toContainText('Why is this the recommended approach?');
-  await expect(turn.getByRole('alert')).toContainText('need the server');
+  await expect(turn.getByTestId('ask-recorded')).toHaveText('Recorded answer on the sample case');
+  await expect(turn.getByTestId('ask-lead')).toContainText('RPA');
+  await expect(turn.getByTestId('ask-citation').first()).toBeVisible();
+  // Next, the other recorded questions; a question of its own needs the server.
+  await expect(turn.getByRole('group', { name: 'Ask next' }).getByRole('button')).toHaveCount(2);
+  await panel.getByLabel('Your question').fill('Who scans the paper invoices?');
+  await panel.getByRole('button', { name: 'Ask', exact: true }).click();
+  await expect(panel.getByTestId('ask-turn').nth(1).getByRole('alert')).toContainText('only for the suggested questions');
   // A question of one character is refused before anything is sent.
   await panel.getByLabel('Your question').fill('?');
   await panel.getByRole('button', { name: 'Ask', exact: true }).click();
@@ -70,7 +80,8 @@ test('on the Delivery board Ask Avala asks about that board, and a board can be 
   const result = await new AxeBuilder({ page }).include('[data-testid="ask-panel"]').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
   await start.getByRole('button', { name: 'What is blocked or overdue?' }).click();
-  await expect(panel.getByTestId('ask-turn').getByRole('alert')).toContainText('need the server');
+  await expect(panel.getByTestId('ask-recorded')).toBeVisible();
+  await expect(panel.getByTestId('ask-lead')).toContainText('Nothing is blocked or overdue');
   await panel.getByLabel('Your question').fill('?');
   await panel.getByRole('button', { name: 'Ask', exact: true }).click();
   await expect(panel).toContainText('Ask a question about this board.');
