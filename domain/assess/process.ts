@@ -12,6 +12,7 @@ import { periodOf, processMetric, stepTrait } from '../processModel/selectors.ts
 export { periodOf };
 import { prioritise, type Priority } from './priority.ts';
 import { DEFAULT_SETTINGS, type AssessmentSettings } from './settings.ts';
+import type { Decisions } from './decisions.ts';
 import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
 
 export const THRESHOLDS = {
@@ -126,8 +127,19 @@ export function yearlyVolume(m: ProcessModel): Computed<Range> {
   return { computable: true, value: [lo * PER_YEAR[per], hi * PER_YEAR[per]] };
 }
 
-export function assessProcess(model: ProcessModel, options: { rate?: Rate | null; settings?: AssessmentSettings } = {}): ProcessAssessment {
-  const steps = scoreSteps(model);
+/**
+ * The assessment of a process. With `decisions`, a step a person overrode takes the approach they chose
+ * (`winner`, with the scoring's own answer kept in `recommended`), so the counts, the split, the verdict
+ * and everything built from them follow the approach in effect. Scores never change. Without
+ * `decisions` it is the scoring alone.
+ */
+export function assessProcess(model: ProcessModel, options: { rate?: Rate | null; settings?: AssessmentSettings; decisions?: Decisions | null } = {}): ProcessAssessment {
+  const chosen = options.decisions?.overrides ?? {};
+  const steps = scoreSteps(model).map(s => {
+    const o = chosen[s.stepId];
+    return o && !s.alreadyAutomated && o.approach !== s.winner ? { ...s, winner: o.approach, recommended: s.winner } : s;
+  });
+  const anyChosen = steps.some(s => s.recommended);
   const scored = steps.filter(s => !s.alreadyAutomated);
   const n = scored.length;
   const nameOf = (id: string) => model.steps.find(s => s.id === id)?.name ?? id;
@@ -156,7 +168,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     const a = r.approach;
     const won = scored.filter(s => s.winner === a);
     const notWon = scored.filter(s => s.winner !== a);
-    const strength = mostCommon(won.flatMap(s => s.scores[0].factors.filter(f => f.known && f.value >= 0.7).map(f => f.text)));
+    const strength = mostCommon(won.flatMap(s => (s.scores.find(x => x.approach === a) ?? s.scores[0]).factors.filter(f => f.known && f.value >= 0.7).map(f => f.text)));
     const held = mostCommon(notWon.map(s => limiter(s.scores.find(x => x.approach === a)!)));
     const why = [
       r.stepsWon ? `Best fit for ${r.stepsWon} of ${plural(n, 'step')}` : `Not the best fit for any of the ${plural(n, 'step')}`,
@@ -176,7 +188,11 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   });
 
   const automatedSteps = n - counts.human;
-  const lead = automatedSteps > 0 ? ranking.find(r => r.stepsWon > 0 && r.rank === 1)?.approach ?? [...ranking].sort((a, b) => b.stepsWon - a.stepsWon)[0].approach : null;
+  // The scoring alone leads with the first-ranked approach when it wins a step. Once people have chosen
+  // approaches, the lead is the approach in effect for the most steps (ties go to the better-ranked).
+  const lead = automatedSteps === 0 ? null
+    : !anyChosen ? ranking.find(r => r.stepsWon > 0 && r.rank === 1)?.approach ?? [...ranking].sort((a, b) => b.stepsWon - a.stepsWon)[0].approach
+    : [...ranking].sort((a, b) => b.stepsWon - a.stepsWon || a.rank - b.rank)[0].approach;
   const aiSteps = counts.ai_assist + counts.agent;
   const approvalSteps = scored.filter(s => s.winner !== 'human' && s.human === 'approve').length;
 

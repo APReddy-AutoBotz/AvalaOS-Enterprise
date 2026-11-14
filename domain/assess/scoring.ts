@@ -132,6 +132,11 @@ export interface StepScore {
   questions: StepQuestion[];
   /** Would API integration win if the systems' APIs were confirmed for this work? */
   apiWouldWin: boolean;
+  /**
+   * Set only by assessProcess with people's decisions, on a step where a person chose another approach:
+   * the scoring's own recommendation. `winner` is then the approach in effect; the scores are unchanged.
+   */
+  recommended?: Approach;
 }
 
 // ---------------------------------------------------------------- reading the facts

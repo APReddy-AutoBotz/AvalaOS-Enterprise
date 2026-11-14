@@ -7,6 +7,8 @@ import { profileFacts } from '../assess/profileFacts.ts';
 import { answerFromNotes } from '../questions/notes.ts';
 import { draftNarrative } from '../docs/narrative.ts';
 import { askProcess } from '../assistant/ask.ts';
+import { askBoard } from '../assistant/board.ts';
+import { askWorkspace } from '../assistant/workspace.ts';
 
 const str = { type: 'string' } as const;
 
@@ -54,4 +56,6 @@ export const TASKS: Record<string, TaskDefinition> = {
   [answerFromNotes.id]: answerFromNotes,
   [draftNarrative.id]: draftNarrative,
   [askProcess.id]: askProcess,
+  [askBoard.id]: askBoard,
+  [askWorkspace.id]: askWorkspace,
 };

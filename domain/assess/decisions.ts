@@ -41,7 +41,7 @@ export class DecisionError extends Error {}
 /** Records an override. A rationale is required; overriding to the scoring's own answer removes it. */
 export function withOverride(d: Decisions, result: StepScore, args: { approach: Approach; rationale: string; by: string; at?: string }): Decisions {
   const next: Decisions = { overrides: { ...d.overrides }, rate: d.rate, costs: d.costs };
-  if (args.approach === result.winner) { delete next.overrides[result.stepId]; return next; }
+  if (args.approach === (result.recommended ?? result.winner)) { delete next.overrides[result.stepId]; return next; }
   if (!args.rationale.trim()) throw new DecisionError('Say why you are overriding the recommendation.');
   next.overrides[result.stepId] = { stepId: result.stepId, approach: args.approach, rationale: args.rationale.trim(), by: args.by, at: args.at ?? new Date().toISOString() };
   return next;

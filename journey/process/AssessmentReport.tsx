@@ -35,7 +35,8 @@ function H({ n, children }: { n: number; children: React.ReactNode }) {
 const th = 'border-b border-slate-300 px-3 py-2 text-left text-xs font-semibold text-slate-500';
 const td = 'border-b border-slate-100 px-3 py-2 align-top text-sm text-slate-800';
 
-export function AssessmentReport({ model, result, decisions, onBack }: { model: ProcessModel; result: ProcessAssessment; decisions: Decisions; onBack: () => void }) {
+/** `result` is the assessment with people's choices of approach; `scoring` the scoring alone, named when they differ. */
+export function AssessmentReport({ model, result, scoring, decisions, onBack }: { model: ProcessModel; result: ProcessAssessment; scoring?: ProcessAssessment; decisions: Decisions; onBack: () => void }) {
   const steps = orderedSteps(model);
   const byStep = new Map<string, StepScore>(result.steps.map(s => [s.stepId, s] as [string, StepScore]));
   const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -65,6 +66,7 @@ export function AssessmentReport({ model, result, decisions, onBack }: { model: 
           <H n={1}>Recommendation</H>
           <p className="mt-4 font-display text-2xl font-semibold text-[#002C4B]">{result.verdict}</p>
           <p className="mt-2 text-sm leading-6 text-slate-700">{result.split}</p>
+          {scoring && (scoring.verdict !== result.verdict || scoring.split !== result.split) && <p className="mt-1 text-sm leading-6 text-slate-500">With people's choices of approach. The scoring alone recommends {scoring.verdict}. {scoring.split}</p>}
           <dl className="mt-4 grid gap-3 sm:grid-cols-3">
             {[[`${Math.round(result.automationFit * 100)}%`, 'of steps fit automation'], [String(result.aiSteps), result.aiSteps === 1 ? 'step needs AI' : 'steps need AI'], [CONFIDENCE_LABEL[result.confidence], `confidence (${Math.round(result.knownShare * 100)}% of the facts are known)`]].map(([v, l]) => (
               <div key={l} className="rounded-xl border border-slate-200 p-3"><dd className="font-display text-xl font-semibold text-slate-900">{v}</dd><dt className="text-xs text-slate-500">{l}</dt></div>

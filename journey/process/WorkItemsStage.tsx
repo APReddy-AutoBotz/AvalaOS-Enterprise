@@ -5,7 +5,7 @@ import React from 'react';
 import type { JourneyStore } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
-import { emptyDecisions } from '../../domain/assess/decisions.ts';
+import type { Decisions } from '../../domain/assess/decisions.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { buildBrd } from '../../domain/docs/brd.ts';
@@ -29,25 +29,27 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
   const [stored, setStored] = React.useState<Proposal[] | null>(null);
   const [reqs, setReqs] = React.useState<StoredRequirement[] | null>(null);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
+  const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState<string | null>(null);
   const [filter, setFilter] = React.useState<'all' | 'selected' | 'rejected'>('all');
   const load = React.useCallback(() => {
     // Reloads the stored proposals; a confirm marks them on the board.
-    Promise.all([store.listProposals(processId), store.listRequirements(processId), store.getDocumentSettings(workspaceId)])
-      .then(([p, r, d]) => { setStored(p); setReqs(r); setDocSettings(d); }).catch(e => setError(messageOf(e)));
+    // People's choices of approach decide which steps become automation work (the same as the documents).
+    Promise.all([store.listProposals(processId), store.listRequirements(processId), store.getDocumentSettings(workspaceId), store.getAssessmentDecisions(processId)])
+      .then(([p, r, d, x]) => { setStored(p); setReqs(r); setDocSettings(d); setDecisions(x); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
   React.useEffect(load, [load]);
 
   const derived = React.useMemo(() => {
-    if (!reqs) return null;
-    const assessment = assessProcess(model);
+    if (!reqs || !decisions) return null;
+    const assessment = assessProcess(model, { decisions });
     const register = reconcile(deriveRequirements(model, assessment), reqs);
-    const i: DocInput = { model, assessment, decisions: emptyDecisions(), sources: [], requirements: register.requirements, revision: { label: '', state: 'working', date: '' } };
+    const i: DocInput = { model, assessment, decisions, sources: [], requirements: register.requirements, revision: { label: '', state: 'working', date: '' } };
     const headings = [buildBrd(i), buildPdd(i), buildFrd(i), buildSdd(i)].flatMap(d => applyLayout(d, docSettings.layouts[d.type]).sections.map(s => s.title));
     const d = deriveProposals(i, headings);
     return { d, register, cov: coverage(d, register.requirements) };
-  }, [model, reqs, docSettings]);
+  }, [model, reqs, docSettings, decisions]);
   const rec = React.useMemo(() => (derived && stored ? reconcileProposals(derived.d.proposals, stored) : null), [derived, stored]);
   React.useEffect(() => {
     if (!rec || !derived || !canEdit) return;

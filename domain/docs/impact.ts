@@ -46,7 +46,7 @@ const BUILDERS: [DocImpact['type'], (i: DocInput) => DocTree][] = [['brd', build
 interface Built { input: DocInput; register: Requirement[]; docs: Map<DocImpact['type'], DocTree>; drafts: ProposalDraft[] }
 
 function build(m: ProcessModel, ctx: ImpactContext, stored: StoredRequirement[]): Built {
-  const assessment = assessProcess(m, { rate: ctx.decisions.rate, ...(ctx.settings ? { settings: ctx.settings } : {}) });
+  const assessment = assessProcess(m, { rate: ctx.decisions.rate, decisions: ctx.decisions, ...(ctx.settings ? { settings: ctx.settings } : {}) });
   const register = reconcile(deriveRequirements(m, assessment), stored).requirements;
   const input: DocInput = { model: m, assessment, decisions: ctx.decisions, sources: [], requirements: register, revision: { label: '', state: 'working', date: '' } };
   const docs = new Map(BUILDERS.map(([t, b]) => [t, b(input)] as const));

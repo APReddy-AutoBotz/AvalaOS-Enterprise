@@ -56,6 +56,9 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
+  // The same assessment with people's choices of approach: what the documents, flows and work items follow.
+  // `result` stays the scoring alone, for the step rows and the ranking, so its own answer stays visible.
+  const chosen = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings, decisions: d }), [editor.model, decisions, settings, d]);
   // The preview reads the decisions as they are on screen, overrides made here included.
   const loadedImpact = useImpactContext(store, processId, workspaceId);
   const impact = React.useMemo(() => (loadedImpact && decisions ? { ...loadedImpact, decisions, ...(settings ? { settings } : {}) } : null), [loadedImpact, decisions, settings]);
@@ -132,7 +135,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   const byStep = new Map<string, StepScore>(result.steps.map(r => [r.stepId, r] as [string, StepScore]));
   const current = open ? byStep.get(open) : undefined;
 
-  if (view === 'report') return <AssessmentReport model={editor.model} result={result} decisions={d} onBack={() => setView('assessment')} />;
+  if (view === 'report') return <AssessmentReport model={editor.model} result={chosen} scoring={result} decisions={d} onBack={() => setView('assessment')} />;
 
   const known = Math.round(result.priority.inputs.share * 100);
   const tabs = (
@@ -157,7 +160,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
     <div className="space-y-6">
       {tabs}
       <ErrorNote message={error ?? editor.error} />
-      <Hero result={result} onReport={() => setView('report')} />
+      <Hero result={chosen} scoring={result} onReport={() => setView('report')} />
       {result.assessed > 0 && <Ranking result={result} />}
       {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
       {result.assessed > 0 && (
@@ -224,7 +227,9 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
 // ---------------------------------------------------------------- the process
 
-function Hero({ result, onReport }: { result: ProcessAssessment; onReport: () => void }) {
+/** The headline follows people's choices; when they change it, the scoring's own verdict is said underneath. */
+function Hero({ result, scoring, onReport }: { result: ProcessAssessment; scoring: ProcessAssessment; onReport: () => void }) {
+  const differs = result.verdict !== scoring.verdict || result.split !== scoring.split;
   const fired = result.cautions.filter(c => c.fired);
   const stats: [string, string, string][] = [
     [`${Math.round(result.automationFit * 100)}%`, 'of steps fit automation', `${result.assessed - result.counts.human} of ${result.assessed}`],
@@ -237,9 +242,10 @@ function Hero({ result, onReport }: { result: ProcessAssessment; onReport: () =>
       <div aria-hidden className="pointer-events-none absolute -bottom-32 left-1/3 h-72 w-72 rounded-full bg-sky-400/10 blur-3xl" />
       <div className="relative flex flex-wrap items-start justify-between gap-6">
         <div className="max-w-2xl">
-          <p className="text-xs font-semibold text-[#FFBC03]">Recommended approach</p>
+          <p className="text-xs font-semibold text-[#FFBC03]">{differs ? 'Approach, with people\'s choices' : 'Recommended approach'}</p>
           <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="verdict">{result.verdict}</h2>
           <p className="mt-3 text-base leading-7 text-slate-200" data-testid="split">{result.split}</p>
+          {differs && <p className="mt-2 text-sm leading-6 text-slate-300" data-testid="scoring-alone">The scoring alone recommends {scoring.verdict}. {scoring.split}</p>}
         </div>
         {result.assessed > 0 && <button type="button" onClick={onReport} className="rounded-xl bg-[#FFBC03] px-4 py-2.5 text-sm font-semibold text-[#002C4B] shadow-sm transition hover:bg-[#ffc933] focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Open the assessment report</button>}
       </div>

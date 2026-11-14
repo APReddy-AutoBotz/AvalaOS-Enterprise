@@ -50,13 +50,16 @@ export function AvalaSpark({ className = 'h-4 w-4' }: { className?: string }) {
   );
 }
 
-/** The Ask Avala button: the brand amber with navy text (contrast above 6:1), so it stands apart from the page's actions. */
-export function AskAvalaButton(props: React.ComponentProps<'button'>) {
+/**
+ * The Ask Avala button: the brand amber with navy text (contrast above 6:1), so it stands apart from the
+ * page's actions. `compact` is the top bar's: a little smaller, and only the mark on narrow screens.
+ */
+export function AskAvalaButton({ compact, ...props }: React.ComponentProps<'button'> & { compact?: boolean }) {
   return (
-    <button type="button" {...props}
-      className="inline-flex items-center gap-2 rounded-lg bg-[#E69F00] px-3.5 py-2 text-sm font-semibold text-[#002C4B] shadow-sm transition-colors hover:bg-[#F2B233] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#002C4B]">
+    <button type="button" aria-label="Ask Avala" {...props}
+      className={`inline-flex items-center gap-2 rounded-lg bg-[#E69F00] font-semibold text-[#002C4B] shadow-sm transition-colors hover:bg-[#F2B233] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#002C4B] ${compact ? 'px-2.5 py-1.5 text-sm sm:px-3' : 'px-3.5 py-2 text-sm'}`}>
       <AvalaSpark />
-      Ask Avala
+      <span className={compact ? 'hidden sm:inline' : undefined}>Ask Avala</span>
     </button>
   );
 }

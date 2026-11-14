@@ -4,21 +4,28 @@
 import React from 'react';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { assessProcess } from '../../domain/assess/process.ts';
-import type { Override } from '../../domain/assess/decisions.ts';
-import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, validateQuestion, type Answer, type AskContext, type Passage, type Target } from '../../domain/assistant/ask.ts';
-import { STATUS_LABEL } from '../../domain/workitems/board.ts';
+import { answerGroups, AskError, askFailure, askSegments, readAnswer, validateQuestion, type Answer, type Target } from '../../domain/assistant/ask.ts';
+import type { AskSubject } from './askSubjects.ts';
+import { RECORDED_LABEL } from '../../domain/assistant/recorded.ts';
+import { answerAction, citedFacts, figureTiles, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
+import type { ProcessAssessment } from '../../domain/assess/process.ts';
+import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 
-type Turn = { question: string; answer?: Answer; error?: string };
-const SUGGESTED = ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'];
+type Turn = { question: string; answer?: Answer; error?: string; recorded?: boolean };
 
-export function AskPanel({ store, processId, workspaceId, model, sources, onOpen, onClose }: {
-  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[];
+export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_ORDER, onOpen, onClose }: {
+  store: JourneyStore; workspaceId: string;
+  /** What is asked about (a process, a board) and how its facts are built: journey/process/askSubjects.ts. */
+  subject: AskSubject;
+  /** What the panel is asking about, and the choice of another (the top bar's panel, journey/AskAvala.tsx). */
+  about?: React.ReactNode;
+  /** The stages this workspace uses: the answer's action opens only one of them. */
+  stages?: StageId[];
   onOpen: (target: Target) => void; onClose: () => void;
 }) {
-  const [record, setRecord] = React.useState<Omit<AskContext, 'model'> | null>(null);
+  const [record, setRecord] = React.useState<unknown>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [turns, setTurns] = React.useState<Turn[]>([]);
   const [question, setQuestion] = React.useState('');
@@ -29,26 +36,10 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   // The record the answers come from: read once when the panel opens.
   React.useEffect(() => {
     let live = true;
-    (async () => {
-      const [settings, decisions, requirements, projects, members] = await Promise.all([
-        store.getSettings(workspaceId).catch(() => null), store.getAssessmentDecisions(processId).catch(() => null),
-        store.listRequirements(processId).catch(() => []), store.listProjects(workspaceId).catch(() => []), store.listMembers(workspaceId).catch(() => []),
-      ]);
-      const items = (await Promise.all(projects.map(p => store.listWorkItems(p.id).catch(() => [])))).flat().filter(i => i.processId === processId);
-      const passages: Passage[] = (await Promise.all(sources.map(async s => (await store.getSourceSegments(s.id).catch(() => []))
-        .map(seg => ({ sourceKey: s.key, sourceTitle: s.title, locator: seg.locator, text: seg.text }))))).flat();
-      const name = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? null : null);
-      if (!live) return;
-      setRecord({
-        assessment: assessProcess(model, { rate: decisions?.rate ?? null, ...(settings ? { settings: settings.settings } : {}) }),
-        requirements: requirements.filter(r => r.state === 'active').map(r => ({ code: r.code, statement: r.statement })),
-        items: items.map(i => ({ id: i.id, projectId: i.projectId, title: i.title, type: i.type, status: STATUS_LABEL[i.status], owner: name(i.ownerId) })),
-        passages,
-        overrides: (decisions ? Object.values(decisions.overrides) as Override[] : []).map(o => ({ stepId: o.stepId, approach: o.approach, rationale: o.rationale })),
-      });
-    })().catch(e => { if (live) setLoadError(messageOf(e)); });
+    subject.load().then(r => { if (live) setRecord(r); })
+      .catch(e => { if (live) setLoadError(messageOf(e)); });
     return () => { live = false; };
-  }, [store, processId, workspaceId, model, sources]);
+  }, [subject]);
 
   React.useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [turns]);
 
@@ -56,14 +47,16 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
     if (!record || busy) return;
     setError(null);
     let q: string;
-    try { q = validateQuestion(text); } catch (x) { setError(x instanceof AskError ? x.message : messageOf(x)); return; }
-    const facts = askFacts(q, { model, ...record });
+    try { q = validateQuestion(text, subject.noun); } catch (x) { setError(x instanceof AskError ? x.message : messageOf(x)); return; }
+    // The last answered turns go along so a follow-up ("and who owns it?") is understood; they are never cited.
+    const earlier = turns.filter(t => t.answer).map(t => ({ question: t.question, answer: t.answer! }));
     setBusy(true); setQuestion('');
     setTurns(t => [...t, { question: q }]);
     try {
-      const r = await store.runAiTask(workspaceId, askProcess.id, askSegments(q, facts) as never);
+      const facts = await subject.facts(q, record);
+      const r = await store.runAiTask(workspaceId, subject.task.id, askSegments(q, facts, earlier) as never);
       const answer = readAnswer(r.data, facts);
-      setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer } : x)));
+      setTurns(t => t.map((x, i) => (i === t.length - 1 ? { ...x, answer, recorded: r.recorded } : x)));
     } catch (x) {
       setTurns(t => t.map((y, i) => (i === t.length - 1 ? { ...y, error: askFailure(messageOf(x)) } : y)));
     } finally { setBusy(false); }
@@ -72,28 +65,43 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   return (
     <SidePanel title="Ask Avala" onClose={onClose} wide>
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
-        <p className="text-sm leading-6 text-slate-600">Ask about this process. Answers come only from its record: its steps, assessment, requirements, board items and sources. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.</p>
+        {about}
+        <p className="text-sm leading-6 text-slate-600">{subject.intro}</p>
         <ErrorNote message={loadError} />
         {!record && !loadError && <div className="mt-6"><Spinner /></div>}
         <div className="mt-5 flex-1 space-y-6" aria-live="polite">
           {record && !turns.length && (
             <div role="group" className="flex flex-wrap gap-2" aria-label="Questions to start with">
-              {SUGGESTED.map(s => <button key={s} type="button" onClick={() => ask(s)} className="rounded-full bg-slate-100 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-200">{s}</button>)}
+              {subject.suggested.map(s => <button key={s} type="button" onClick={() => ask(s)} className="rounded-full bg-slate-100 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-200">{s}</button>)}
             </div>
           )}
-          {turns.map((t, n) => (
-            <section key={n} aria-label={`Question ${n + 1}`} data-testid="ask-turn">
-              <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
-              {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
-              {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
-              {t.answer && <AnswerView answer={t.answer} onOpen={onOpen} />}
-            </section>
-          ))}
+          {turns.map((t, n) => {
+            // Two questions to ask next, by rule from what the last answer cited, never one already asked.
+            // After a recorded answer (the demo), the other suggested questions, which are recorded too.
+            const asked = turns.map(x => x.question.toLowerCase());
+            const next = !t.answer || n !== turns.length - 1 || busy ? []
+              : t.recorded ? subject.suggested.filter(s => !asked.includes(s.toLowerCase())).slice(0, 2)
+              : followUps(t.answer, turns.map(x => x.question), stages, 2, subject.kind);
+            return (
+              <section key={n} aria-label={`Question ${n + 1}`} data-testid="ask-turn">
+                <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B] px-3.5 py-2 text-sm text-white">{t.question}</p>
+                {!t.answer && !t.error && <p className="mt-3 text-sm text-slate-500">Reading the record…</p>}
+                {t.error && <p role="alert" className="mt-3 text-sm text-red-700">{t.error}</p>}
+                {t.answer && t.recorded && <p className="mt-3 text-xs font-medium text-slate-500" data-testid="ask-recorded">{RECORDED_LABEL}</p>}
+                {t.answer && <AnswerView answer={t.answer} assessment={record ? subject.assessment(record) : null} stages={stages} onOpen={onOpen} />}
+                {next.length > 0 && (
+                  <div role="group" aria-label="Ask next" className="mt-4 flex flex-wrap gap-2">
+                    {next.map(q => <button key={q} type="button" onClick={() => ask(q)} className="rounded-full border border-slate-300 px-3 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50">{q}</button>)}
+                  </div>
+                )}
+              </section>
+            );
+          })}
           <div ref={end} />
         </div>
         <form className="sticky bottom-0 mt-6 border-t border-slate-100 bg-white pt-4" onSubmit={e => { e.preventDefault(); ask(question); }}>
           <label htmlFor="ask-question" className="sr-only">Your question</label>
-          <textarea id="ask-question" rows={2} value={question} maxLength={500} disabled={!record} placeholder="Ask about the steps, the assessment, requirements or sources…"
+          <textarea id="ask-question" rows={2} value={question} maxLength={500} disabled={!record} placeholder={subject.placeholder}
             onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(question); } }}
             className="block w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20" />
           <ErrorNote message={error} />
@@ -107,32 +115,84 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   );
 }
 
-function AnswerView({ answer, onOpen }: { answer: Answer; onOpen: (t: Target) => void }) {
-  // One number per fact cited, in the order they first appear.
-  const cited = [...new Map(answer.sentences.map(s => [s.fact.id, s.fact])).values()];
+/**
+ * One answer: the sentences with their numbers, what the record does not hold, one action that opens where
+ * most of the facts live, and the sources as compact chips that show their quote when opened. The layout
+ * is decided by rule (domain/assistant/present.ts); nothing here is written by the AI.
+ */
+function AnswerView({ answer, assessment, stages, onOpen }: { answer: Answer; assessment?: ProcessAssessment | null; stages: StageId[]; onOpen: (t: Target) => void }) {
+  const cited = citedFacts(answer);
   const num = (id: string) => cited.findIndex(f => f.id === id) + 1;
+  const [shown, setShown] = React.useState<string | null>(null);
   if (!answer.sentences.length) {
     return <p className="mt-3 rounded-lg bg-amber-50 px-3.5 py-2.5 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200">{answer.missing || 'The record of this process does not answer that.'}</p>;
   }
+  const action = answerAction(answer, stages);
+  const open = cited.find(f => f.id === shown) ?? null;
+  const tiles = figureTiles(answer, assessment);
+  const cite = (x: Answer['sentences'][number]) => (
+    <sup className="ml-0.5"><a href={`#cite-${x.fact.id}`} onClick={() => setShown(x.fact.id)} className="font-semibold text-[#002C4B] no-underline hover:underline" aria-label={`Source ${num(x.fact.id)}: ${x.fact.label}`}>{num(x.fact.id)}</a></sup>
+  );
   return (
     <div className="mt-3" data-testid="ask-answer">
-      <p className="text-sm leading-7 text-slate-800">
-        {answer.sentences.map((s, i) => (
-          <React.Fragment key={i}>{i > 0 && ' '}{s.text}<sup className="ml-0.5"><a href={`#cite-${s.fact.id}`} className="font-semibold text-[#002C4B] no-underline hover:underline" aria-label={`Source ${num(s.fact.id)}: ${s.fact.label}`}>[{num(s.fact.id)}]</a></sup></React.Fragment>
-        ))}
-      </p>
+      {answer.lead ? (
+        <>
+          {/* The direct answer first; the figures beside it are worked out by rule, never by the AI. */}
+          <p className="border-l-[3px] border-[#E69F00] pl-3 text-[15px] font-semibold leading-7 text-slate-900" data-testid="ask-lead">{answer.lead.text}{cite(answer.lead)}</p>
+          {tiles.length > 0 && (
+            <dl className="mt-3 grid gap-2" style={{ gridTemplateColumns: `repeat(${tiles.length}, minmax(0, 1fr))` }}>
+              {tiles.map(t => (
+                <div key={t.label} className="rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
+                  <dt className="text-xs text-slate-500">{t.label}</dt>
+                  <dd className="font-display text-lg font-semibold text-[#002C4B]">{t.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          {answerGroups(answer).map((g, gi) => (
+            <div key={gi} className="mt-3">
+              {g.heading && <p className="text-xs font-semibold text-slate-500">{g.heading}</p>}
+              <ul className="mt-1 space-y-1">
+                {g.sentences.map((x, i) => <li key={i} className="flex gap-2 text-sm leading-6 text-slate-800"><span aria-hidden="true" className="mt-2.5 h-1 w-1 shrink-0 rounded-full bg-slate-400" /><span>{x.text}{cite(x)}</span></li>)}
+              </ul>
+            </div>
+          ))}
+        </>
+      ) : (
+        <p className="text-sm leading-7 text-slate-800">
+          {answer.sentences.map((x, i) => <React.Fragment key={i}>{i > 0 && ' '}{x.text}{cite(x)}</React.Fragment>)}
+        </p>
+      )}
       {answer.missing && <p className="mt-2 text-sm text-amber-900"><span className="font-semibold">Not in the record:</span> {answer.missing}</p>}
-      <ol className="mt-3 space-y-2 border-l-2 border-slate-200 pl-3 text-xs" aria-label="Where this comes from">
-        {cited.map((f, i) => (
-          <li key={f.id} id={`cite-${f.id}`} data-testid="ask-citation">
-            <span className="font-semibold text-slate-700">[{i + 1}]</span>{' '}
-            {f.target.kind === 'source'
-              ? <span className="text-slate-700">{f.label}<span className="mt-1 block"><SourceList sources={[f.target.ref]} sourceTitle={() => f.label} /></span></span>
-              : <button type="button" onClick={() => onOpen(f.target)} className={cx('text-left font-medium text-[#002C4B] hover:underline')}>{f.label}</button>}
-            <span className="mt-0.5 block text-slate-500">“{answer.sentences.find(s => s.fact.id === f.id)!.quote}”</span>
-          </li>
-        ))}
-      </ol>
+      {action && (
+        <Button variant="secondary" className="mt-3" onClick={() => onOpen(action.target)}>
+          {action.label}<svg viewBox="0 0 16 16" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 8h10M9 4l4 4-4 4" /></svg>
+        </Button>
+      )}
+      <div className="mt-3 border-t border-slate-100 pt-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs text-slate-500" id={`sources-${cited[0]!.id}`}>Sources</span>
+          <ul className="contents" aria-labelledby={`sources-${cited[0]!.id}`}>
+            {cited.map((f, i) => (
+              <li key={f.id} id={`cite-${f.id}`} data-testid="ask-citation">
+                <button type="button" aria-expanded={shown === f.id} onClick={() => setShown(shown === f.id ? null : f.id)}
+                  className={cx('max-w-[16rem] truncate rounded-md px-2 py-1 text-left text-xs', shown === f.id ? 'bg-[#002C4B] text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200')}>
+                  <span className="font-semibold">{i + 1}</span> · {f.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+        {open && (
+          <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2.5 text-xs leading-5 text-slate-600 ring-1 ring-inset ring-slate-200" data-testid="ask-quote">
+            <p className="font-semibold text-slate-700">{num(open.id)} · {open.label}</p>
+            {open.target.kind === 'source'
+              ? <div className="mt-1"><SourceList sources={[open.target.ref]} sourceTitle={() => open.label} /></div>
+              : <p className="mt-1">“{answer.sentences.find(s => s.fact.id === open.id)!.quote}”</p>}
+            {open.target.kind !== 'source' && <button type="button" onClick={() => onOpen(open.target)} className="mt-1.5 font-medium text-[#002C4B] hover:underline">Open where this is</button>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -64,7 +64,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
       const model = rev ? await store.getModel(rev.id) : null;
       if (!model) return null;
       const decisions = await store.getAssessmentDecisions(p.id).catch(() => null);
-      return { id: p.id, name: p.name, assessment: assessProcess(model, { settings: rec.settings }), rate: decisions?.rate ?? null, costs: decisions?.costs ?? null };
+      return { id: p.id, name: p.name, assessment: assessProcess(model, { settings: rec.settings, decisions }), rate: decisions?.rate ?? null, costs: decisions?.costs ?? null };
     }));
     }).then(items => { if (live) setData(buildPortfolio(items.filter((i): i is NonNullable<typeof i> => i !== null))); }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };

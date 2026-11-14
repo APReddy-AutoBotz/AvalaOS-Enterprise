@@ -3,12 +3,11 @@
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
-import { AskPanel } from '../process/AskPanel.tsx';
 import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { AskAvalaButton, Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
+import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag } from '../ui.tsx';
 import { HistoryDrawer } from './HistoryDrawer.tsx';
 import { useModelEditor } from '../process/useModelEditor.ts';
 import { ProcessEditor } from '../process/ProcessEditor.tsx';
@@ -41,7 +40,6 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
-  const [asking, setAsking] = React.useState(false);
   const [me, setMe] = React.useState('');
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.email ?? '')).catch(() => {}); }, [store]);
 
@@ -117,7 +115,6 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           {canApprove && working && (
             <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
           )}
-          {model && hasSteps && shownStages.length > 0 && <AskAvalaButton onClick={() => setAsking(true)} aria-haspopup="dialog" />}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
       </div>
@@ -178,12 +175,6 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         </SourceContext.Provider>}
       </section>
 
-      {asking && model && <AskPanel store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} onClose={() => setAsking(false)}
-        onOpen={t => {
-          setAsking(false);
-          if (t.kind === 'item') nav.go({ page: 'board', projectId: t.projectId, itemId: t.itemId });
-          else nav.go({ page: 'process', processId: process.id, stage: t.kind === 'assessment' ? 'assessment' : t.kind === 'requirement' && shownStages.includes('documents') ? 'documents' : 'process' });
-        }} />}
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
     </div>
   );

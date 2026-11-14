@@ -2,6 +2,8 @@
 # Runs on main, and on claude/ branches when the commit message contains [deploy] (to try a change
 # against the live project before merging). Needs the SUPABASE_ACCESS_TOKEN repository secret;
 # without it the job says so and does nothing. The project ref is public (it is in the API URL).
+# Run by hand ("Run workflow"), it can deploy one function only, so a change to one function goes live
+# without the others.
 name: Deploy edge functions
 
 on:
@@ -14,6 +16,12 @@ on:
       - 'supabase/config.toml'
       - '.github/workflows/deploy-functions.yml'
   workflow_dispatch:
+    inputs:
+      function:
+        description: Which function to deploy
+        type: choice
+        options: [all, journey-ai, journey-extract, journey-invite, journey-notify]
+        default: all
 
 concurrency:
   group: deploy-functions
@@ -41,6 +49,10 @@ jobs:
             echo "::warning::SUPABASE_ACCESS_TOKEN is not set, so nothing was deployed."
             exit 0
           fi
-          for fn in journey-ai journey-extract journey-invite journey-notify; do
+          only="${{ github.event.inputs.function }}"
+          fns="journey-ai journey-extract journey-invite journey-notify"
+          if [ -n "$only" ] && [ "$only" != "all" ]; then fns="$only"; fi
+          echo "Deploying: $fns (from ${GITHUB_REF_NAME} at ${GITHUB_SHA::7})"
+          for fn in $fns; do
             supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt --use-api --yes
           done

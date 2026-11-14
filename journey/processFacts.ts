@@ -19,13 +19,14 @@ export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, setti
   const revisions = await store.listRevisions(p.id);
   const status = revisionStatus(revisions);
   const current = revisions.find(r => r.state === 'working') ?? revisions.find(r => r.state === 'approved');
-  const [model, proposals] = await Promise.all([current ? store.getModel(current.id) : Promise.resolve(null), store.listProposals(p.id)]);
+  const [model, proposals, decisions] = await Promise.all([current ? store.getModel(current.id) : Promise.resolve(null), store.listProposals(p.id), store.getAssessmentDecisions(p.id).catch(() => null)]);
   return {
     id: p.id, name: p.name, analystId: p.analystId ?? null, architectId: p.architectId ?? null, approverId: p.approverId ?? null,
     status: revisions.length === 0 ? 'none' : status.tone === 'approved' ? 'approved' : status.tone === 'changed' ? 'changed' : 'draft',
     openQuestions: model ? model.openQuestions.filter(q => q.status === 'open').length : 0,
     proposalsWaiting: proposals.filter(x => x.state === 'proposed' || x.state === 'selected').length,
     statusLabel: status.label, statusTone: status.tone,
-    card: model ? processCard(assessProcess(model, { settings })) : null,
+    // The approach in effect for each step, people's choices included, as on the process's own pages.
+    card: model ? processCard(assessProcess(model, { settings, decisions })) : null,
   };
 }
