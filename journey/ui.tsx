@@ -18,6 +18,27 @@ export function Button({ variant = 'primary', className, ...props }: React.Compo
   );
 }
 
+/** The Ask Avala mark: two sparks, drawn in the current colour. */
+export function AvalaSpark({ className = 'h-4 w-4' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 20 20" className={className} aria-hidden="true" fill="currentColor">
+      <path d="M8 2.5c.4 2.9 1.6 4.9 5 5.5-3.4.6-4.6 2.6-5 5.5-.4-2.9-1.6-4.9-5-5.5 3.4-.6 4.6-2.6 5-5.5Z" />
+      <path d="M15 11.5c.2 1.6.9 2.6 2.5 3-1.6.4-2.3 1.4-2.5 3-.2-1.6-.9-2.6-2.5-3 1.6-.4 2.3-1.4 2.5-3Z" />
+    </svg>
+  );
+}
+
+/** The Ask Avala button: the brand amber with navy text (contrast above 6:1), so it stands apart from the page's actions. */
+export function AskAvalaButton(props: React.ComponentProps<'button'>) {
+  return (
+    <button type="button" {...props}
+      className="inline-flex items-center gap-2 rounded-lg bg-[#E69F00] px-3.5 py-2 text-sm font-semibold text-[#002C4B] shadow-sm transition-colors hover:bg-[#F2B233] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#002C4B]">
+      <AvalaSpark />
+      Ask Avala
+    </button>
+  );
+}
+
 export function Field({ label, hint, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { label: string; hint?: string }) {
   const id = React.useId();
   return (

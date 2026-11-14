@@ -7,7 +7,10 @@ import { test, expect } from '@playwright/test';
 test('the assistant panel opens on a process, offers questions, and says when answers need the server', async ({ page }) => {
   await page.goto('/demo/processes');
   await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
-  await page.getByRole('button', { name: 'Ask Avala' }).click();
+  const button = page.getByRole('button', { name: 'Ask Avala' });
+  // Set apart from the page's other actions: the brand amber.
+  await expect(button).toHaveCSS('background-color', 'rgb(230, 159, 0)');
+  await button.click();
   const panel = page.getByTestId('ask-panel');
   await expect(page.getByRole('heading', { name: 'Ask Avala' })).toBeVisible();
   await expect(panel).toContainText('Answers come only from its record');
