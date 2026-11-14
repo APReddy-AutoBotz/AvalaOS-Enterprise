@@ -12,13 +12,15 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { WorkItem } from '../../domain/workitems/board.ts';
 
-const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at, sort_order, labels';
+const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at, sort_order, labels, sprint_id';
 const itemFrom = (r: any): WorkItem => ({
   id: r.id, projectId: r.project_id, parentId: r.parent_id, type: r.item_type, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [],
   status: r.status, priority: r.priority, ownerId: r.owner_id, estimateHours: r.estimate_hours === null ? null : Number(r.estimate_hours), startDate: r.start_date, dueDate: r.due_date,
   processId: r.process_id, stepIds: r.step_ids ?? [], requirements: r.details?.requirements ?? [], snapshot: r.details?.snapshot ?? {}, updatedAt: r.updated_at,
-  sortOrder: Number(r.sort_order ?? 0), labels: r.labels ?? [],
+  sortOrder: Number(r.sort_order ?? 0), labels: r.labels ?? [], sprintId: r.sprint_id ?? null,
 });
+const SPRINT_COLUMNS = 'id, project_id, name, goal, starts_on, ends_on, state, started_at, closed_at';
+const sprintFrom = (r: any): Sprint => ({ id: r.id, projectId: r.project_id, name: r.name, goal: r.goal, startsOn: r.starts_on, endsOn: r.ends_on, state: r.state, startedAt: r.started_at, closedAt: r.closed_at });
 const COMMENT_COLUMNS = 'id, work_item_id, author_id, body, created_at, edited_at';
 const commentFrom = (r: any): ItemComment => ({ id: r.id, workItemId: r.work_item_id, authorId: r.author_id, body: r.body, createdAt: r.created_at, editedAt: r.edited_at });
 
@@ -27,6 +29,7 @@ const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as 
 import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
+import type { Sprint } from '../../domain/workitems/sprints.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -401,6 +404,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (e.dueDate !== undefined) row.due_date = e.dueDate;
       if (e.parentId !== undefined) row.parent_id = e.parentId;
       if (e.labels !== undefined) row.labels = e.labels;
+      if (e.sprintId !== undefined) row.sprint_id = e.sprintId;
       const { data, error } = await db.from('delivery_work_items').update(row).eq('id', id).select(ITEM_COLUMNS).single();
       if (error) fail(error);
       return itemFrom(data);
@@ -443,6 +447,43 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('delivery_work_item_comments').delete().eq('id', id).select('id');
       if (error) fail(error);
       if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+    },
+    async listSprints(projectId) {
+      const { data, error } = await db.from('delivery_sprints').select(SPRINT_COLUMNS).eq('project_id', projectId).order('created_at');
+      if (error) fail(error);
+      return (data ?? []).map(sprintFrom);
+    },
+    async createSprint(projectId, v) {
+      const { data: project, error: e1 } = await db.from('delivery_projects').select('workspace_id').eq('id', projectId).single();
+      if (e1) fail(e1);
+      const { data, error } = await db.from('delivery_sprints').insert({ workspace_id: project.workspace_id, project_id: projectId, name: v.name, goal: v.goal, starts_on: v.startsOn, ends_on: v.endsOn }).select(SPRINT_COLUMNS).single();
+      if (error) fail(error);
+      return sprintFrom(data);
+    },
+    async updateSprint(id, v) {
+      const row: Record<string, unknown> = {};
+      if (v.name !== undefined) row.name = v.name;
+      if (v.goal !== undefined) row.goal = v.goal;
+      if (v.startsOn !== undefined) row.starts_on = v.startsOn;
+      if (v.endsOn !== undefined) row.ends_on = v.endsOn;
+      if (v.state !== undefined) row.state = v.state;
+      const { data, error } = await db.from('delivery_sprints').update(row).eq('id', id).select(SPRINT_COLUMNS);
+      if (error) {
+        if ((error as { code?: string }).code === '23505') throw new StoreError(409, 'Another sprint is already running on this board. Complete it first.');
+        fail(error);
+      }
+      if (!data?.length) throw new StoreError(403, 'Changing a sprint needs the editor or admin role.');
+      return sprintFrom(data[0]);
+    },
+    async closeSprint(id, moveTo) {
+      const { data, error } = await db.rpc('close_sprint', { target_sprint: id, move_to: moveTo });
+      if (error) fail(error);
+      return Number(data ?? 0);
+    },
+    async deleteSprint(id) {
+      const { data, error } = await db.from('delivery_sprints').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Deleting a sprint needs the editor or admin role.');
     },
     async listItemHistory(workItemId) {
       const { data, error } = await db.from('delivery_work_item_events').select('id, work_item_id, actor_id, kind, field, old_value, new_value, created_at').eq('work_item_id', workItemId).order('id', { ascending: false }).limit(200);

@@ -72,7 +72,7 @@ export function historyOrder(events: ItemEvent[]): ItemEvent[] {
  * The rows the database's history trigger writes when an item changes (app_private.log_work_item_change),
  * for the in-browser store. Keep the two in step: same fields, long text without its values.
  */
-export function changedFields(before: WorkItem & { sprintId?: string | null }, after: WorkItem & { sprintId?: string | null }): { field: EventField; oldValue: string | null; newValue: string | null }[] {
+export function changedFields(before: WorkItem, after: WorkItem): { field: EventField; oldValue: string | null; newValue: string | null }[] {
   const s = (v: unknown) => (v === null || v === undefined ? null : String(v));
   const rows: [EventField, string | null, string | null, boolean][] = [
     ['title', before.title, after.title, true],

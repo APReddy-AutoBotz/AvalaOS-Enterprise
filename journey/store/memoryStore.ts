@@ -17,6 +17,7 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem } from '../../domain/workitems/board.ts';
 import { changedFields, type ItemComment, type ItemEvent } from '../../domain/workitems/collab.ts';
+import type { Sprint } from '../../domain/workitems/sprints.ts';
 import { providerLabel } from '../../domain/auth/providers.ts';
 import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
 
@@ -42,6 +43,7 @@ interface State {
   needsEmail?: boolean;
   comments?: ItemComment[];
   itemEvents?: ItemEvent[];
+  sprints?: Sprint[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -100,6 +102,14 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
   let eventSeq = Math.max(0, ...(state.itemEvents ?? []).map(x => Number(x.id)));
   const pushEvent = (e: Omit<ItemEvent, 'id' | 'createdAt' | 'actorId'>) => (state.itemEvents ??= []).push({ ...e, id: String(++eventSeq), actorId: state.me?.id ?? null, createdAt: now() });
   const logCreated = (workItemId: string) => pushEvent({ workItemId, kind: 'created', field: null, oldValue: null, newValue: null });
+  const sprintEditable = (id: string) => {
+    const sprint = (state.sprints ?? []).find(x => x.id === id);
+    const project = sprint && (state.projects ?? []).find(p => p.id === sprint.projectId);
+    const w = project && state.workspaces.find(x => x.id === project.workspaceId);
+    if (!sprint || !w) throw new StoreError(404, 'Sprint not found.');
+    if (w.role === 'viewer') throw new StoreError(403, 'Changing a sprint needs the editor or admin role.');
+    return sprint;
+  };
   const logChange = (before: WorkItem, after: WorkItem) => { for (const c of changedFields(before, after)) pushEvent({ workItemId: after.id, kind: 'changed', ...c }); };
   const peopleOf = (workspaceId: string) => {
     const me = requireMe();
@@ -486,6 +496,52 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (!c) throw new StoreError(404, 'Comment not found.');
       if (c.authorId !== me.id && itemWorkspace(c.workItemId).role !== 'admin') throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
       state.comments = (state.comments ?? []).filter(x => x.id !== id);
+      save();
+    },
+    async listSprints(projectId) {
+      requireMe();
+      return structuredClone((state.sprints ?? []).filter(x => x.projectId === projectId));
+    },
+    async createSprint(projectId, v) {
+      requireMe();
+      const project = (state.projects ?? []).find(p => p.id === projectId);
+      const w = project && state.workspaces.find(x => x.id === project.workspaceId);
+      if (!w) throw new StoreError(404, 'Project not found.');
+      if (w.role === 'viewer') throw new StoreError(403, 'Planning a sprint needs the editor or admin role.');
+      const sprint: Sprint = { id: uuid(), projectId, name: v.name, goal: v.goal, startsOn: v.startsOn, endsOn: v.endsOn, state: 'planned', startedAt: null, closedAt: null };
+      (state.sprints ??= []).push(sprint);
+      save();
+      return structuredClone(sprint);
+    },
+    async updateSprint(id, v) {
+      requireMe();
+      const sprint = sprintEditable(id);
+      if (v.state === 'active' && sprint.state !== 'active') {
+        if (sprint.state === 'closed') throw new StoreError(400, 'A completed sprint cannot be reopened');
+        if ((state.sprints ?? []).some(x => x.projectId === sprint.projectId && x.state === 'active')) throw new StoreError(409, 'Another sprint is already running on this board. Complete it first.');
+        sprint.state = 'active'; sprint.startedAt = now();
+      }
+      const { state: _s, ...rest } = v;
+      Object.assign(sprint, Object.fromEntries(Object.entries(rest).filter(([, x]) => x !== undefined)));
+      save();
+      return structuredClone(sprint);
+    },
+    async closeSprint(id, moveTo) {
+      requireMe();
+      const sprint = sprintEditable(id);
+      if (sprint.state !== 'active') throw new StoreError(400, 'Only the active sprint can be completed');
+      if (moveTo && !(state.sprints ?? []).some(x => x.id === moveTo && x.projectId === sprint.projectId && x.state === 'planned')) throw new StoreError(400, 'Open work can move to a planned sprint of this project, or to the backlog');
+      let moved = 0;
+      for (const i of state.workItems ?? []) if (i.sprintId === id && i.status !== 'done') { const before = structuredClone(i); i.sprintId = moveTo; logChange(before, i); moved++; }
+      sprint.state = 'closed'; sprint.closedAt = now();
+      save();
+      return moved;
+    },
+    async deleteSprint(id) {
+      requireMe();
+      sprintEditable(id);
+      for (const i of state.workItems ?? []) if (i.sprintId === id) { const before = structuredClone(i); i.sprintId = null; logChange(before, i); }
+      state.sprints = (state.sprints ?? []).filter(x => x.id !== id);
       save();
     },
     async listItemHistory(workItemId) {

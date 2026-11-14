@@ -664,6 +664,6 @@ The platform is sold as one product a customer can start small with, not as sepa
 For small companies that find per-seat tracker prices too high: the same board, usable without a process.
 
 1. **Manage items (done):** add an epic, story, task, bug or sub-task by hand; put an item under another, as in Jira (epics on top, a sub-task always under a story, task or bug); delete an item, its direct children staying without a parent; priority on cards. Viewers read; editors and admins change.
-2. **Work together (in progress):** comments and an item history (done); labels (done); sprints (database done, screens next); import from a Jira CSV; "assigned to you" emails.
+2. **Work together (in progress):** comments and an item history (done); labels (done); sprints (done); import from a Jira CSV; "assigned to you" emails.
 3. **Later:** attachments, the team's own status columns, simple reports (burndown, cycle time).
 
