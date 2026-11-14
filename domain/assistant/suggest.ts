@@ -11,7 +11,9 @@
 //   - work-item: a requirement the work-item proposals do not plan yet, with why (`planWork`, `coverage`).
 //   - application: facts the workspace's applications list holds about an application this process
 //     uses and the process does not (`applicationOffer`).
-// Drafts of document sections come next, in the same shape.
+//   - draft: one of the company's own document sections (Settings → Document sections) that has no text
+//     and no edit on this process; nothing in the process fills it, so it opens in Documents, where
+//     "Draft with AI" drafts it from the process's facts and the person reads and changes it before saving.
 import type { ProcessModel } from '../processModel/types.ts';
 import type { Segment } from '../ai/gateway.ts';
 import type { StageId } from '../workspace/route.ts';
@@ -21,6 +23,8 @@ import { saysNotKnown } from '../questions/interview.ts';
 import type { TriageItem } from '../questions/triage.ts';
 import type { NotPlanned } from '../workitems/derive.ts';
 import { applicationOffer, matchApplication, type Application } from '../workspace/applications.ts';
+import type { DocLayout } from '../docs/branding.ts';
+import type { DocType } from '../docs/tree.ts';
 import { relevantPassages, type Passage } from './ask.ts';
 
 export const SUGGEST_LIMITS = { perQuestion: 4, passages: 40, passageChars: 1200 } as const;
@@ -29,12 +33,14 @@ export type SuggestionTarget =
   /** Opens the interview on that question with the answer filled in, to Save or change. */
   | { kind: 'answer'; itemKey: string; proposal: Proposal; source: string }
   /** Opens the stage where that change is made. */
-  | { kind: 'stage'; stage: StageId };
+  | { kind: 'stage'; stage: StageId }
+  /** Opens that section of that document in Documents, in its editor. */
+  | { kind: 'section'; docType: DocType; sectionId: string };
 
 export interface Suggestion {
   /** Stable while the suggestion holds, so a dismissal is remembered. */
   key: string;
-  kind: 'answer' | 'work-item' | 'application';
+  kind: 'answer' | 'work-item' | 'application' | 'draft';
   title: string;
   why: string;
   /** The words it rests on, and where they are, for an answer from a source. */
@@ -111,9 +117,30 @@ export function applicationSuggestions(model: ProcessModel, apps: Application[])
   return out;
 }
 
+const DOC_NAME: Record<string, string> = { brd: 'BRD', pdd: 'PDD', frd: 'FRD', sdd: 'SDD' };
+
+/** The company's own sections with no text that this process has not written yet. */
+export function draftSuggestions(layouts: Partial<Record<DocType, DocLayout>>, edits: { docType: DocType; sectionKey: string }[]): Suggestion[] {
+  const out: Suggestion[] = [];
+  for (const [docType, layout] of Object.entries(layouts) as [DocType, DocLayout | undefined][]) {
+    if (!DOC_NAME[docType]) continue;
+    for (const c of layout?.custom ?? []) {
+      const sectionId = `c-${c.id}`;
+      if (c.text.trim() || edits.some(e => e.docType === docType && e.sectionKey === sectionId)) continue;
+      out.push({
+        key: `draft:${docType}:${sectionId}`, kind: 'draft', title: `"${c.title}" in the ${DOC_NAME[docType]} has no text yet`,
+        why: 'It is one of your company\'s own sections, so nothing in the process fills it.',
+        willDo: 'Open it in Documents, where "Draft with AI" writes it from the process; you read and change it before saving.',
+        needs: 'edit_process', target: { kind: 'section', docType, sectionId },
+      });
+    }
+  }
+  return out;
+}
+
 /** Only what this person may do, not dismissed, in the plan's order. */
 export function suggestionsFor(all: Suggestion[], member: MemberFacts, dismissed: readonly string[] = []): Suggestion[] {
-  const order = { answer: 0, 'work-item': 1, application: 2 } as const;
+  const order = { answer: 0, 'work-item': 1, application: 2, draft: 3 } as const;
   return all.filter(s => can(member, s.needs) && !dismissed.includes(s.key)).sort((a, b) => order[a.kind] - order[b.kind]);
 }
 

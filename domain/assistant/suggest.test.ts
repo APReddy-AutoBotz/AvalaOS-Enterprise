@@ -11,7 +11,7 @@ import { interviewEdit, interviewQueue } from '../questions/interview.ts';
 import type { NoteFinding } from '../questions/notes.ts';
 import type { Application } from '../workspace/applications.ts';
 import type { Passage } from './ask.ts';
-import { answerSuggestions, applicationSuggestions, passagesFor, sourceSegments, suggestionsFor, workItemSuggestions } from './suggest.ts';
+import { answerSuggestions, applicationSuggestions, draftSuggestions, passagesFor, sourceSegments, suggestionsFor, workItemSuggestions } from './suggest.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const setup = () => { const m = gold(); return { m, items: interviewQueue(triage(m, assessProcess(m))) }; };
@@ -71,4 +71,12 @@ test('only what the person\'s role may do, nothing dismissed, answers first', ()
   assert.equal(suggestionsFor(ws, admin).length, 1);
   assert.equal(suggestionsFor(ws, viewer).length, 0, 'a viewer is offered no change');
   assert.equal(suggestionsFor(ws, admin, ['work-item:FR-1']).length, 0, 'dismissed');
+});
+
+test('a company section with no text, not yet written on this process, is suggested for drafting in Documents', () => {
+  const layouts = { pdd: { sections: {}, custom: [{ id: 'risks', after: '3', title: 'Risks', text: '' }, { id: 'scope', after: 'start', title: 'Scope note', text: 'Fixed company text.' }] } };
+  const [d] = draftSuggestions(layouts, []);
+  assert.deepEqual([d.title, d.target, d.needs], ['"Risks" in the PDD has no text yet', { kind: 'section', docType: 'pdd', sectionId: 'c-risks' }, 'edit_process']);
+  assert.equal(draftSuggestions(layouts, [{ docType: 'pdd', sectionKey: 'c-risks' }]).length, 0, 'already written on this process');
+  assert.equal(draftSuggestions({}, []).length, 0);
 });
