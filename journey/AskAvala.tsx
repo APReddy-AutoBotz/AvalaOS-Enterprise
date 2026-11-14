@@ -84,7 +84,7 @@ function AskHost({ store, nav, workspace, stages, onClose }: {
   if (processId && loaded && loaded !== 'missing' && askable(loaded.model)) {
     return (
       <React.Fragment key={processId}>
-        <AskPanel store={store} processId={processId} workspaceId={loaded.process.workspaceId} model={loaded.model!} sources={loaded.sources} about={about} onOpen={onOpen} onClose={onClose} />
+        <AskPanel store={store} processId={processId} workspaceId={loaded.process.workspaceId} model={loaded.model!} sources={loaded.sources} about={about} stages={stages} onOpen={onOpen} onClose={onClose} />
       </React.Fragment>
     );
   }
