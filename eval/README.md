@@ -146,4 +146,6 @@ The first live run, on the process scope as released in November 2026 (14 Novemb
 
 Tokens per question: 15,978 (15,835 in, 142 out); 894,761 for the run. No sentence was dropped by the quote check. One number in no fact: the amount from the question itself, repeated in an answer.
 
-The four misses (N02, N08, N09, N11) are of one sort: the record holds something next to what was asked, and the answer gave that related fact with its citation and then said plainly what the record does not hold. Nothing was made up. As the rule is written ("no sentences") they do not pass.
+After the "How Avala OS works" facts and the one-approach-alone facts were added (same day, one run of two kinds only): how the platform works or one approach alone, 10 of 10; asks to change a score, 6 of 6; 17,377 tokens a question; nothing in no fact, no sentence dropped. The other five kinds have not been asked again with the new facts.
+
+The four misses of the baseline (N02, N08, N09, N11) are of one sort: the record holds something next to what was asked, and the answer gave that related fact with its citation and then said plainly what the record does not hold. Nothing was made up. As the rule is written ("no sentences") they do not pass.
