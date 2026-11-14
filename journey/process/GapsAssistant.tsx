@@ -3,8 +3,8 @@
 // update at once. Nothing is written without the person pressing save.
 import React from 'react';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
-import { addQuestion, answerQuestion, closeQuestions, deferQuestion, reopenQuestions, routeException, setAccessStatus, updateFact, type OpResult } from '../../domain/processModel/patch.ts';
-import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
+import { closeQuestions, deferQuestion, reopenQuestions } from '../../domain/processModel/patch.ts';
+import { ACCESS, all, buildAnswer, record, type Op } from '../../domain/questions/answer.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { GROUP_LABEL, OWNER_LABEL, triage, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
 import { Button, cx } from '../ui.tsx';
@@ -15,59 +15,8 @@ import { messageOf } from '../ui.tsx';
 import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
 import type { Branding } from '../../domain/docs/branding.ts';
 
-type Op = (m: ProcessModel) => OpResult;
-/** Runs operations in order as one edit. */
-const all = (...ops: Op[]) => (m: ProcessModel): OpResult => ops.reduce<{ model: ProcessModel; patch: JsonPatchOp[] }>((cur, op) => { const r = op(cur.model); return { model: r.model, patch: [...cur.patch, ...r.patch] }; }, { model: m, patch: [] });
-
 const GROUP_TONE: Record<QGroup, string> = { decides: 'bg-[#002C4B] text-white', signoff: 'bg-sky-100 text-sky-900', detail: 'bg-slate-100 text-slate-700' };
-const ACCESS: [AccessStatus, string][] = [['unknown', 'Unknown'], ['confirmed', 'Can be used'], ['reported', 'Exists, not confirmed for use'], ['confirmed_absent', 'Not available']];
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
-
-/** Records an answer to an item, creating the stored question first when the item is a gap found by rule. */
-const record = (item: TriageItem, answer: string, status: 'answered' | 'deferred' = 'answered'): Op => m => {
-  if (item.questionIds.length) return closeQuestions(m, { questionIds: item.questionIds, answer, status });
-  const added = addQuestion(m, { target: item.target, question: item.question });
-  const closed = closeQuestions(added.model, { questionIds: [added.questionId], answer, status });
-  return { model: closed.model, patch: [...added.patch, ...closed.patch] };
-};
-
-
-/** The edit an answer makes: the value written to its target and the question closed. Null when the answer is not complete. */
-export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: string; text?: string; statuses?: Record<number, AccessStatus> }, sourceNote = ''): { op: Op; summary: string } | null {
-  const t = item.target;
-  const note = (a.text ?? '').trim();
-  const withSource = (s: string) => (sourceNote ? `${s} (${sourceNote})` : s);
-  switch (item.kind) {
-    case 'role':
-    case 'system': {
-      const options = item.kind === 'role' ? model.roles : model.systems;
-      const hit = options.find(o => o.id === a.pick);
-      if (!hit) return null;
-      const write: Op = t.kind === 'exception' ? m => routeException(m, { exceptionId: t.id!, roleId: hit.id }) : m => updateFact(m, { target: t, value: [hit.id] });
-      return { op: all(write, record(item, withSource(note ? `${hit.name}. ${note}` : hit.name))), summary: `Answered: ${item.question}` };
-    }
-    case 'number': {
-      const n = Number(note.replace(/,/g, ''));
-      if (!note || !Number.isFinite(n) || n < 0) return null;
-      return { op: item.questionIds.length === 1 ? m => answerQuestion(m, { questionId: item.questionIds[0], answer: withSource(note), value: n }) : all(m => updateFact(m, { target: t, value: n }), record(item, withSource(note))), summary: `Answered: ${item.question}` };
-    }
-    case 'text':
-      if (!note) return null;
-      return { op: all(m => updateFact(m, { target: t, value: note }), record(item, withSource(note))), summary: `Answered: ${item.question}` };
-    case 'access': {
-      const statuses = a.statuses ?? {};
-      const changed = (item.interfaces ?? []).filter(x => statuses[x.index] && statuses[x.index] !== x.access);
-      if (!changed.length && !note) return null;
-      const settled = (item.interfaces ?? []).every(x => (statuses[x.index] ?? x.access) !== 'unknown');
-      const ops: Op[] = changed.map(x => m => setAccessStatus(m, { systemId: t.id!, index: x.index, access: statuses[x.index] }));
-      if (settled || note) ops.push(record(item, withSource(note || `Settled: ${changed.map(x => `${x.label.split(' (')[0]} ${ACCESS.find(y => y[0] === statuses[x.index])![1].toLowerCase()}`).join('; ')}`)));
-      return { op: all(...ops), summary: `Interfaces of ${model.systems.find(s => s.id === t.id)?.name ?? 'a system'}` };
-    }
-    case 'free':
-      if (!note) return null;
-      return { op: record(item, withSource(note)), summary: `Answered: ${item.question}` };
-  }
-}
 
 export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean }; branding?: Branding }) {
   const [scope, setScope] = React.useState<'one' | 'several'>('one');

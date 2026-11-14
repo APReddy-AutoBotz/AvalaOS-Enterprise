@@ -1,0 +1,25 @@
+{
+  "about": "Ask Avala's interview (stage 2): twenty answers in a person's own words to the sample process's open questions. Each says what must happen: the value recorded (a role or application by name, interface access, or words the recorded answer must contain), or nothing recorded (one follow-up instead). 'maybe': either a follow-up, or a record that says what is listed. Whatever happens, no answer may record a value the person did not give.",
+  "cases": [
+    { "id": "IV01", "key": "system:sys-servicenow", "answer": "Yes, ServiceNow's API is live and IT has confirmed we can use it to raise requests.", "expect": { "statuses": { "0": "confirmed" } } },
+    { "id": "IV02", "key": "system:sys-servicenow", "answer": "There is an API, but nobody has confirmed we are allowed to use it yet.", "expect": { "statuses": { "0": "reported" } } },
+    { "id": "IV03", "key": "system:sys-servicenow", "answer": "ServiceNow has no API we are allowed to use.", "expect": { "statuses": { "0": "confirmed_absent" } } },
+    { "id": "IV04", "key": "system:sys-servicenow", "answer": "I'll have to check with the ServiceNow admin.", "expect": { "none": true } },
+    { "id": "IV05", "key": "system:sys-sap", "answer": "The bot would work through the SAP GUI screens with a service account; posting has no API.", "expect": { "say": [["screen", "screens", "GUI"]] } },
+    { "id": "IV06", "key": "q-buyer-sla", "answer": "Buyers should come back to us within two working days.", "expect": { "say": [["two", "2"]] } },
+    { "id": "IV07", "key": "q-buyer-sla", "answer": "I'm not sure, you would have to ask procurement.", "expect": { "none": true } },
+    { "id": "IV08", "key": "gap:step_without_system:step:s-check:systemIds", "answer": "That check happens in SAP.", "expect": { "pick": "SAP S/4HANA" } },
+    { "id": "IV09", "key": "gap:step_without_system:step:s-check:systemIds", "answer": "The clerk checks it against the AP tracker spreadsheet.", "expect": { "pick": "AP tracker (Excel on SharePoint)" } },
+    { "id": "IV10", "key": "gap:step_without_system:step:s-check:systemIds", "answer": "Someone just looks at the invoice.", "expect": { "none": true } },
+    { "id": "IV11", "key": "gap:step_without_role:step:s-match:roleIds", "answer": "The AP Clerk does the three-way match.", "expect": { "pick": "AP Clerk" } },
+    { "id": "IV12", "key": "gap:step_without_role:step:s-match:roleIds", "answer": "SAP does that automatically, nobody touches it.", "expect": { "none": true } },
+    { "id": "IV13", "key": "gap:step_without_role:step:s-match:roleIds", "answer": "Our AP team lead does it.", "expect": { "pick": "AP Team Lead" } },
+    { "id": "IV14", "key": "gap:step_without_system:step:s-investigate:systemIds", "answer": "Buyers look into variances in SAP and then email the vendor.", "expect": { "pick": "SAP S/4HANA" } },
+    { "id": "IV15", "key": "gap:step_without_system:step:s-review:systemIds", "answer": "The team lead reviews it in SAP before it is posted.", "expect": { "pick": "SAP S/4HANA" } },
+    { "id": "IV16", "key": "q-aht-nonpo", "answer": "About twenty minutes per invoice.", "expect": { "say": [["twenty", "20"]] } },
+    { "id": "IV17", "key": "q-aht-nonpo", "answer": "Longer than a PO invoice, but we have never timed it.", "expect": { "maybe": true, "say": [["longer"]] } },
+    { "id": "IV18", "key": "q-credit-notes", "answer": "The AP clerk enters credit notes in SAP against the original invoice.", "expect": { "say": [["credit"], ["SAP"]] } },
+    { "id": "IV19", "key": "q-dept-head", "answer": "HR keeps the list of department heads in Workday.", "expect": { "say": [["Workday"]] } },
+    { "id": "IV20", "key": "q-gl-coding", "answer": "No idea, honestly.", "expect": { "none": true } }
+  ]
+}

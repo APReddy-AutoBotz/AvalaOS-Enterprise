@@ -3,7 +3,8 @@
 # "Run workflow", or on a claude/ branch when the commit message contains [ask-eval] (once),
 # [ask-eval 2] (twice, up to 5), [ask-eval only:platform,score] (only those kinds or question ids) or
 # [ask-eval check] (sign-in and workspace only, no AI is called) or [ask-eval record] (the demo's
-# recorded answers: each scope's starter questions once, printed for public/demo-data/ask-answers.json).
+# recorded answers: each scope's starter questions once, printed for public/demo-data/ask-answers.json)
+# or [ask-eval interview] (the interview's twenty answers, eval/ask/interview.json).
 #
 # The AI use is counted against one workspace, named below or with [ask-eval ws:<name>]; with its own AI provider connected, the
 # measure runs on that provider. The run signs in as a trusted server with the project's server key,
@@ -62,6 +63,7 @@ jobs:
           runs="${RUNS:-}"
           if [[ "$COMMIT_MESSAGE" == *"[ask-eval check]"* ]]; then mode="--check"; fi
           if [[ "$COMMIT_MESSAGE" == *"[ask-eval record]"* ]]; then mode="--record"; fi
+          if [[ "$COMMIT_MESSAGE" == *"[ask-eval interview]"* ]]; then mode="--interview"; fi
           # [ask-eval ws:<name>] counts the AI use against another workspace by name (letters, digits, spaces, dashes).
           if [ -z "${{ inputs.workspace }}" ] && [[ "$COMMIT_MESSAGE" =~ \[ask-eval\ ws:([A-Za-z0-9\ _-]+)\] ]]; then export ASK_EVAL_WORKSPACE_NAME="${BASH_REMATCH[1]}"; fi
           echo "AI use is counted against the workspace \"$ASK_EVAL_WORKSPACE_NAME\"." 
