@@ -54,3 +54,42 @@ test('an application is added with its ways in, shown in words, kept unique, edi
   await page.getByTestId('applications-list').getByRole('button', { name: 'Delete SAP S/4HANA' }).click();
   await expect(page.getByTestId('application-row')).toHaveCount(0);
 });
+
+test('a process adds its application to the list, and later takes the list\'s facts when a person accepts them', async ({ page }) => {
+  await page.goto('/demo/processes');
+  await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
+  await page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name: 'Process' }).click();
+  await page.getByRole('tab', { name: /^Roles and systems/ }).click();
+  const sapRow = page.getByTestId('system-row').filter({ has: page.getByLabel('Name of system SAP S/4HANA', { exact: true }) });
+
+  // Not on the list yet: add it from what the process states or a person confirmed.
+  await sapRow.getByRole('button', { name: 'Add to the applications list' }).click();
+  await expect(sapRow.getByTestId('add-to-list')).toContainText('Adds SAP S/4HANA to the workspace\'s list with: ');
+  await sapRow.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(sapRow.getByTestId('on-list')).toHaveText('On the applications list');
+
+  // The list learns something new: SAP is reached through a remote desktop.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
+  await page.getByRole('tab', { name: 'Settings' }).click();
+  const list = page.getByTestId('applications-list');
+  await list.getByRole('button', { name: 'Edit SAP S/4HANA' }).click();
+  await list.getByLabel('Reached through a remote desktop').selectOption({ label: 'Yes (Citrix or similar)' });
+  await list.getByRole('button', { name: 'Save changes' }).click();
+  await expect(list.getByTestId('application-row')).toContainText('reached through a remote desktop');
+
+  // Back on the process (the demo keeps changes only until a reload, so by the links): the fact is
+  // offered, with what it changes, and taken only on Accept.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
+  await page.getByRole('tab', { name: 'Processes' }).click();
+  await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
+  await page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name: 'Process' }).click();
+  await page.getByRole('tab', { name: /^Roles and systems/ }).click();
+  const offer = sapRow.getByTestId('list-offer');
+  await expect(offer).toHaveText('On the applications list: 1 fact to bring in');
+  await offer.click();
+  await expect(page.getByRole('heading', { name: 'From the applications list: SAP S/4HANA' })).toBeVisible();
+  await expect(page.getByRole('listitem').filter({ hasText: 'Reached through a remote desktop' })).toBeVisible();
+  await page.getByRole('button', { name: 'Accept it' }).click();
+  await expect(sapRow.getByTestId('on-list')).toHaveText('On the applications list');
+  await expect(page.getByTestId('change-impact')).toContainText('Took the applications list\'s facts for SAP S/4HANA.');
+});
