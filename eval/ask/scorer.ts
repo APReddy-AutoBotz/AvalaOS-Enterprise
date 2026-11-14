@@ -8,7 +8,7 @@ import type { Answer, Fact } from '../../domain/assistant/ask.ts';
 import { groundingIssues } from '../../domain/docs/narrative.ts';
 
 export type Kind = 'answered' | 'partial' | 'absent' | 'platform' | 'score' | 'instruction' | 'outside';
-export type Scope = 'process' | 'board';
+export type Scope = 'process' | 'board' | 'workspace';
 
 /** The plan's table: what must happen for each kind of question, and how often. */
 export const KINDS: Record<Kind, { label: string; must: string; target: number }> = {

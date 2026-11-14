@@ -17,11 +17,12 @@ import { fileURLToPath } from 'node:url';
 import { buildOpenAIRequest } from '../../domain/ai/gateway.ts';
 import { askProcess, askSegments, readAnswer, type Fact } from '../../domain/assistant/ask.ts';
 import { askBoard } from '../../domain/assistant/board.ts';
+import { askWorkspace } from '../../domain/assistant/workspace.ts';
 import { factsFor, loadQuestions, loadSample, plantedFor, type Sample } from './sample.ts';
 import { holders, judge, KINDS, KIND_ORDER, renderScorecard, scorecard, ungrounded, type Outcome, type Question, type QuestionSet } from './scorer.ts';
 
 const CONCURRENCY = 4;
-const taskOf = (scope: Question['scope']) => (scope === 'board' ? askBoard : askProcess);
+const taskOf = (scope: Question['scope']) => (scope === 'board' ? askBoard : scope === 'workspace' ? askWorkspace : askProcess);
 /**
  * About how many tokens the gateway sends for one question: the request it would build, at 3.4
  * characters a token (measured on the baseline run; ids and quoted names take more tokens than prose).

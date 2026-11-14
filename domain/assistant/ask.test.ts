@@ -157,3 +157,23 @@ test('a server without the task says so in plain words; other failures are kept'
   assert.doesNotMatch(m, /readFlowchart|Known tasks/);
   assert.equal(askFailure('The monthly AI allowance is used up.'), 'The monthly AI allowance is used up.');
 });
+
+test('a follow-up carries the last two answered turns as context, which can never be cited', async () => {
+  const { askSegments, earlierSegments, readAnswer, askProcess } = await import('./ask.ts');
+  const fact = { id: 'f:x', text: 'The AP Team Lead reviews.', label: 'Step', target: { kind: 'process' as const } };
+  const answer = (t: string) => ({ lead: null, missing: '', sentences: [{ text: t, quote: 'q', fact, group: '' }] });
+  const earlier = [
+    { question: 'one?', answer: answer('First.') }, { question: 'failed?', answer: null },
+    { question: 'two?', answer: answer('Second.') }, { question: 'three?', answer: { ...answer('Third.'), missing: 'No date.' } },
+  ];
+  const ctx = earlierSegments(earlier);
+  assert.deepEqual(ctx.map(c => c.id), ['context:1', 'context:2']);
+  assert.equal(ctx[1].text, 'Earlier question: three?\nEarlier answer: Third. No date.');
+  const segs = askSegments('And who owns it?', [fact], earlier);
+  assert.deepEqual(segs.map(s => s.id), ['question', 'context:1', 'context:2', 'f:x']);
+  // A sentence citing the context is dropped: only facts are answered from.
+  const read = readAnswer({ sentences: [{ text: 'From before.', segmentId: 'context:1', excerpt: 'Second', role: 'answer', group: '' }], missing: '' }, [fact]);
+  assert.equal(read.sentences.length, 0);
+  assert.match(askProcess.instructions, /"context:"[^\n]*Never cite or quote them/);
+  assert.match(askProcess.instructions, /without repeating the value asked for/);
+});

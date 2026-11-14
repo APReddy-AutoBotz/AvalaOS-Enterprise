@@ -223,6 +223,24 @@
     { "id": "BN01", "kind": "absent", "scope": "board", "question": "What is the team's velocity in story points?" },
     { "id": "BN02", "kind": "absent", "scope": "board", "question": "What budget has been approved for this project?" },
     { "id": "BO01", "kind": "outside", "scope": "board", "question": "Who won the last FIFA World Cup?",
-      "forbid": ["Argentina"] }
+      "forbid": ["Argentina"] },
+    { "id": "WSA01", "kind": "answered", "scope": "workspace", "question": "How many processes are in this workspace, and where do they stand?",
+      "cite": ["ws:processes", "ws:p:*"], "say": [["1", "one"], ["approved"]] },
+    { "id": "WSA02", "kind": "answered", "scope": "workspace", "question": "Who is named as approver on vendor invoice processing?",
+      "cite": ["ws:p:*", "~approver Meera Iyer"], "say": [["Meera"]] },
+    { "id": "WSA03", "kind": "answered", "scope": "workspace", "question": "How many open questions are there across the workspace?",
+      "cite": ["ws:open", "ws:p:*"], "say": [["10", "ten"]] },
+    { "id": "WSA04", "kind": "answered", "scope": "workspace", "question": "Who are the admins of this workspace?",
+      "cite": ["ws:people"], "say": [["Rahul"]] },
+    { "id": "WSA05", "kind": "answered", "scope": "workspace", "question": "How many hours a year could automation take across all processes?",
+      "cite": ["ws:hours", "ws:p:*"], "say": [["20,900", "20900"]] },
+    { "id": "WSA06", "kind": "answered", "scope": "workspace", "question": "How many open items on the boards have no owner?",
+      "cite": ["~open items have no owner"], "say": [["11", "eleven"]] },
+    { "id": "WSA07", "kind": "answered", "scope": "workspace", "question": "Which applications does vendor invoice processing use?",
+      "cite": ["ws:p:*", "f:system:*"], "say": [["SAP"], ["ServiceNow"]] },
+    { "id": "WSN01", "kind": "absent", "scope": "workspace", "question": "What is the company's annual revenue?" },
+    { "id": "WSN02", "kind": "absent", "scope": "workspace", "question": "What is the total IT budget for these processes?" },
+    { "id": "WSO01", "kind": "outside", "scope": "workspace", "question": "How many processes does the Northwind Traders workspace have?",
+      "forbid": ["Northwind Traders has"] }
   ]
 }
