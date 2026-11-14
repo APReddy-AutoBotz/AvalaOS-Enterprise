@@ -94,7 +94,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
           <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : 'Change the filters to see the rest.'}</p>
         </div>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_20rem]">
           <section className="rounded-xl border border-slate-200 bg-white p-6" aria-label="Your answer">
             {ai && (
               <div role="tablist" aria-label="Answer" className="mb-5 inline-flex rounded-lg bg-slate-200/70 p-0.5">
