@@ -7,7 +7,7 @@ import type { TrustPageId } from './pages.ts';
 
 export const OPERATOR = 'AP Reddy';
 export const CONTACT_EMAIL = 'mailtoapreddy@gmail.com';
-export const UPDATED = '13 November 2026';
+export const UPDATED = '14 November 2026';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
 /** Further days until the rolling database backups that still hold the data have expired. */
@@ -96,6 +96,7 @@ const privacy: TrustPage = {
             'Supabase: the database, sign-in, sign-in emails and the server functions. The database is hosted in Sydney, Australia.',
             'OpenAI: the AI requests described above.',
             'Netlify: hosting of the website.',
+            'Sentry: reports of errors in the website, so we can fix them. A report says what failed and on which page. It does not include what you typed or your account, and before it leaves your browser we remove email addresses and the tokens in links. It is used only to fix the product.',
             'Google and Microsoft: only when you choose to sign in with them, to confirm who you are.',
           ],
         },

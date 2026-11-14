@@ -5,6 +5,8 @@ import './index.css';
 import ReactDOM from 'react-dom/client';
 import { parseJourneyPath } from './domain/workspace/route';
 import { publicPage } from './domain/site/pages';
+import { startMonitoring } from './journey/monitoring';
+import { ErrorBoundary } from './journey/ErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -33,10 +35,15 @@ const Root = React.lazy(async (): Promise<{ default: React.ComponentType }> => {
   return import('./journey/JourneyApp');
 });
 
+// Errors are reported only when the build has VITE_SENTRY_DSN (journey/monitoring.ts).
+startMonitoring();
+
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <React.Suspense fallback={null}>
-      <Root />
-    </React.Suspense>
+    <ErrorBoundary>
+      <React.Suspense fallback={null}>
+        <Root />
+      </React.Suspense>
+    </ErrorBoundary>
   </React.StrictMode>
 );

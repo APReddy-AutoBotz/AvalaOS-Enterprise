@@ -11,6 +11,8 @@ interface ImportMetaEnv {
     readonly VITE_SUPABASE_ANON_KEY?: string
     readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string
     readonly VITE_JOURNEY_STORE?: string
+    /** Sentry's address for this project; without it no error is reported (journey/monitoring.ts). */
+    readonly VITE_SENTRY_DSN?: string
     readonly VITE_PR_C_CONTROLLED_HUMAN_ENABLED?: string
     readonly VITE_PR_C_CONTROLLED_HUMAN_RELEASE_SHA?: string
     readonly VITE_PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA?: string
