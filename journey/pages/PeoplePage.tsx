@@ -70,7 +70,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
             const role = roleOf({ access: m.role, canApprove: m.canApprove, job: m.job });
             return (
               <li key={m.userId} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 basis-full sm:basis-0">
                   <p className="truncate text-sm font-semibold text-slate-900">{m.name}</p>
                   {m.email && <p className="truncate text-xs text-slate-500">{m.email}</p>}
                 </div>
@@ -88,7 +88,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
             <ul className="mt-2 divide-y divide-slate-100" data-testid="invites">
               {people.invites.map(i => (
                 <li key={i.email} className="flex flex-wrap items-center gap-3 py-2">
-                  <span className="min-w-0 flex-1 truncate text-sm text-slate-800">{i.email}</span>
+                  <span className="min-w-0 flex-1 basis-full truncate text-sm text-slate-800 sm:basis-0">{i.email}</span>
                   <Tag tone="warn">{roleOf({ access: i.role, canApprove: i.canApprove, job: i.job }).label}</Tag>
                   <span className="text-xs text-slate-500">{ago(i.at)}</span>
                   <Button variant="ghost" disabled={busy} aria-label={`Email the invitation to ${i.email} again`} onClick={() => run(() => store.sendInviteEmail(workspace.id, i.email), `Invitation emailed again to ${i.email}.`)}>Send again</Button>

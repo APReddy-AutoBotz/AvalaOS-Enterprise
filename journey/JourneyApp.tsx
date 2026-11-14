@@ -143,9 +143,9 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
               {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).filter(([page]) => page === 'work' || parts[page]).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
                 return (
-                  <a key={page} href={`${base}/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
+                  <a key={page} href={`${base}/${page}`} aria-label={label} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
                     <svg viewBox="0 0 20 20" className={`h-[18px] w-[18px] shrink-0 ${here ? 'text-[#002C4B]' : 'text-slate-400 group-hover:text-slate-600'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{NAV_ICON[page]}</svg>
-                    <span className="whitespace-nowrap">{label}</span>
+                    <span className="whitespace-nowrap">{page === 'board' ? <><span className="sm:hidden">Board</span><span className="hidden sm:inline">{label}</span></> : label}</span>
                   </a>
                 );
               })}
