@@ -50,18 +50,21 @@ export function ProcessesPage({ store, nav }: { store: JourneyStore; nav: Nav })
           <p className="text-sm text-slate-500">{workspace.organizationName}</p>
           <h1 className="font-display text-2xl font-semibold tracking-tight text-slate-900">{has(workspace.modules, 'assess') ? 'Processes' : 'Workspace'}</h1>
         </div>
-        {workspaces.length > 1 && (
-          <label className="text-sm text-slate-600">
-            <span className="mr-2">Workspace</span>
-            <select
-              className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
-              value={workspace.id}
-              onChange={e => { setWorkspaceId(e.target.value); remember(e.target.value); }}
-            >
-              {workspaces.map(w => <option key={w.id} value={w.id}>{w.organizationName} · {w.name}</option>)}
-            </select>
-          </label>
-        )}
+        <div className="flex flex-wrap items-end gap-3">
+          {workspaces.length > 1 && (
+            <label className="text-sm text-slate-600">
+              <span className="mr-2">Workspace</span>
+              <select
+                className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                value={workspace.id}
+                onChange={e => { setWorkspaceId(e.target.value); remember(e.target.value); }}
+              >
+                {workspaces.map(w => <option key={w.id} value={w.id}>{w.organizationName} · {w.name}</option>)}
+              </select>
+            </label>
+          )}
+          {workspace.canAddWorkspace && <NewWorkspace store={store} workspace={workspace} onCreated={async id => { remember(id); await loadWorkspaces(); }} />}
+        </div>
       </div>
       <React.Fragment key={workspace.id}><ProcessList store={store} nav={nav} workspace={workspace} /></React.Fragment>
     </div>
@@ -161,6 +164,32 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
         </>
       )}
     </section>
+  );
+}
+
+/**
+ * Another workspace in the same organisation, for example one per client: people see only the workspaces
+ * they are invited to, so a client added to its own workspace sees only its own processes and boards.
+ */
+function NewWorkspace({ store, workspace, onCreated }: { store: JourneyStore; workspace: Workspace; onCreated: (id: string) => Promise<void> }) {
+  const [open, setOpen] = React.useState(false);
+  const [name, setName] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  if (!open) return <Button variant="secondary" onClick={() => setOpen(true)}>New workspace</Button>;
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { const id = await store.createWorkspace(workspace.organizationId ?? workspace.id, name.trim()); setOpen(false); setName(''); await onCreated(id); }
+    catch (x) { setError(messageOf(x)); } finally { setBusy(false); }
+  };
+  return (
+    <form onSubmit={submit} className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-4" data-testid="new-workspace">
+      <Field label="New workspace" placeholder="e.g. a client, or Finance Operations" required maxLength={120} value={name} onChange={e => setName(e.target.value)} autoFocus />
+      <p className="mt-2 text-xs leading-5 text-slate-500">People see only the workspaces they are invited to. Give each client a workspace of its own and invite its people there: they see only its processes and boards. You become its admin.</p>
+      <ErrorNote message={error} />
+      <div className="mt-3 flex gap-2"><Button type="submit" disabled={busy || !name.trim()}>Create workspace</Button><Button type="button" variant="ghost" onClick={() => { setOpen(false); setName(''); setError(null); }}>Cancel</Button></div>
+    </form>
   );
 }
 
