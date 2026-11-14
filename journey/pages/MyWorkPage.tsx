@@ -12,6 +12,7 @@ import { itemsFor, needsFor, processesFor, type Duty, type Person, type ProcessF
 import { revisionStatus } from '../../domain/workspace/route.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Spinner, Tag, TypeGlyph } from '../ui.tsx';
 import { FirstRun, remember, remembered } from './ProcessesPage.tsx';
+import { has } from '../../domain/workspace/modules.ts';
 
 const DUTY: Record<Duty, string> = { analyst: 'Analyst', architect: 'Architect', approver: 'Approver' };
 const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
@@ -68,12 +69,14 @@ const article = (label: string) => `${/^[aeiou]/i.test(label) ? 'an' : 'a'} ${la
 function Home({ store, nav, workspace, userId }: { store: JourneyStore; nav: Nav; workspace: Workspace; userId: string }) {
   const [data, setData] = React.useState<Loaded | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  // Only the parts the organisation uses (domain/workspace/modules.ts).
+  const assess = has(workspace.modules, 'assess'), board = has(workspace.modules, 'board');
 
   React.useEffect(() => {
     let live = true;
     (async () => {
       try {
-        const [processes, projects, members] = await Promise.all([store.listProcesses(workspace.id), store.listProjects(workspace.id), store.listMembers(workspace.id)]);
+        const [processes, projects, members] = await Promise.all([assess ? store.listProcesses(workspace.id) : Promise.resolve([]), board ? store.listProjects(workspace.id) : Promise.resolve([]), store.listMembers(workspace.id)]);
         const items = (await Promise.all(projects.map(p => store.listWorkItems(p.id)))).flat();
         const facts = await Promise.all(processes.map(async p => {
           const revisions = await store.listRevisions(p.id);
@@ -92,7 +95,7 @@ function Home({ store, nav, workspace, userId }: { store: JourneyStore; nav: Nav
       } catch (e) { if (live) setError(messageOf(e)); }
     })();
     return () => { live = false; };
-  }, [store, workspace.id]);
+  }, [store, workspace.id, assess, board]);
 
   if (error) return <ErrorNote message={error} />;
   if (!data) return <Spinner />;
@@ -104,7 +107,16 @@ function Home({ store, nav, workspace, userId }: { store: JourneyStore; nav: Nav
   const byId = new Map<string, Loaded["facts"][number]>(data.facts.map(f => [f.id, f] as const));
   const nothing = needs.length === 0 && mine.length === 0 && myProcesses.length === 0 && unassigned.length === 0;
 
-  if (data.facts.length === 0) {
+  if (!assess && mine.length === 0) {
+    return (
+      <div className="mt-6">
+        <EmptyState title="Nothing assigned to you yet" action={<Button onClick={() => nav.go({ page: 'board' })}>Open the Delivery board</Button>}>
+          Items you own on the Delivery board appear here, with their status and due dates.
+        </EmptyState>
+      </div>
+    );
+  }
+  if (assess && data.facts.length === 0) {
     return (
       <div className="mt-6">
         <EmptyState title="No processes yet" action={workspace.role !== 'viewer' ? <Button onClick={() => nav.go({ page: 'processes' })}>Add a process</Button> : undefined}>

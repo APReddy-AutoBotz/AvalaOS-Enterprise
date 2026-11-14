@@ -18,6 +18,7 @@ import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, WorkItem } from '../../domain/workitems/board.ts';
 import { changedFields, type ItemComment, type ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
+import { validateModules } from '../../domain/workspace/modules.ts';
 import { providerLabel } from '../../domain/auth/providers.ts';
 import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
 
@@ -164,13 +165,23 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     async canCreateOrganization() { return true; },
     async createOrganization(organizationName, workspaceName) {
       requireMe();
-      const w: Workspace = { id: uuid(), name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true };
+      const id = uuid();
+      const w: Workspace = { id, name: workspaceName.trim() || 'General', organizationName: organizationName.trim(), role: 'admin', canApprove: true, organizationId: id, modules: ['assess', 'documents', 'board'] };
       if (!w.organizationName) throw new StoreError(400, 'Name the organization.');
       state.workspaces.push(w);
       save();
       return { workspaceId: w.id };
     },
 
+    async setOrganizationModules(organizationId, modules) {
+      requireMe();
+      const list = state.workspaces.filter(w => (w.organizationId ?? w.id) === organizationId);
+      if (!list.length) throw new StoreError(404, 'Organisation not found');
+      const chosen = validateModules(modules);
+      for (const w of list) w.modules = [...chosen];
+      save();
+      return chosen;
+    },
     async getSettings(workspaceId) {
       requireMe();
       const row = (state.settings ?? []).find(x => x.workspaceId === workspaceId);

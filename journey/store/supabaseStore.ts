@@ -30,6 +30,7 @@ import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me,
 import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
+import type { Module } from '../../domain/workspace/modules.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
@@ -114,13 +115,19 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (!auth.user) throw new StoreError(401, 'Sign in again.');
       const { data, error } = await db
         .from('workspace_members')
-        .select('role, job, can_approve, workspaces(id, name, organizations(name))')
+        .select('role, job, can_approve, workspaces(id, name, organization_id, organizations(name, modules))')
         .eq('user_id', auth.user.id);
       if (error) fail(error);
       return (data ?? []).flatMap((m: any): Workspace[] => (m.workspaces ? [{
         id: m.workspaces.id, name: m.workspaces.name, organizationName: m.workspaces.organizations?.name ?? '',
         role: m.role, canApprove: Boolean(m.can_approve), job: m.job ?? null,
+        organizationId: m.workspaces.organization_id, ...(m.workspaces.organizations?.modules ? { modules: m.workspaces.organizations.modules } : {}),
       }] : [])).sort((a, b) => a.organizationName.localeCompare(b.organizationName) || a.name.localeCompare(b.name));
+    },
+    async setOrganizationModules(organizationId, modules) {
+      const { data, error } = await db.rpc('set_organization_modules', { target_organization: organizationId, org_modules: modules });
+      if (error) fail(error);
+      return data as Module[];
     },
     async canCreateOrganization() {
       const { data, error } = await db.rpc('can_create_organization');

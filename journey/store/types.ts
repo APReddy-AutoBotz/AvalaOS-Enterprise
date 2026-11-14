@@ -14,6 +14,7 @@ import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../dom
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint, validateSprint } from '../../domain/workitems/sprints.ts';
 import type { PlannedItem } from '../../domain/workitems/jiraImport.ts';
+import type { Module } from '../../domain/workspace/modules.ts';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import type { AuditEntry, Job, RoleDef } from '../../domain/people/roles.ts';
 import type { ProviderId } from '../../domain/auth/providers.ts';
@@ -34,7 +35,12 @@ export interface AiUsage {
   /** True when there were more rows than were read. */
   partial: boolean;
 }
-export interface Workspace { id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null }
+export interface Workspace {
+  id: string; name: string; organizationName: string; role: 'admin' | 'editor' | 'viewer'; canApprove: boolean; job?: Job | null;
+  organizationId?: string;
+  /** The parts of Avala OS its organisation uses (domain/workspace/modules.ts); missing means all of them. */
+  modules?: Module[];
+}
 /** A person in a workspace, as others see them: a name, never an email address. */
 export interface Member { userId: string; name: string; role: Workspace['role'] }
 /** A person as an admin sees them in the People screen. `email` is set for admins only. */
@@ -143,6 +149,8 @@ export interface JourneyStore {
   /** Whether the signed-in person may create an organization (only the platform owner, once one is listed). */
   canCreateOrganization(): Promise<boolean>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
+  /** The platform owner only: which parts the organisation uses (one of the four set-ups). Nothing is deleted. */
+  setOrganizationModules(organizationId: string, modules: Module[]): Promise<Module[]>;
 
   /** The assessment settings of a workspace; the defaults when none are set. */
   getSettings(workspaceId: string): Promise<SettingsRecord>;
