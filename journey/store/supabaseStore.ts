@@ -115,14 +115,19 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (!auth.user) throw new StoreError(401, 'Sign in again.');
       const { data, error } = await db
         .from('workspace_members')
-        .select('role, job, can_approve, workspaces(id, name, organization_id, organizations(name, modules))')
+        .select('role, job, can_approve, workspaces(id, name, organization_id, organizations(name, modules, created_by))')
         .eq('user_id', auth.user.id);
       if (error) fail(error);
       return (data ?? []).flatMap((m: any): Workspace[] => (m.workspaces ? [{
         id: m.workspaces.id, name: m.workspaces.name, organizationName: m.workspaces.organizations?.name ?? '',
         role: m.role, canApprove: Boolean(m.can_approve), job: m.job ?? null,
-        organizationId: m.workspaces.organization_id, ...(m.workspaces.organizations?.modules ? { modules: m.workspaces.organizations.modules } : {}),
+        organizationId: m.workspaces.organization_id, canAddWorkspace: m.workspaces.organizations?.created_by === auth.user!.id, ...(m.workspaces.organizations?.modules ? { modules: m.workspaces.organizations.modules } : {}),
       }] : [])).sort((a, b) => a.organizationName.localeCompare(b.organizationName) || a.name.localeCompare(b.name));
+    },
+    async createWorkspace(organizationId, name) {
+      const { data, error } = await db.rpc('create_workspace', { target_organization: organizationId, workspace_name: name });
+      if (error) fail(error);
+      return data as string;
     },
     async setOrganizationModules(organizationId, modules) {
       const { data, error } = await db.rpc('set_organization_modules', { target_organization: organizationId, org_modules: modules });

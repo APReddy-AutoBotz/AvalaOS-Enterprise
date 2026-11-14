@@ -64,7 +64,7 @@ export function PeoplePage({ store, workspace }: { store: JourneyStore; workspac
     <section className="max-w-4xl space-y-4" data-testid="people">
       <div className="rounded-xl border border-slate-200 bg-white p-6">
         <h2 className="font-display text-lg font-semibold text-slate-900">People in {workspace.name}</h2>
-        <p className="mt-1 text-sm leading-6 text-slate-600">A role decides what a person may do. Where a process names its analyst, architect and approver, that decides what they see first.</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">A role decides what a person may do. Where a process names its analyst, architect and approver, that decides what they see first. People here see only this workspace: for a client, use a workspace of its own.</p>
         <ul className="mt-4 divide-y divide-slate-100" data-testid="people-list">
           {people.members.map(m => {
             const role = roleOf({ access: m.role, canApprove: m.canApprove, job: m.job });

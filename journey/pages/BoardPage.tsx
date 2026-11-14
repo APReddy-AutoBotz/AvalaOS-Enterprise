@@ -47,6 +47,8 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [creating, setCreating] = React.useState(false);
   const [label, setLabel] = React.useState('');
   const [off, setOff] = React.useState<string | null>(null);
+  const [boardWorkspaces, setBoardWorkspaces] = React.useState<Workspace[]>([]);
+  const [allProjects, setAllProjects] = React.useState<Record<string, Project[]>>({});
   const [sprints, setSprints] = React.useState<Sprint[]>([]);
   const [view, setView] = React.useState<SprintView>('all');
   const [sprintsOpen, setSprintsOpen] = React.useState(false);
@@ -58,15 +60,28 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
 
   React.useEffect(() => {
     store.listWorkspaces().then(async list => {
-      // The board of a workspace whose organisation uses it: the remembered one, else the first that does.
+      // The boards of the workspaces whose organisation uses the board. A link to a project opens its own
+      // workspace; otherwise the remembered workspace, else the first.
       const withBoard = list.filter(x => has(x.modules, 'board'));
-      const w = withBoard.find(x => x.id === remembered()) ?? withBoard[0] ?? null;
-      if (!w && list[0]) { setOff(offMessage('board', list[0].organizationName)); setProjects([]); return; }
+      if (!withBoard.length && list[0]) { setOff(offMessage('board', list[0].organizationName)); setProjects([]); return; }
+      const all = Object.fromEntries(await Promise.all(withBoard.map(async x => [x.id, await store.listProjects(x.id)] as const)));
+      const w = (projectId ? withBoard.find(x => all[x.id]!.some(p => p.id === projectId)) : undefined)
+        ?? withBoard.find(x => x.id === remembered()) ?? withBoard[0] ?? null;
+      setBoardWorkspaces(withBoard); setAllProjects(all);
       setWorkspace(w);
-      setProjects(w ? await store.listProjects(w.id) : []);
+      setProjects(w ? all[w.id]! : []);
       if (w) store.listMembers(w.id).then(setMembers).catch(() => {});
     }).catch(e => setError(messageOf(e)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the project only picks the workspace on arrival
   }, [store]);
+  const switchWorkspace = (id: string) => {
+    const w = boardWorkspaces.find(x => x.id === id);
+    if (!w) return;
+    try { localStorage.setItem(WORKSPACE_KEY, id); } catch { /* storage unavailable */ }
+    setWorkspace(w); setProjects(allProjects[id] ?? []); setMembers([]); setWho(''); setLabel('');
+    store.listMembers(id).then(setMembers).catch(() => {});
+    nav.go({ page: 'board', ...(allProjects[id]?.[0] ? { projectId: allProjects[id]![0]!.id } : {}) });
+  };
   const project = projects?.find(p => p.id === projectId) ?? null;
   React.useEffect(() => {
     if (projects && !projectId && projects[0]) nav.go({ page: 'board', projectId: projects[0].id }, { replace: true });
@@ -105,7 +120,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
     setError(null);
     try {
       const p = await store.createProject(workspace.id, validateProjectName(newName));
-      setProjects(cur => [...(cur ?? []), p]); setNewName(''); setAdding(false);
+      setProjects(cur => [...(cur ?? []), p]); setAllProjects(cur => ({ ...cur, [workspace.id]: [...(cur[workspace.id] ?? []), p] })); setNewName(''); setAdding(false);
       nav.go({ page: 'board', projectId: p.id });
     } catch (x) { setError(x instanceof BoardError ? x.message : messageOf(x)); }
   };
@@ -143,6 +158,11 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
     <section className="space-y-5" data-testid="board">
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="font-display text-2xl font-semibold text-slate-900">Delivery board</h1>
+        {boardWorkspaces.length > 1 && workspace && (
+          <select aria-label="Workspace" value={workspace.id} onChange={e => switchWorkspace(e.target.value)} className={cx(field, 'max-w-[18rem]')}>
+            {boardWorkspaces.map(w => <option key={w.id} value={w.id}>{w.organizationName} · {w.name}</option>)}
+          </select>
+        )}
         {projects.length > 0 && (
           <select aria-label="Project" value={projectId ?? ''} onChange={e => nav.go({ page: 'board', projectId: e.target.value })} className={cx(field, 'max-w-[18rem] font-medium')}>
             {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
