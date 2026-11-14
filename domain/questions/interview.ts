@@ -104,8 +104,14 @@ export const willRecord = (p: Proposal) => `This will record: ${p.display}`;
  * The edit for a proposal the person accepted: the value written to the question's target and the
  * question closed with the answer and the person's own words, so the record shows where it came from.
  */
-export function interviewEdit(model: ProcessModel, item: TriageItem, p: Proposal): { op: Op; summary: string } | null {
-  return buildAnswer(item, model, p.answer, `in their words: "${p.quote.replace(/\s+/g, ' ').trim()}"`);
+export function interviewEdit(model: ProcessModel, item: TriageItem, p: Proposal, from?: string): { op: Op; summary: string } | null {
+  const quote = p.quote.replace(/\s+/g, ' ').trim();
+  // An answer Ask Avala found in a source keeps the source and its words, and History says who suggested it.
+  if (from) {
+    const edit = buildAnswer(item, model, p.answer, `from ${from}: "${quote}"`);
+    return edit && { op: edit.op, summary: `Suggested by Ask Avala from ${from}; confirmed: ${item.question}` };
+  }
+  return buildAnswer(item, model, p.answer, `in their words: "${quote}"`);
 }
 
 /** The heading over a question: its place and why it is asked first. */

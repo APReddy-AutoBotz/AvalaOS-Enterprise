@@ -4,18 +4,11 @@
 import React from 'react';
 import type { JourneyStore } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { assessProcess } from '../../domain/assess/process.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
-import { deriveRequirements } from '../../domain/requirements/derive.ts';
-import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
-import { buildBrd } from '../../domain/docs/brd.ts';
-import { buildPdd } from '../../domain/docs/pdd.ts';
-import { buildFrd } from '../../domain/docs/frd.ts';
-import { buildSdd } from '../../domain/docs/sdd.ts';
-import { applyLayout } from '../../domain/docs/layout.ts';
-import type { DocInput } from '../../domain/docs/common.ts';
+import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
-import { coverage, deriveProposals, type ProposalType } from '../../domain/workitems/derive.ts';
+import type { ProposalType } from '../../domain/workitems/derive.ts';
+import { planWork } from '../../domain/workitems/plan.ts';
 import { editProposal, keepMine, mergeProblem, mergeProposals, ProposalError, reconcileProposals, rejectProposal, restoreProposal, setSelected, splitProposal, takeUpdate, type Proposal, type ProposalRow, type SplitInput } from '../../domain/workitems/register.ts';
 import { Button, cx, ErrorNote, messageOf, ReqCode, Spinner, Tag, TypeGlyph, WORK_TYPE } from '../ui.tsx';
 import { splitStory } from '../../domain/workitems/board.ts';
@@ -43,12 +36,7 @@ export function WorkItemsStage({ store, processId, workspaceId, model, canEdit, 
 
   const derived = React.useMemo(() => {
     if (!reqs || !decisions) return null;
-    const assessment = assessProcess(model, { decisions });
-    const register = reconcile(deriveRequirements(model, assessment), reqs);
-    const i: DocInput = { model, assessment, decisions, sources: [], requirements: register.requirements, revision: { label: '', state: 'working', date: '' } };
-    const headings = [buildBrd(i), buildPdd(i), buildFrd(i), buildSdd(i)].flatMap(d => applyLayout(d, docSettings.layouts[d.type]).sections.map(s => s.title));
-    const d = deriveProposals(i, headings);
-    return { d, register, cov: coverage(d, register.requirements) };
+    return planWork(model, decisions, reqs, docSettings.layouts);
   }, [model, reqs, docSettings, decisions]);
   const rec = React.useMemo(() => (derived && stored ? reconcileProposals(derived.d.proposals, stored) : null), [derived, stored]);
   React.useEffect(() => {

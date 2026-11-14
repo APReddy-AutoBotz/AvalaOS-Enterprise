@@ -24,14 +24,16 @@ import { Button, ErrorNote, messageOf } from '../ui.tsx';
 type Phase =
   | { kind: 'answer'; attempt: 1 | 2; first: string; followUp?: string }
   | { kind: 'reading' }
-  | { kind: 'read'; reading: Reading; attempt: 1 | 2; first: string }
+  | { kind: 'read'; reading: Reading; attempt: 1 | 2; first: string; from?: string }
   | { kind: 'saved'; what: string };
 
 const SERVER = 'Reading answers needs the server. Sign in to Avala OS to answer questions here; in the demo they can be read but not answered.';
 
 /** The open questions of one process, asked one at a time. */
-export function InterviewPanel({ store, process, workspace, model, working }: {
+export function InterviewPanel({ store, process, workspace, model, working, start }: {
   store: JourneyStore; process: ProcessRow; workspace: Workspace; model: ProcessModel; working: { id: string; seq: number } | null;
+  /** An answer Ask Avala found in a source (a suggestion): opened on its question, ready to review and Save. */
+  start?: { itemKey: string; proposal: import('../../domain/questions/notes.ts').Proposal; source: string } | null;
 }) {
   const canEdit = workspace.role !== 'viewer';
   const editor = useModelEditor(store, process.id, { model, working }, () => announceProcessChanged(process.id));
@@ -51,10 +53,21 @@ export function InterviewPanel({ store, process, workspace, model, working }: {
   }, [store, process.workspaceId, process.analystId]);
 
   const pending = queue.filter(i => !skipped.includes(i.key));
-  const item: TriageItem | null = pending[0] ?? null;
+  // A suggestion opens its own question first, with the answer the source gave ready to review.
+  const opening = React.useRef(start ?? null);
+  const item: TriageItem | null = (opening.current && pending.find(i => i.key === opening.current!.itemKey)) || pending[0] || null;
   // A new question starts clean (after Save, Skip, or the answer closing it).
   const key = item?.key ?? '';
-  React.useEffect(() => { setText(''); setError(null); setPhase(p => (p.kind === 'saved' ? p : { kind: 'answer', attempt: 1, first: '' })); }, [key]);
+  React.useEffect(() => {
+    setText(''); setError(null);
+    const o = opening.current;
+    if (o && o.itemKey === key) {
+      setPhase({ kind: 'read', reading: { kind: 'record', proposal: o.proposal }, attempt: 1, first: '', from: o.source });
+      opening.current = null;
+      return;
+    }
+    setPhase(p => (p.kind === 'saved' ? p : { kind: 'answer', attempt: 1, first: '' }));
+  }, [key]);
 
   if (!item) {
     return (
@@ -90,8 +103,8 @@ export function InterviewPanel({ store, process, workspace, model, working }: {
     }
   };
 
-  const save = async (reading: Extract<Reading, { kind: 'record' | 'confirm' }>) => {
-    const edit = interviewEdit(editor.model, item, reading.proposal);
+  const save = async (reading: Extract<Reading, { kind: 'record' | 'confirm' }>, from?: string) => {
+    const edit = interviewEdit(editor.model, item, reading.proposal, from);
     if (!edit) { setError('This answer cannot be recorded for this question.'); return; }
     if (await editor.apply(edit.op, edit.summary)) {
       setRecorded(n => n + 1);
@@ -132,7 +145,8 @@ export function InterviewPanel({ store, process, workspace, model, working }: {
 
       {canEdit && phase.kind === 'read' && (phase.reading.kind === 'record' || phase.reading.kind === 'confirm') && (() => {
         const reading = phase.reading;
-        const edit = interviewEdit(editor.model, item, reading.proposal);
+        const from = phase.from;
+        const edit = interviewEdit(editor.model, item, reading.proposal, from);
         const impact = edit ? previewImpact(ctx, editor.model, edit.op) : null;
         return reading.kind === 'confirm' ? (
           <div className="mt-4 space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4" data-testid="interview-confirm">
@@ -151,10 +165,11 @@ export function InterviewPanel({ store, process, workspace, model, working }: {
         ) : (
           <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-card" data-testid="interview-record">
             <p className="border-l-[3px] border-[#E69F00] pl-3 text-[15px] font-semibold leading-7 text-slate-900">{willRecord(reading.proposal)}</p>
-            <p className="text-sm leading-6 text-slate-600">Your words: “{reading.proposal.quote}”</p>
+            <p className="text-sm leading-6 text-slate-600">{from ? <>From {from}: “{reading.proposal.quote}”</> : <>Your words: “{reading.proposal.quote}”</>}</p>
+            {from && <p className="text-xs text-slate-500" data-testid="interview-suggested">Suggested by Ask Avala from a source. Check it against what you know before saving.</p>}
             {impact && <p className="text-sm leading-6 text-slate-600" data-testid="interview-impact">What it changes: {impactSummary(impact)}</p>}
             <div className="flex flex-wrap gap-2">
-              <Button variant="accent" onClick={() => save(reading)} disabled={editor.saving}>{editor.saving ? 'Saving…' : 'Save'}</Button>
+              <Button variant="accent" onClick={() => save(reading, from)} disabled={editor.saving}>{editor.saving ? 'Saving…' : 'Save'}</Button>
               <Button variant="secondary" onClick={() => { setText(phase.first); setPhase({ kind: 'answer', attempt: 1, first: '' }); }}>Change my answer</Button>
               <Button variant="ghost" onClick={skip}>Skip</Button>
             </div>
