@@ -12,8 +12,10 @@ import { SidePanel, SourceList } from './widgets.tsx';
 type Turn = { question: string; answer?: Answer; error?: string };
 const SUGGESTED = ['Why is this the recommended approach?', 'Which steps stay with people, and why?', 'What is still unknown about this process?'];
 
-export function AskPanel({ store, processId, workspaceId, model, sources, onOpen, onClose }: {
+export function AskPanel({ store, processId, workspaceId, model, sources, about, onOpen, onClose }: {
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[];
+  /** What the panel is asking about, and the choice of another process (the top bar's panel, journey/AskAvala.tsx). */
+  about?: React.ReactNode;
   onOpen: (target: Target) => void; onClose: () => void;
 }) {
   const [record, setRecord] = React.useState<Omit<AskContext, 'model'> | null>(null);
@@ -54,6 +56,7 @@ export function AskPanel({ store, processId, workspaceId, model, sources, onOpen
   return (
     <SidePanel title="Ask Avala" onClose={onClose} wide>
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
+        {about}
         <p className="text-sm leading-6 text-slate-600">Ask about this process. Answers come only from its record (its steps, assessment, requirements, board items and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.</p>
         <ErrorNote message={loadError} />
         {!record && !loadError && <div className="mt-6"><Spinner /></div>}

@@ -10,6 +10,7 @@ import { BoardPage } from './pages/BoardPage.tsx';
 import { FirstRun, ProcessesPage } from './pages/ProcessesPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import { AccountMenu, WorkspaceSwitcher, type Workspaces } from './TopBar.tsx';
+import { AskAvala } from './AskAvala.tsx';
 import { remember, remembered } from './workspaceChoice.ts';
 import { MyWorkPage } from './pages/MyWorkPage.tsx';
 import { ProcessWorkspace } from './pages/ProcessWorkspace.tsx';
@@ -150,6 +151,8 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
           )}
           {signedIn && (
             <div className="flex items-center gap-2 self-stretch">
+              {/* Ask Avala on every page, about where the person is (keyed so a new workspace starts it afresh). */}
+              {ws && <React.Fragment key={ws.current.id}><AskAvala store={store} nav={nav} workspace={ws.current} /></React.Fragment>}
               {ws && <WorkspaceSwitcher store={store} ws={ws} />}
               {ws && (
                 <a href={`${base}/settings`} aria-label="Settings" aria-current={nav.route.page === 'settings' ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: 'people' }); }}
