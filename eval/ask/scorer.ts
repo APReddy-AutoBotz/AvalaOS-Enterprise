@@ -85,6 +85,8 @@ export function judge(q: Question, facts: Fact[], answer: Answer, planted?: Plan
 
   const mustAnswer = () => {
     if (!sentences.length) { reasons.push(`gave no answer${missing ? ` ("${missing}")` : ''}`); return; }
+    // The approved format: one direct answer first, then the points (a reply in the older shape has none).
+    if (!answer.lead) reasons.push('did not lead with a direct answer');
     if (q.cite?.length && !cited(q.cite)) reasons.push(`did not cite a fact that holds the answer (cited ${citedIds()})${holders(q, facts).length ? '' : '; no such fact was among the facts sent'}`);
     for (const group of q.say ?? []) if (!group.some(w => says(text, w))) reasons.push(`the answer does not say "${group[0]}"`);
   };

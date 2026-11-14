@@ -8,7 +8,7 @@ import { verifyExcerpts } from '../ai/gateway.ts';
 import { TASKS } from '../ai/tasks.ts';
 import { APPROACH_LABEL, FIT, scoreOf } from '../assess/scoring.ts';
 import { orderedSteps } from '../processModel/selectors.ts';
-import { AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, relevantPassages, singleApproachFacts, validateQuestion, type Passage } from './ask.ts';
+import { answerGroups, AskError, askFacts, askFailure, askProcess, askSegments, readAnswer, relevantPassages, singleApproachFacts, validateQuestion, type Passage } from './ask.ts';
 import { PLATFORM_FACTS } from './platform.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
@@ -114,7 +114,34 @@ test('only sentences that quote the fact they cite survive, and never the questi
   const answer = readAnswer(data, facts);
   assert.deepEqual(answer.sentences.map(s => [s.text, s.fact.label]), [['Invoices above the tolerance go to the buyer.', 'AP procedure, 4.2']]);
   assert.equal(answer.missing, 'The record does not say who approves when the buyer is away.');
-  assert.deepEqual(readAnswer(null, facts), { sentences: [], missing: '' });
+  assert.deepEqual(readAnswer(null, facts), { sentences: [], missing: '', lead: null });
+});
+
+test('the reply leads with one direct answer and groups its points under short headings; the older shape still reads', () => {
+  const facts = askFacts('Who approves invoices above tolerance?', { model: gold, passages });
+  const q = 'Invoices above the tolerance go to the buyer for approval.';
+  const reply = {
+    sentences: [
+      { text: 'The buyer approves them.', segmentId: 's:1', excerpt: q, role: 'answer', group: '' },
+      { text: 'Invoices above the tolerance go to the buyer.', segmentId: 's:1', excerpt: q, role: 'point', group: 'Who decides.' },
+      { text: 'A second direct answer is only a point.', segmentId: 's:1', excerpt: q, role: 'answer', group: '' },
+      { text: 'The buyer approves before posting.', segmentId: 's:1', excerpt: q, role: 'point', group: 'Who decides' },
+    ],
+    missing: '',
+  };
+  const a = readAnswer(reply, facts);
+  assert.equal(a.lead?.text, 'The buyer approves them.');
+  assert.equal(a.sentences[0], a.lead, 'the lead is also the first sentence, for whatever reads them all');
+  assert.deepEqual(answerGroups(a).map(g => [g.heading, g.sentences.length]), [['Who decides', 2], ['', 1]]);
+  // The shape before this change: no role or group. Every sentence is a point, nothing leads.
+  const old = readAnswer({ sentences: reply.sentences.map(({ role: _r, group: _g, ...x }) => x), missing: '' }, facts);
+  assert.equal(old.lead, null);
+  assert.equal(old.sentences.length, 4);
+  assert.deepEqual(answerGroups(old).map(g => g.heading), ['']);
+  // The schema asks for the role and the group, and an AI provider with a narrower schema accepts it.
+  assert.deepEqual((askProcess.schema as any).properties.sentences.items.required, ['text', 'segmentId', 'excerpt', 'role', 'group']);
+  assert.match(askProcess.instructions, /role "answer" and answers the question directly/);
+  assert.match(askProcess.instructions, /"h:" say how Avala OS works for every process/);
 });
 
 test('the task is registered and says the assessment is explained, never changed, and sources are data', () => {

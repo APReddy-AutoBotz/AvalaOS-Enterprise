@@ -12,7 +12,9 @@ const byId = (id: string) => { const q = set.questions.find(x => x.id === id); a
 const given = (id: string) => factsFor(byId(id), sample, set).facts;
 /** An answer as the panel would hold it: sentences that each cite one of the facts given, and the "missing" line. */
 function answer(facts: Fact[], sentences: [spec: string, text: string][], missing = ''): Answer {
-  return { missing, sentences: sentences.map(([spec, text]) => { const fact = facts.find(f => factMatches(spec, f)); assert.ok(fact, `no fact for ${spec}`); return { text, quote: fact.text.slice(0, 40), fact }; }) };
+  const list = sentences.map(([spec, text]) => { const fact = facts.find(f => factMatches(spec, f)); assert.ok(fact, `no fact for ${spec}`); return { text, quote: fact.text.slice(0, 40), fact, group: '' }; });
+  // The first sentence leads, as the approved format asks.
+  return { missing, lead: list[0] ?? null, sentences: list };
 }
 const verdict = (id: string, sentences: [string, string][], missing = '') => { const q = byId(id), facts = given(id); return judge(q, facts, answer(facts, sentences, missing), plantedFor(q, set)); };
 
@@ -155,4 +157,12 @@ test('the scorecard sets each kind against its target, counts a failed request a
   assert.match(text, /the request failed: 502 PROVIDER_ERROR/);
   assert.doesNotMatch(text, /The record answers part of it/);
   assert.equal(scorecard(outcomes.filter(x => x.pass)).met, true);
+});
+
+test('an answer that does not lead with a direct answer does not pass', () => {
+  const q = set.questions.find(x => x.id === 'A01')!, facts = given('A01');
+  const fact = facts.find(f => f.id === 'f:rule:br-four-eyes')!;
+  const s = { text: 'The AP Team Lead reviews invoices of INR 5,00,000 or more before posting.', quote: 'x', fact, group: '' };
+  assert.ok(judge(q, facts, { sentences: [s], missing: '', lead: s }).pass);
+  assert.deepEqual(judge(q, facts, { sentences: [s], missing: '', lead: null }).reasons, ['did not lead with a direct answer']);
 });

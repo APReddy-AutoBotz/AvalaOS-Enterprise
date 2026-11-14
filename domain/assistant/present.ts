@@ -4,6 +4,8 @@
 // facts the answer cited, so every suggestion is one the record can answer.
 import type { Answer, Fact, Target } from './ask.ts';
 import { STAGES, type StageId } from '../workspace/route.ts';
+import type { ProcessAssessment } from '../assess/process.ts';
+import { APPROACH_LABEL, FIT, scoreOf, type Approach } from '../assess/scoring.ts';
 
 /** The facts an answer cites, once each, in the order they first appear (the numbers the panel shows). */
 export function citedFacts(answer: Answer): Fact[] {
@@ -73,3 +75,38 @@ export function followUps(answer: Answer, asked: string[], stages: StageId[], ma
 
 /** The stages in the order the process page shows them, for labels. */
 export const STAGE_ORDER: StageId[] = STAGES.map(s => s.id);
+
+// ---- Key figures, computed by rule -------------------------------------------------------------
+
+
+export interface Tile { label: string; value: string; note?: string }
+
+/**
+ * Figures to show beside an answer, worked out from the assessment, never taken from the AI's words: when
+ * the answer cites what one approach alone could do (`a:only:<approach>`), how many steps it could do and
+ * how many it could not; when it cites the verdict, how the steps people do today would be done. The same
+ * counts as the facts the answer quotes (singleApproachFacts, the assessment's split).
+ */
+export function figureTiles(answer: Answer, a: ProcessAssessment | null | undefined): Tile[] {
+  if (!a) return [];
+  const ids = new Set(citedFacts(answer).map(f => f.id));
+  const scored = a.steps.filter(s => !s.alreadyAutomated);
+  const only = [...ids].find(id => id.startsWith('a:only:'));
+  if (only && scored.length) {
+    const approach = only.slice('a:only:'.length) as Approach;
+    const fits = scored.filter(s => scoreOf(s, approach) >= FIT.possible).length;
+    return [
+      { label: `${APPROACH_LABEL[approach]} alone could do`, value: `${fits} of ${scored.length} steps` },
+      { label: 'It could not do', value: `${scored.length - fits} ${scored.length - fits === 1 ? 'step' : 'steps'}`, note: 'the reasons are in the answer' },
+    ];
+  }
+  if (ids.has('a:verdict') && scored.length) {
+    const c = a.counts;
+    return [
+      { label: 'By rules (RPA or an API)', value: String(c.rpa + c.api) },
+      { label: 'With AI', value: String(c.ai_assist + c.agent) },
+      { label: 'Stay with people', value: String(c.human) },
+    ];
+  }
+  return [];
+}
