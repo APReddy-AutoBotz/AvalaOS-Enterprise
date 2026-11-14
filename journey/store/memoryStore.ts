@@ -410,6 +410,33 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       save();
       return structuredClone(item);
     },
+    async createWorkItem(projectId, n) {
+      requireMe();
+      const project = (state.projects ?? []).find(p => p.id === projectId);
+      const w = project && state.workspaces.find(x => x.id === project.workspaceId);
+      if (!project || !w) throw new StoreError(404, 'Project not found.');
+      if (w.role === 'viewer') throw new StoreError(403, 'Adding an item needs the editor or admin role.');
+      const item: WorkItem = {
+        id: crypto.randomUUID(), projectId, parentId: n.parentId, type: n.type, title: n.title, description: n.description, acceptance: [], status: n.status,
+        priority: n.priority, ownerId: n.ownerId, estimateHours: n.estimateHours, startDate: n.startDate, dueDate: n.dueDate, processId: null, stepIds: [],
+        requirements: [], snapshot: {}, updatedAt: new Date().toISOString(), sortOrder: n.sortOrder,
+      };
+      (state.workItems ??= []).push(item);
+      save();
+      return structuredClone(item);
+    },
+    async deleteWorkItem(id) {
+      requireMe();
+      const item = (state.workItems ?? []).find(i => i.id === id);
+      const project = item && (state.projects ?? []).find(p => p.id === item.projectId);
+      const w = project && state.workspaces.find(x => x.id === project.workspaceId);
+      if (!item || !w) throw new StoreError(404, 'Work item not found.');
+      if (w.role === 'viewer') throw new StoreError(403, 'Deleting needs the editor or admin role.');
+      state.workItems = (state.workItems ?? []).filter(i => i.id !== id);
+      for (const i of state.workItems) if (i.parentId === id) i.parentId = null; // as the database: on delete set null
+      for (const list of Object.values(state.proposals ?? {})) for (const p of list) if (p.workItemId === id) p.workItemId = null;
+      save();
+    },
     async listProposals(processId) {
       requireMe();
       workspaceOf(processId);

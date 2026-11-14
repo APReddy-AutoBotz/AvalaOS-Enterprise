@@ -1,4 +1,5 @@
-// The Delivery board: confirmed work, in lanes by epic and columns by status. Epics head the lanes
+// The Delivery board: work in lanes by epic and columns by status. Items come from a process's work
+// items, or a person adds them by hand (New item), so the board also works on its own, as in Jira. Epics head the lanes
 // (as in Jira and Azure DevOps) and are not cards. Cards move between columns (drag, or the status
 // in the item panel); every change is saved at once. The item panel shows what "done" means and the
 // linked requirements, and warns when a requirement changed after the item was confirmed; the item
@@ -6,7 +7,7 @@
 import React from 'react';
 import type { JourneyStore, Member, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
-import { BoardError, COLUMNS, criterionParts, initials, joinStory, lanesOf, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateProjectName, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
+import { allowedParents, BoardError, COLUMNS, criterionParts, deleteEffect, initials, joinStory, lanesOf, MANUAL_TYPES, needsParent, planningFacts, splitStory, STATUS_LABEL, upstreamChanges, validateEdit, validateNewItem, validateProjectName, type ManualType, type Project, type WorkItem, type WorkItemEdit, type WorkStatus } from '../../domain/workitems/board.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import { toAzureCsv, toJiraCsv } from '../../domain/workitems/export.ts';
 import { Button, cx, EmptyState, ErrorNote, messageOf, Progress, Spinner, Tag, TypeGlyph, when, WORK_TYPE } from '../ui.tsx';
@@ -38,6 +39,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const [members, setMembers] = React.useState<Member[]>([]);
   const [exporting, setExporting] = React.useState(false);
   const [who, setWho] = React.useState<string>(''); // '' everyone, 'none' unassigned, else a member
+  const [creating, setCreating] = React.useState(false);
 
   React.useEffect(() => {
     store.listWorkspaces().then(async list => {
@@ -64,9 +66,20 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
   const update = async (item: WorkItem, e: WorkItemEdit) => {
     setError(null);
     try {
-      const next = await store.updateWorkItem(item.id, validateEdit(item, e));
+      const next = await store.updateWorkItem(item.id, validateEdit(item, e, items ?? []));
       setItems(cur => (cur ?? []).map(x => (x.id === item.id ? next : x)));
     } catch (x) { setError(x instanceof BoardError ? x.message : messageOf(x)); }
+  };
+  const addItem = async (n: Parameters<typeof validateNewItem>[0]) => {
+    if (!project) return;
+    const created = await store.createWorkItem(project.id, validateNewItem(n, items ?? []));
+    setItems(cur => [...(cur ?? []), created]);
+    setCreating(false);
+  };
+  const remove = async (item: WorkItem) => {
+    await store.deleteWorkItem(item.id);
+    setItems(cur => (cur ?? []).filter(x => x.id !== item.id).map(x => (x.parentId === item.id ? { ...x, parentId: null } : x)));
+    if (project) nav.go({ page: 'board', projectId: project.id });
   };
   const create = async () => {
     if (!workspace) return;
@@ -135,6 +148,7 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
               )}
             </div>
           )}
+          {canEdit && project && items && <Button onClick={() => setCreating(true)}>New item</Button>}
           {canEdit && (adding
             ? <form className="flex items-center gap-2" onSubmit={e => { e.preventDefault(); create(); }}>
                 <input autoFocus aria-label="New project name" placeholder="Project name" value={newName} onChange={e => setNewName(e.target.value)} className={cx(field, 'w-48')} />
@@ -145,9 +159,9 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
         </div>
       </div>
       <ErrorNote message={error} />
-      {!projects.length && <EmptyState title="No projects yet">A project is created when you confirm work items from a process's Work items stage. You can also start an empty one with New project.</EmptyState>}
+      {!projects.length && <EmptyState title="No projects yet">Start a project with New project, then add epics, stories, tasks and bugs to it. Work items confirmed from a process also arrive on a project's board.</EmptyState>}
       {project && !items && <Spinner />}
-      {project && items && !items.length && <EmptyState title="Nothing on this board yet">Open a process, go to Work items, and confirm the items you want. They arrive here in To do.</EmptyState>}
+      {project && items && !items.length && <EmptyState title="Nothing on this board yet">{canEdit ? 'Add an item with New item, or confirm work items from a process. New items arrive in To do.' : 'Items appear here when the team adds them.'}</EmptyState>}
       {project && items && items.length > 0 && (
         <div className="overflow-x-auto pb-2">
           <div className="min-w-[84rem]">
@@ -231,7 +245,8 @@ export function BoardPage({ store, nav, projectId, itemId }: { store: JourneySto
           </div>
         </div>
       )}
-      {open && project && items && <React.Fragment key={open.id}><ItemPanel item={open} items={items} members={members} canEdit={canEdit} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
+      {creating && project && items && <NewItemDialog items={items} members={members} onAdd={addItem} onClose={() => setCreating(false)} />}
+      {open && project && items && <React.Fragment key={open.id}><ItemPanel item={open} items={items} members={members} canEdit={canEdit} onDelete={() => remove(open)} reqs={open.processId ? reqs[open.processId] ?? [] : []} changes={changesOf(open)} onClose={() => nav.go({ page: 'board', projectId: project.id })} onOpen={openItem} onSave={e => update(open, e)} onOpenFrd={() => { if (open.processId) nav.go({ page: 'process', processId: open.processId, stage: 'documents' }); }} /></React.Fragment>}
     </section>
   );
 }
@@ -257,7 +272,10 @@ function useAutosize(value: string) {
   return ref;
 }
 
-function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd }: { item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void }) {
+function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOpen, onSave, onOpenFrd, onDelete }: { item: WorkItem; items: WorkItem[]; members: Member[]; canEdit: boolean; reqs: StoredRequirement[]; changes: ReturnType<typeof upstreamChanges>; onClose: () => void; onOpen: (id: string) => void; onSave: (e: WorkItemEdit) => Promise<void>; onOpenFrd: () => void; onDelete: () => Promise<void> }) {
+  const [confirming, setConfirming] = React.useState(false);
+  const [deleteError, setDeleteError] = React.useState<string | null>(null);
+  const parents = allowedParents(item.type, items, item.id);
   const { story, rest } = splitStory(item.description);
   const [title, setTitle] = React.useState(item.title);
   const [description, setDescription] = React.useState(rest);
@@ -326,6 +344,14 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Priority
               <select aria-label="Priority" value={item.priority ?? ''} disabled={!canEdit} onChange={e => onSave({ priority: (e.target.value || null) as WorkItem['priority'] })} className={cx(prop, !item.priority && 'font-normal text-slate-500')}><option value="">Not set</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select>
             </label>
+            {item.type !== 'epic' && (
+              <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Parent
+                <select aria-label="Parent" value={item.parentId ?? ''} disabled={!canEdit} onChange={e => onSave({ parentId: e.target.value || null })} className={cx(prop, !item.parentId && 'font-normal text-slate-500')}>
+                  {!needsParent(item.type) && <option value="">None</option>}
+                  {parents.map(p => <option key={p.id} value={p.id}>{TYPE[p.type].label}: {p.title}</option>)}
+                </select>
+              </label>
+            )}
             <label className="grid gap-1 bg-white px-3 py-2 text-[11px] text-slate-500">Estimate (hours)
               <input aria-label="Estimate in hours" inputMode="decimal" value={estimate} disabled={!canEdit} placeholder="Not set" onChange={e => setEstimate(e.target.value)} className={prop} />
             </label>
@@ -365,6 +391,23 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
             </ul>
           </>}
 
+          {canEdit && (
+            <div className="mt-8 border-t border-slate-100 pt-5" data-testid="item-delete">
+              {!confirming ? (
+                <button type="button" onClick={() => { setConfirming(true); setDeleteError(null); }} className="text-sm font-medium text-red-700 hover:underline">Delete this item</button>
+              ) : (
+                <div role="alertdialog" aria-label="Delete this item" className="rounded-lg bg-red-50 p-3.5 text-sm text-red-950 ring-1 ring-inset ring-red-200">
+                  <p>{deleteEffect(item, items)}{item.processId ? ' It came from a process\'s work items; the process itself does not change.' : ''}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button type="button" onClick={async () => { try { await onDelete(); } catch (x) { setDeleteError(messageOf(x)); } }} className="rounded-lg bg-red-700 px-3.5 py-2 text-sm font-semibold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700">Delete</button>
+                    <Button variant="ghost" onClick={() => setConfirming(false)}>Keep it</Button>
+                  </div>
+                  <ErrorNote message={deleteError} />
+                </div>
+              )}
+            </div>
+          )}
+
           <p className="mt-8 text-xs text-slate-500">
             {item.stepIds.length > 0 && `Covers ${item.stepIds.length} ${item.stepIds.length === 1 ? 'step' : 'steps'} of the process. `}
             {item.updatedAt && `Last changed ${when(item.updatedAt)}.`}
@@ -377,6 +420,80 @@ function ItemPanel({ item, items, members, canEdit, reqs, changes, onClose, onOp
           </footer>
         )}
       </aside>
+    </div>
+  );
+}
+
+/** New item: what kind, its title and, where it fits, its parent, owner, priority and description. */
+function NewItemDialog({ items, members, onAdd, onClose }: { items: WorkItem[]; members: Member[]; onAdd: (n: Parameters<typeof validateNewItem>[0]) => Promise<void>; onClose: () => void }) {
+  const [type, setType] = React.useState<ManualType>('task');
+  const [title, setTitle] = React.useState('');
+  const [parentId, setParentId] = React.useState('');
+  const [ownerId, setOwnerId] = React.useState('');
+  const [priority, setPriority] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const parents = allowedParents(type, items);
+  React.useEffect(() => { if (parentId && !parents.some(p => p.id === parentId)) setParentId(''); }, [type]); // eslint-disable-line react-hooks/exhaustive-deps
+  const empty = !title.trim() && !description.trim();
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && empty) onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [empty, onClose]);
+  const field = 'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
+  const submit = async () => {
+    setBusy(true); setError(null);
+    try {
+      await onAdd({ type, title, description, parentId: parentId || null, ownerId: ownerId || null, priority: (priority || null) as WorkItem['priority'] });
+    } catch (x) { setError(x instanceof BoardError ? x.message : messageOf(x)); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-900/25 px-4 py-16" onClick={() => { if (empty) onClose(); }}>
+      <form role="dialog" aria-modal="true" aria-label="New item" onClick={e => e.stopPropagation()} onSubmit={e => { e.preventDefault(); submit(); }}
+        className="w-full max-w-lg rounded-xl bg-white p-6 shadow-[0_24px_56px_-20px_rgba(15,23,42,0.45)]" data-testid="new-item">
+        <h2 className="font-display text-lg font-semibold text-slate-900">New item</h2>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-slate-800">Kind
+            <select aria-label="Kind" value={type} onChange={e => setType(e.target.value as ManualType)} className={field}>
+              {MANUAL_TYPES.map(t => <option key={t} value={t}>{WORK_TYPE[t].label}</option>)}
+            </select>
+          </label>
+          {type !== 'epic' && (
+            <label className="text-sm font-medium text-slate-800">{needsParent(type) ? 'Belongs to' : 'Parent'}
+              <select aria-label={needsParent(type) ? 'Belongs to' : 'Parent'} value={parentId} onChange={e => setParentId(e.target.value)} className={field}>
+                <option value="">{needsParent(type) ? 'Choose a story, task or bug' : 'None'}</option>
+                {parents.map(p => <option key={p.id} value={p.id}>{WORK_TYPE[p.type].label}: {p.title}</option>)}
+              </select>
+            </label>
+          )}
+        </div>
+        <label className="mt-4 block text-sm font-medium text-slate-800">Title
+          <input autoFocus aria-label="Title" value={title} maxLength={300} onChange={e => setTitle(e.target.value)} className={field} />
+        </label>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="text-sm font-medium text-slate-800">Owner
+            <select aria-label="Owner" value={ownerId} onChange={e => setOwnerId(e.target.value)} className={field}>
+              <option value="">Unassigned</option>
+              {members.map(m => <option key={m.userId} value={m.userId}>{m.name}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-medium text-slate-800">Priority
+            <select aria-label="Priority" value={priority} onChange={e => setPriority(e.target.value)} className={field}>
+              <option value="">Not set</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+            </select>
+          </label>
+        </div>
+        <label className="mt-4 block text-sm font-medium text-slate-800">Description
+          <textarea aria-label="Description" rows={4} value={description} onChange={e => setDescription(e.target.value)} className={field} />
+        </label>
+        <div className="mt-3"><ErrorNote message={error} /></div>
+        <div className="mt-5 flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Adding…' : 'Add item'}</Button>
+        </div>
+      </form>
     </div>
   );
 }

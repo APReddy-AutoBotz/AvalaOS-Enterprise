@@ -12,11 +12,12 @@ import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { WorkItem } from '../../domain/workitems/board.ts';
 
-const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at';
+const ITEM_COLUMNS = 'id, project_id, parent_id, item_type, title, description, acceptance_criteria, status, priority, owner_id, estimate_hours, start_date, due_date, process_id, step_ids, details, updated_at, sort_order';
 const itemFrom = (r: any): WorkItem => ({
   id: r.id, projectId: r.project_id, parentId: r.parent_id, type: r.item_type, title: r.title, description: r.description, acceptance: r.acceptance_criteria ?? [],
   status: r.status, priority: r.priority, ownerId: r.owner_id, estimateHours: r.estimate_hours === null ? null : Number(r.estimate_hours), startDate: r.start_date, dueDate: r.due_date,
   processId: r.process_id, stepIds: r.step_ids ?? [], requirements: r.details?.requirements ?? [], snapshot: r.details?.snapshot ?? {}, updatedAt: r.updated_at,
+  sortOrder: Number(r.sort_order ?? 0),
 });
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
@@ -395,9 +396,26 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (e.estimateHours !== undefined) row.estimate_hours = e.estimateHours;
       if (e.startDate !== undefined) row.start_date = e.startDate;
       if (e.dueDate !== undefined) row.due_date = e.dueDate;
+      if (e.parentId !== undefined) row.parent_id = e.parentId;
       const { data, error } = await db.from('delivery_work_items').update(row).eq('id', id).select(ITEM_COLUMNS).single();
       if (error) fail(error);
       return itemFrom(data);
+    },
+    async createWorkItem(projectId, n) {
+      const { data: project, error: e1 } = await db.from('delivery_projects').select('workspace_id').eq('id', projectId).single();
+      if (e1) fail(e1);
+      const { data, error } = await db.from('delivery_work_items').insert({
+        workspace_id: project.workspace_id, project_id: projectId, item_type: n.type, title: n.title, description: n.description,
+        parent_id: n.parentId, owner_id: n.ownerId, priority: n.priority, estimate_hours: n.estimateHours, start_date: n.startDate,
+        due_date: n.dueDate, status: n.status, sort_order: n.sortOrder,
+      }).select(ITEM_COLUMNS).single();
+      if (error) fail(error);
+      return itemFrom(data);
+    },
+    async deleteWorkItem(id) {
+      const { data, error } = await db.from('delivery_work_items').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'This item could not be deleted. Deleting needs the editor or admin role.');
     },
     async listProposals(processId) {
       const { data, error } = await db.from('work_item_proposals').select('derivation_key, item_type, parent_key, title, description, acceptance_criteria, step_ids, requirement_codes, state, rejected_reason, user_edited, sort_order, confirmed_work_item_id, base_hash').eq('process_id', processId).not('derivation_key', 'is', null).order('sort_order');
