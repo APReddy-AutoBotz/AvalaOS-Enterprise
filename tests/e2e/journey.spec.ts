@@ -56,7 +56,7 @@ test('an unknown process says so, and every other path (except the public homepa
   for (const path of ['/sandbox', '/assess/guided']) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/work$/);
-    await expect(page.getByRole('link', { name: 'Vendor invoice processing' })).toBeVisible();
+    await expect(page.getByTestId('my-processes').getByRole('link', { name: 'Vendor invoice processing' })).toBeVisible();
   }
   await shot(page, `05-processes-list`);
 });

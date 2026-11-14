@@ -1,10 +1,14 @@
 import React from 'react';
-import type { JourneyStore, ProcessRow, Workspace } from '../store/types.ts';
+import type { JourneyStore, Member, ProcessRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
 import { ago, Button, cx, EmptyState, ErrorNote, Field, messageOf, Spinner, Tag, when } from '../ui.tsx';
-import { revisionStatus } from '../../domain/workspace/route.ts';
+import { namedOn, openOn, type Duty } from '../../domain/work/home.ts';
+import { initials } from '../../domain/workitems/board.ts';
+import { loadProcessFacts, STATUS_TONE, type LoadedFacts } from '../processFacts.ts';
 
-const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
+const DUTY: Record<Duty, string> = { analyst: 'Analyst', architect: 'Architect', approver: 'Approver' };
+// One row of the list: the process, who is named on it, what is open, where it stands, when it changed.
+const ROW = 'md:grid md:grid-cols-[minmax(0,1fr)_8rem_minmax(0,13rem)_minmax(0,14rem)_6.5rem] md:items-center md:gap-4';
 import { Portfolio } from './Portfolio.tsx';
 import { has, offMessage } from '../../domain/workspace/modules.ts';
 import { remember } from '../workspaceChoice.ts';
@@ -31,14 +35,17 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
   const [view, setView] = React.useState<'list' | 'portfolio'>('list');
   const canEdit = workspace.role !== 'viewer';
 
-  const [status, setStatus] = React.useState<Record<string, ReturnType<typeof revisionStatus>>>({});
+  const [facts, setFacts] = React.useState<Record<string, LoadedFacts>>({});
+  const [members, setMembers] = React.useState<Member[]>([]);
   React.useEffect(() => {
     store.listProcesses(workspace.id).then(list => {
       setProcesses(list);
-      // Where each process stands (not started, working draft, approved), read after the list shows.
-      list.forEach(p => store.listRevisions(p.id).then(r => setStatus(cur => ({ ...cur, [p.id]: revisionStatus(r) }))).catch(() => {}));
+      // Where each process stands, who is named and what is open, read after the list shows.
+      list.forEach(p => loadProcessFacts(store, p).then(f => setFacts(cur => ({ ...cur, [p.id]: f }))).catch(() => {}));
     }).catch(e => setError(messageOf(e)));
+    store.listMembers(workspace.id).then(setMembers).catch(() => {});
   }, [store, workspace.id]);
+  const nameOf = (id: string) => members.find(m => m.userId === id)?.name ?? 'Someone no longer in this workspace';
 
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,26 +89,37 @@ function ProcessList({ store, nav, workspace }: { store: JourneyStore; nav: Nav;
         <>
           {view === 'portfolio' ? <Portfolio store={store} nav={nav} processes={processes} workspaceId={workspace.id} /> : <>
           {canEdit && adding && <div className="rounded-xl border border-slate-200 bg-white p-4">{addForm}</div>}
-          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-            <div className="grid grid-cols-[minmax(0,1fr)_14rem_9rem] gap-4 border-b border-slate-200 px-5 py-2.5 text-xs font-semibold text-slate-500" aria-hidden>
-              <span>Process</span><span>Where it stands</span><span className="text-right">Last changed</span>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white" data-testid="process-list">
+            <div className={cx('hidden border-b border-slate-200 px-5 py-2.5 text-xs font-semibold text-slate-500', ROW)} aria-hidden>
+              <span>Process</span><span>People</span><span>Open</span><span>Where it stands</span><span className="text-right">Last changed</span>
             </div>
             <ul className="divide-y divide-slate-100">
               {processes.map(p => {
-                const st = status[p.id];
+                const f = facts[p.id];
+                const people = f ? namedOn(f) : [];
+                const open = f ? openOn(f) : [];
                 return (
-                  <li key={p.id}>
+                  <li key={p.id} data-testid="process-row">
                     <a
                       href={`/process/${p.id}/sources`}
                       onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: p.id, stage: 'sources' }); }}
-                      className="group grid grid-cols-[minmax(0,1fr)_14rem_9rem] items-center gap-4 px-5 py-3.5 hover:bg-slate-50"
+                      className={cx('group flex flex-col gap-2 px-5 py-3.5 hover:bg-slate-50', ROW)}
                     >
                       <span className="min-w-0">
                         <span className="block truncate text-[15px] font-semibold text-slate-900 group-hover:text-[#002C4B]">{p.name}</span>
                         {p.description && <span className="mt-0.5 block truncate text-sm text-slate-500">{p.description}</span>}
                       </span>
-                      <span>{st && <Tag tone={STATUS_TONE[st.tone]} className="px-2 py-1 text-xs">{st.label}</Tag>}</span>
-                      <span className="text-right text-xs text-slate-500" title={when(p.updatedAt)}>{ago(p.updatedAt)}</span>
+                      <span className="flex items-center gap-1">
+                        {f && (people.length === 0 ? <Tag tone="warn">Nobody named</Tag> : people.map(x => (
+                          <span key={x.userId} title={`${nameOf(x.userId)}: ${x.duties.map(d => DUTY[d]).join(', ')}`}>
+                            <span aria-hidden className="grid h-7 w-7 place-items-center rounded-full bg-slate-200 text-[11px] font-semibold text-slate-700">{initials(nameOf(x.userId))}</span>
+                            <span className="sr-only">{x.duties.map(d => DUTY[d]).join(', ')}: {nameOf(x.userId)}.</span>
+                          </span>
+                        )))}
+                      </span>
+                      <span className="min-w-0 text-sm text-slate-700">{f && (open.length ? open.join(' · ') : <span className="text-slate-500">Nothing open</span>)}</span>
+                      <span>{f && <Tag tone={STATUS_TONE[f.statusTone]} className="px-2 py-1 text-xs">{f.statusLabel}</Tag>}</span>
+                      <span className="text-xs text-slate-500 md:text-right" title={when(p.updatedAt)}>{ago(p.updatedAt)}</span>
                     </a>
                   </li>
                 );
