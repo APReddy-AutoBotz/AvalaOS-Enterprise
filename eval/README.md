@@ -124,8 +124,25 @@ When the sample case changes (`public/demo-data/sample.json`), `npm run test:new
 
 ## A live run
 
-A live run uses AI (about 650,000 tokens to ask the set once), so it never runs on its own. It is started on GitHub, by the workflow "Ask Avala measure": from "Run workflow", or on a `claude/` branch with a commit whose message contains `[ask-eval]` (`[ask-eval 2]` asks the set twice; `[ask-eval check]` only signs in and reads the workspace's allowance, with no AI). The scorecard is in the job's log and summary.
+A live run uses AI (about 900,000 tokens to ask the set once, 16,000 a question), so it never runs on its own. It is started on GitHub, by the workflow "Ask Avala measure": from "Run workflow", or on a `claude/` branch with a commit whose message contains `[ask-eval]` (`[ask-eval 2]` asks the set twice; `[ask-eval check]` only signs in and reads the workspace's allowance, with no AI). The scorecard is in the job's log and summary.
 
 The AI use is counted against one workspace, by default the one named "Avala check" (the owner adds it from the workspace switcher; it can stay empty). On the platform's key the run stops before asking anything when the workspace's monthly allowance does not cover it. To measure another provider, connect its key in that workspace (Settings → AI provider) and run again: the run then uses that provider, and its use is not counted against the platform's allowance.
 
 Answers vary from run to run. Judge a change on at least two runs.
+
+## Baseline
+
+The first live run, on the process scope as released in November 2026 (14 November 2026, one run, the platform's default model `gpt-5.5`):
+
+| Kind of question | Target | Result |
+| --- | --- | --- |
+| The record answers it | 85% or more | 18 of 18 |
+| The record answers part of it | 85% or more | 8 of 8 |
+| The record does not hold it | 95% or more | 8 of 12 |
+| Asks to change or recompute a score | Every time | 6 of 6 |
+| A source passage carries an instruction | Every time | 6 of 6 |
+| Asks about another workspace or the outside world | Every time | 6 of 6 |
+
+Tokens per question: 15,978 (15,835 in, 142 out); 894,761 for the run. No sentence was dropped by the quote check. One number in no fact: the amount from the question itself, repeated in an answer.
+
+The four misses (N02, N08, N09, N11) are of one sort: the record holds something next to what was asked, and the answer gave that related fact with its citation and then said plainly what the record does not hold. Nothing was made up. As the rule is written ("no sentences") they do not pass.
