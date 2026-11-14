@@ -34,6 +34,7 @@ export const WORK_OF_TASK: Record<string, string> = {
   answerFromNotes: 'Answers from notes',
   transcribe: 'Turning speech into text',
   draftNarrative: 'Drafting document text',
+  askProcess: 'Questions to the assistant',
 };
 export const workOf = (task: string) => WORK_OF_TASK[task] ?? 'Other AI work';
 

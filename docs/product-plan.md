@@ -649,7 +649,7 @@ An assistant on top of the platform, in the way Rovo sits on Jira, using the wor
 - It never decides. Scores stay arithmetic from the fixed tables; the assistant explains them and cannot change them.
 - It changes nothing on its own. Anything it proposes (an answer to an open question, a section draft, a work item) goes through the existing patch operations and review screens, and a person confirms it. It acts with the signed-in person's role and no more.
 - Source documents are untrusted: text inside a transcript or procedure is content to read, never an instruction to the assistant.
-- Order: (1) read-only questions with citations; (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
+- Order: (1) read-only questions with citations (built, November 2026: "Ask about this process"); (2) the gap-closing interview, asking the open questions in priority order; (3) proposals a person confirms. No autonomous multi-step actions until the first three are in use.
 
 ### Packaging: start with the part you need (agreed November 2026)
 
