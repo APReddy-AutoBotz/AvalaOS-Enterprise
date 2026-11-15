@@ -10,6 +10,7 @@
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
+import { buildingSystem, notDoneToday } from '../plan/intended.ts';
 export const MODEL_VERSION = 'assess-scoring-2026-11.5';
 
 export type Approach = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human';
@@ -391,9 +392,30 @@ function reasonFor(winner: ApproachScore, runnerUp: ApproachScore | undefined, b
   return `${first}${second}`.trim();
 }
 
+/**
+ * Whether a step is already done by a system on its own, so there is nothing to automate. Not when the
+ * system doing it is the one being built, or when nothing of the work is done today: then the step is work
+ * the new solution must do, and is scored like any other (agreed 15 November 2026).
+ */
+export function alreadyDone(model: ProcessModel, step: Step): boolean {
+  if (step.taskType !== 'service') return false;
+  if (notDoneToday(model)) return false;
+  const b = buildingSystem(model);
+  return !(b && step.systemIds.includes(b.id));
+}
+
+/** The reason's opening for a system step that is scored because it is work still to be built. */
+function toBuildNote(model: ProcessModel, step: Step): string {
+  if (step.taskType !== 'service') return '';
+  const b = buildingSystem(model);
+  return b && step.systemIds.includes(b.id)
+    ? `Described as done by ${b.name}, which is what is being built, so it is work the new solution must do. `
+    : 'Nothing of this work is done today, so a step described as done by a system is work the new solution must do. ';
+}
+
 export function scoreStep(model: ProcessModel, step: Step, common = commonWords(model)): StepScore {
   const rework = known(step.traits?.rework as Fact<unknown> | undefined)?.value === true;
-  if (step.taskType === 'service') {
+  if (alreadyDone(model, step)) {
     return {
       stepId: step.id, alreadyAutomated: true, scores: [], winner: 'human', bestAutomation: 'rpa', forNow: false, mustStayHuman: false, aiNeeded: false, aiUnnecessary: false, human: 'none', rework,
       reason: 'A system already does this step on its own; there is nothing to automate.', knownShare: 1, confidence: 'high', unknowns: [], questions: [], apiWouldWin: false,
@@ -438,7 +460,7 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
   return {
     stepId: step.id, alreadyAutomated: false, scores, winner: winner.approach, bestAutomation: best.approach, forNow, mustStayHuman: Boolean(s.human.floor),
     aiNeeded: winner.approach === 'ai_assist' || winner.approach === 'agent', aiUnnecessary: winner.approach === 'rpa' || winner.approach === 'api',
-    human, rework, reason: reasonFor(winner, order[0], best, forNow), knownShare,
+    human, rework, reason: `${toBuildNote(model, step)}${reasonFor(winner, order[0], best, forNow)}`, knownShare,
     confidence: knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low', unknowns, questions, apiWouldWin,
   };
 }

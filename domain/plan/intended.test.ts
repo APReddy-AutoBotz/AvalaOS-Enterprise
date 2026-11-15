@@ -99,3 +99,26 @@ test('no hours saved for work not done today: the value is what it would take by
   // Work done today keeps the hours it can save.
   assert.notEqual(assessProcess(gold()).priority.value.value?.basis, 'by_hand');
 });
+
+test('a step a system does is "already done" only when the work is done today and that system is not the one being built', () => {
+  const m0 = gold();
+  const service = m0.steps.find(s => s.taskType === 'service')!;
+  const before = assessProcess(m0).steps.find(s => s.stepId === service.id)!;
+  assert.equal(before.alreadyAutomated, true, 'work done today: unchanged');
+
+  // Nothing done today: the step is work the new solution must do, scored like the others.
+  const none = setBriefFact(m0, { fact: 'doneToday', value: 'no' }).model;
+  const scored = assessProcess(none).steps.find(s => s.stepId === service.id)!;
+  assert.equal(scored.alreadyAutomated, false);
+  assert.ok(scored.scores.length > 0);
+  assert.match(scored.reason, /^Nothing of this work is done today/);
+
+  // Done today, but the system doing it is the one being built.
+  const sys = service.systemIds[0];
+  if (sys) {
+    const built = setBriefFact(setBriefFact(m0, { fact: 'doneToday', value: 'partly' }).model, { fact: 'building', value: sys }).model;
+    const s = assessProcess(built).steps.find(x => x.stepId === service.id)!;
+    assert.equal(s.alreadyAutomated, false);
+    assert.match(s.reason, /which is what is being built/);
+  }
+});
