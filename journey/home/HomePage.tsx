@@ -233,7 +233,7 @@ const START_NOTES: [string, string][] = [
   ['Need it inside your own cloud?', 'Avala OS can be installed in your company\'s own cloud on request. Tell us what your security team needs and we will plan it with you.'],
 ];
 const PILOT = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('A pilot of Avala OS')}&body=${encodeURIComponent('Company:\nThe process you have in mind:\nThe part you want to start with (the full journey, Assess and Documents, Assess, or the Delivery board):\n')}`;
-const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#start', 'Ways to start'], ['#ai', 'Your AI key'], ['/demo', 'Demo']];
+const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#start', 'Ways to start'], ['#ai', 'Your AI key'], ['/demo', 'Live demo']];
 // What a buyer asks first, on the first screen: each line leads to the part of the page that shows it.
 const HERO_FACTS: [string, string][] = [
   ['#ai', 'Bring your own AI key (BYOK)'],
