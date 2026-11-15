@@ -867,10 +867,10 @@ test('a step set to agentic AI gets the agent document: planned, its steps and a
   await expect(doc).toContainText('With which account does the agent work in SAP S/4HANA');
   await expect(doc).toContainText('What must the agent never do in this process?');
   // Section edits on the agent document, like the other four (migration review_comments_and_test_edits).
-  await expect(doc.getByRole('button', { name: 'Edit section 1' })).toBeVisible();
+  await expect(doc.getByRole('button', { name: 'Edit section 1', exact: true })).toBeVisible();
 
   // A review comment on a section: added, counted, resolved.
-  await doc.getByRole('button', { name: 'Comment on section 1' }).click();
+  await doc.getByRole('button', { name: 'Comment on section 1', exact: true }).click();
   const thread = doc.getByTestId('section-comments').first();
   await thread.getByLabel('Comment on Purpose and scope').fill('Name the limit before sign-off.');
   await thread.getByRole('button', { name: 'Add comment' }).click();
