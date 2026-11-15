@@ -96,6 +96,7 @@ test('what the team had in mind is compared with the assessment, never used as t
   assert.match(agent, /The assessment decides/);
   assert.match(expectation(['rpa'], { ...a, lead: 'rpa' })!, /^As expected: the assessment leads with Rule-based RPA \(of \d+ steps scored/);
   assert.match(expectation(['agent'], null)!, /no steps to compare it with yet/);
+  assert.match(expectation(['api', 'agent'], null)!, /^API integration and an AI agent were expected/);
   const withMind = setBriefFact(m, { fact: 'inMind', value: ['agent'] }).model;
   const p = deliveryPlan(withMind, assessProcess(withMind));
   assert.equal(p.track, deliveryPlan(m, a).track, 'the expectation does not change the track');

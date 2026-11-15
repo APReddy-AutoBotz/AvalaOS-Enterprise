@@ -41,6 +41,8 @@ export interface BriefLine {
 }
 
 const listWords = (xs: string[]) => (xs.length <= 1 ? xs.join('') : `${xs.slice(0, -1).join(', ')} and ${xs[xs.length - 1]}`);
+/** Labels in a list: "API integration and an AI agent", not "and An AI agent". */
+const listLabels = (xs: string[]) => listWords(xs.map((x, i) => (i > 0 ? x.replace(/^(An?|The) /, w => w.toLowerCase()) : x)));
 
 function stateOf(f: Fact<unknown> | undefined): BriefLine['state'] {
   if (!f || f.status === 'unknown' || f.value === null) return 'unknown';
@@ -60,7 +62,7 @@ export function briefLines(m: ProcessModel): BriefLine[] {
     line('doneToday', b.doneToday, v => DONE_TODAY_LABEL[v]),
     line('kind', b.kind, v => WORK_KIND_LABEL[v]),
     { key: 'applications', label: BRIEF_LABEL.applications, text: apps.length ? listWords(apps) : null, state: apps.length ? 'read' : 'unknown' },
-    line('inMind', b.inMind, v => listWords(v.map(x => IN_MIND_LABEL[x]))),
+    line('inMind', b.inMind, v => listLabels(v.map(x => IN_MIND_LABEL[x]))),
     line('documents', b.documents, v => listWords(v.map(x => DOC_LABEL[x]))),
   ];
 }
@@ -158,7 +160,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 export function expectation(inMind: InMind[], a: ProcessAssessment | null): string | null {
   const expected: InMind[] = inMind.filter(x => x !== 'open');
   if (!expected.length) return null;
-  const said = `${listWords(expected.map(x => IN_MIND_LABEL[x]))} ${expected.length === 1 ? 'was' : 'were'} expected`;
+  const said = `${listLabels(expected.map(x => IN_MIND_LABEL[x]))} ${expected.length === 1 ? 'was' : 'were'} expected`;
   if (!a || a.assessed === 0) return `${said}; there are no steps to compare it with yet.`;
   const c = a.counts;
   const rules = (c.rpa ?? 0) + (c.api ?? 0);
