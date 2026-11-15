@@ -22,8 +22,8 @@ export const DONE_TODAY_LABEL: Record<DoneToday, string> = { yes: 'Done today', 
 export const WORK_KIND_LABEL: Record<WorkKind, string> = { existing_process: 'An existing process', new_process: 'A new process', tool: 'A tool to be built', agent: 'An agent to be built' };
 export const IN_MIND_LABEL: Record<InMind, string> = { rpa: 'RPA', api: 'API integration', ai: 'AI that assists people', agent: 'An AI agent', open: 'Not decided yet' };
 export const DOC_LABEL: Record<PlannedDoc, string> = { brd: 'Business requirements (BRD)', pdd: 'Process definition (PDD)', frd: 'Functional requirements (FRD)', sdd: 'Solution design (SDD)', agent: 'Agent definition document' };
-/** Documents Avala OS can produce today; the agent document comes with part E of the plan. */
-export const BUILT_DOCS: readonly PlannedDoc[] = ['brd', 'pdd', 'frd', 'sdd'];
+/** Documents Avala OS can produce (the agent document since part E of the plan). */
+export const BUILT_DOCS: readonly PlannedDoc[] = ['brd', 'pdd', 'frd', 'sdd', 'agent'];
 const ORDER: PlannedDoc[] = ['brd', 'pdd', 'agent', 'frd', 'sdd'];
 
 export type BriefKey = 'summary' | 'doneToday' | 'kind' | 'building' | 'applications' | 'inMind' | 'documents';

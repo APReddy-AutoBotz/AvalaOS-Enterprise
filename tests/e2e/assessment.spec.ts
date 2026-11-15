@@ -840,3 +840,32 @@ test('hand-over checklist, and the editor flags names and numbers that are not i
   await doc.getByRole('button', { name: 'Save anyway' }).click();
   await expect(doc.getByTestId('edited-text').first()).toContainText('Oracle Fusion');
 });
+
+// Part E of docs/effort-first-plan.md: the agent document follows the approach in effect, a person's choice included.
+test('a step set to agentic AI gets the agent document: planned, its steps and applications, its open questions, read-only', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Assessment');
+  const panel = await openStep(page, 'Post invoice in SAP');
+  await panel.getByLabel('Override recommendation').selectOption({ label: 'Agentic AI' });
+  await panel.getByLabel('Rationale').fill('Invoices vary too much for fixed rules.');
+  await panel.getByRole('button', { name: 'Override' }).click();
+  await expect(panel.getByTestId('override-note')).toContainText('Overridden by');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('delivery-plan').getByTestId('planned-doc')).toHaveText([/Process definition \(PDD\)/, /Agent definition document/, /Solution design \(SDD\)/]);
+
+  await stage(page, 'Documents');
+  const tab = page.getByRole('tablist', { name: 'Documents' }).getByRole('tab', { name: /^Agent/ });
+  await expect(tab).toHaveAttribute('data-planned', 'yes');
+  await expect(page.getByTestId('planned-docs')).toContainText('the agent document');
+  await tab.click();
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Agent Definition Document');
+  await expect(doc.getByRole('heading', { name: /What the agent does/ })).toBeVisible();
+  await expect(doc).toContainText('Post invoice in SAP');
+  await expect(doc).toContainText('set so by a person');
+  await expect(doc).toContainText('With which account does the agent work in SAP S/4HANA');
+  await expect(doc).toContainText('What must the agent never do in this process?');
+  await expect(page.getByTestId('agent-read-only')).toBeVisible();
+  await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
+  await shot(page, '73-agent-document');
+});

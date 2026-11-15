@@ -6,7 +6,7 @@ import {
   AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, LevelFormat, PageBreak, PageNumber, Packer, Paragraph,
   ShadingType, Table, TableCell, TableOfContents, TableRow, TextRun, WidthType, type IStylesOptions,
 } from 'docx';
-import type { Block, Cell, DocTree } from './tree.ts';
+import { docShort, type Block, type Cell, type DocTree } from './tree.ts';
 import { imageSize } from './branding.ts';
 import { richParas } from './edits.ts';
 
@@ -105,7 +105,7 @@ function block(b: Block, s: DocxStyle): (Paragraph | Table)[] {
 
 export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxStyle }): Document {
   const s = opts.style ?? DEFAULT_DOCX_STYLE;
-  const kind = doc.type.toUpperCase();
+  const kind = docShort(doc.type);
   const styles: IStylesOptions = {
     default: { document: { run: { font: s.font, size: PT(10) }, paragraph: { spacing: { line: 276 } } } },
     paragraphStyles: [

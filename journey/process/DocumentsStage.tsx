@@ -9,7 +9,7 @@ import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { buildBrd } from '../../domain/docs/brd.ts';
 import { buildPdd } from '../../domain/docs/pdd.ts';
 import { toMarkdown } from '../../domain/docs/markdown.ts';
-import type { Block, Cell, DocTree, DocType } from '../../domain/docs/tree.ts';
+import { docShort, type Block, type Cell, type DocTree, type DocType } from '../../domain/docs/tree.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { StatusBadge } from './widgets.tsx';
@@ -22,6 +22,7 @@ import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/d
 import { applyLayout } from '../../domain/docs/layout.ts';
 import { buildFrd } from '../../domain/docs/frd.ts';
 import { buildSdd } from '../../domain/docs/sdd.ts';
+import { buildAgent } from '../../domain/docs/agent.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
@@ -36,6 +37,7 @@ const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'pdd', short: 'PDD', label: 'Process definition', ready: true },
   { id: 'frd', short: 'FRD', label: 'Functional requirements', ready: true },
   { id: 'sdd', short: 'SDD', label: 'Solution design', ready: true },
+  { id: 'agent', short: 'Agent', label: 'Agent definition', ready: true },
 ];
 
 const PRINT_CSS = `
@@ -143,10 +145,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   // The delivery plan (part B): its documents come first and the first of them opens, unless the person chose a tab.
   const delivery = React.useMemo(() => (assessment ? deliveryPlan(model, assessment) : null), [model, assessment]);
   const planned = React.useMemo(() => new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)), [delivery]);
-  const orderedTypes = React.useMemo(() => [...TYPES.filter(t => planned.has(t.id)), ...TYPES.filter(t => !planned.has(t.id))], [planned]);
+  // The agent document is a tab only when the delivery plan lists it, planned or one click away (part E).
+  const types = React.useMemo(() => TYPES.filter(t => t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent')), [delivery]);
+  const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
   const typeChosen = React.useRef(false);
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
-  const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.available ? d.doc.toUpperCase() : 'the agent document (to come)')).join(', ')}.` : '';
+  const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.doc === 'agent' ? 'the agent document' : d.doc.toUpperCase())).join(', ')}.` : '';
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
   const register = React.useMemo(() => (assessment && stored ? reconcile(deriveRequirements(model, assessment), stored) : null), [model, assessment, stored]);
   React.useEffect(() => {
@@ -161,7 +165,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : sddReady ? buildSdd(input) : null;
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : sddReady ? buildSdd(input) : null;
     if (!raw) return null;
     const edited = applyEdits(raw, edits);
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
@@ -174,7 +178,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     if (!approvedModel || !doc || !decisions || !stored) return [];
     const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
     const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
-    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : buildSdd(input);
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
   }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
   const changedIds = new Set(sinceApproved.map(c => c.id));
@@ -223,14 +227,14 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       const { toDocxBlob, docxStyleFrom } = await import('../../domain/docs/docx.ts');
       const blob = await toDocxBlob(await withPngFigures(doc), { draft: revision.state !== 'approved', style: docxStyleFrom(docSettings.branding) });
       const url = URL.createObjectURL(blob);
-      const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${doc.type.toUpperCase()}.docx` });
+      const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${docShort(doc.type)}.docx` });
       a.click(); URL.revokeObjectURL(url);
     } catch (e) { setError(messageOf(e)); } finally { setWordBusy(false); }
   };
   const download = () => {
     if (!doc) return;
     const url = URL.createObjectURL(new Blob([toMarkdown(doc)], { type: 'text/markdown' }));
-    const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${doc.type.toUpperCase()}.md` });
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - ${docShort(doc.type)}.md` });
     a.click(); URL.revokeObjectURL(url);
   };
 
@@ -318,6 +322,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         )}
         {review > 0 && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="review-banner"><span className="font-semibold">{review} edited {review === 1 ? 'section needs' : 'sections need'} review:</span> the process changed after you edited {review === 1 ? 'it' : 'them'}. Keep your text or take the update in each section.</p>}
         {type === 'sdd' && approvedRevision === null && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950" data-testid="sdd-preview">Preview from the working draft: no revision is approved yet, so this SDD is not for sign-off.</p>}
+        {type === 'agent' && canEdit && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="agent-read-only">This document follows the process and the assessment as they change. Its sections cannot be edited here yet; change the steps, the approaches or the answers, and it follows.</p>}
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
@@ -338,7 +343,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             {doc.sections.map(s => {
               const st = built!.status[s.id];
               const mine = edits.find(e => e.docType === type && e.sectionKey === s.id);
-              const editable = canEdit && st && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
+              const editable = canEdit && st && type !== 'agent' && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
               const head = (
                 <span className="flex flex-wrap items-center gap-2">
                   <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-500')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>

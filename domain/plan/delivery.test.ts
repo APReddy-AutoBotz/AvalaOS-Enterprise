@@ -69,7 +69,7 @@ test('the delivery plan by its table: existing work, AI or agent, and work not d
   const g = deliveryPlan(agent, assessProcess(agent));
   assert.equal(g.track, 'ai');
   assert.deepEqual(g.docs.filter(d => d.planned).map(d => d.doc), ['pdd', 'agent', 'sdd']);
-  assert.equal(g.docs.find(d => d.doc === 'agent')!.available, false, 'the agent document comes with part E');
+  assert.equal(g.docs.find(d => d.doc === 'agent')!.available, true, 'the agent document is built (part E)');
 
   // The assessment alone can make it an AI track.
   assert.equal(deliveryPlan(m, { ...a, lead: 'agent' }).track, 'ai');
