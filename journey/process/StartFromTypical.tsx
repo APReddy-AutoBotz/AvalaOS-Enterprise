@@ -19,6 +19,8 @@ export function StartFromTypical({ store, processId, processName, onStarted }: {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const what = ref.name.charAt(0).toLowerCase() + ref.name.slice(1);
+  // Offered only when the process name suggests one (part I: "offers the reference when the process name matches").
+  if (!suggested) return null;
 
   const start = async () => {
     setBusy(true); setError(null);
@@ -34,7 +36,7 @@ export function StartFromTypical({ store, processId, processName, onStarted }: {
     <section className="rounded-xl border border-slate-200 bg-white p-5" aria-label="Start from a typical process" data-testid="typical-start">
       <h3 className="text-sm font-semibold text-slate-900">Or start from a typical process</h3>
       <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
-        {suggested ? <>This looks like <strong>{what}</strong>. </> : null}
+        This looks like <strong>{what}</strong>. 
         Start from a typical {what} and confirm it step by step: we do this, ours is different, or we don't.
         Everything stays marked <strong>Typical</strong> until your people confirm it, and documents say so. It brings no volumes, times, costs or application facts.
       </p>
