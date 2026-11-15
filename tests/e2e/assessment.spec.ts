@@ -891,17 +891,17 @@ test('a step set to agentic AI gets the agent document: planned, its steps and a
   await expect(doc).toContainText('Post invoice in SAP');
   await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
   // A tester's edit: change the data of a case; the document follows, and the case is marked edited.
-  const panel = page.getByTestId('test-cases-panel');
-  await panel.getByRole('button', { name: 'Edit cases' }).click();
-  const firstRow = panel.getByTestId('case-row').first();
+  const cases = page.getByTestId('test-cases-panel');
+  await cases.getByRole('button', { name: 'Edit cases' }).click();
+  const firstRow = cases.getByTestId('case-row').first();
   const code = (await firstRow.locator('span.tabular-nums').first().textContent())!.trim();
   await firstRow.getByRole('button', { name: `Edit case ${code}` }).click();
-  await panel.getByLabel(`Data of ${code}`).fill('Invoice 4711 with a missing PO number');
-  await panel.getByTestId('case-editor').getByRole('button', { name: 'Save' }).click();
-  await expect(panel.getByTestId('case-row').first()).toHaveAttribute('data-state', 'edited');
+  await cases.getByLabel(`Data of ${code}`).fill('Invoice 4711 with a missing PO number');
+  await cases.getByTestId('case-editor').getByRole('button', { name: 'Save' }).click();
+  await expect(cases.getByTestId('case-row').first()).toHaveAttribute('data-state', 'edited');
   await expect(doc).toContainText('Invoice 4711 with a missing PO number');
-  await panel.getByTestId('case-row').first().getByRole('button', { name: `Set aside case ${code}` }).click();
-  await expect(panel.getByTestId('case-row').first()).toHaveAttribute('data-state', 'set_aside');
+  await cases.getByTestId('case-row').first().getByRole('button', { name: `Set aside case ${code}` }).click();
+  await expect(cases.getByTestId('case-row').first()).toHaveAttribute('data-state', 'set_aside');
   const csvFile = page.waitForEvent('download');
   await page.getByRole('button', { name: 'Download for Excel' }).click();
   expect((await csvFile).suggestedFilename()).toMatch(/Test pack\.csv$/);

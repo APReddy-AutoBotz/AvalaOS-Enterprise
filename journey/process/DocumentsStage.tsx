@@ -395,7 +395,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {s.level === 1
                     ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900">{head}</h3>
                     : <h4 className="mt-6 font-display text-base font-semibold text-slate-900">{head}</h4>}
-                  <SectionComments key={`${type}:${s.id}`} ctx={reviewCtx} docType={type} sectionKey={s.id} sectionTitle={s.title} comments={reviewView!.bySection.get(s.id) ?? []} startOpen={commenting === s.id} />
+                  <React.Fragment key={`${type}:${s.id}`}><SectionComments ctx={reviewCtx} docType={type} sectionKey={s.id} sectionTitle={s.title} comments={reviewView!.bySection.get(s.id) ?? []} startOpen={commenting === s.id} /></React.Fragment>
                   {st?.state === 'needs_review' && mine && (
                     <div className="no-print mt-3 rounded-xl bg-amber-50 p-4 ring-1 ring-inset ring-amber-200" data-testid="review-update">
                       <p className="text-sm text-amber-950"><span className="font-semibold">The process changed since you edited this section.</span> The generated text now reads:</p>
