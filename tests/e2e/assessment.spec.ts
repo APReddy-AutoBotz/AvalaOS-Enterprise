@@ -879,6 +879,9 @@ test('a step set to agentic AI gets the agent document: planned, its steps and a
   const axeComments = await new AxeBuilder({ page }).include('[data-testid="section-comments"]').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(axeComments.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
   await thread.getByRole('button', { name: 'Resolve' }).click();
+  // A resolved comment folds away and can be shown again.
+  await expect(thread.getByTestId('section-comment')).toHaveCount(0);
+  await thread.getByRole('button', { name: 'Show 1 resolved' }).click();
   await expect(thread.getByTestId('section-comment')).toHaveAttribute('data-resolved', 'yes');
   await expect(page.getByTestId('open-comments')).toHaveCount(0);
   await shot(page, '73-agent-document');
