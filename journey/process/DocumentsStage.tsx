@@ -23,6 +23,7 @@ import { applyLayout } from '../../domain/docs/layout.ts';
 import { buildFrd } from '../../domain/docs/frd.ts';
 import { buildSdd } from '../../domain/docs/sdd.ts';
 import { buildAgent } from '../../domain/docs/agent.ts';
+import { buildTests, testPack, testPackCsv } from '../../domain/docs/tests.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
@@ -38,6 +39,7 @@ const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'frd', short: 'FRD', label: 'Functional requirements', ready: true },
   { id: 'sdd', short: 'SDD', label: 'Solution design', ready: true },
   { id: 'agent', short: 'Agent', label: 'Agent definition', ready: true },
+  { id: 'tests', short: 'Tests', label: 'Test pack', ready: true },
 ];
 
 const PRINT_CSS = `
@@ -165,7 +167,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : sddReady ? buildSdd(input) : null;
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input) : sddReady ? buildSdd(input) : null;
     if (!raw) return null;
     const edited = applyEdits(raw, edits);
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
@@ -178,7 +180,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     if (!approvedModel || !doc || !decisions || !stored) return [];
     const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
     const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
-    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : buildSdd(input);
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
   }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
   const changedIds = new Set(sinceApproved.map(c => c.id));
@@ -231,6 +233,14 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       a.click(); URL.revokeObjectURL(url);
     } catch (e) { setError(messageOf(e)); } finally { setWordBusy(false); }
   };
+  // The test pack for Excel (part F): one row per case, as CSV, which Excel opens directly.
+  const downloadExcel = () => {
+    if (!decisions || !assessment) return;
+    const input = { model, assessment, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
+    const url = URL.createObjectURL(new Blob([testPackCsv(testPack(input))], { type: 'text/csv;charset=utf-8' }));
+    const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - Test pack.csv` });
+    a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
   const download = () => {
     if (!doc) return;
     const url = URL.createObjectURL(new Blob([toMarkdown(doc)], { type: 'text/markdown' }));
@@ -268,7 +278,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           </div>
           {plannedLine && <span className="text-xs text-slate-500" data-testid="planned-docs">{plannedLine}</span>}
         </div>
-        {doc && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setShowChecks(!showChecks)} aria-expanded={showChecks}>{failing ? `Ready to hand over? ${failing} to fix` : 'Ready to hand over ✓'}</Button><Button onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
+        {doc && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setShowChecks(!showChecks)} aria-expanded={showChecks}>{failing ? `Ready to hand over? ${failing} to fix` : 'Ready to hand over ✓'}</Button>{type === 'tests' && <Button onClick={downloadExcel}>Download for Excel</Button>}<Button variant={type === 'tests' ? 'secondary' : undefined} onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
       </div>
 
       {!decisions ? (error ? null : <Spinner label="Writing the document" />) : !doc ? (
@@ -323,6 +333,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         {review > 0 && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="review-banner"><span className="font-semibold">{review} edited {review === 1 ? 'section needs' : 'sections need'} review:</span> the process changed after you edited {review === 1 ? 'it' : 'them'}. Keep your text or take the update in each section.</p>}
         {type === 'sdd' && approvedRevision === null && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950" data-testid="sdd-preview">Preview from the working draft: no revision is approved yet, so this SDD is not for sign-off.</p>}
         {type === 'agent' && canEdit && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="agent-read-only">This document follows the process and the assessment as they change. Its sections cannot be edited here yet; change the steps, the approaches or the answers, and it follows.</p>}
+        {type === 'tests' && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="tests-note">One test case for each acceptance criterion of the functional requirements, so nothing is tested that no requirement states. It follows the requirements as they change{canEdit ? '; change a criterion on the FRD and the case follows' : ''}. Testers' own edits are not kept here yet.</p>}
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
@@ -343,7 +354,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             {doc.sections.map(s => {
               const st = built!.status[s.id];
               const mine = edits.find(e => e.docType === type && e.sectionKey === s.id);
-              const editable = canEdit && st && type !== 'agent' && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
+              const editable = canEdit && st && type !== 'agent' && type !== 'tests' && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
               const head = (
                 <span className="flex flex-wrap items-center gap-2">
                   <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-500')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
