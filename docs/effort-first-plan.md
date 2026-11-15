@@ -155,6 +155,7 @@ Agreed by the owner on 15 November 2026 as a change to the rule "invent nothing"
 - **Sees:** per process: time from first upload to first documents; questions asked of people; questions answered from sources; documents produced; open items left.
 - **Why:** it is the proof a pilot client takes to their management, and the evidence the homepage and sales conversations need. It also keeps us honest against the rule in section 1.
 - **Underneath:** counted from records that already exist. No database change expected.
+- **Built (15 November 2026, preview):** "Effort so far" on each process's Assessment stage and "Effort across N processes" on the Portfolio: time from the first source to a first draft and how the draft came, questions raised, answered by people, answered from the sources, still to ask, found to confirm, can wait, open left, documents ready. A time that was not recorded says "Not recorded".
 
 ## 6. Order
 

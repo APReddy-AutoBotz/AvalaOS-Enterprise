@@ -1,4 +1,7 @@
 // The portfolio: every assessed process in a workspace side by side, in the order to take them.
+import { durationText, effortOf, effortTotals, NOT_RECORDED, readyDocuments, type EffortTotals } from '../../domain/work/effort.ts';
+import { deliveryPlan } from '../../domain/plan/delivery.ts';
+import { questionPlan } from '../process/sourceLook.ts';
 import React from 'react';
 import type { JourneyStore, ProcessRow } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -55,6 +58,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
   const [data, setData] = React.useState<PortfolioData | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [totals, setTotals] = React.useState<EffortTotals | null>(null);
   React.useEffect(() => {
     let live = true;
     store.getSettings(workspaceId).then(async rec => {
@@ -64,9 +68,20 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
       const model = rev ? await store.getModel(rev.id) : null;
       if (!model) return null;
       const decisions = await store.getAssessmentDecisions(p.id).catch(() => null);
-      return { id: p.id, name: p.name, assessment: assessProcess(model, { settings: rec.settings, decisions }), rate: decisions?.rate ?? null, costs: decisions?.costs ?? null };
+      const assessment = assessProcess(model, { settings: rec.settings, decisions });
+      // Effort so far (part H), from what is recorded for the process.
+      const [history, sources] = await Promise.all([store.history(p.id).catch(() => ({ revisions: [], edits: [] })), store.listSources(p.id).catch(() => [])]);
+      const qp = model.steps.length ? questionPlan(p.id, model).plan : null;
+      const effort = effortOf({
+        sources: sources.map(s => ({ key: s.key, createdAt: s.createdAt })), edits: history.edits, firstRevisionAt: history.revisions.map(r => r.createdAt).sort()[0] ?? null, model,
+        plan: qp ? { now: qp.now.length, found: qp.found.length, wait: qp.wait.length } : undefined, documents: readyDocuments(deliveryPlan(model, assessment).docs),
+      });
+      return { id: p.id, name: p.name, assessment, rate: decisions?.rate ?? null, costs: decisions?.costs ?? null, effort };
     }));
-    }).then(items => { if (live) setData(buildPortfolio(items.filter((i): i is NonNullable<typeof i> => i !== null))); }).catch(e => { if (live) setError(messageOf(e)); });
+    }).then(items => {
+      const kept = items.filter((i): i is NonNullable<typeof i> => i !== null);
+      if (live) { setData(buildPortfolio(kept)); setTotals(effortTotals(kept.map(i => i.effort))); }
+    }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
   }, [store, processes, workspaceId]);
 
@@ -119,6 +134,25 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
           </tbody>
         </table>
       </div>
+      {totals && totals.processes > 0 && (
+        <section className="rounded-xl border border-slate-200 bg-white p-5" aria-label="Effort across the processes" data-testid="portfolio-effort">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="font-display text-base font-semibold text-slate-900">Effort across {totals.processes} {totals.processes === 1 ? 'process' : 'processes'}</h3>
+            <p className="text-xs text-slate-600">Counted from what is recorded for each process. Nothing is estimated.</p>
+          </div>
+          <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-3 lg:grid-cols-6">
+            {[
+              ['Middle time to a first draft', totals.medianMinutesToDraft !== null ? durationText(totals.medianMinutesToDraft) : NOT_RECORDED],
+              ['With a first draft', `${totals.withDraft} of ${totals.processes}`],
+              ['Questions raised', String(totals.raised)],
+              ['Answered from the sources', String(totals.answeredFromSources)],
+              ['Answered by people', String(totals.answeredByPeople)],
+              ['Open questions left', String(totals.stillOpen)],
+            ].map(([k, v]) => <div key={k} className="bg-white px-4 py-3"><dt className="text-xs text-slate-600">{k}</dt><dd className="mt-1 font-display text-lg font-semibold text-[#002C4B]">{v}</dd></div>)}
+          </dl>
+          <p className="mt-2 text-xs text-slate-600">{totals.documents} {totals.documents === 1 ? 'document' : 'documents'} ready across the processes, as their delivery plans name them.</p>
+        </section>
+      )}
       <p className="text-xs leading-5 text-slate-500">Ordered by priority, then by hours. Each row is that process's own assessment; open it to see the reasons or to complete its inputs.</p>
     </div>
   );

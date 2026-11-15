@@ -11,6 +11,9 @@ import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type 
 import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { DeliveryPlanPanel } from './DeliveryPlanPanel.tsx';
+import { EffortCard } from './EffortCard.tsx';
+import { readyDocuments } from '../../domain/work/effort.ts';
+import { deliveryPlan } from '../../domain/plan/delivery.ts';
 import { provisionalNote } from '../../domain/reference/typical.ts';
 import { useQuestionPlan } from './sourceLook.ts';
 import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
@@ -59,7 +62,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
-  const firstQuestions = useQuestionPlan(processId, editor.model).plan.now.length;
+  const questionPlanNow = useQuestionPlan(processId, editor.model).plan;
+  const firstQuestions = questionPlanNow.now.length;
   // The same assessment with people's choices of approach: what the documents, flows and work items follow.
   // `result` stays the scoring alone, for the step rows and the ranking, so its own answer stays visible.
   const chosen = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings, decisions: d }), [editor.model, decisions, settings, d]);
@@ -169,6 +173,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       <Hero result={chosen} scoring={result} onReport={() => setView('report')} />
       {/* The delivery plan follows the approach in effect, people's choices included (part B). */}
       <DeliveryPlanPanel model={editor.model} result={chosen} firstQuestions={firstQuestions} />
+      {/* What it took to get here, counted from what is recorded (part H). */}
+      <EffortCard store={store} processId={processId} model={editor.model} sources={sources} plan={{ now: questionPlanNow.now.length, found: questionPlanNow.found.length, wait: questionPlanNow.wait.length }} documents={readyDocuments(deliveryPlan(editor.model, chosen).docs)} />
       {result.assessed > 0 && <Ranking result={result} />}
       {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
       {result.assessed > 0 && (

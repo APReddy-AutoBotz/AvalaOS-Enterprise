@@ -37,6 +37,11 @@ test('a typical process: offered by name, mapped to your applications, confirmed
   // Downstream: the assessment is provisional; documents say Typical, not confirmed.
   await stage(page, 'Assessment');
   await expect(page.getByTestId('provisional')).toContainText('Provisional:');
+  // Effort so far (part H): counted from the history; the draft came from the typical process.
+  const effort = page.getByTestId('effort-card');
+  await expect(effort.getByTestId('effort-start')).toContainText('From a typical process');
+  await expect(effort.getByTestId('effort-draft')).toContainText(/under a minute|\d+ minutes?/);
+  await expect(effort.getByTestId('effort-people')).toContainText('0');
   await stage(page, 'Documents');
   await page.getByRole('tab', { name: /PDD/ }).click();
   const doc = page.getByTestId('document');
