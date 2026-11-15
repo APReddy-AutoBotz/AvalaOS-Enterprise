@@ -6,8 +6,8 @@
 import type { TrustPageId } from './pages.ts';
 
 export const OPERATOR = 'AP Reddy';
-export const CONTACT_EMAIL = 'mailtoapreddy@gmail.com';
-export const UPDATED = '14 November 2026';
+export const CONTACT_EMAIL = 'hello@avalaos.com';
+export const UPDATED = '15 November 2026';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
 /** Further days until the rolling database backups that still hold the data have expired. */
