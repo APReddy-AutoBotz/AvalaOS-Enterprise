@@ -109,12 +109,12 @@ test('homepage on a phone: the links are behind Menu', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const main = page.getByRole('navigation', { name: 'Main' });
-  await expect(main.getByRole('link', { name: 'Demo' })).toBeHidden();
+  await expect(main.getByRole('link', { name: 'Live demo' })).toBeHidden();
   await main.getByRole('button', { name: 'Menu' }).click();
   await expect(main.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'true');
   await main.getByRole('link', { name: 'Ways to start' }).click();
   await expect(page).toHaveURL(/#start$/);
-  await expect(main.getByRole('link', { name: 'Demo' })).toBeHidden();
+  await expect(main.getByRole('link', { name: 'Live demo' })).toBeHidden();
   await main.getByRole('button', { name: 'Menu' }).click();
   await page.keyboard.press('Escape');
   await expect(main.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false');
