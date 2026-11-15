@@ -171,19 +171,19 @@ const REASONS = [
   {
     title: 'The score is arithmetic, not an opinion',
     text: 'Every step gets a score out of 100 for each approach, worked out from fixed tables you can read. The same facts always give the same ranking. AI helps read your sources, but it does not decide, and where rules are enough the answer is “AI unnecessary”.',
-    img: 'reason-score', w: 1700, h: 907, tint: 'bg-sky-100',
+    id: 'why-score', img: 'reason-score', w: 1700, h: 907, tint: 'bg-sky-100',
     alt: 'The step-by-step table: one step marked AI needed, the others AI unnecessary, each with its score and reasons',
   },
   {
     title: 'Nothing is invented',
     text: 'A fact the sources did not give is never filled in. It shows as “Not provided”, or as reported but not confirmed, becomes an open question with a likely owner, and is listed again at the end of each document, so a gap cannot hide in a confident paragraph.',
-    img: 'reason-facts', w: 1700, h: 1172, tint: 'bg-amber-100',
+    id: 'why-facts', img: 'reason-facts', w: 1700, h: 1172, tint: 'bg-amber-100',
     alt: 'Part of a generated document: one access marked Not provided, one reported but not confirmed, and a figure marked Inferred',
   },
   {
     title: 'A named person signs off',
     text: 'Each process names its analyst, architect and approver. Only an approver can approve a revision, an approved revision is never changed, and who invited, changed and approved what is kept in the audit trail.',
-    img: 'reason-people', w: 1700, h: 963, tint: 'bg-emerald-100',
+    id: 'why-people', img: 'reason-people', w: 1700, h: 963, tint: 'bg-emerald-100',
     alt: 'The list of what each of the six roles can do, above the audit trail',
   },
 ];
@@ -233,7 +233,13 @@ const START_NOTES: [string, string][] = [
   ['Need it inside your own cloud?', 'Avala OS can be installed in your company\'s own cloud on request. Tell us what your security team needs and we will plan it with you.'],
 ];
 const PILOT = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('A pilot of Avala OS')}&body=${encodeURIComponent('Company:\nThe process you have in mind:\nThe part you want to start with (the full journey, Assess and Documents, Assess, or the Delivery board):\n')}`;
-const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#start', 'Ways to start'], ['#ai', 'Your AI'], ['/demo', 'Demo']];
+const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#start', 'Ways to start'], ['#ai', 'Your AI key'], ['/demo', 'Demo']];
+// What a buyer asks first, on the first screen: each line leads to the part of the page that shows it.
+const HERO_FACTS: [string, string][] = [
+  ['#ai', 'Bring your own AI key (BYOK)'],
+  ['#why-score', 'Scores come from fixed tables, not from AI'],
+  ['#why-people', 'A named person signs off'],
+];
 
 /** The page's links: in the bar on a wide screen, behind Menu on a narrow one. */
 function SiteNav({ go }: { go: { href: string; label: string } }) {
@@ -245,7 +251,7 @@ function SiteNav({ go }: { go: { href: string; label: string } }) {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open]);
-  const link = `rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 ${focus} focus-visible:outline-white`;
+  const link = `whitespace-nowrap rounded-lg px-3 py-2 text-slate-200 hover:bg-white/10 ${focus} focus-visible:outline-white`;
   return (
     <nav aria-label="Main" className="relative flex items-center gap-1 text-sm font-semibold">
       {NAV.map(([href, label]) => <a key={href} href={href} className={`hidden lg:block ${link}`}>{label}</a>)}
@@ -279,14 +285,22 @@ export default function HomePage() {
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-10 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:pb-28 lg:pt-16">
           <div>
             <h1 className="font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
-            <p className="mt-6 text-xl leading-8 text-white">Not every process needs AI.</p>
-            <p className="mt-2 text-lg leading-8 text-slate-300">Avala OS scores each step for RPA, API, AI or a person, and shows its reasons.</p>
+            <p className="mt-7 border-l-4 border-[#E69F00] pl-4 font-display text-2xl font-semibold leading-8 tracking-tight text-white sm:text-3xl">Not every process needs AI.</p>
+            <p className="mt-4 text-lg leading-8 text-slate-300">Avala OS scores each step for RPA, API, AI or a person, and shows its reasons.</p>
             <div className="mt-9 flex flex-wrap items-center gap-3">
               {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={PILOT} className={cta}>Request a pilot</a>}
               <a href="/demo" className={`rounded-lg border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Try the demo</a>
               <a href="#tour" className={`rounded-lg px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>Watch the 30-second tour</a>
             </div>
-            {!signedIn && <p className="mt-5 text-sm leading-6 text-slate-300">Already have an invitation? <a href="/signin" className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>Sign in</a>. Evaluating Avala OS for your team? Request a pilot and we will set up a workspace for you.</p>}
+            <ul aria-label="In short" className="mt-7 space-y-2 text-sm font-semibold text-slate-100">
+              {HERO_FACTS.map(([href, label]) => (
+                <li key={href} className="flex items-start gap-2.5">
+                  <span aria-hidden className="mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full bg-[#E69F00]" />
+                  <a href={href} className={`rounded underline-offset-4 hover:underline ${focus} focus-visible:outline-white`}>{label}</a>
+                </li>
+              ))}
+            </ul>
+            {!signedIn && <p className="mt-6 text-sm leading-6 text-slate-300">Already have an invitation? <a href="/signin" className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>Sign in</a>. Evaluating Avala OS for your team? Request a pilot and we will set up a workspace for you.</p>}
           </div>
           <div className="lg:-mr-56 xl:-mr-40">
             <div className="shot-frame">
@@ -332,7 +346,7 @@ export default function HomePage() {
             <h2 id="why-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Built so you can defend the answer</h2>
             <div className="mt-14 space-y-20">
               {REASONS.map((r, i) => (
-                <div key={r.title} className="grid items-center gap-8 lg:grid-cols-5 lg:gap-16">
+                <div key={r.title} id={r.id} className="grid scroll-mt-10 items-center gap-8 lg:grid-cols-5 lg:gap-16">
                   <div className={`lg:col-span-2 ${i % 2 ? 'lg:order-2' : ''}`}>
                     <h3 className="font-display text-3xl font-semibold tracking-tight text-slate-900">{r.title}</h3>
                     <p className="mt-4 max-w-xl text-lg leading-8 text-slate-700">{r.text}</p>
@@ -353,6 +367,34 @@ export default function HomePage() {
             </div>
             <dl className="grid gap-px self-start overflow-hidden rounded-2xl bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-2">
               {ASK_POINTS.map(([t, x]) => (
+                <div key={t} className="bg-white p-6">
+                  <dt className="font-display text-lg font-semibold text-[#002C4B]">{t}</dt>
+                  <dd className="mt-2 text-base leading-7 text-slate-700">{x}</dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        </section>
+
+        <section id="ai" aria-labelledby="ai-h" className="scroll-mt-6">
+          <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-16">
+            <div>
+              <p className="text-sm font-semibold text-[#9A6700]">Bring your own AI key (BYOK)</p>
+              <h2 id="ai-h" className="mt-2 font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Your AI, your key</h2>
+              <p className="mt-5 text-lg leading-8 text-slate-700">Connect the AI provider your company already trusts, with your own key. For AI reading, your documents then go to that provider and to no other AI provider.</p>
+              <div className="mt-8">
+                <p className="text-sm font-semibold text-slate-900">Available now</p>
+                <ul aria-label="AI providers available now" className="mt-2 flex flex-wrap gap-2">
+                  {providers.filter(p => p.ready).map(p => <li key={p.id} className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-900 ring-1 ring-inset ring-emerald-200">{p.label}</li>)}
+                </ul>
+                <p className="mt-5 text-sm font-semibold text-slate-900">Coming once each passes our extraction check</p>
+                <ul aria-label="AI providers coming" className="mt-2 flex flex-wrap gap-2">
+                  {providers.filter(p => !p.ready).map(p => <li key={p.id} className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300">{p.label}</li>)}
+                </ul>
+              </div>
+            </div>
+            <dl className="grid gap-px self-start overflow-hidden rounded-2xl bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-2">
+              {AI_POINTS.map(([t, x]) => (
                 <div key={t} className="bg-white p-6">
                   <dt className="font-display text-lg font-semibold text-[#002C4B]">{t}</dt>
                   <dd className="mt-2 text-base leading-7 text-slate-700">{x}</dd>
@@ -403,33 +445,6 @@ export default function HomePage() {
               <a href={PILOT} className={`rounded-lg bg-[#002C4B] px-5 py-3 text-sm font-semibold text-white hover:bg-[#003B63] ${focus} focus-visible:outline-[#002C4B]`}>Talk to us about a pilot</a>
               <p className="text-base text-slate-700">Access is by invitation. Say which part you want to start with, and we set up your workspace.</p>
             </div>
-          </div>
-        </section>
-
-        <section id="ai" aria-labelledby="ai-h" className="scroll-mt-6 bg-slate-50">
-          <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-16">
-            <div>
-              <h2 id="ai-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Your AI, your key</h2>
-              <p className="mt-5 text-lg leading-8 text-slate-700">Connect the AI provider your company already trusts, with its own key. Your process documents then go to that provider and nowhere else.</p>
-              <div className="mt-8">
-                <p className="text-sm font-semibold text-slate-900">Available now</p>
-                <ul aria-label="AI providers available now" className="mt-2 flex flex-wrap gap-2">
-                  {providers.filter(p => p.ready).map(p => <li key={p.id} className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-900 ring-1 ring-inset ring-emerald-200">{p.label}</li>)}
-                </ul>
-                <p className="mt-5 text-sm font-semibold text-slate-900">Coming once each passes our extraction check</p>
-                <ul aria-label="AI providers coming" className="mt-2 flex flex-wrap gap-2">
-                  {providers.filter(p => !p.ready).map(p => <li key={p.id} className="rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-700 ring-1 ring-inset ring-slate-300">{p.label}</li>)}
-                </ul>
-              </div>
-            </div>
-            <dl className="grid gap-px self-start overflow-hidden rounded-2xl bg-slate-200 ring-1 ring-slate-200 sm:grid-cols-2">
-              {AI_POINTS.map(([t, x]) => (
-                <div key={t} className="bg-white p-6">
-                  <dt className="font-display text-lg font-semibold text-[#002C4B]">{t}</dt>
-                  <dd className="mt-2 text-base leading-7 text-slate-700">{x}</dd>
-                </div>
-              ))}
-            </dl>
           </div>
         </section>
 

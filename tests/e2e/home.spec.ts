@@ -12,6 +12,10 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   // A buyer has somewhere to go: a pilot request in the bar and in the opening, beside the demo.
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Request a pilot' })).toHaveAttribute('href', /^mailto:.*pilot/i);
   await expect(page.getByText('Already have an invitation?')).toBeVisible();
+  // The first screen says what a buyer asks first, and each line leads to where the page shows it.
+  const facts = page.getByRole('list', { name: 'In short' }).getByRole('link');
+  await expect(facts).toHaveText(['Bring your own AI key (BYOK)', 'Scores come from fixed tables, not from AI', 'A named person signs off']);
+  for (const f of await facts.all()) await expect(page.locator(String(await f.getAttribute('href')))).toHaveCount(1);
   await expect(page.getByRole('link', { name: 'Try the demo' })).toHaveAttribute('href', '/demo');
   await expect(page).toHaveTitle('Avala OS | Evaluate before you automate');
   await expect(page.getByText(/AvalaOS/)).toHaveCount(0);
@@ -89,8 +93,10 @@ test('homepage: the ways to start and the AI providers come from the product\'s 
   // The five words read as five words, not one.
   await expect(page.getByRole('heading', { name: 'Assess. Validate. Assemble. Launch. Audit.' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Built by a practitioner' })).toBeVisible();
-  await main.getByRole('link', { name: 'Your AI' }).click();
+  await main.getByRole('link', { name: 'Your AI key' }).click();
   await expect(page.getByRole('heading', { name: 'Your AI, your key' })).toBeVisible();
+  await expect(page.locator('#ai')).toContainText('Bring your own AI key (BYOK)');
+  await expect(page.locator('#ai')).toContainText('to no other AI provider');
   // Only providers the extraction check has been run with are called available.
   await expect(page.getByRole('list', { name: 'AI providers available now' }).getByRole('listitem')).toHaveText(['OpenAI', 'Azure OpenAI']);
   await expect(page.getByRole('list', { name: 'AI providers coming' }).getByRole('listitem')).toHaveText(['Anthropic', 'OpenAI-compatible endpoint', 'Amazon Bedrock (Claude)', 'Mistral AI']);
