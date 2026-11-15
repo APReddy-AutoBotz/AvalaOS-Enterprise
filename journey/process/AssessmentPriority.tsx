@@ -6,11 +6,12 @@ import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { EASE_BANDS, QUADRANT, type Quadrant, type ReadinessState } from '../../domain/assess/priority.ts';
 import { cx } from '../ui.tsx';
 
-const BASIS = { step_times: 'From the time and share of each step.', time_per_case: 'From the volume and the time per case. Step times would say how much of it automation can take.', people: 'From the people doing the work today. Volume and times would narrow it.' } as const;
+const BASIS = { step_times: 'From the time and share of each step.', time_per_case: 'From the volume and the time per case. Step times would say how much of it automation can take.', people: 'From the people doing the work today. Volume and times would narrow it.', by_hand: 'Nothing of this work is done today, so no hours are saved: this is what it would take by hand, from the expected volume and time per case entered.' } as const;
 const hrs = (n: number) => Math.round(n).toLocaleString('en');
 export const valueText = (v: { hours: [number, number]; exact: boolean }) => (v.exact ? range(v.hours) : `Up to ${hrs(v.hours[1])}`);
 export const orList = (labels: string[]) => (labels.length <= 2 ? labels.join(' or ') : `${labels.slice(0, -1).join(', ')} or ${labels[labels.length - 1]}`);
 import { range } from './assessmentShared.tsx';
+import { partlyDoneToday } from '../../domain/plan/intended.ts';
 
 const READY_TONE: Record<ReadinessState, string> = { ready: 'bg-emerald-100 text-emerald-900 ring-emerald-200', fix_first: 'bg-amber-100 text-amber-900 ring-amber-200', wait: 'bg-rose-100 text-rose-900 ring-rose-200' };
 export const EASE_LABEL = { easy: 'Easy', medium: 'Medium', difficult: 'Difficult' } as const;
@@ -89,8 +90,9 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
           {p.value.computable ? (
             <>
               <p className="mt-2"><span className="font-display text-3xl font-semibold tabular-nums text-slate-900">{valueText(p.value.value!)}</span><span className="text-sm text-slate-500"> hours a year</span></p>
-              <p className="mt-1.5 text-sm leading-6 text-slate-700">Hands-on time automation could take, {p.value.value!.exact ? 'about' : 'at most'} {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {p.settings.hoursPerFte.toLocaleString('en')} hours a year.</p>
+              <p className="mt-1.5 text-sm leading-6 text-slate-700">{p.value.value!.basis === 'by_hand' ? 'What this work would take by hand, about' : `Hands-on time automation could take, ${p.value.value!.exact ? 'about' : 'at most'}`} {people(p.value.value!.fte)} full-time {p.value.value!.fte >= 0.95 && p.value.value!.fte < 1.05 ? 'person' : 'people'} at {p.settings.hoursPerFte.toLocaleString('en')} hours a year.</p>
               <p className="mt-1.5 text-xs leading-5 text-slate-500" data-testid="value-basis">{BASIS[p.value.value!.basis]}{!p.value.value!.exact && p.value.value!.basis === 'step_times' ? ' The share of cases is missing on some steps, so this is the most it can be.' : ''}</p>
+              {partlyDoneToday(model) && <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600 ring-1 ring-inset ring-slate-200" data-testid="value-partly">The brief says only part of this work is done today: hours saved apply to that part; the new part has none to save.</p>}
               {p.value.value!.assumedSteps > 0 && <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900" data-testid="value-assumed">Rests on an assumption: the time of {p.value.value!.assumedSteps} {p.value.value!.assumedSteps === 1 ? 'step' : 'steps'} is the time per case spread evenly. Confirm the step times to firm this up.</p>}
               <p className="mt-3 border-t border-slate-100 pt-3 text-xs leading-5 text-slate-500">{p.value.value!.high === 'yes' ? 'High value' : p.value.value!.high === 'no' ? 'Lower value' : 'Could be high or lower value'}: the line is {p.settings.valueHoursPerYear.toLocaleString('en')} hours a year.</p>
             </>

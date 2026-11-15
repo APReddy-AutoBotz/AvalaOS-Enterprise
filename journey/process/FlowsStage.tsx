@@ -2,6 +2,7 @@
 // diagram. A saved drawing is read back and its changes are listed in words; nothing reaches the
 // model until the person applies them, as one edit.
 import React from 'react';
+import { processWords } from '../../domain/plan/intended.ts';
 import type { JourneyStore } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
@@ -29,7 +30,9 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
 }) {
   const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
   const model = editor.model;
-  const [view, setView] = React.useState<View>('asis');
+  // Work not done today (part C) has one map: the intended process, coloured by how each step would be done.
+  const words = processWords(loaded);
+  const [view, setView] = React.useState<View>(words.intended ? 'tobe' : 'asis');
   const [full, setFull] = React.useState(false);
   const api = React.useRef<CanvasApi | null>(null);
   const [dirty, setDirty] = React.useState(false);
@@ -45,7 +48,8 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
   const pictures = React.useMemo(() => {
     const a = assessProcess(model, { decisions });
     const modes = new Map(a.steps.map(s => [s.stepId, modeFromScore(s.winner, s.alreadyAutomated, s.human)]));
-    return { asis: flowPicture(model, { title: `As-Is map of ${model.meta.name}` }), tobe: flowPicture(model, { modes, title: `To-Be map of ${model.meta.name}` }) };
+    const intended = processWords(model).intended;
+    return { asis: flowPicture(model, { title: `As-Is map of ${model.meta.name}` }), tobe: flowPicture(model, { modes, title: `${intended ? 'Intended process map' : 'To-Be map'} of ${model.meta.name}` }) };
   }, [model, decisions]);
   // The editor shows the flow top to bottom like the maps; the download is the standard left-to-right
   // layout, which every BPMN tool reads.
@@ -81,11 +85,13 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
     <div className="space-y-4" data-testid="flows-stage">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Flow view" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
-          {tab('asis', 'As-Is map')}{tab('tobe', 'To-Be map')}{canEdit && tab('edit', 'Edit the As-Is flow')}
+          {words.intended
+            ? <>{tab('tobe', 'Intended process')}{canEdit && tab('edit', 'Edit the intended flow')}</>
+            : <>{tab('asis', 'As-Is map')}{tab('tobe', 'To-Be map')}{canEdit && tab('edit', 'Edit the As-Is flow')}</>}
         </div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           {view !== 'edit' && <button type="button" className="font-semibold text-[#002C4B] hover:underline" onClick={() => setFull(!full)} aria-pressed={full}>{full ? 'Fit to width' : 'Full size'}</button>}
-          <Button variant="secondary" onClick={() => save(new Blob([downloadXml], { type: 'application/xml' }), `${model.meta.name} - As-Is.bpmn`)}>Download BPMN</Button>
+          <Button variant="secondary" onClick={() => save(new Blob([downloadXml], { type: 'application/xml' }), `${model.meta.name} - ${words.intended ? 'Intended process' : 'As-Is'}.bpmn`)}>Download BPMN</Button>
         </div>
       </div>
       <ErrorNote message={error ?? editor.error} />
@@ -93,13 +99,15 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
 
       {view !== 'edit' ? (
         <figure className="rounded-xl border border-slate-200 bg-white p-4" data-testid="flow-map">
-          <figcaption className="mb-2 text-sm text-slate-600">{view === 'tobe' ? 'Each step coloured by how it will be done, from the assessment. Change the flow itself on the As-Is map.' : 'How the work flows today, one column per role. Drawn from the process model.'}</figcaption>
+          <figcaption className="mb-2 text-sm text-slate-600">{words.intended ? 'The intended process: nothing of it is done today. Each step is coloured by how it would be done, from the assessment; change the flow itself under Edit the intended flow.' : view === 'tobe' ? 'Each step coloured by how it will be done, from the assessment. Change the flow itself on the As-Is map.' : 'How the work flows today, one column per role. Drawn from the process model.'}</figcaption>
           <div className={cx(full ? 'max-h-[75vh] overflow-auto' : '[&_svg]:h-auto [&_svg]:max-w-full')} dangerouslySetInnerHTML={{ __html: pic.svg }} />
         </figure>
       ) : (
         <div className="space-y-3">
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200">
-            <p><strong>You are editing the As-Is flow</strong>: how the work is done today, one column per role. The To-Be map is worked out from this flow and the assessment, so it follows on its own; to change how a step will be done, change its facts in Assessment.</p>
+            {words.intended
+              ? <p><strong>You are editing the intended flow</strong>: how the work is meant to go, one column per role. How each step would be done is worked out from this flow and the assessment; to change that, change its facts in Assessment.</p>
+              : <p><strong>You are editing the As-Is flow</strong>: how the work is done today, one column per role. The To-Be map is worked out from this flow and the assessment, so it follows on its own; to change how a step will be done, change its facts in Assessment.</p>}
             <p className="mt-1 text-slate-600">Drag steps, draw connections, add or delete elements, rename by double-clicking, and drag a step into another role's column. Zoom with the buttons or Ctrl and the mouse wheel. Then <strong>Review changes</strong>: you see each change in words before it is saved.</p>
           </div>
           <React.Suspense fallback={<Spinner label="Opening the editor" />}>

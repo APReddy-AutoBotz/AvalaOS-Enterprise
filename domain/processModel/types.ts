@@ -115,6 +115,8 @@ export interface ProcessBrief {
   doneToday?: Fact<DoneToday>;
   kind?: Fact<WorkKind>;
   inMind?: Fact<InMind[]>;
+  /** The application being built (a system id), when this is a tool or an agent to be built (part C). It is not an application the process uses. */
+  building?: Fact<string>;
   /** The documents wanted. Unset: the delivery plan's rule decides (domain/plan/delivery.ts). */
   documents?: Fact<PlannedDoc[]>;
 }

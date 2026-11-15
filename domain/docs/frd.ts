@@ -4,6 +4,7 @@
 import { gaps as modelGaps, orderedSteps } from '../processModel/selectors.ts';
 import { NFR_TOPICS } from '../requirements/derive.ts';
 import { criterionText, PRIORITY_LABEL, type Requirement } from '../requirements/register.ts';
+import { processWords } from '../plan/intended.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
 import { ACCESS_TEXT, sourceList, type DocInput } from './common.ts';
 
@@ -22,7 +23,7 @@ export function buildFrd(input: DocInput): DocTree {
   const b = new DocBuilder();
 
   b.section('1', 'Introduction', 1);
-  b.paragraph(`This document states what the solution for ${m.meta.name} must do, as requirements that can each be tested. Why the change is made is in the BRD; how the work is done today is in the PDD section "Detailed As-Is steps".`);
+  b.paragraph(`This document states what the solution for ${m.meta.name} must do, as requirements that can each be tested. Why the change is made is in the BRD; ${processWords(m).intended ? 'the intended steps are in the PDD section "Detailed intended steps"' : 'how the work is done today is in the PDD section "Detailed As-Is steps"'}.`);
   b.keyValue('Requirements', [['Business requirements', String(br.length)], ['Functional requirements', String(fr.length)], ['Non-functional requirements', String(nfr.length)], ['Edited by a person', String(active.filter(r => r.edited).length)]]);
 
   b.section('2', 'Actors and permissions', 1);

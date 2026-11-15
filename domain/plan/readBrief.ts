@@ -17,15 +17,16 @@ export const readBrief: TaskDefinition = {
   reasoningEffort: 'medium',
   instructions: [
     'The segment "process" names the process and its applications. The other segments are passages from its sources: meeting transcripts, notes, requirements, procedures.',
-    'Report what the passages say about the five lines below, each finding with one short verbatim quote from one passage and that passage id. Never quote the "process" segment. Report nothing for a line the passages do not settle; never answer from general knowledge.',
+    'Report what the passages say about the six lines below, each finding with one short verbatim quote from one passage and that passage id. Never quote the "process" segment. Report nothing for a line the passages do not settle; never answer from general knowledge.',
     'certainty: "stated" when the passage says it outright, "inferred" when it clearly follows from the passage.',
     'Lines:',
     '- summary: what this is, in one or two plain sentences in the passages\' own terms (value: the sentences). Give at most one.',
     '- doneToday: whether the work is done today, by people or systems. "yes" when a passage describes the work being done now; "partly" when some of it is done now and the rest is new; "no" when the passages describe something to be designed or built (a tool, a solution, a requirement, a future state) and none describes the work being done today. A wish, a plan or a requirement is not work done today.',
     '- kind: what kind of thing this is. "existing_process" for work done today that is to be improved or automated; "new_process" for a way of working that does not exist yet; "tool" for an application, tool, platform or chatbot to be built; "agent" for an AI agent to be built that acts on its own within limits.',
     '- inMind: an approach someone says they want, plan or expect for this work ("we want a bot to…", "the agent will…", "we plan to integrate through the API"). "rpa" for robots or bots on screens, "api" for API or system integration, "ai" for AI that assists a person (reading documents, suggesting answers, a copilot or chatbot that a person checks), "agent" for an AI agent that acts on its own. One finding per approach. An interface, API or capability that merely exists or is described is not something in mind; nor is a possibility someone rejected.',
+    '- building: when this is a tool, application or agent to be built, the name of the application in the "process" segment that is the thing being built (copy the name exactly as listed). Nothing when it is not listed there or nothing is being built.',
     '- documents: a document someone asks to be produced for this work ("we need a solution design", "please prepare the PDD"). "brd" business requirements, "pdd" process definition, "frd" functional requirements or specification, "sdd" solution or technical design, "agent" an agent definition. One finding per document. A document that already exists, is quoted or is the source itself is not asked for.',
-    'value: for summary, the sentences; otherwise exactly one of the listed words.',
+    'value: for summary, the sentences; for building, the application name; otherwise exactly one of the listed words.',
   ].join('\n'),
   schema: {
     type: 'object', additionalProperties: false, required: ['findings'],
@@ -36,7 +37,7 @@ export const readBrief: TaskDefinition = {
           type: 'object', additionalProperties: false,
           required: ['line', 'value', 'certainty', 'segmentId', 'excerpt'],
           properties: {
-            line: { type: 'string', enum: ['summary', 'doneToday', 'kind', 'inMind', 'documents'] },
+            line: { type: 'string', enum: ['summary', 'doneToday', 'kind', 'building', 'inMind', 'documents'] },
             value: str,
             certainty: { type: 'string', enum: ['stated', 'inferred'] },
             segmentId: str, excerpt: str,
@@ -49,7 +50,7 @@ export const readBrief: TaskDefinition = {
   verifyArrays: ['findings'],
 };
 
-export interface BriefFinding { line: 'summary' | 'doneToday' | 'kind' | 'inMind' | 'documents'; value: string; certainty: 'stated' | 'inferred'; segmentId: string; excerpt: string }
+export interface BriefFinding { line: 'summary' | 'doneToday' | 'kind' | 'building' | 'inMind' | 'documents'; value: string; certainty: 'stated' | 'inferred'; segmentId: string; excerpt: string }
 
 /** The limits of one reading: passages sent and the characters kept of each (about 12,000 tokens in all). */
 export const BRIEF_LIMITS = { passages: 50, chars: 900, openingPerSource: 4 } as const;
@@ -72,7 +73,7 @@ export function briefSegments(model: ProcessModel, sources: { key: string; title
   return { segments: [{ id: 'process', text: `Process: ${model.meta.name}\nApplications: ${apps}` }, ...toGatewaySegments(picked)], ingest };
 }
 
-const LISTS: Record<Exclude<BriefFinding['line'], 'summary'>, readonly string[]> = { doneToday: DONE_TODAY, kind: WORK_KINDS, inMind: IN_MIND, documents: PLANNED_DOCS };
+const LISTS: Record<Exclude<BriefFinding['line'], 'summary' | 'building'>, readonly string[]> = { doneToday: DONE_TODAY, kind: WORK_KINDS, inMind: IN_MIND, documents: PLANNED_DOCS };
 
 /**
  * The brief the findings support. A finding whose passage was not sent, or whose value is not one of
@@ -80,7 +81,7 @@ const LISTS: Record<Exclude<BriefFinding['line'], 'summary'>, readonly string[]>
  * Several-value lines (in mind, documents): every value found, each with its passage. Every line no
  * finding settles is unknown, so a later reading can clear what an earlier one read.
  */
-export function briefFromFindings(findings: BriefFinding[], ingest: Map<string, { seg: IngestSegment; sourceKey: string }>): ProcessBrief {
+export function briefFromFindings(findings: BriefFinding[], ingest: Map<string, { seg: IngestSegment; sourceKey: string }>, model?: ProcessModel): ProcessBrief {
   const ok = findings.filter(f => ingest.has(f.segmentId) && f.excerpt.trim());
   const ref = (f: BriefFinding): SourceRef => { const { seg, sourceKey } = ingest.get(f.segmentId)!; return { sourceId: sourceKey, locator: seg.locator, excerpt: f.excerpt.trim() }; };
   const unknown = <T>(): Fact<T> => ({ value: null, status: 'unknown', sources: [] });
@@ -98,7 +99,14 @@ export function briefFromFindings(findings: BriefFinding[], ingest: Map<string, 
     const values = LISTS[line].filter(v => fs.some(f => f.value === v)) as T[];
     return values.length ? { value: values, status: status(fs), sources: values.map(v => ref(fs.find(f => f.value === v)!)) } : unknown<T[]>();
   };
+  // What is being built: an application of the process, by its name (exact, ignoring case and punctuation); findings must agree.
+  const norm = (x: string) => x.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const builds = of('building').map(f => ({ f, sys: model?.systems.find(s => norm(s.name) === norm(f.value)) })).filter(x => x.sys);
+  const buildIds = new Set(builds.map(x => x.sys!.id));
+  const building: Fact<string> = builds.length && buildIds.size === 1
+    ? { value: builds[0].sys!.id, status: status(builds.map(x => x.f)), sources: builds.slice(0, 3).map(x => ref(x.f)) } : unknown<string>();
   return {
+    ...(model ? { building } : {}),
     summary: summary.length ? { value: summary[0].value, status: summary[0].certainty, sources: [ref(summary[0])] } : unknown<string>(),
     doneToday: one<DoneToday>('doneToday'),
     kind: one<WorkKind>('kind'),

@@ -11,6 +11,7 @@ import { metricNumber, processMetric, stepTrait } from '../processModel/selector
 import { NON_INTEGRABLE } from './scoring.ts';
 import type { StepScore } from './scoring.ts';
 import type { Caution, Computed, Range } from './process.ts';
+import { notDoneToday } from '../plan/intended.ts';
 
 export const EASE_WEIGHTS = { processStability: 15, systemStability: 10, input: 20, variability: 20, length: 15, applications: 20 } as const;
 
@@ -56,7 +57,8 @@ export const QUADRANT: Record<Quadrant, { label: string; text: string }> = {
   not_now: { label: 'Not now', text: 'Lower value and harder to build. Leave it unless the volume or the systems change.' },
 };
 
-export type ValueBasis = 'step_times' | 'time_per_case' | 'people';
+/** Where the hours come from. `by_hand`: work not done today, from the expected volume and time per case a person entered (part C). */
+export type ValueBasis = 'step_times' | 'time_per_case' | 'people' | 'by_hand';
 export interface ValueEstimate {
   /** Hands-on hours a year automation could take: at least, and at most. */
   hours: Range;
@@ -186,6 +188,7 @@ const minutesOf = (m: Metric): Range => {
  */
 function valueOf(model: ProcessModel, ctx: PriorityContext): Priority['value'] {
   const S = ctx.settings;
+  if (notDoneToday(model)) return byHand(model, ctx);
   const rows = ctx.scored.map(s => {
     const t = model.steps.find(x => x.id === s.stepId)?.traits;
     return { effort: knownFact(t?.effortMinutes), share: knownFact(t?.sharePercent), auto: ctx.automationShare(s), assumed: t?.effortMinutes?.status === 'assumed' };
@@ -210,6 +213,24 @@ function valueOf(model: ProcessModel, ctx: PriorityContext): Priority['value'] {
   const mid = (hours[0] + hours[1]) / 2;
   const high = hours[0] >= S.valueHoursPerYear ? 'yes' : hours[1] < S.valueHoursPerYear ? 'no' : 'either';
   return { computable: true, value: { hours, exact, basis, mid, fte: (exact ? mid : hours[1]) / S.hoursPerFte, high, assumedSteps: rows.filter(r => r.assumed).length } };
+}
+
+/**
+ * Work not done today (part C): no hours are saved, because nobody does it now. The value is what the
+ * work would take by hand, only from the expected volume and time per case a person entered; figures
+ * read from the sources describe nothing that happens today and are not used. Nothing entered, no value.
+ */
+function byHand(model: ProcessModel, ctx: PriorityContext): Priority['value'] {
+  const S = ctx.settings;
+  const vol = processMetric(model, 'volume'), per = processMetric(model, 'handling_time');
+  const entered = (x: Metric | null | undefined) => Boolean(x && x.status === 'user-confirmed');
+  if (!ctx.scored.length) return { computable: false, reason: 'There are no steps yet.' };
+  if (!entered(vol) || !entered(per) || !ctx.volume.computable) return { computable: false, reason: 'Nothing of this work is done today, so there are no hours to save. Enter the expected volume and the time a case would take by hand to see what the work would take by hand.' };
+  const t = minutesOf(per!);
+  const hours: Range = [ctx.volume.value![0] * t[0] / 60, ctx.volume.value![1] * t[1] / 60];
+  const mid = (hours[0] + hours[1]) / 2;
+  const high = hours[0] >= S.valueHoursPerYear ? 'yes' : hours[1] < S.valueHoursPerYear ? 'no' : 'either';
+  return { computable: true, value: { hours, exact: true, basis: 'by_hand', mid, fte: mid / S.hoursPerFte, high, assumedSteps: 0 } };
 }
 
 export interface PriorityContext {

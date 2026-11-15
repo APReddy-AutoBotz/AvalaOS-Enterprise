@@ -52,7 +52,7 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead }: {
                 <dt className="text-sm font-medium text-slate-600">{l.label}</dt>
                 <dd className="min-w-0">
                   {editing === l.key && l.key !== 'applications' ? (
-                    <LineEditor k={l.key} brief={m.meta.brief ?? {}} onCancel={() => setEditing(null)}
+                    <LineEditor k={l.key} brief={m.meta.brief ?? {}} systems={m.systems.map(x => [x.id, x.name] as [string, string])} onCancel={() => setEditing(null)}
                       onSave={async (value, words) => { if (await editor.apply(mm => setBriefFact(mm, { fact: l.key as keyof ProcessBrief, value: value as never }), `Brief: ${l.label.toLowerCase()} ${words}`)) setEditing(null); }} />
                   ) : (
                     <>
@@ -85,8 +85,8 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead }: {
   );
 }
 
-function LineEditor({ k, brief, onSave, onCancel }: {
-  k: Exclude<BriefLine['key'], 'applications'>; brief: ProcessBrief;
+function LineEditor({ k, brief, systems, onSave, onCancel }: {
+  k: Exclude<BriefLine['key'], 'applications'>; brief: ProcessBrief; systems: [string, string][];
   onSave: (value: unknown, words: string) => void; onCancel: () => void;
 }) {
   const cur = brief[k]?.status !== 'unknown' ? brief[k]?.value ?? null : null;
@@ -103,12 +103,12 @@ function LineEditor({ k, brief, onSave, onCancel }: {
   if (k === 'summary') {
     return <div><textarea aria-label="What this is" rows={2} maxLength={400} value={text} onChange={e => setText(e.target.value)} className={input} />{buttons(text.trim(), 'set', text.trim().length > 0)}</div>;
   }
-  if (k === 'doneToday' || k === 'kind') {
-    const options = k === 'doneToday' ? DONE_TODAY.map(v => [v, DONE_TODAY_LABEL[v as DoneToday]]) : WORK_KINDS.map(v => [v, WORK_KIND_LABEL[v as WorkKind]]);
+  if (k === 'doneToday' || k === 'kind' || k === 'building') {
+    const options = k === 'building' ? systems : k === 'doneToday' ? DONE_TODAY.map(v => [v, DONE_TODAY_LABEL[v as DoneToday]]) : WORK_KINDS.map(v => [v, WORK_KIND_LABEL[v as WorkKind]]);
     return (
       <div>
-        <select aria-label={k === 'doneToday' ? 'Done today?' : 'What kind of thing'} value={pick} onChange={e => setPick(e.target.value)} className={input}>
-          <option value="">Choose</option>
+        <select aria-label={k === 'doneToday' ? 'Done today?' : k === 'building' ? 'What is being built' : 'What kind of thing'} value={pick} onChange={e => setPick(e.target.value)} className={input}>
+          <option value="">{k === 'building' ? 'Choose the application being built' : 'Choose'}</option>
           {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         {buttons(pick, `set to ${options.find(o => o[0] === pick)?.[1] ?? ''}`, Boolean(pick))}

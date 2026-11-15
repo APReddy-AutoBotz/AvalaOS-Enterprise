@@ -5,6 +5,7 @@ import { gaps, orderedSteps } from '../processModel/selectors.ts';
 import { paybackOf } from '../assess/payback.ts';
 import { QUADRANT } from '../assess/priority.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
+import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { businessRequirementRows } from './frd.ts';
 import { known, metricCell, sourceList, type DocInput } from './common.ts';
 
@@ -22,7 +23,7 @@ export function buildBrd(input: DocInput): DocTree {
   b.list([
     a.split,
     `Readiness: ${p.readiness.label}. ${p.readiness.reasons.join(' ')}`,
-    p.value.computable ? `${p.value.value!.exact ? '' : 'Up to '}${p.value.value!.exact && Math.round(p.value.value!.hours[0]) !== Math.round(p.value.value!.hours[1]) ? `${hrs(p.value.value!.hours[0])} to ` : ''}${hrs(p.value.value!.hours[1])} hands-on hours a year could be automated.` : `The hours that could be automated are not known yet: ${p.value.reason}`,
+    p.value.computable ? `${p.value.value!.exact ? '' : 'Up to '}${p.value.value!.exact && Math.round(p.value.value!.hours[0]) !== Math.round(p.value.value!.hours[1]) ? `${hrs(p.value.value!.hours[0])} to ` : ''}${hrs(p.value.value!.hours[1])} ${p.value.value!.basis === 'by_hand' ? 'hours a year: what this work would take by hand (nothing of it is done today).' : 'hands-on hours a year could be automated.'}` : `The hours that could be automated are not known yet: ${p.value.reason}`,
     p.placement.placed ? `Priority: ${QUADRANT[p.placement.quadrant!].label}. ${QUADRANT[p.placement.quadrant!].text}` : `Priority is not settled yet. ${p.placement.reason}`,
   ]);
   for (const c of a.cautions.filter(c => c.fired)) b.callout(`${c.label}. ${c.reason}`, 'warning');
@@ -51,9 +52,12 @@ export function buildBrd(input: DocInput): DocTree {
   ], 'No roles are recorded.');
   if (!owner) b.open('Who owns the process and signs off this document?', { kind: 'meta', field: 'owner' });
 
-  b.section('6', 'Current-state summary', 1);
+  const words = processWords(m);
+  b.section('6', words.intended ? 'Intended process summary' : 'Current-state summary', 1);
   const steps = orderedSteps(m);
-  b.paragraph(`Today the process has ${steps.length} steps carried out by ${m.roles.filter(r => r.inScope).length} roles across ${m.systems.length} applications. It handles ${metricCell(m, 'volume').text.toLowerCase() === 'not provided' ? 'a volume that is not yet stated' : metricCell(m, 'volume').text}. The step-by-step detail is in the PDD section "Detailed As-Is steps".`);
+  const building = buildingSystem(m);
+  const apps = existingSystems(m).length;
+  b.paragraph(`${words.intended ? 'Nothing of this is done today. The intended process has' : 'Today the process has'} ${steps.length} steps carried out by ${m.roles.filter(r => r.inScope).length} roles across ${apps} ${apps === 1 ? 'application' : 'applications'}${building ? `, besides ${building.name}, which is being built` : ''}. It handles ${metricCell(m, 'volume').text.toLowerCase() === 'not provided' ? 'a volume that is not yet stated' : metricCell(m, 'volume').text}. The step-by-step detail is in the PDD section "Detailed As-Is steps".`);
 
   b.section('7', 'Business requirements', 1);
   if (input.requirements) {
@@ -85,7 +89,7 @@ export function buildBrd(input: DocInput): DocTree {
   b.section('11', 'Benefits', 1);
   const pb = paybackOf(p.value, input.decisions.rate, input.decisions.costs);
   b.keyValue('Benefits', [
-    ['Hands-on hours a year automation could take', p.value.computable ? `${p.value.value!.exact ? '' : 'Up to '}${hrs(p.value.value!.hours[1])}` : missing()],
+    [p.value.computable && p.value.value!.basis === 'by_hand' ? 'Hours a year this work would take by hand (nothing of it is done today)' : 'Hands-on hours a year automation could take', p.value.computable ? `${p.value.value!.exact ? '' : 'Up to '}${hrs(p.value.value!.hours[1])}` : missing()],
     ['Value a year', pb.computable ? `${pb.value!.exact ? '' : 'Up to '}${pb.value!.currency} ${hrs(pb.value!.value[1])}` : missing('Not provided (no hourly cost entered)')],
     ['Build cost', input.decisions.costs?.build != null ? `${input.decisions.rate?.currency ?? ''} ${hrs(input.decisions.costs.build)}`.trim() : missing('Not estimated')],
     ['Payback', pb.computable && pb.value!.months.best !== null ? (pb.value!.months.worst === null ? `From ${pb.value!.months.best} months` : pb.value!.months.worst === 'never' ? `${pb.value!.months.best} months at best` : `${pb.value!.months.best}${pb.value!.months.worst !== pb.value!.months.best ? ` to ${pb.value!.months.worst}` : ''} months`) : missing()],
