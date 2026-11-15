@@ -66,3 +66,29 @@ test('answers found are offered while their question is open and not dismissed, 
   assert.deepEqual(look.found.map(s => s.key).sort(), [answer(a.key, 'y').key, answer(b.key).key].sort());
   assert.equal(addLook(look, 'other', { items: [], found: [], passages: 0, tokens: 0 }).found.length, 0);
 });
+
+test('a passage that leaves the matter open, or an answer that repeats the question, is not offered; a flow question is not looked up', async () => {
+  const { answersIt } = await import('./suggest.ts');
+  let m = many();
+  for (const q of ['Which functional owners should validate the proposed answers?', 'What is the intended environment for the access request?', 'What are the technical feasibility and effort?'])
+    m = addQuestion(m, { target: { kind: 'meta' }, question: q }).model;
+  const t = triage(m, assessProcess(m));
+  const item = (re: RegExp) => t.items.find(i => re.test(i.question))!;
+  const p = (it: { key: string; question: string }, display: string, quote = display) => ({ itemKey: it.key, question: it.question, display, quote, certainty: 'stated' as const, answer: { text: display } });
+  const owners = item(/functional owners/), env = item(/intended environment/), eff = item(/technical feasibility/);
+  assert.equal(answersIt(p(owners, 'Relevant functional owners should validate the proposed answers.'), owners), false, 'repeats the question');
+  assert.equal(answersIt(p(owners, 'The finance and procurement process owners validate them.'), owners), true);
+  assert.equal(answersIt(p(env, 'The existing access request needs to be reviewed to confirm the intended environment.'), env), false);
+  assert.equal(answersIt(p(eff, 'Technical feasibility and effort will be assessed once these details are established.'), eff), false);
+  assert.equal(answersIt(p(eff, 'These requirements need further analysis and agreement before being included.'), eff), false);
+  assert.equal(answersIt(p(eff, 'No walkthrough of how the template is filled was given.'), eff), false);
+  assert.equal(answersIt(p(env, 'The quality system in the Frankfurt data centre, with read-only rights.'), env), true);
+  // An answer kept from before is held to the same rule when it is read back.
+  const look = addLook(null, 'k', { items: [owners], found: [{ ...answer(owners.key), target: { kind: 'answer', itemKey: owners.key, proposal: p(owners, 'Relevant functional owners should validate the proposed answers.'), source: 's' } }], passages: 1, tokens: 0 });
+  assert.equal(foundFor(look, t).length, 0);
+  // A decision with one outcome is a flow to fix, not a question for the sources.
+  const g = gold();
+  const withGateway = addQuestion(g, { target: { kind: 'gateway', id: g.gateways[0].id }, question: 'Decision "Match?" has only one outcome.' }).model;
+  const tg = triage(withGateway, assessProcess(withGateway));
+  assert.ok(!toLookUp(tg, null, 'k', { perBatch: 500, batches: 1 }).flat().some(i => i.target.kind === 'gateway'));
+});

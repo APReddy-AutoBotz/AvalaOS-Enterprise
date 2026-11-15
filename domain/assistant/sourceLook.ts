@@ -4,7 +4,7 @@
 // a passage states outright come back, as suggestions a person confirms (`answerSuggestions`); nothing is
 // recorded by the look itself. A question is looked up once per set of sources: answering one question
 // does not start another look, adding or archiving a source does.
-import type { Suggestion } from './suggest.ts';
+import { answersIt, type Suggestion } from './suggest.ts';
 import { decisive, weightOf } from '../questions/firstList.ts';
 import type { Triage, TriageItem } from '../questions/triage.ts';
 
@@ -36,7 +36,8 @@ export const sourcesKey = (sources: { id: string; archived?: boolean }[]) => sou
 /** The questions still to look up, in batches, most decisive first; none when every one has been looked up in these sources. */
 export function toLookUp(t: Triage, look: SourceLook | null, sources: string, limit: { perBatch: number; batches: number } = AUTO_LOOK): TriageItem[][] {
   const looked = new Set(look && look.sources === sources ? look.looked : []);
-  const open = t.items.filter(i => !i.deferred && !looked.has(i.key));
+  // A question about the shape of the flow is fixed in the Process stage; no passage answers it.
+  const open = t.items.filter(i => !i.deferred && !looked.has(i.key) && i.target.kind !== 'gateway');
   const first = open.filter(decisive).map((i, n) => ({ i, n })).sort((a, b) => weightOf(b.i) - weightOf(a.i) || a.n - b.n).map(x => x.i);
   const order = [...first, ...open.filter(i => !decisive(i))].slice(0, limit.perBatch * limit.batches);
   const out: TriageItem[][] = [];
@@ -60,11 +61,19 @@ export function addLook(look: SourceLook | null, sources: string, run: { items: 
   };
 }
 
-/** The answers still worth offering: their question is still open and the person has not dismissed them. */
+/**
+ * The answers still worth offering: their question is still open, the person has not dismissed them,
+ * and they still pass `answersIt` (checked again here, so answers kept from before a rule changed are
+ * held to it too).
+ */
 export function foundFor(look: SourceLook | null, t: Triage, dismissed: readonly string[] = []): Suggestion[] {
   if (!look) return [];
-  const open = new Set(t.items.filter(i => !i.deferred).map(i => i.key));
-  return look.found.filter(s => s.target.kind === 'answer' && open.has(s.target.itemKey) && !dismissed.includes(s.key));
+  const open = new Map(t.items.filter(i => !i.deferred).map(i => [i.key, i]));
+  return look.found.filter(s => {
+    if (s.target.kind !== 'answer' || dismissed.includes(s.key)) return false;
+    const item = open.get(s.target.itemKey);
+    return Boolean(item && answersIt(s.target.proposal, item));
+  });
 }
 
 /** The question keys those answers are for, for `planQuestions`. */
