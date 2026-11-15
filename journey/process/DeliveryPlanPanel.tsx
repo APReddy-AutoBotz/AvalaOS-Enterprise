@@ -29,7 +29,6 @@ export function DeliveryPlanPanel({ model, result, firstQuestions, onBrief }: {
           <li key={d.doc} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2.5" data-testid="planned-doc">
             <span className="min-w-[14rem] text-sm font-semibold text-slate-900">{d.label}</span>
             <span className="flex-1 text-sm leading-6 text-slate-600">{d.reason}</span>
-            {!d.available && <Tag tone="neutral">Comes with the agent document work</Tag>}
           </li>
         ))}
       </ul>

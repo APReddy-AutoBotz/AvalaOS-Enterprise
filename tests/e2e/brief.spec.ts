@@ -44,7 +44,7 @@ test('no documents: the short form and "in your own words" start the process; th
   await stage(page, 'Assessment');
   const plan = page.getByTestId('delivery-plan');
   await expect(plan.getByTestId('delivery-why')).toContainText('An agent is to be built (confirmed by a person)');
-  await expect(plan.getByTestId('planned-doc')).toHaveText([/Process definition \(PDD\)/, /Agent definition document.*Comes with the agent document work/, /Solution design \(SDD\)/]);
+  await expect(plan.getByTestId('planned-doc')).toHaveText([/Process definition \(PDD\)/, /Agent definition document/, /Solution design \(SDD\)/]);
   await expect(plan.getByTestId('offered-docs')).toContainText('Business requirements (BRD), Functional requirements (FRD)');
   await expect(plan.getByTestId('delivery-expectation')).toContainText('An AI agent was expected; there are no steps to compare it with yet.');
   await shot(page, '62-delivery-plan');

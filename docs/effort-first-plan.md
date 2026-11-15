@@ -1,6 +1,6 @@
 # Avala OS: the effort-first plan
 
-Agreed by the owner on 15 November 2026. Built so far (on the preview, not released): parts D, A, B, C and I (one trial reference, AP invoice processing; the owner checks its content before release); the brief's reading task is live on the server (15 November 2026). Part C was built without changing the extraction function: whether the work is done today comes from the brief. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
+Agreed by the owner on 15 November 2026. Built so far (on the preview, not released): parts D, A, B, C, I and E (one trial reference, AP invoice processing; the owner checks its content before release); the brief's reading task is live on the server (15 November 2026). Part C was built without changing the extraction function: whether the work is done today comes from the brief. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
 
 This file is kept in two places: `docs/effort-first-plan.md` in the repository (the source of truth) and `claude/effort-first-plan.md` in the owner's project. Change both together.
 
@@ -133,6 +133,7 @@ Agreed by the owner on 15 November 2026 as a change to the rule "invent nothing"
 - **May ask:** only the boundary questions (what it may do alone, who reviews), because nobody can infer those.
 - **Underneath:** a fifth document type built like the other four; agent facts on the process record. No database change expected.
 - **Proof:** on the owner's documents and on one agent case written for the test set, a reviewer can tell from the document alone what the agent may and may not do.
+- **Built (15 November 2026, preview):** `domain/docs/agent.ts`, the Documents tab "Agent" (shown when the delivery plan lists the document, planned or one click away). The agent's steps are those in effect AI-assisted or agentic, a person's choice included. Eleven sections: purpose and scope, what it does, the steps around it, decisions and rules, hand-overs to a person, applications and access, data, limits and controls, checking before go-live, running it, open questions. Every boundary fact the sources do not give (what it may never do, its limit, a wrong action's cost, its account per application, test cases, the share of right outcomes, who watches and who may stop it) is an open question. Word and Markdown downloads work. Not yet: editing its sections (needs the document-edits table to accept a fifth type: a database change, to be asked), the hand-over checklist and the change-impact list (they still cover the four documents), agent facts recorded on the process (answers go in the open questions for now).
 
 ### F. The test pack
 
