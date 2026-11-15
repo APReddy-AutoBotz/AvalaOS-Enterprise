@@ -137,13 +137,18 @@ export function deliveryPlan(m: ProcessModel, a: ProcessAssessment | null): Deli
   const b = m.meta.brief ?? {};
   const { track, why } = trackOf(m, a);
   const rule = RULE_DOCS[track];
-  const chosen = b.documents && b.documents.status !== 'unknown' && b.documents.value?.length ? b.documents.value : null;
-  const planned = new Set(chosen ?? rule);
+  // Only a person's choice replaces the table; documents the sources ask for are added to it.
+  const wanted = b.documents && b.documents.status !== 'unknown' && b.documents.value?.length ? b.documents.value : null;
+  const chosen = wanted && b.documents!.status === 'user-confirmed' ? wanted : null;
+  const asked = wanted && !chosen ? wanted : [];
+  const planned = new Set([...(chosen ?? rule), ...asked]);
   const inMind = b.inMind && b.inMind.status !== 'unknown' ? (b.inMind.value ?? []) : [];
   const offered = ORDER.filter(d => !planned.has(d) && (d !== 'agent' || inMind.includes('agent') || track === 'ai'));
   const docs: DocLine[] = [...ORDER.filter(d => planned.has(d)), ...offered].map(doc => ({
     doc, label: DOC_LABEL[doc], planned: planned.has(doc), available: BUILT_DOCS.includes(doc),
-    reason: chosen && planned.has(doc) ? `Wanted (${from(b.documents)}). ${REASON[track][doc] ?? ''}`.trim() : REASON[track][doc] ?? (planned.has(doc) ? '' : 'One click away.'),
+    reason: chosen && planned.has(doc) ? `Wanted (${from(b.documents)}). ${REASON[track][doc] ?? ''}`.trim()
+      : asked.includes(doc) && !rule.includes(doc) ? `Asked for in the sources; confirm or change it in the brief. ${REASON[track][doc] ?? ''}`.trim()
+      : REASON[track][doc] ?? (planned.has(doc) ? '' : 'One click away.'),
   }));
   const same = chosen && chosen.length === rule.length && chosen.every(d => rule.includes(d));
   const unknowns: string[] = [];

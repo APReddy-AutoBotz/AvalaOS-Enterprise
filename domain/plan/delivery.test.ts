@@ -82,6 +82,12 @@ test('documents a person chose replace the table\'s, and the table\'s own choice
   assert.deepEqual(p.docs.filter(d => d.planned).map(d => d.doc), ['brd', 'pdd', 'sdd']);
   assert.deepEqual(p.ruleWouldPlan, ['pdd', 'sdd']);
   assert.match(p.docs[0].reason, /^Wanted \(confirmed by a person\)/);
+  // Documents read from the sources (not confirmed) are added to the table's, never replace them.
+  const read = adoptBrief(gold(), { documents: { value: ['brd'], status: 'stated', sources: ref('Summary of Business Requirements') } }).model;
+  const r = deliveryPlan(read, assessProcess(read));
+  assert.deepEqual(r.docs.filter(d => d.planned).map(d => d.doc), ['brd', 'pdd', 'sdd']);
+  assert.match(r.docs.find(d => d.doc === 'brd')!.reason, /^Asked for in the sources; confirm or change it in the brief/);
+  assert.equal(r.ruleWouldPlan, null);
   const same = setBriefFact(gold(), { fact: 'documents', value: ['sdd', 'pdd'] }).model;
   assert.equal(deliveryPlan(same, assessProcess(same)).ruleWouldPlan, null);
 });
