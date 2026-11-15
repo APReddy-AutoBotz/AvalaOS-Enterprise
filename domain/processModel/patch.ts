@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
+import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessBrief, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
 import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 import { mergeApplication, type Application } from '../workspace/applications.ts';
@@ -403,6 +403,46 @@ export function setSystemApi(model: ProcessModel, args: { systemId: string; acce
 export function setProfileFact(model: ProcessModel, args: { fact: 'processChange' | 'systemChange'; value: ChangeLevel | null }): OpResult {
   return commit(model, m => {
     m.meta.profile = { ...(m.meta.profile ?? {}), [args.fact]: confirmed(args.value) };
+  });
+}
+
+/**
+ * A person states (or clears, with null) one line of the brief (docs/effort-first-plan.md, part A).
+ * The line becomes theirs: a later reading of the sources never overwrites it (`adoptBrief`).
+ */
+export function setBriefFact<K extends keyof ProcessBrief>(model: ProcessModel, args: { fact: K; value: NonNullable<ProcessBrief[K]>['value'] }): OpResult {
+  return commit(model, m => {
+    m.meta.brief = { ...(m.meta.brief ?? {}), [args.fact]: confirmed(args.value as never) };
+  });
+}
+
+/**
+ * A person confirms the brief as it stands: every line read from the sources becomes confirmed and
+ * keeps its passages. Lines the sources are silent on stay unknown; nothing is filled in for them.
+ */
+export function confirmBrief(model: ProcessModel): OpResult {
+  return commit(model, m => {
+    const b = m.meta.brief ?? {};
+    for (const k of Object.keys(b) as (keyof ProcessBrief)[]) {
+      const f = b[k];
+      if (f && (f.status === 'stated' || f.status === 'inferred')) f.status = 'user-confirmed';
+    }
+    m.meta.brief = b;
+  });
+}
+
+/**
+ * The brief as read from the sources goes into the model. A line a person gave or confirmed is never
+ * replaced; every other line takes the reading, including "the sources do not say" (unknown).
+ */
+export function adoptBrief(model: ProcessModel, read: ProcessBrief): OpResult {
+  return commit(model, m => {
+    const b: ProcessBrief = { ...(m.meta.brief ?? {}) };
+    for (const k of Object.keys(read) as (keyof ProcessBrief)[]) {
+      if (b[k]?.status === 'user-confirmed') continue;
+      (b as Record<string, unknown>)[k] = read[k];
+    }
+    m.meta.brief = b;
   });
 }
 
