@@ -10,6 +10,8 @@ import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type ApproachScore, type FactorScore, type StepScore } from '../../domain/assess/scoring.ts';
 import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
+import { DeliveryPlanPanel } from './DeliveryPlanPanel.tsx';
+import { useQuestionPlan } from './sourceLook.ts';
 import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
@@ -56,6 +58,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
+  const firstQuestions = useQuestionPlan(processId, editor.model).plan.now.length;
   // The same assessment with people's choices of approach: what the documents, flows and work items follow.
   // `result` stays the scoring alone, for the step rows and the ranking, so its own answer stays visible.
   const chosen = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings, decisions: d }), [editor.model, decisions, settings, d]);
@@ -161,6 +164,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       {tabs}
       <ErrorNote message={error ?? editor.error} />
       <Hero result={chosen} scoring={result} onReport={() => setView('report')} />
+      {/* The delivery plan follows the approach in effect, people's choices included (part B). */}
+      <DeliveryPlanPanel model={editor.model} result={chosen} firstQuestions={firstQuestions} />
       {result.assessed > 0 && <Ranking result={result} />}
       {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
       {result.assessed > 0 && (

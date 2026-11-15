@@ -39,6 +39,11 @@ export const TARGET_COLLECTION: Record<Exclude<ElementTarget['kind'], 'meta'>, s
   exception: 'exceptions', metric: 'meta.metrics', data: 'dataObjects',
 };
 
+export const DONE_TODAY = ['yes', 'partly', 'no'] as const;
+export const WORK_KINDS = ['existing_process', 'new_process', 'tool', 'agent'] as const;
+export const IN_MIND = ['rpa', 'api', 'ai', 'agent', 'open'] as const;
+export const PLANNED_DOCS = ['brd', 'pdd', 'frd', 'sdd', 'agent'] as const;
+
 const isStr = (v: unknown): v is string => typeof v === 'string';
 const isNonEmpty = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 
@@ -180,6 +185,20 @@ export function validateModel(model: ProcessModel): ValidationResult {
       if (k === 'typical') traits(pr[k], '/meta/profile/typical');
       else if (!['processChange', 'systemChange'].includes(k)) err('PROFILE', `/meta/profile/${k}`, `Unknown profile fact ${k}.`);
       else typedFact(pr[k], `/meta/profile/${k}`, v => ['none', 'minor', 'major'].includes(v as string));
+    }
+  }
+  if (model.meta.brief !== undefined) {
+    const b: any = model.meta.brief;
+    const one = (list: readonly string[]) => (v: unknown) => list.includes(v as string);
+    const many = (list: readonly string[]) => (v: unknown) => Array.isArray(v) && v.every(x => list.includes(x)) && new Set(v).size === v.length;
+    const checks: Record<string, (v: unknown) => boolean> = {
+      summary: v => typeof v === 'string' && v.trim().length > 0,
+      doneToday: one(DONE_TODAY), kind: one(WORK_KINDS), inMind: many(IN_MIND), documents: many(PLANNED_DOCS),
+    };
+    if (!b || typeof b !== 'object' || Array.isArray(b)) err('BRIEF', '/meta/brief', 'brief must be an object.');
+    else for (const k of Object.keys(b)) {
+      if (!checks[k]) err('BRIEF', `/meta/brief/${k}`, `Unknown brief fact ${k}.`);
+      else typedFact(b[k], `/meta/brief/${k}`, checks[k]);
     }
   }
   model.systems.forEach((s, i) => {

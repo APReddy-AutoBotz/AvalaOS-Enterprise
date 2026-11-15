@@ -1,6 +1,6 @@
 # Avala OS: the effort-first plan
 
-Agreed by the owner on 15 November 2026. Nothing in it is built yet. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
+Agreed by the owner on 15 November 2026. Built so far (on the preview, not released): part D, and parts A and B without the brief's reading task going live (it needs one `journey-ai` deploy, asked for at the time). It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
 
 This file is kept in two places: `docs/effort-first-plan.md` in the repository (the source of truth) and `claude/effort-first-plan.md` in the owner's project. Change both together.
 

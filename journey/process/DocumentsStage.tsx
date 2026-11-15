@@ -16,6 +16,7 @@ import { StatusBadge } from './widgets.tsx';
 import { GapsAssistant } from './GapsAssistant.tsx';
 import { useQuestionPlan } from './sourceLook.ts';
 import { nowHeading, planSummary } from '../../domain/questions/firstList.ts';
+import { deliveryPlan } from '../../domain/plan/delivery.ts';
 import { useModelEditor } from './useModelEditor.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
@@ -139,6 +140,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   }, [store, processId, workspaceId]);
 
   const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings, decisions }) : null), [model, decisions, settings]);
+  // The delivery plan (part B): its documents come first and the first of them opens, unless the person chose a tab.
+  const delivery = React.useMemo(() => (assessment ? deliveryPlan(model, assessment) : null), [model, assessment]);
+  const planned = React.useMemo(() => new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)), [delivery]);
+  const orderedTypes = React.useMemo(() => [...TYPES.filter(t => planned.has(t.id)), ...TYPES.filter(t => !planned.has(t.id))], [planned]);
+  const typeChosen = React.useRef(false);
+  React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
+  const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.available ? d.doc.toUpperCase() : 'the agent document (to come)')).join(', ')}.` : '';
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
   const register = React.useMemo(() => (assessment && stored ? reconcile(deriveRequirements(model, assessment), stored) : null), [model, assessment, stored]);
   React.useEffect(() => {
@@ -242,13 +250,19 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div role="tablist" aria-label="Documents" className="inline-flex flex-wrap rounded-lg bg-slate-200/70 p-0.5">
-          {TYPES.map(t => (
-            <button key={t.id} type="button" role="tab" aria-selected={type === t.id} onClick={() => setType(t.id)}
-              className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', type === t.id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
-              {t.short}<span className="ml-1.5 hidden font-normal text-slate-600 sm:inline">{t.label}</span>
-            </button>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* The delivery plan's documents first (part B), marked with an amber dot; the others stay one click away. */}
+          <div role="tablist" aria-label="Documents" className="inline-flex flex-wrap rounded-lg bg-slate-200/70 p-0.5">
+            {orderedTypes.map(t => (
+              <button key={t.id} type="button" role="tab" aria-selected={type === t.id} onClick={() => { setType(t.id); typeChosen.current = true; }} data-planned={planned.has(t.id) ? 'yes' : 'no'}
+                title={planned.has(t.id) ? 'Planned for this process' : 'Not in the plan for this process; one click away'}
+                className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', type === t.id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
+                {planned.has(t.id) && <span aria-hidden className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#E69F00] align-middle" />}
+                {t.short}<span className="ml-1.5 hidden font-normal text-slate-600 sm:inline">{t.label}</span>
+              </button>
+            ))}
+          </div>
+          {plannedLine && <span className="text-xs text-slate-500" data-testid="planned-docs">{plannedLine}</span>}
         </div>
         {doc && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setShowChecks(!showChecks)} aria-expanded={showChecks}>{failing ? `Ready to hand over? ${failing} to fix` : 'Ready to hand over ✓'}</Button><Button onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
       </div>

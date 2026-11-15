@@ -2,6 +2,9 @@
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import { useProcessChanged } from '../processChanged.ts';
 import { useAutoLook } from '../process/sourceLook.ts';
+import { BriefPanel } from '../process/BriefPanel.tsx';
+import { briefFromFindings, briefSegments, readBrief, type BriefFinding } from '../../domain/plan/readBrief.ts';
+import { adoptBrief } from '../../domain/processModel/patch.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
@@ -171,7 +174,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
-          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
               revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
@@ -205,8 +208,27 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
     apps,
     add: async input => { const saved = await store.saveApplication(workspaceId, input); setApps(cur => [...(cur ?? []), saved]); },
   } : null), [apps, store, workspaceId]);
+  // The brief, read from the sources on request (part A): the reading task in journey-ai, then by rule.
+  const [reading, setReading] = React.useState(false);
+  const [readError, setReadError] = React.useState<string | null>(null);
+  const readBriefNow = async () => {
+    setReading(true); setReadError(null);
+    try {
+      const rows = (await store.listSources(processId)).filter(s => !s.archived);
+      const sources = await Promise.all(rows.map(async s => ({ key: s.key, title: s.title, segments: await store.getSourceSegments(s.id).catch(() => []) })));
+      const { segments, ingest } = briefSegments(editor.model, sources);
+      if (!segments.length) { setReadError('There are no sources to read the brief from yet.'); return; }
+      const r = await store.runAiTask(workspaceId, readBrief.id, segments as never);
+      const read = briefFromFindings(((r.data as { findings?: BriefFinding[] } | null)?.findings ?? []), ingest);
+      await editor.apply(m => adoptBrief(m, read), 'Brief read from the sources');
+    } catch (e) { setReadError(messageOf(e)); } finally { setReading(false); }
+  };
   return (
-    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
+    <>
+      <ErrorNote message={readError} />
+      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
+      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
+    </>
   );
 }
 
