@@ -18,7 +18,7 @@ export interface ValidationResult {
   issues: ValidationIssue[];
 }
 
-const FACT_STATUSES: readonly FactStatus[] = ['stated', 'inferred', 'user-confirmed', 'assumed', 'unknown'];
+const FACT_STATUSES: readonly FactStatus[] = ['stated', 'inferred', 'user-confirmed', 'assumed', 'typical', 'unknown'];
 const ROLE_KINDS = ['person_role', 'team', 'external', 'system_actor'];
 const ACCESS_METHODS = ['api', 'ui', 'file', 'database', 'event', 'email'];
 const ACCESS_STATUSES = ['confirmed', 'reported', 'unknown', 'confirmed_absent'];
@@ -186,6 +186,9 @@ export function validateModel(model: ProcessModel): ValidationResult {
       else if (!['processChange', 'systemChange'].includes(k)) err('PROFILE', `/meta/profile/${k}`, `Unknown profile fact ${k}.`);
       else typedFact(pr[k], `/meta/profile/${k}`, v => ['none', 'minor', 'major'].includes(v as string));
     }
+  }
+  if (model.meta.startedFrom !== undefined && (typeof model.meta.startedFrom !== 'string' || !model.meta.startedFrom.trim())) {
+    err('BAD_STARTED_FROM', 'meta.startedFrom', 'meta.startedFrom must name a typical process.');
   }
   if (model.meta.brief !== undefined) {
     const b: any = model.meta.brief;

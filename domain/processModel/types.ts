@@ -15,6 +15,7 @@ export type FactStatus =
   | 'inferred' // derived from sources, not said outright
   | 'user-confirmed' // set or confirmed by a person in the product
   | 'assumed' // a working assumption someone recorded; must be confirmed later
+  | 'typical' // from a typical process Avala OS offers as a start (part I); never a fact until a person confirms it
   | 'unknown'; // known to be missing
 
 /** Where in a source a fact was found. Only the fields that apply to the source type are set. */
@@ -130,6 +131,8 @@ export interface ProcessMeta {
   metrics: Metric[];
   profile?: ProcessProfile;
   brief?: ProcessBrief;
+  /** The typical process this one was started from (domain/reference), if any; part I. */
+  startedFrom?: string;
 }
 
 export type RoleKind = 'person_role' | 'team' | 'external' | 'system_actor';

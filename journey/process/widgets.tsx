@@ -13,6 +13,7 @@ const STATUS: Record<FactStatus, { label: string; tone: string; title: string }>
   inferred: { label: 'Inferred', tone: 'bg-violet-100 text-violet-900', title: 'Read from the sources but not said outright; check it' },
   'user-confirmed': { label: 'Confirmed', tone: 'bg-emerald-100 text-emerald-900', title: 'Set or confirmed by a person' },
   assumed: { label: 'Assumption', tone: 'bg-amber-100 text-amber-900', title: 'A working assumption to confirm' },
+  typical: { label: 'Typical, not confirmed', tone: 'bg-orange-100 text-orange-900', title: 'From a typical process Avala OS offers as a start; not a fact until your people confirm it' },
   unknown: { label: 'Unknown', tone: 'bg-slate-200/70 text-slate-700', title: 'Known to be missing' },
 };
 

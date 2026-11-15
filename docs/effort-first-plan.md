@@ -1,6 +1,6 @@
 # Avala OS: the effort-first plan
 
-Agreed by the owner on 15 November 2026. Built so far (on the preview, not released): parts D, A, B and C; the brief's reading task is live on the server (15 November 2026). Part C was built without changing the extraction function: whether the work is done today comes from the brief. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
+Agreed by the owner on 15 November 2026. Built so far (on the preview, not released): parts D, A, B, C and I (one trial reference, AP invoice processing; the owner checks its content before release); the brief's reading task is live on the server (15 November 2026). Part C was built without changing the extraction function: whether the work is done today comes from the brief. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
 
 This file is kept in two places: `docs/effort-first-plan.md` in the repository (the source of truth) and `claude/effort-first-plan.md` in the owner's project. Change both together.
 
@@ -123,6 +123,7 @@ Agreed by the owner on 15 November 2026 as a change to the rule "invent nothing"
 - **Trial:** one reference process, AP invoice processing, built from the hand-checked sample case. Try it with a person who has no documents. Expand to five only if they reach useful documents faster and the confirm pass feels natural. Suggested five: AP invoice processing, vendor set-up, bank reconciliation, employee onboarding, customer onboarding checks for banking (the owner may change these to what the first clients do).
 - **Homepage:** the line "Nothing is invented" becomes, in substance, "Nothing is invented; a typical pattern stays labelled as typical until your people confirm it" when this ships.
 - **Underneath:** a new status for facts ("typical") in the process record and the checks that read it; the reference files in the repository. No database change expected.
+- **Built (15 November 2026, preview):** as above, with the homepage line changed in the next release. The checklist is offered only for a process read from sources, so a step taken out with "We don't" is never suggested again. "Skip for now" leaves an item typical without answering.
 - **Proof:** no document states a typical item as a fact; a test keeps volumes, times, costs and API facts out of every reference.
 
 ### E. The agent document

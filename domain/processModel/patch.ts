@@ -446,6 +446,67 @@ export function adoptBrief(model: ProcessModel, read: ProcessBrief): OpResult {
   });
 }
 
+// ---- a typical process to start from (docs/effort-first-plan.md, part I) ----------------------
+
+/**
+ * Starts an empty process from a reference process: every element typical, the applications mapped to
+ * the ones the person named (domain/reference/typical.ts `typicalElements`). Only on a process with no
+ * steps yet: a reference is a start, never laid over what the sources say.
+ */
+export function startFromTypical(model: ProcessModel, args: { elements: Pick<ProcessModel, 'roles' | 'systems' | 'events' | 'steps' | 'gateways' | 'flows' | 'rules' | 'exceptions'>; from?: string }): OpResult {
+  if (model.steps.length) throw new ModelOpError('NOT_EMPTY', 'A typical process is only a start: this process already has steps.');
+  return commit(model, m => {
+    const e = args.elements;
+    m.roles = [...m.roles, ...e.roles.filter(r => !m.roles.some(x => x.id === r.id))];
+    m.systems = [...m.systems, ...e.systems.filter(s => !m.systems.some(x => x.id === s.id || x.name.toLowerCase() === s.name.toLowerCase()))];
+    m.events = e.events; m.steps = e.steps; m.gateways = e.gateways; m.flows = e.flows; m.rules = e.rules; m.exceptions = e.exceptions;
+    if (args.from) m.meta.startedFrom = args.from;
+  });
+}
+
+type TypicalTarget = { kind: 'step' | 'rule' | 'exception' | 'role' | 'system' | 'gateway' | 'event'; id: string };
+const typicalList = (m: ProcessModel, kind: TypicalTarget['kind']): { id: string; status: string }[] =>
+  ({ step: m.steps, rule: m.rules, exception: m.exceptions, role: m.roles, system: m.systems, gateway: m.gateways, event: m.events })[kind];
+
+/**
+ * A person confirms a typical item: "we do this" (as it stands) or "ours is different" (with their own
+ * name and description, or rule wording). It becomes theirs (confirmed by a person).
+ */
+export function confirmTypical(model: ProcessModel, args: TypicalTarget & { name?: string; detail?: string }): OpResult {
+  const item = typicalList(model, args.kind).find(x => x.id === args.id);
+  if (!item) throw new ModelOpError('NOT_FOUND', `No ${args.kind} with id ${args.id}.`);
+  if (item.status !== 'typical') throw new ModelOpError('NOT_TYPICAL', 'Only a typical item is confirmed this way.');
+  const name = args.name?.trim(), detail = args.detail?.trim();
+  return commit(model, m => {
+    const x = typicalList(m, args.kind).find(y => y.id === args.id)! as Record<string, unknown>;
+    x.status = 'user-confirmed';
+    if (name) { if (args.kind === 'gateway') x.question = name; else x.name = name; }
+    if (detail !== undefined && detail !== '') {
+      if (args.kind === 'step') x.description = detail;
+      else if (args.kind === 'rule') x.action = detail;
+      else if (args.kind === 'exception') x.handling = detail;
+    }
+  });
+}
+
+/** "We don't do this": a typical step, rule or exception is taken out (a step's neighbours are joined). */
+export function dropTypical(model: ProcessModel, args: { kind: 'step' | 'rule' | 'exception'; id: string }): OpResult {
+  const item = typicalList(model, args.kind).find(x => x.id === args.id);
+  if (!item) throw new ModelOpError('NOT_FOUND', `No ${args.kind} with id ${args.id}.`);
+  if (item.status !== 'typical') throw new ModelOpError('NOT_TYPICAL', 'Only a typical item is taken out this way; delete your own in the Process stage.');
+  if (args.kind === 'step') return removeStep(model, { stepId: args.id });
+  return removeElement(model, { kind: args.kind, id: args.id });
+}
+
+/**
+ * With documents present, a person adds one step of the reference the sources do not mention: it comes
+ * in typical, at the end of the steps, with no role or application the process does not have.
+ */
+export function addTypicalStep(model: ProcessModel, args: { step: Pick<Step, 'id' | 'name' | 'description' | 'taskType'> }): OpResult & { stepId: string } {
+  const id = allIds(model).has(args.step.id) ? undefined : args.step.id;
+  return addStep(model, { step: { ...(id ? { id } : {}), name: args.step.name, description: args.step.description, taskType: args.step.taskType, status: 'typical', sources: [] } });
+}
+
 export const PROCESS_METRICS: Partial<Record<MetricKind, { label: string; unit: string }>> = {
   volume: { label: 'Cases handled', unit: 'cases' },
   handling_time: { label: 'Hands-on time per case', unit: 'minutes' },
