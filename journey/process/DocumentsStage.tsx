@@ -14,8 +14,9 @@ import type { JourneyStore, SourceRow } from '../store/types.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { StatusBadge } from './widgets.tsx';
 import { GapsAssistant } from './GapsAssistant.tsx';
+import { useQuestionPlan } from './sourceLook.ts';
+import { nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { useModelEditor } from './useModelEditor.ts';
-import { triage } from '../../domain/questions/triage.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
 import { buildFrd } from '../../domain/docs/frd.ts';
@@ -225,17 +226,19 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     a.click(); URL.revokeObjectURL(url);
   };
 
-  const toAnswer = React.useMemo(() => (decisions ? triage(model, assessProcess(model, { settings })) : null), [model, decisions, settings]);
-  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} branding={docSettings.branding} /></>;
+  // The first list (part D): the banner counts only what people must answer now and answers to confirm.
+  const { plan } = useQuestionPlan(processId, model);
+  const toAnswer = decisions ? plan : null;
+  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant processId={processId} model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} branding={docSettings.branding} /></>;
 
   return (
     <div className="space-y-5">
       <style>{PRINT_CSS}</style>
       <ErrorNote message={error ?? editor.error} />
-      {toAnswer && (toAnswer.items.some(i => !i.deferred) || toAnswer.alreadyKnown.length > 0) && (
+      {toAnswer && (toAnswer.now.length + toAnswer.found.length + toAnswer.wait.length > 0 || toAnswer.counts.alreadyKnown > 0) && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-4" data-testid="gaps-banner">
-          <p className="text-sm text-amber-950"><span className="font-semibold">{toAnswer.items.filter(i => !i.deferred).length} questions to answer</span> before these documents are complete (from {toAnswer.raw} raised; duplicates merged{toAnswer.alreadyKnown.length ? `, ${toAnswer.alreadyKnown.length} already answered by the model` : ''}).</p>
-          <Button onClick={() => setAnswering(true)}>Answer them</Button>
+          <p className="text-sm text-amber-950"><span className="font-semibold">{nowHeading(toAnswer)}</span>. {planSummary(toAnswer)}</p>
+          <Button onClick={() => setAnswering(true)}>{toAnswer.now.length || toAnswer.found.length ? 'Answer them' : 'See what can wait'}</Button>
         </div>
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">

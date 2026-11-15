@@ -199,7 +199,7 @@ export interface JourneyStore {
   latestExtraction(processId: string): Promise<ExtractionRow | null>;
   /** Runs a registered AI task on segments; quotes in the result are already checked against them. */
   /** `recorded`: the demo's recorded reply on the sample case, not a live answer (domain/assistant/recorded.ts). */
-  runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown; recorded?: boolean }>;
+  runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown; recorded?: boolean; /** Tokens the call used, as the server reports them. */ usage?: { input: number; output: number } }>;
 
   /** Overrides and the cost rate for a process's assessment (the latest saved). */
   getAssessmentDecisions(processId: string): Promise<Decisions>;

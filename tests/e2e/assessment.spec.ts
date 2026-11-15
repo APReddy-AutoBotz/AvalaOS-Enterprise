@@ -300,34 +300,43 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   expect(sdd.suggestedFilename()).toMatch(/SDD\.docx$/);
 });
 
-test('closing the gaps: answers in a guided session update the model and the documents', async ({ page }) => {
+test('closing the gaps: the first list is asked first, answers update the model and the documents, and the rest can wait', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Documents');
   await expect(page.getByTestId('gaps-banner')).toBeVisible();
+  await expect(page.getByTestId('gaps-banner')).toContainText('only your people can tell us');
   await page.getByRole('button', { name: 'Answer them' }).click();
   const assistant = page.getByTestId('gaps-assistant');
-  const before = Number((await assistant.getByTestId('gaps-count').textContent())!.match(/\d+/)![0]);
+  // At most seven at first (docs/effort-first-plan.md, part D); the rest is one click away.
+  const before = Number((await assistant.getByTestId('gaps-count').textContent())!.match(/^\d+/)![0]);
+  expect(before).toBeLessThanOrEqual(7);
+  await expect(assistant.getByTestId('gaps-summary')).toContainText('can wait until sign-off');
   await shot(page, '40-gaps-assistant');
+  const list = assistant.getByRole('list', { name: 'Questions' });
 
-  // Who does the step: a role picker; the answer writes the step's role.
-  const roleQ = assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /Who does "Check invoice totals"/ });
-  if (await roleQ.count()) {
-    await roleQ.click();
-    await expect(assistant.getByTestId('gap-question')).toContainText('Who does "Check invoice totals"');
-  }
-  // The objective: free text written to the process.
-  await assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /objective/i }).click();
+  // The objective opens the documents, so it is asked first: free text written to the process.
+  await list.getByRole('button', { name: /objective/i }).click();
   await assistant.getByLabel('Answer', { exact: true }).fill('Post supplier invoices correctly within five working days.');
   await assistant.getByRole('button', { name: 'Save answer' }).click();
   await saved(page);
-  await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 1} `));
+  await expect(list.getByRole('button', { name: /objective/i })).toHaveCount(0);
 
-  // Set one aside for someone else.
+  // Set one aside for someone else: it leaves the list.
+  const asked = (await assistant.getByTestId('gap-question').getByRole('heading').textContent())!;
   await assistant.getByRole('button', { name: 'Ask someone later' }).click();
   await assistant.getByLabel('Who should answer it').fill('AP Team Lead');
   await assistant.getByRole('button', { name: 'Set aside' }).click();
   await saved(page);
-  await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 2} `));
+  await expect(list.getByRole('button').filter({ hasText: asked })).toHaveCount(0);
+
+  // What can wait is still there, each with why it waits; who does a step is answered with a role picker.
+  await assistant.getByTestId('gaps-view-wait').click();
+  await expect(assistant.getByTestId('gap-waits')).toBeVisible();
+  const roleQ = list.getByRole('button', { name: /Who does "Check invoice totals"/ });
+  if (await roleQ.count()) {
+    await roleQ.click();
+    await expect(assistant.getByTestId('gap-question')).toContainText('Who does "Check invoice totals"');
+  }
 
   await assistant.getByRole('button', { name: 'Back to the document' }).click();
   await expect(page.getByTestId('document')).toContainText('Post supplier invoices correctly within five working days.');

@@ -7,6 +7,8 @@ import { revisionStatus } from '../domain/workspace/route.ts';
 import { assessProcess } from '../domain/assess/process.ts';
 import { processCard, type ProcessCard } from '../domain/assess/portfolio.ts';
 import type { AssessmentSettings } from '../domain/assess/settings.ts';
+import { questionPlan } from './process/sourceLook.ts';
+import type { ProcessModel } from '../domain/processModel/types.ts';
 
 export type LoadedFacts = ProcessFacts & {
   statusLabel: string; statusTone: 'neutral' | 'draft' | 'approved' | 'changed';
@@ -14,6 +16,11 @@ export type LoadedFacts = ProcessFacts & {
   card: ProcessCard | null;
 };
 export const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
+
+function questionCounts(processId: string, model: ProcessModel) {
+  const { plan } = questionPlan(processId, model);
+  return { now: plan.now.length, found: plan.found.length, wait: plan.wait.length };
+}
 
 export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, settings?: AssessmentSettings): Promise<LoadedFacts> {
   const revisions = await store.listRevisions(p.id);
@@ -24,6 +31,8 @@ export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, setti
     id: p.id, name: p.name, analystId: p.analystId ?? null, architectId: p.architectId ?? null, approverId: p.approverId ?? null,
     status: revisions.length === 0 ? 'none' : status.tone === 'approved' ? 'approved' : status.tone === 'changed' ? 'changed' : 'draft',
     openQuestions: model ? model.openQuestions.filter(q => q.status === 'open').length : 0,
+    // The first list (part D): what only people can answer now, what the sources answer, what can wait.
+    questions: model && model.steps.length ? questionCounts(p.id, model) : undefined,
     proposalsWaiting: proposals.filter(x => x.state === 'proposed' || x.state === 'selected').length,
     statusLabel: status.label, statusTone: status.tone,
     // The approach in effect for each step, people's choices included, as on the process's own pages.

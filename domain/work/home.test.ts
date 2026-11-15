@@ -93,3 +93,14 @@ test('the people named on a process: each once, with every duty they hold', () =
   assert.deepEqual(namedOn(proc({ analystId: 'ba', architectId: 'sa', approverId: 'ba' })), [{ userId: 'ba', duties: ['analyst', 'approver'] }, { userId: 'sa', duties: ['architect'] }]);
   assert.deepEqual(namedOn(proc()), []);
 });
+
+test('with the first list worked out, only what people must answer now and answers to confirm are needs; what can wait is listed, not asked', () => {
+  const ba: Person = { userId: 'ba', access: 'editor', canApprove: false, job: 'business_analyst' };
+  const p = proc({ analystId: 'ba', proposalsWaiting: 0, status: 'approved', openQuestions: 66, questions: { now: 7, found: 2, wait: 50 } });
+  assert.deepEqual(needsFor(ba, [p]).map(n => n.text), ['7 questions only your people can answer', '2 answers found in the sources to confirm']);
+  assert.deepEqual(openOn(p), ['7 questions to answer now', '2 answers to confirm', '50 can wait until sign-off']);
+  const later = proc({ analystId: 'ba', proposalsWaiting: 0, status: 'approved', openQuestions: 40, questions: { now: 0, found: 0, wait: 40 } });
+  assert.deepEqual(needsFor(ba, [later]), []);
+  // The weekday email knows only the stored count: unchanged.
+  assert.deepEqual(needsFor(ba, [proc({ analystId: 'ba', proposalsWaiting: 0, status: 'approved', openQuestions: 3 })]).map(n => n.text), ['3 open questions to answer']);
+});

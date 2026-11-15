@@ -1,6 +1,7 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import { useProcessChanged } from '../processChanged.ts';
+import { useAutoLook } from '../process/sourceLook.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
@@ -74,6 +75,9 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   React.useEffect(() => { load(); }, [load]);
   // Answers recorded from the Ask Avala panel show here at once.
   useProcessChanged(processId, load);
+  // Before its questions are put to people, the sources are looked in for their answers (part D).
+  const shown = data && data !== 'missing' ? data : null;
+  useAutoLook(store, shown?.process ?? null, shown?.model ?? null, Boolean(shown?.workspace && shown.workspace.role !== 'viewer'));
   // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
   const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
   React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);

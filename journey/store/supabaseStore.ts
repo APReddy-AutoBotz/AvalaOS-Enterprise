@@ -268,7 +268,8 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     },
     async runAiTask(workspaceId, task, segments) {
       const r = await call('journey-ai', { action: 'run', workspaceId, task, segments });
-      return { data: r.data };
+      const u = r.usage as { input?: number; output?: number } | undefined;
+      return { data: r.data, usage: u ? { input: Number(u.input) || 0, output: Number(u.output) || 0 } : undefined };
     },
     async getAssessmentDecisions(processId) {
       const { data, error } = await db.from('assessments').select('overrides').eq('process_id', processId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
