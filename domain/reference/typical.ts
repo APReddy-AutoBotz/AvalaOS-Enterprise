@@ -79,6 +79,12 @@ export function toConfirm(m: ProcessModel): { kind: 'step' | 'rule' | 'exception
 }
 const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
+/** What the last card of the confirm pass covers: typical roles and applications (to name), and how many decision points and events. */
+export function restToConfirm(m: ProcessModel): { roles: { id: string; name: string }[]; systems: { id: string; name: string }[]; gateways: number; events: number } {
+  const t = <X extends { status: string }>(xs: X[]) => xs.filter(x => x.status === 'typical');
+  return { roles: t(m.roles).map(r => ({ id: r.id, name: r.name })), systems: t(m.systems).map(s => ({ id: s.id, name: s.name })), gateways: t(m.gateways).length, events: t(m.events).length };
+}
+
 /** A sentence for the provisional assessment, or null when nothing typical is left among the steps. */
 export function provisionalNote(m: ProcessModel): string | null {
   const c = typicalCounts(m);

@@ -489,6 +489,27 @@ export function confirmTypical(model: ProcessModel, args: TypicalTarget & { name
   });
 }
 
+/**
+ * The last card of the confirm pass: the typical roles, applications, decision points and events that
+ * connect the steps people have confirmed. Only once no typical step, rule or exception is left; roles and
+ * applications may be renamed on the way (an application still named "Your ..." must be named first).
+ */
+export function confirmTypicalRest(model: ProcessModel, args: { names?: Record<string, string> } = {}): OpResult {
+  if ([...model.steps, ...model.rules, ...model.exceptions].some(x => x.status === 'typical')) {
+    throw new ModelOpError('STEPS_FIRST', 'Confirm or take out the typical steps, rules and exceptions first.');
+  }
+  const names = args.names ?? {};
+  const named = (id: string, old: string) => (names[id]?.trim() || old);
+  const placeholder = model.systems.find(s => s.status === 'typical' && /^Your /.test(named(s.id, s.name)));
+  if (placeholder) throw new ModelOpError('NAME_APPLICATION', `Give "${placeholder.name}" the name of your application first.`);
+  return commit(model, m => {
+    for (const r of m.roles) if (r.status === 'typical') { r.name = named(r.id, r.name); r.status = 'user-confirmed'; }
+    for (const s of m.systems) if (s.status === 'typical') { s.name = named(s.id, s.name); s.status = 'user-confirmed'; }
+    for (const g of m.gateways) if (g.status === 'typical') g.status = 'user-confirmed';
+    for (const e of m.events) if (e.status === 'typical') e.status = 'user-confirmed';
+  });
+}
+
 /** "We don't do this": a typical step, rule or exception is taken out (a step's neighbours are joined). */
 export function dropTypical(model: ProcessModel, args: { kind: 'step' | 'rule' | 'exception'; id: string }): OpResult {
   const item = typicalList(model, args.kind).find(x => x.id === args.id);

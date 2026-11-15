@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { ProcessModel } from '../processModel/types.ts';
 import { emptyModel } from '../processModel/empty.ts';
-import { addTypicalStep, confirmTypical, dropTypical, ModelOpError, removeStep, startFromTypical } from '../processModel/patch.ts';
+import { addTypicalStep, confirmTypical, confirmTypicalRest, dropTypical, ModelOpError, removeStep, startFromTypical } from '../processModel/patch.ts';
 import { validateModel } from '../processModel/validate.ts';
 import { assessProcess } from '../assess/process.ts';
 import { emptyDecisions } from '../assess/decisions.ts';
 import { buildPdd } from '../docs/pdd.ts';
 import { toMarkdown } from '../docs/markdown.ts';
 import { AP_INVOICE } from './apInvoice.ts';
-import { matchReference, provisionalNote, REFERENCES, toConfirm, typicalChecklist, typicalCounts, typicalElements } from './typical.ts';
+import { matchReference, provisionalNote, REFERENCES, restToConfirm, toConfirm, typicalChecklist, typicalCounts, typicalElements } from './typical.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const started = (apps: Record<string, string> = {}) => startFromTypical(emptyModel('Supplier invoices'), { elements: typicalElements(AP_INVOICE, apps), from: AP_INVOICE.id }).model;
@@ -111,4 +111,19 @@ test('the checklist never offers back a step taken out of a process started from
   m = confirmTypical(m, { kind: 'step', id: 's-log' }).model;
   assert.equal(m.meta.startedFrom, 'ap-invoice');
   assert.deepEqual(typicalChecklist(m, AP_INVOICE), []);
+});
+
+test('the last card: roles and applications named and confirmed with the decision points, once the steps are done', () => {
+  let m = started({ 'sys-sap': 'SAP S/4HANA' });
+  assert.throws(() => confirmTypicalRest(m), ModelOpError);
+  for (const x of toConfirm(m)) m = confirmTypical(m, { kind: x.kind, id: x.id }).model;
+  const rest = restToConfirm(m);
+  assert.ok(rest.roles.length > 0 && rest.gateways > 0 && rest.events > 0);
+  assert.ok(!rest.systems.some(s => s.id === 'sys-sap'), 'a mapped application is already the person\'s');
+  assert.throws(() => confirmTypicalRest(m), /name of your application/);
+  const names = Object.fromEntries(rest.systems.map(s => [s.id, `${s.name.replace(/^Your /, 'Our ')}`]));
+  m = confirmTypicalRest(m, { names }).model;
+  assert.equal(typicalCounts(m).total, 0);
+  assert.equal(provisionalNote(m), null);
+  assert.equal(validateModel(m).valid, true);
 });
