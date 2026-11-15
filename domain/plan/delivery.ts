@@ -117,7 +117,10 @@ export function trackOf(m: ProcessModel, a: ProcessAssessment | null): { track: 
     return { track: 'new', why: `${what}, so there is no current process to document: the requirements come first, then the solution design.` };
   }
   if (a?.lead === 'agent' || a?.lead === 'ai_assist') return { track: 'ai', why: `The assessment leads with ${APPROACH_LABEL[a.lead]}, so the agent's boundaries, reviewer and access are written down beside the process.` };
-  return { track: 'existing', why: a?.lead ? `The work is done today and the assessment leads with ${APPROACH_LABEL[a.lead]}: the process as it runs and the solution design are what a build needs.` : 'The work is done today: the process as it runs and the solution design are what a build needs.' };
+  // Only a brief that says so makes it work done today; otherwise the plan says it is assumed.
+  const today = done === 'yes' || done === 'partly' ? `The work is ${done === 'partly' ? 'partly ' : ''}done today (${from(b.doneToday)})` : 'Nobody has said yet whether the work is done today, so it is treated as done today';
+  const lead = a?.lead ? ` and the assessment leads with ${APPROACH_LABEL[a.lead]}` : '';
+  return { track: 'existing', why: `${today}${lead}: the process as it runs and the solution design are what a build needs.` };
 }
 
 const REASON: Record<Track, Partial<Record<PlannedDoc, string>>> = {
@@ -141,7 +144,7 @@ export function deliveryPlan(m: ProcessModel, a: ProcessAssessment | null): Deli
   }));
   const same = chosen && chosen.length === rule.length && chosen.every(d => rule.includes(d));
   const unknowns: string[] = [];
-  if (!b.doneToday || b.doneToday.status === 'unknown') unknowns.push('Whether the work is done today is not known yet; the plan treats it as done today until someone says otherwise.');
+  if (!b.doneToday || b.doneToday.status === 'unknown') unknowns.push('Whether the work is done today: fill it in on the brief (Process stage); if it is not done today, the plan changes to requirements first.');
   if (!b.kind || b.kind.status === 'unknown') unknowns.push('What kind of thing this is (an existing process, a new one, a tool or an agent) is not known yet.');
   return { track, why, docs, ruleWouldPlan: chosen && !same ? rule : null, expectation: expectation(inMind, a), unknowns };
 }
