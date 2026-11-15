@@ -868,4 +868,16 @@ test('a step set to agentic AI gets the agent document: planned, its steps and a
   await expect(page.getByTestId('agent-read-only')).toBeVisible();
   await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
   await shot(page, '73-agent-document');
+
+  // Part F: the test pack, one case per criterion (or one with no expected result yet), the agent's cases marked.
+  await page.getByRole('tablist', { name: 'Documents' }).getByRole('tab', { name: /^Tests/ }).click();
+  await expect(doc).toContainText('Test Pack');
+  await expect(page.getByTestId('tests-note')).toContainText('nothing is tested that no requirement states');
+  await expect(doc.getByRole('heading', { name: /The agent's cases/ })).toBeVisible();
+  await expect(doc).toContainText('Post invoice in SAP');
+  await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
+  const csvFile = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download for Excel' }).click();
+  expect((await csvFile).suggestedFilename()).toMatch(/Test pack\.csv$/);
+  await shot(page, '74-test-pack');
 });

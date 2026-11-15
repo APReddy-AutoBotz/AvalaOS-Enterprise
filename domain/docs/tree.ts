@@ -5,9 +5,9 @@
 import type { ElementTarget, FactStatus } from '../processModel/types.ts';
 
 /** 'questions' is a question pack sent to one owner; it has no layout of its own. */
-export type DocType = 'brd' | 'pdd' | 'frd' | 'sdd' | 'agent' | 'questions';
+export type DocType = 'brd' | 'pdd' | 'frd' | 'sdd' | 'agent' | 'tests' | 'questions';
 /** A document's short name, in headers and file names. */
-export const docShort = (t: DocType) => (t === 'agent' ? 'Agent definition' : t.toUpperCase());
+export const docShort = (t: DocType) => (t === 'agent' ? 'Agent definition' : t === 'tests' ? 'Test pack' : t.toUpperCase());
 
 export interface Cell { text: string; status?: FactStatus; missing?: boolean }
 export type CellInput = string | Cell;
