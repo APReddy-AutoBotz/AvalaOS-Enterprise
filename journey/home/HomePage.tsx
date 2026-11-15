@@ -176,7 +176,7 @@ const REASONS = [
   },
   {
     title: 'Nothing is invented',
-    text: 'A fact the sources did not give is never filled in. It shows as “Not provided”, or as reported but not confirmed, becomes an open question with a likely owner, and is listed again at the end of each document, so a gap cannot hide in a confident paragraph.',
+    text: 'A fact the sources did not give is never filled in. It shows as “Not provided”, or as reported but not confirmed, becomes an open question with a likely owner, and is listed again at the end of each document, so a gap cannot hide in a confident paragraph. Start from a typical process if you like: it stays labelled Typical until your people confirm it.',
     id: 'why-facts', img: 'reason-facts', w: 1700, h: 1172, tint: 'bg-amber-100',
     alt: 'Part of a generated document: one access marked Not provided, one reported but not confirmed, and a figure marked Inferred',
   },

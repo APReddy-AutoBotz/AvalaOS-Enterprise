@@ -11,6 +11,7 @@ import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type 
 import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { DeliveryPlanPanel } from './DeliveryPlanPanel.tsx';
+import { provisionalNote } from '../../domain/reference/typical.ts';
 import { useQuestionPlan } from './sourceLook.ts';
 import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
@@ -163,6 +164,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
     <div className="space-y-6">
       {tabs}
       <ErrorNote message={error ?? editor.error} />
+      {/* A process started from a typical one is assessed provisionally until its steps are confirmed (part I). */}
+      {provisionalNote(editor.model) && <p className="rounded-xl bg-orange-50 px-4 py-3 text-sm leading-6 text-orange-950 ring-1 ring-inset ring-orange-200" data-testid="provisional">{provisionalNote(editor.model)}</p>}
       <Hero result={chosen} scoring={result} onReport={() => setView('report')} />
       {/* The delivery plan follows the approach in effect, people's choices included (part B). */}
       <DeliveryPlanPanel model={editor.model} result={chosen} firstQuestions={firstQuestions} />

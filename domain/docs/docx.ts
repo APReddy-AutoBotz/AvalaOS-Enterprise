@@ -41,7 +41,7 @@ export const DEFAULT_DOCX_STYLE: DocxStyle = { font: 'Calibri', accent: '002C4B'
 const PT = (n: number) => n * 2; // docx sizes are half-points
 const AMBER = 'B45309';
 const GREY = '64748B';
-const STATUS_NOTE: Record<string, string> = { inferred: 'inferred', assumed: 'assumed', unknown: 'unknown' };
+const STATUS_NOTE: Record<string, string> = { inferred: 'inferred', assumed: 'assumed', typical: 'typical, not confirmed', unknown: 'unknown' };
 
 function cellRuns(c: Cell, size: number, bold = false, color?: string): TextRun[] {
   if (c.missing) return [new TextRun({ text: c.text, italics: true, color: AMBER, size })];

@@ -3,6 +3,8 @@
 import { useProcessChanged } from '../processChanged.ts';
 import { useAutoLook } from '../process/sourceLook.ts';
 import { BriefPanel } from '../process/BriefPanel.tsx';
+import { TypicalPanel } from '../process/TypicalPanel.tsx';
+import { typicalCounts } from '../../domain/reference/typical.ts';
 import { briefFromFindings, briefSegments, readBrief, type BriefFinding } from '../../domain/plan/readBrief.ts';
 import { adoptBrief } from '../../domain/processModel/patch.ts';
 import React from 'react';
@@ -128,6 +130,9 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
         </div>
         <div className="flex items-center gap-2">
+          {canApprove && working && model && typicalCounts(model).total > 0 && (
+            <Tag tone="warn" data-testid="typical-unconfirmed" title="Approving keeps them marked Typical, not confirmed, in the approved documents">{typicalCounts(model).total} typical {typicalCounts(model).total === 1 ? 'item' : 'items'} not confirmed</Tag>
+          )}
           {canApprove && working && (
             <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
           )}
@@ -174,7 +179,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
-          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
               revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
@@ -186,7 +191,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           : stage === 'flows' && model && model.steps.length > 0
           ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
           : stage === 'process' && model
-          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
+          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
         </SourceContext.Provider>}
       </section>
@@ -196,8 +201,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   );
 }
 
-function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved }: {
-  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
+function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved, processName }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void; processName: string;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
@@ -227,6 +232,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
     <>
       <ErrorNote message={readError} />
       <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
+      <TypicalPanel editor={editor} canEdit={canEdit} processName={processName} />
       <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>
   );

@@ -3,7 +3,8 @@ import { richMarkdown } from './edits.ts';
 import type { Block, Cell, DocTree } from './tree.ts';
 
 const esc = (s: string) => s.replace(/\|/g, '\\|').replace(/\n+/g, ' ');
-const c = (x: Cell) => esc(x.missing ? `*${x.text}*` : x.text);
+// A typical item (part I) says so wherever the document is read.
+const c = (x: Cell) => esc(x.missing ? `*${x.text}*` : x.status === 'typical' ? `${x.text} *(typical, not confirmed)*` : x.text);
 
 function block(b: Block): string {
   switch (b.kind) {

@@ -15,6 +15,7 @@ import { ago, Button, cx, EmptyState, ErrorNote, messageOf, Tag, when } from '..
 import { ACCEPT, ingestFile } from './ingestFile.ts';
 import { InlineText } from './widgets.tsx';
 import { StartInOwnWords } from './StartInOwnWords.tsx';
+import { StartFromTypical } from './StartFromTypical.tsx';
 
 const STATUS_TEXT: Record<ExtractionRow['status'], string> = {
   queued: 'Starting…', running: 'Reading each source…', merging: 'Combining what the sources say…', reviewing: 'Checking the flow…',
@@ -30,9 +31,11 @@ export function coarsePatch(before: ProcessModel, after: ProcessModel): JsonPatc
   return ops;
 }
 
-export function SourcesStage({ store, processId, workspaceId, canEdit, onModelChanged, onSourcesChanged, goToProcess, me = '' }: {
+export function SourcesStage({ store, processId, workspaceId, canEdit, onModelChanged, onSourcesChanged, goToProcess, me = '', processName = '', hasSteps = false }: {
   store: JourneyStore; processId: string; workspaceId: string; canEdit: boolean;
   onModelChanged: () => void; onSourcesChanged: () => void; goToProcess: () => void; me?: string;
+  /** For the typical process the name suggests (part I); offered only while the process has no steps. */
+  processName?: string; hasSteps?: boolean;
 }) {
   const [sources, setSources] = React.useState<SourceRow[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -144,6 +147,7 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
         <>
           <EmptyState title="No sources yet">Every extracted fact keeps a link back to the passage it came from in these files.</EmptyState>
           {canEdit && <StartInOwnWords store={store} processId={processId} workspaceId={workspaceId} me={me} onSaved={() => { load(); onSourcesChanged(); onModelChanged(); }} />}
+          {canEdit && !hasSteps && <StartFromTypical store={store} processId={processId} processName={processName} onStarted={() => { onModelChanged(); goToProcess(); }} />}
         </>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
