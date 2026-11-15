@@ -392,6 +392,27 @@ test('an admin uses the company\'s section structure: renamed, hidden and own se
   expect(readFileSync(await word.path()).subarray(0, 2).toString()).toBe('PK');
 });
 
+test('a platform pack: the PDD takes UiPath\'s headings, sections UiPath has none for keep theirs', async ({ page }) => {
+  await buildProcess(page);
+  const processUrl = page.url();
+  await openSettings(page, 'Documents');
+  const box = page.getByTestId('document-sections');
+  await box.getByRole('button', { name: 'Use UiPath headings' }).click();
+  await expect(box.getByRole('status')).toContainText("UiPath's headings");
+  await expect(box.getByLabel('Title of section 3.4')).toHaveValue('In Scope for RPA');
+  await box.getByRole('button', { name: 'Save PDD sections' }).click();
+  await expect(box.getByRole('status')).toContainText('Saved');
+  // The BRD has no platform headings to offer.
+  await box.getByRole('tab', { name: 'BRD' }).click();
+  await expect(box.getByTestId('platform-packs')).toHaveCount(0);
+
+  await page.goto(processUrl);
+  await stage(page, 'Documents');
+  await expect(page.getByRole('link', { name: /^2 As-Is Process Description$/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^3\.6 Business Exceptions Handling$/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /^3\.2 Delivery model$/ })).toBeVisible();
+});
+
 test('question packs: one file per owner to download, and a returned pack is read back for review', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Documents');

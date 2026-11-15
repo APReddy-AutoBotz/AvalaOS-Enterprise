@@ -132,18 +132,20 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       <header className="border-b border-slate-200 bg-white">
-        <div className={`mx-auto flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-6 py-2 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
-          <a href={`${base}/work`} onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex items-center gap-2.5">
-            <img src="/brand/avala-os-logo.svg" alt="Avala OS" className="h-8 w-auto" />
+        {/* On a phone: the mark and the controls on the first row, the main menu in one row under them. */}
+        <div className={`mx-auto flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 sm:px-6 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
+          <a href={`${base}/work`} onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex shrink-0 items-center gap-2.5">
+            <img src="/brand/avala-os-logo.svg" alt="Avala OS" className="hidden h-8 w-auto sm:block" />
+            <img src="/brand/avala-os-mark.svg" alt="Avala OS" className="h-8 w-auto sm:hidden" />
           </a>
           {signedIn && (
-            <nav aria-label="Main" className="mr-auto ml-6 flex gap-1 self-stretch text-sm">
+            <nav aria-label="Main" className="order-last -mx-1 flex w-full gap-1 self-stretch overflow-x-auto text-sm md:order-none md:mx-0 md:mr-auto md:ml-6 md:w-auto md:overflow-visible">
               {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).filter(([page]) => page === 'work' || parts[page]).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
                 return (
-                  <a key={page} href={`${base}/${page}`} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
+                  <a key={page} href={`${base}/${page}`} aria-label={label} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
                     <svg viewBox="0 0 20 20" className={`h-[18px] w-[18px] shrink-0 ${here ? 'text-[#002C4B]' : 'text-slate-400 group-hover:text-slate-600'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{NAV_ICON[page]}</svg>
-                    {label}
+                    <span className="whitespace-nowrap">{page === 'board' ? <><span className="hidden sm:inline">Delivery </span><span className="inline-block first-letter:uppercase sm:first-letter:normal-case">board</span></> : label}</span>
                   </a>
                 );
               })}
@@ -167,12 +169,14 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
               {!demo && me && <AccountMenu store={store} me={me} />}
             </div>
           )}
-          {demo && <a href="/" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">Leave the demo</a>}
+          {demo && <a href="/" className="hidden rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">Leave the demo</a>}
         </div>
       </header>
       {demo && (
         <div data-testid="demo-banner" role="note" className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-center text-sm text-amber-950">
           Demo on a sample case: Kaveri Industrial Components is a made-up company. Try anything; nothing is saved, and reloading starts again.
+          {/* On a phone the top bar has no room for it. */}
+          <a href="/" className="ml-1 font-semibold underline sm:hidden">Leave the demo</a>
         </div>
       )}
       {store.kind === 'memory' && (

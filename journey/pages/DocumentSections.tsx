@@ -6,6 +6,7 @@ import type { DocLayout, DocumentSettings } from '../../domain/docs/branding.ts'
 import type { DocType } from '../../domain/docs/tree.ts';
 import { EMPTY_LAYOUT, LayoutError, outlineOf, suggestLayout, validateLayout, type HeadingMatch, type OutlineEntry } from '../../domain/docs/layout.ts';
 import { buildPdd } from '../../domain/docs/pdd.ts';
+import { applyPack, packsFor, type PlatformPack } from '../../domain/docs/packs.ts';
 import { buildBrd } from '../../domain/docs/brd.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
@@ -50,6 +51,11 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
     const s = suggestLayout(outline, t.headings);
     setMatches(s.matches); change(s.layout);
     setNote(`Matched ${s.matches.filter(m => m.number).length} of ${s.matches.length} headings from ${t.name}. Check the list, then save.`);
+  };
+  const usePack = (p: PlatformPack) => {
+    const r = applyPack(p, outline, draft);
+    setMatches(null); change(r.layout);
+    setNote(`Renamed ${r.renamed} sections to ${p.name}'s headings. Sections ${p.name} has no heading for keep their names. Check the list, then save.`);
   };
   const save = async () => {
     setBusy(true); setError(null);
@@ -107,6 +113,10 @@ export function DocumentSections({ store, workspace, settings, onSaved }: { stor
       {isAdmin && settings.branding.template && <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-inset ring-slate-200">
         <span className="text-slate-700">Your template <strong>{settings.branding.template.name}</strong> has {settings.branding.template.headings.length} headings.</span>
         <Button variant="secondary" onClick={fromTemplate}>Match to my template</Button>
+      </div>}
+      {isAdmin && packsFor(type).length > 0 && <div className="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-slate-50 p-3 text-sm ring-1 ring-inset ring-slate-200" data-testid="platform-packs">
+        <span className="text-slate-700">Delivering on a platform? Use its own section headings.</span>
+        {packsFor(type).map(p => <Button key={p.id} variant="secondary" onClick={() => usePack(p)}>Use {p.name} headings</Button>)}
       </div>}
       <div className="mt-4 divide-y divide-slate-100">
         {customAfter('start').map(c => custom(c, 1))}

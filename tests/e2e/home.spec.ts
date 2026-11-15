@@ -9,6 +9,16 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('Evaluate before you automate.');
   await expect(page.getByRole('link', { name: 'Sign in' }).first()).toHaveAttribute('href', '/signin');
+  // A buyer has somewhere to go: a pilot request in the bar and in the opening, beside the demo.
+  await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Request a pilot' })).toHaveAttribute('href', /^mailto:.*pilot/i);
+  await expect(page.getByText('Already have an invitation?')).toBeVisible();
+  // The first screen says what a buyer asks first, and each line leads to where the page shows it.
+  const facts = page.getByRole('list', { name: 'In short' }).getByRole('link');
+  await expect(facts).toHaveText(['Bring your own AI key (BYOK)', 'Scores come from fixed tables, not from AI', 'A named person signs off']);
+  for (const f of await facts.all()) await expect(page.locator(String(await f.getAttribute('href')))).toHaveCount(1);
+  await expect(page.getByRole('link', { name: 'Try the demo' })).toHaveAttribute('href', '/demo');
+  await expect(page).toHaveTitle('Avala OS | Evaluate before you automate');
+  await expect(page.getByText(/AvalaOS/)).toHaveCount(0);
   // The opening screen is a real product screen and it loads.
   const hero = page.getByRole('img', { name: /assessment of a vendor invoice process/ });
   await expect(hero).toBeVisible();
@@ -75,13 +85,22 @@ test('homepage: the ways to start and the AI providers come from the product\'s 
   await main.getByRole('link', { name: 'Ways to start' }).click();
   await expect(page).toHaveURL(/#start$/);
   await expect(page.getByRole('list', { name: 'Ways to start' }).getByRole('heading')).toHaveText(['The full journey', 'Assess and Documents', 'Assess', 'The Delivery board on its own']);
-  await expect(page.getByRole('link', { name: 'Ask for an invitation' })).toHaveAttribute('href', /^mailto:/);
-  await main.getByRole('link', { name: 'Your AI' }).click();
+  await expect(page.getByRole('link', { name: 'Talk to us about a pilot' })).toHaveAttribute('href', /^mailto:/);
+  await expect(page.getByText('Need it inside your own cloud?')).toBeVisible();
+  // Ask Avala is described as it works: a person confirms, nothing is written on its own.
+  await expect(page.getByRole('heading', { name: 'Ask Avala, and check its answer' })).toBeVisible();
+  await expect(page.locator('#ask')).toContainText('nothing is written until you press Save');
+  // The five words read as five words, not one.
+  await expect(page.getByRole('heading', { name: 'Assess. Validate. Assemble. Launch. Audit.' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Built by a practitioner' })).toBeVisible();
+  await main.getByRole('link', { name: 'Your AI key' }).click();
   await expect(page.getByRole('heading', { name: 'Your AI, your key' })).toBeVisible();
+  await expect(page.locator('#ai')).toContainText('Bring your own AI key (BYOK)');
+  await expect(page.locator('#ai')).toContainText('to no other AI provider');
   // Only providers the extraction check has been run with are called available.
   await expect(page.getByRole('list', { name: 'AI providers available now' }).getByRole('listitem')).toHaveText(['OpenAI', 'Azure OpenAI']);
   await expect(page.getByRole('list', { name: 'AI providers coming' }).getByRole('listitem')).toHaveText(['Anthropic', 'OpenAI-compatible endpoint', 'Amazon Bedrock (Claude)', 'Mistral AI']);
-  const result = await new AxeBuilder({ page }).include('#start').include('#ai').withTags(['wcag2a', 'wcag2aa']).analyze();
+  const result = await new AxeBuilder({ page }).include('#start').include('#ai').include('#ask').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
   await shot(page, '72-homepage-parts-ai');
 });
@@ -90,12 +109,12 @@ test('homepage on a phone: the links are behind Menu', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto('/');
   const main = page.getByRole('navigation', { name: 'Main' });
-  await expect(main.getByRole('link', { name: 'Demo' })).toBeHidden();
+  await expect(main.getByRole('link', { name: 'Live demo' })).toBeHidden();
   await main.getByRole('button', { name: 'Menu' }).click();
   await expect(main.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'true');
   await main.getByRole('link', { name: 'Ways to start' }).click();
   await expect(page).toHaveURL(/#start$/);
-  await expect(main.getByRole('link', { name: 'Demo' })).toBeHidden();
+  await expect(main.getByRole('link', { name: 'Live demo' })).toBeHidden();
   await main.getByRole('button', { name: 'Menu' }).click();
   await page.keyboard.press('Escape');
   await expect(main.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false');

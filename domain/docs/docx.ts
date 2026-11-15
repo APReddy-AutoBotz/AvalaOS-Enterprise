@@ -140,7 +140,7 @@ export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxS
   ]);
   const small = { size: PT(8), color: GREY };
   return new Document({
-    creator: 'AvalaOS', title: `${doc.title}: ${doc.subtitle}`, description: `${kind} for ${doc.subtitle}`,
+    creator: 'Avala OS', title: `${doc.title}: ${doc.subtitle}`, description: `${kind} for ${doc.subtitle}`,
     features: { updateFields: true },
     // A company template's styles replace ours, so its fonts and heading look apply throughout.
     ...(s.stylesXml ? { externalStyles: s.stylesXml } : { styles }),

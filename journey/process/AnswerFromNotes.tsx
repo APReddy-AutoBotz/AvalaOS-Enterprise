@@ -9,7 +9,7 @@ import { answerFromNotes, notesSegments, proposalsFrom, type NoteFinding, type P
 import type { JourneyStore } from '../store/types.ts';
 import { Button, cx, messageOf } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
-import { buildAnswer } from './GapsAssistant.tsx';
+import { buildAnswer } from '../../domain/questions/answer.ts';
 import type { OpResult } from '../../domain/processModel/patch.ts';
 import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 

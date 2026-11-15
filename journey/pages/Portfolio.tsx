@@ -78,7 +78,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
 
   return (
     <div className="space-y-5" data-testid="portfolio">
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid gap-4 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Chart rows={data.rows} settings={settings} />
         <div className="space-y-4">
           <div className="rounded-xl bg-[#002C4B] p-6 text-white shadow-sm">

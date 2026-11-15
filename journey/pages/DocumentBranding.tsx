@@ -49,7 +49,7 @@ export function DocumentBranding({ store, workspace }: { store: JourneyStore; wo
     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-card" data-testid="document-branding">
       <h2 className="font-display text-lg font-semibold text-slate-900">How documents look</h2>
       <p className="mt-1 text-sm leading-6 text-slate-600">Your organisation's look for the BRD, PDD, FRD and SDD, on screen and in Word. Upload your company's Word template to use its fonts and heading styles.{isAdmin ? '' : ' Only an admin can change it.'}</p>
-      <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
+      <div className="mt-5 grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_18rem]">
         <div className="space-y-4">
           <label className="grid gap-1 text-sm font-semibold text-slate-800">Organisation name
             <input aria-label="Organisation name" value={draft.organisation} disabled={!isAdmin} onChange={e => set({ organisation: e.target.value })} placeholder="Shown on the cover and in the header" className={input} />

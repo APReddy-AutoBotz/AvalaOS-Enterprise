@@ -134,7 +134,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
       {nothing ? (
         <div className="mt-8"><EmptyState title="Nothing is waiting on you">Processes you are named on, and board items assigned to you, will appear here. Open Processes to see everything in this workspace.</EmptyState></div>
       ) : (
-        <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
+        <div className="mt-8 grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
           <div className="space-y-6">
             {needs.length > 0 && <NeedsYou needs={needs} groups={groups} nav={nav} />}
 
