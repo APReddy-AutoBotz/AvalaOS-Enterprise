@@ -1,4 +1,6 @@
 import type { AuditEntry } from '../../domain/people/roles.ts';
+import type { SectionComment } from '../../domain/docs/review.ts';
+import type { TestCaseEdit } from '../../domain/docs/testEdits.ts';
 import { monthStart } from '../../domain/ai/usage.ts';
 import { documentSettingsFrom, validateBranding } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
@@ -23,6 +25,9 @@ const SPRINT_COLUMNS = 'id, project_id, name, goal, starts_on, ends_on, state, s
 const sprintFrom = (r: any): Sprint => ({ id: r.id, projectId: r.project_id, name: r.name, goal: r.goal, startsOn: r.starts_on, endsOn: r.ends_on, state: r.state, startedAt: r.started_at, closedAt: r.closed_at });
 const COMMENT_COLUMNS = 'id, work_item_id, author_id, body, created_at, edited_at';
 const commentFrom = (r: any): ItemComment => ({ id: r.id, workItemId: r.work_item_id, authorId: r.author_id, body: r.body, createdAt: r.created_at, editedAt: r.edited_at });
+
+const SECTION_COMMENT_COLUMNS = 'id, doc_type, section_key, section_title, author_id, body, created_at, edited_at, resolved_at, resolved_by';
+const sectionCommentFrom = (r: any): SectionComment => ({ id: r.id, docType: r.doc_type, sectionKey: r.section_key, sectionTitle: r.section_title, authorId: r.author_id, body: r.body, createdAt: r.created_at, editedAt: r.edited_at, resolvedAt: r.resolved_at, resolvedBy: r.resolved_by });
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
@@ -592,6 +597,54 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     },
     async removeDocumentEdit(processId, docType, sectionKey) {
       const { error } = await db.from('document_edits').delete().eq('process_id', processId).eq('doc_type', docType).eq('section_key', sectionKey);
+      if (error) fail(error);
+    },
+    async listSectionComments(processId) {
+      const { data, error } = await db.from('document_comments').select(SECTION_COMMENT_COLUMNS).eq('process_id', processId).order('created_at');
+      if (error) fail(error);
+      return (data ?? []).map(sectionCommentFrom);
+    },
+    async addSectionComment(processId, c) {
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const { data, error } = await db.from('document_comments').insert({ workspace_id: process.workspaceId, process_id: processId, doc_type: c.docType, section_key: c.sectionKey, section_title: c.sectionTitle.slice(0, 300), body: c.body }).select(SECTION_COMMENT_COLUMNS).single();
+      if (error) fail(error);
+      return sectionCommentFrom(data);
+    },
+    async editSectionComment(id, body) {
+      const { data, error } = await db.from('document_comments').update({ body }).eq('id', id).select(SECTION_COMMENT_COLUMNS);
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment can change it.');
+      return sectionCommentFrom(data[0]);
+    },
+    async resolveSectionComment(id, resolved) {
+      // The database records when and by whom; the time sent here only says "resolved".
+      const { data, error } = await db.from('document_comments').update({ resolved_at: resolved ? new Date().toISOString() : null }).eq('id', id).select(SECTION_COMMENT_COLUMNS);
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the author or an editor can resolve a comment.');
+      return sectionCommentFrom(data[0]);
+    },
+    async deleteSectionComment(id) {
+      const { data, error } = await db.from('document_comments').delete().eq('id', id).select('id');
+      if (error) fail(error);
+      if (!data?.length) throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+    },
+    async listTestEdits(processId) {
+      const { data, error } = await db.from('test_case_edits').select('case_code, fields, set_aside, base_hash, updated_by, updated_at').eq('process_id', processId);
+      if (error) fail(error);
+      return (data ?? []).map((r: any): TestCaseEdit => ({ caseCode: r.case_code, fields: r.fields ?? {}, setAside: r.set_aside, baseHash: r.base_hash, updatedBy: r.updated_by, updatedAt: r.updated_at }));
+    },
+    async saveTestEdit(processId, edit) {
+      const process = await this.getProcess(processId);
+      if (!process) throw new StoreError(404, 'Process not found.');
+      const me = (await db.auth.getUser()).data.user?.id;
+      const { error } = await db.from('test_case_edits').upsert({
+        workspace_id: process.workspaceId, process_id: processId, case_code: edit.caseCode, fields: edit.fields, set_aside: edit.setAside, base_hash: edit.baseHash, updated_by: me, updated_at: new Date().toISOString(),
+      }, { onConflict: 'process_id,case_code' });
+      if (error) fail(error);
+    },
+    async removeTestEdit(processId, caseCode) {
+      const { error } = await db.from('test_case_edits').delete().eq('process_id', processId).eq('case_code', caseCode);
       if (error) fail(error);
     },
     async saveRequirements(processId, rows) {

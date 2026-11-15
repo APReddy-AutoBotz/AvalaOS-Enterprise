@@ -24,6 +24,11 @@ import { buildFrd } from '../../domain/docs/frd.ts';
 import { buildSdd } from '../../domain/docs/sdd.ts';
 import { buildAgent } from '../../domain/docs/agent.ts';
 import { buildTests, testPack, testPackCsv } from '../../domain/docs/tests.ts';
+import { packAsRun, type TestCaseEdit } from '../../domain/docs/testEdits.ts';
+import { openCommentsText, reviewOf, type SectionComment } from '../../domain/docs/review.ts';
+import { CommentButton, SectionComments, type ReviewContext } from './SectionComments.tsx';
+import { TestCasesPanel } from './TestCasesPanel.tsx';
+import type { Member } from '../store/types.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
@@ -138,10 +143,21 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [edits, setEdits] = React.useState<SectionEdit[]>([]);
   const [editing, setEditing] = React.useState<string | null>(null);
   const [editBusy, setEditBusy] = React.useState(false);
+  // Review comments and testers' edits (part F); members and who I am, for names and what I may do.
+  const [comments, setComments] = React.useState<SectionComment[]>([]);
+  const [testEdits, setTestEdits] = React.useState<TestCaseEdit[]>([]);
+  const [members, setMembers] = React.useState<Member[]>([]);
+  const [myId, setMyId] = React.useState('');
+  const [commenting, setCommenting] = React.useState<string | null>(null);
   React.useEffect(() => {
     Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId), store.listDocumentEdits(processId)])
       .then(([d, s, ds, r, ed]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
+    Promise.all([store.listSectionComments(processId), store.listTestEdits(processId), store.listMembers(workspaceId), store.currentUser()])
+      .then(([c, t, mem, u]) => { setComments(c); setTestEdits(t); setMembers(mem); setMyId(u?.id ?? ''); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
+  const reviewCtx: ReviewContext = { store, processId, me: myId, canEdit, isAdmin: members.find(m => m.userId === myId)?.role === 'admin', members, onChanged: next => setComments(next) };
+  const saveTestEdit = async (e: TestCaseEdit) => { await store.saveTestEdit(processId, e); setTestEdits(cur => [...cur.filter(x => x.caseCode !== e.caseCode), e]); };
+  const removeTestEdit = async (code: string) => { await store.removeTestEdit(processId, code); setTestEdits(cur => cur.filter(x => x.caseCode !== code)); };
 
   const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings, decisions }) : null), [model, decisions, settings]);
   // The delivery plan (part B): its documents come first and the first of them opens, unless the person chose a tab.
@@ -167,12 +183,17 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input) : sddReady ? buildSdd(input) : null;
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input, testEdits) : sddReady ? buildSdd(input) : null;
     if (!raw) return null;
     const edited = applyEdits(raw, edits);
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
-  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits]);
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits]);
   const doc = built?.doc ?? null;
+  const reviewView = React.useMemo(() => (doc ? reviewOf(doc, comments) : null), [doc, comments]);
+  const testPackNow = React.useMemo(() => {
+    if (type !== 'tests' || !decisions || !assessment) return null;
+    return testPack({ model, assessment, decisions, sources: [], revision, requirements: register?.requirements });
+  }, [type, model, decisions, assessment, revision, register]);
   // The same document built from the approved revision's model: what changed since approval.
   const [approvedModel, setApprovedModel] = React.useState<ProcessModel | null>(null);
   React.useEffect(() => { setApprovedModel(null); if (approvedRevisionId) store.getModel(approvedRevisionId).then(setApprovedModel).catch(() => setApprovedModel(null)); }, [store, approvedRevisionId]);
@@ -180,7 +201,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     if (!approvedModel || !doc || !decisions || !stored) return [];
     const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
     const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
-    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input) : buildSdd(input);
+    const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input, testEdits) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
   }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
   const changedIds = new Set(sinceApproved.map(c => c.id));
@@ -237,7 +258,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const downloadExcel = () => {
     if (!decisions || !assessment) return;
     const input = { model, assessment, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const url = URL.createObjectURL(new Blob([testPackCsv(testPack(input))], { type: 'text/csv;charset=utf-8' }));
+    const url = URL.createObjectURL(new Blob([testPackCsv(packAsRun(testPack(input), testEdits))], { type: 'text/csv;charset=utf-8' }));
     const a = Object.assign(document.createElement('a'), { href: url, download: `${model.meta.name} - Test pack.csv` });
     a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -332,8 +353,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         )}
         {review > 0 && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="review-banner"><span className="font-semibold">{review} edited {review === 1 ? 'section needs' : 'sections need'} review:</span> the process changed after you edited {review === 1 ? 'it' : 'them'}. Keep your text or take the update in each section.</p>}
         {type === 'sdd' && approvedRevision === null && <p className="rounded-xl bg-amber-50 px-4 py-2.5 text-sm text-amber-950" data-testid="sdd-preview">Preview from the working draft: no revision is approved yet, so this SDD is not for sign-off.</p>}
-        {type === 'agent' && canEdit && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="agent-read-only">This document follows the process and the assessment as they change. Its sections cannot be edited here yet; change the steps, the approaches or the answers, and it follows.</p>}
-        {type === 'tests' && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="tests-note">One test case for each acceptance criterion of the functional requirements, so nothing is tested that no requirement states. It follows the requirements as they change{canEdit ? '; change a criterion on the FRD and the case follows' : ''}. Testers' own edits are not kept here yet.</p>}
+        {type === 'tests' && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="tests-note">One test case for each acceptance criterion of the functional requirements, so nothing is tested that no requirement states. It follows the requirements as they change; testers' own changes are kept, and a case whose requirement changed since is marked for review.</p>}
+        {type === 'tests' && testPackNow && <TestCasesPanel pack={testPackNow} edits={testEdits} canEdit={canEdit} onSave={saveTestEdit} onRemove={removeTestEdit} />}
         {type === 'frd' && register && <RequirementsPanel model={model} requirements={register.requirements} canEdit={canEdit} onSave={saveRequirement} />}
         <div className="grid gap-6 grid-cols-[minmax(0,1fr)] lg:grid-cols-[15rem_minmax(0,1fr)]">
           <nav aria-label="Contents" className="hidden lg:block">
@@ -341,6 +362,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               <p className="text-xs font-semibold text-slate-500">Contents</p>
               <ol className="mt-2 space-y-1">{doc.sections.map(s => <li key={s.id} className={s.level === 2 ? 'pl-3' : 'mt-2 font-semibold'}><a href={`#${s.id}`} className="text-slate-700 hover:text-[#002C4B] hover:underline"><span className="tabular-nums text-slate-500">{s.number}</span> {s.title}</a></li>)}</ol>
               <p className="mt-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">{doc.openItems.length} open {doc.openItems.length === 1 ? 'item' : 'items'}</p>
+              {openCommentsText(reviewView!.open) && <p className="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-800" data-testid="open-comments">{openCommentsText(reviewView!.open)}</p>}
             </div>
           </nav>
           <article id="document-print" data-testid="document" className="min-w-0 rounded-xl border border-slate-200 bg-white px-6 py-8 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_16px_40px_-24px_rgba(15,23,42,0.18)] sm:px-12 sm:py-10" style={{ fontFamily: `${docSettings.branding.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${docSettings.branding.accent}` }}>
@@ -354,7 +376,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             {doc.sections.map(s => {
               const st = built!.status[s.id];
               const mine = edits.find(e => e.docType === type && e.sectionKey === s.id);
-              const editable = canEdit && st && type !== 'agent' && type !== 'tests' && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
+              const editable = canEdit && st && type !== 'tests' && !s.id.startsWith('c-') && !/^Open (gaps|questions)|Open design decisions/.test(s.title);
               const head = (
                 <span className="flex flex-wrap items-center gap-2">
                   <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-500')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
@@ -362,7 +384,10 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {st?.state === 'edited' && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-edited">Edited by you</span>}
                   {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
                   {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}
-                  {editable && editing !== s.id && <button type="button" className="no-print ml-auto font-sans text-xs font-medium text-slate-500 hover:text-[#002C4B] hover:underline focus-visible:text-[#002C4B]" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
+                  <span className="no-print ml-auto flex items-center gap-3">
+                    <CommentButton number={s.number} open={commenting === s.id} count={(reviewView!.bySection.get(s.id) ?? []).filter(c => !c.resolvedAt).length} onClick={() => setCommenting(commenting === s.id ? null : s.id)} />
+                    {editable && editing !== s.id && <button type="button" className="font-sans text-xs font-medium text-slate-500 hover:text-[#002C4B] hover:underline focus-visible:text-[#002C4B]" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
+                  </span>
                 </span>
               );
               return (
@@ -370,6 +395,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {s.level === 1
                     ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900">{head}</h3>
                     : <h4 className="mt-6 font-display text-base font-semibold text-slate-900">{head}</h4>}
+                  <SectionComments key={`${type}:${s.id}`} ctx={reviewCtx} docType={type} sectionKey={s.id} sectionTitle={s.title} comments={reviewView!.bySection.get(s.id) ?? []} startOpen={commenting === s.id} />
                   {st?.state === 'needs_review' && mine && (
                     <div className="no-print mt-3 rounded-xl bg-amber-50 p-4 ring-1 ring-inset ring-amber-200" data-testid="review-update">
                       <p className="text-sm text-amber-950"><span className="font-semibold">The process changed since you edited this section.</span> The generated text now reads:</p>
@@ -393,6 +419,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                 </section>
               );
             })}
+            {reviewView!.orphaned.length > 0 && (
+              <section className="no-print mt-9" data-testid="orphaned-comments">
+                <h3 className="border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900">Comments on sections no longer in this document</h3>
+                <ul className="mt-3 space-y-2 text-sm text-slate-700">{reviewView!.orphaned.map(c => <li key={c.id}><span className="font-semibold">{c.sectionTitle}:</span> {c.body}{c.resolvedAt ? ' (resolved)' : ''}</li>)}</ul>
+              </section>
+            )}
           </article>
         </div>
         </>
