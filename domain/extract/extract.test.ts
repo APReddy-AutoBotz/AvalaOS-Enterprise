@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractProcessModel, type RunTask } from './pipeline.ts';
-import { cautiousAccess } from './assemble.ts';
+import { assembleModel, cautiousAccess } from './assemble.ts';
 import { buildCandidates, factsListing, flowListing } from './candidates.ts';
 import { validateModel } from '../processModel/validate.ts';
 import type { IngestSegment } from '../ingest/segment.ts';
@@ -239,4 +239,31 @@ test('review: a step that is the only one for a numbered procedure section canno
   const { flow: out, skipped } = applyReview(flow, { merges: [{ step: 'c', into: 'p', reason: 'recording after posting' }, { step: 'a', into: 'p', reason: 'attach after posting' }], removals: [] }, set);
   assert.deepEqual(out.steps.map((s: any) => s.key), ['p', 'c', 'x1', 'x2'], '6.12 keeps its step; attaching (also 6.11) merges into posting');
   assert.ok(skipped.some(x => x.includes('procedure section 6.12')));
+});
+
+test('a figure given only in words: the number another source gives is kept, and nothing points at a figure left out', () => {
+  const ref = (sourceId: string, excerpt: string) => ({ sourceId, locator: { line: 1 }, excerpt });
+  const metric = (id: string, sourceId: string, excerpt: string, value: number | null, unit = 'invoices') => ({ id, kind: 'metric' as const, sourceId, order: 1, ref: ref(sourceId, excerpt),
+    data: { kind: 'volume', label: 'Invoices', value, unit, low: null, high: null, period: 'month', appliesTo: '' } });
+  const set = { sources: [], items: [
+    // Monthly volume: the merge chose the source that says it in words; two others give numbers that differ.
+    metric('c1', 's1', 'several hundred invoices a month', null), metric('c2', 's2', '500 invoices a month', 500), metric('c3', 's3', '800 invoices a month', 800),
+    // Backlog: nobody gives a number, in two different units.
+    metric('c4', 's1', 'a large backlog of invoices', null, 'invoices'), metric('c5', 's2', 'many days of backlog', null, 'days'),
+  ] };
+  const flow = { roles: [], systems: [], steps: [], gateways: [], events: [], flows: [] };
+  const facts = { rules: [], exceptions: [], interfaces: [], questions: [],
+    metrics: [{ label: 'Backlog', chosen: 'c4', members: ['c4', 'c5'] }, { label: 'Invoices a month', chosen: 'c1', members: ['c1', 'c2', 'c3'] }],
+    conflicts: [{ summary: 'Backlog is described differently', about: 'metric' as const, members: ['c4', 'c5'] }, { summary: 'Monthly volume differs', about: 'metric' as const, members: ['c1', 'c2', 'c3'] }] };
+  const { model, report } = assembleModel('Invoices', set as any, flow, facts);
+  // The backlog has no number anywhere: left out, said so, and its id is not used up.
+  assert.ok(report.dropped.some(d => d.includes('"Backlog": no number')));
+  assert.deepEqual(model.meta.metrics.map(m => [m.id, m.label, m.value]), [['m-1', 'Invoices a month', 500]]);
+  assert.equal(model.meta.metrics[0].sources.length, 3);
+  // Both conflicts stay with every value; the one about the figure left out stands on the process.
+  assert.equal(model.conflicts.length, 2);
+  assert.deepEqual(model.conflicts[0].target, { kind: 'meta' });
+  assert.deepEqual(model.conflicts[1].target, { kind: 'metric', id: 'm-1', field: 'value' });
+  assert.equal(model.conflicts[1].values.length, 3);
+  assert.deepEqual(validateModel(model).issues.filter(i => i.severity === 'error'), []);
 });
