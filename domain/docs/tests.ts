@@ -12,6 +12,7 @@ import { csv } from '../workitems/export.ts';
 import { agentSteps } from './agent.ts';
 import { DocBuilder, missing, NOT_PROVIDED, type DocTree } from './tree.ts';
 import type { DocInput } from './common.ts';
+import { packAsRun, type TestCaseEdit } from './testEdits.ts';
 
 export type CaseKind = 'step' | 'human' | 'exception';
 export const CASE_KIND_LABEL: Record<CaseKind, string> = { step: 'What the solution does', human: 'A person checks or decides', exception: 'Exception path' };
@@ -80,9 +81,10 @@ export function testPack(input: DocInput): TestPack {
 }
 
 /** The pack as a document: about it, the cases, the agent's cases, requirements with no case, open items. */
-export function buildTests(input: DocInput): DocTree {
+export function buildTests(input: DocInput, edits: TestCaseEdit[] = []): DocTree {
   const m = input.model;
-  const pack = testPack(input);
+  // Testers' versions in, cases set aside left out (testEdits.ts).
+  const pack = edits.length ? packAsRun(testPack(input), edits) : testPack(input);
   const steps = orderedSteps(m);
   const b = new DocBuilder();
   const frCount = new Set(pack.cases.map(c => c.requirement)).size;

@@ -142,7 +142,7 @@ Agreed by the owner on 15 November 2026 as a change to the rule "invent nothing"
 - **May ask:** nothing to produce it; a tester edits and adds.
 - **Underneath:** rules; one new table to keep testers' edits (**needs the owner's yes**, with a rolled-back trial first).
 - **Proof:** every functional requirement on the sample has at least one test case; none tests something no requirement states.
-- **Built (15 November 2026, preview), without the table:** the Documents tab "Tests": one case per acceptance criterion, and one case for each requirement with no criterion yet, its expected result "Not provided" with what is missing as an open item (sample: 26 cases for 25 functional requirements, 10 without an expected result); the agent's cases marked; Word, Markdown and a CSV that Excel opens. Waiting for the owner: the table for testers' edits, and a real .xlsx (a new library).
+- **Built (15 November 2026, preview), without the table:** the Documents tab "Tests": one case per acceptance criterion, and one case for each requirement with no criterion yet, its expected result "Not provided" with what is missing as an open item (sample: 26 cases for 25 functional requirements, 10 without an expected result); the agent's cases marked; Word, Markdown and a CSV that Excel opens. The table for testers' edits and review comments on document sections (from G) was applied on the owner's yes the same day, after a rolled-back trial; both are on screen. Still waiting: a real .xlsx (a new library).
 
 ### G. Hand-over in the client's tools
 

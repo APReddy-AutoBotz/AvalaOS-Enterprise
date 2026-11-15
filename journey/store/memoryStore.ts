@@ -1,4 +1,6 @@
 import { leavesNoAdmin, PeopleError, roleOf, validateEmail, type AuditEntry } from '../../domain/people/roles.ts';
+import type { SectionComment } from '../../domain/docs/review.ts';
+import type { TestCaseEdit } from '../../domain/docs/testEdits.ts';
 import { findRecorded, NOT_RECORDED, type RecordedAnswer } from '../../domain/assistant/recorded.ts';
 import { documentSettingsFrom, validateBranding, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings, type AssessmentSettings } from '../../domain/assess/settings.ts';
@@ -35,6 +37,8 @@ interface State {
   assessments?: { processId: string; revisionId: string; decisions: Decisions; result: unknown }[];
   requirements?: Record<string, StoredRequirement[]>;
   docEdits?: Record<string, SectionEdit[]>;
+  sectionComments?: (SectionComment & { processId: string })[];
+  testEdits?: Record<string, TestCaseEdit[]>;
   proposals?: Record<string, Proposal[]>;
   projects?: (Project & { workspaceId: string })[];
   workItems?: WorkItem[];
@@ -663,6 +667,65 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
       state.docEdits ??= {};
       state.docEdits[processId] = (state.docEdits[processId] ?? []).filter(e => !(e.docType === docType && e.sectionKey === sectionKey));
+      save();
+    },
+    async listSectionComments(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return structuredClone((state.sectionComments ?? []).filter(c => c.processId === processId)).map(({ processId: _p, ...c }) => c);
+    },
+    async addSectionComment(processId, c) {
+      const me = requireMe();
+      workspaceOf(processId);
+      const row = { id: uuid(), processId, docType: c.docType, sectionKey: c.sectionKey, sectionTitle: c.sectionTitle, authorId: me.id, body: c.body, createdAt: now(), editedAt: null, resolvedAt: null, resolvedBy: null };
+      (state.sectionComments ??= []).push(row);
+      save();
+      const { processId: _p, ...out } = structuredClone(row);
+      return out;
+    },
+    async editSectionComment(id, body) {
+      const me = requireMe();
+      const c = (state.sectionComments ?? []).find(x => x.id === id);
+      if (!c || c.authorId !== me.id) throw new StoreError(403, 'Only the person who wrote a comment can change it.');
+      if (c.body !== body) { c.body = body; c.editedAt = now(); }
+      save();
+      const { processId: _p, ...out } = structuredClone(c);
+      return out;
+    },
+    async resolveSectionComment(id, resolved) {
+      const me = requireMe();
+      const c = (state.sectionComments ?? []).find(x => x.id === id);
+      if (!c) throw new StoreError(404, 'Comment not found.');
+      if (c.authorId !== me.id && workspaceOf(c.processId).w.role === 'viewer') throw new StoreError(403, 'Only the author or an editor can resolve a comment.');
+      if (resolved !== Boolean(c.resolvedAt)) { c.resolvedAt = resolved ? now() : null; c.resolvedBy = resolved ? me.id : null; }
+      save();
+      const { processId: _p, ...out } = structuredClone(c);
+      return out;
+    },
+    async deleteSectionComment(id) {
+      const me = requireMe();
+      const c = (state.sectionComments ?? []).find(x => x.id === id);
+      if (!c || (c.authorId !== me.id && workspaceOf(c.processId).w.role !== 'admin')) throw new StoreError(403, 'Only the person who wrote a comment, or an admin, can delete it.');
+      state.sectionComments = (state.sectionComments ?? []).filter(x => x.id !== id);
+      save();
+    },
+    async listTestEdits(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return structuredClone((state.testEdits ?? {})[processId] ?? []);
+    },
+    async saveTestEdit(processId, edit) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing test cases needs the editor or admin role.');
+      state.testEdits ??= {};
+      state.testEdits[processId] = [...(state.testEdits[processId] ?? []).filter(e => e.caseCode !== edit.caseCode), { ...structuredClone(edit), updatedBy: state.me?.email, updatedAt: now() }];
+      save();
+    },
+    async removeTestEdit(processId, caseCode) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing test cases needs the editor or admin role.');
+      state.testEdits ??= {};
+      state.testEdits[processId] = (state.testEdits[processId] ?? []).filter(e => e.caseCode !== caseCode);
       save();
     },
     async listRequirements(processId) {
