@@ -8,11 +8,14 @@ import React from 'react';
 import type { JourneyStore, ProcessRow, Workspace } from '../store/types.ts';
 import { StoreError } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
-import { assessProcess } from '../../domain/assess/process.ts';
-import { triage, type TriageItem } from '../../domain/questions/triage.ts';
+import type { TriageItem } from '../../domain/questions/triage.ts';
+import { askingOrder, holdReason, nowHeading, planSummary } from '../../domain/questions/firstList.ts';
+import { lookSummary } from '../../domain/assistant/sourceLook.ts';
+import { useQuestionPlan } from './sourceLook.ts';
+import { FoundAnswers } from './FoundAnswers.tsx';
 import { answerFromNotes, type NoteFinding } from '../../domain/questions/notes.ts';
 import {
-  followUpFor, interviewAnswer, interviewEdit, interviewQueue, interviewSegments, INTERVIEW_LIMITS, questionHeading, readInterview,
+  followUpFor, interviewAnswer, interviewEdit, interviewSegments, INTERVIEW_LIMITS, questionHeading, readInterview,
   UNANSWERED, whoCanAnswer, whyItMatters, willRecord, type Reading,
 } from '../../domain/questions/interview.ts';
 import { impactSummary } from '../../domain/docs/impact.ts';
@@ -38,7 +41,12 @@ export function InterviewPanel({ store, process, workspace, model, working, star
   const canEdit = workspace.role !== 'viewer';
   const editor = useModelEditor(store, process.id, { model, working }, () => announceProcessChanged(process.id));
   const ctx = useImpactContext(store, process.id, process.workspaceId, editor.lastChange?.at);
-  const queue = React.useMemo(() => interviewQueue(triage(editor.model, assessProcess(editor.model))), [editor.model]);
+  // The first list (part D): only what people must answer is asked first; what the sources answer is
+  // offered to confirm; what can wait comes after, when the person goes on.
+  const { plan, found, triage: t, look, looking } = useQuestionPlan(process.id, editor.model);
+  const [goOn, setGoOn] = React.useState(false);
+  const [showFound, setShowFound] = React.useState(false);
+  const queue = React.useMemo(() => askingOrder(plan, goOn), [plan, goOn]);
   const [skipped, setSkipped] = React.useState<string[]>([]);
   const [analyst, setAnalyst] = React.useState<string | null>(null);
   const [text, setText] = React.useState('');
@@ -53,9 +61,23 @@ export function InterviewPanel({ store, process, workspace, model, working, star
   }, [store, process.workspaceId, process.analystId]);
 
   const pending = queue.filter(i => !skipped.includes(i.key));
-  // A suggestion opens its own question first, with the answer the source gave ready to review.
+  // A suggestion opens its own question first, with the answer the source gave ready to review (it may be one the list holds back).
   const opening = React.useRef(start ?? null);
-  const item: TriageItem | null = (opening.current && pending.find(i => i.key === opening.current!.itemKey)) || pending[0] || null;
+  const item: TriageItem | null = (opening.current && t.items.find(i => i.key === opening.current!.itemKey && !i.deferred)) || pending[0] || null;
+  const lookLine = looking ? 'Looking in your sources for answers…' : lookSummary(look, found.length);
+  const head = (
+    <div className="mb-4 rounded-xl bg-slate-50 px-4 py-3 ring-1 ring-inset ring-slate-200" data-testid="interview-plan">
+      <p className="text-sm font-semibold text-slate-900" data-testid="interview-plan-heading">{nowHeading(plan)}</p>
+      {planSummary(plan) && <p className="mt-0.5 text-sm leading-6 text-slate-600">{planSummary(plan)}</p>}
+      {lookLine && <p className="mt-0.5 text-xs text-slate-500" role="status" data-testid="source-look">{lookLine}</p>}
+      {plan.found.length > 0 && canEdit && (
+        <Button variant="secondary" className="mt-2" onClick={() => setShowFound(v => !v)} aria-expanded={showFound}>
+          {showFound ? 'Hide the answers found' : `Confirm ${plan.found.length === 1 ? 'the answer' : `${plan.found.length} answers`} found in your sources`}
+        </Button>
+      )}
+      {showFound && <div className="mt-3"><FoundAnswers processId={process.id} model={editor.model} items={t.items} found={found} canEdit={canEdit} onApply={(op, summary) => editor.apply(op, summary)} /></div>}
+    </div>
+  );
   // A new question starts clean (after Save, Skip, or the answer closing it).
   const key = item?.key ?? '';
   React.useEffect(() => {
@@ -70,18 +92,27 @@ export function InterviewPanel({ store, process, workspace, model, working, star
   }, [key]);
 
   if (!item) {
+    const firstDone = !goOn && plan.wait.length > 0;
     return (
-      <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900" data-testid="interview-done">
-        {queue.length === 0
-          ? 'No open questions are left on this process.'
-          : `No more questions for now: ${queue.length} ${queue.length === 1 ? 'was' : 'were'} skipped.`}
-        {recorded > 0 && ` ${recorded} ${recorded === 1 ? 'answer was' : 'answers were'} recorded.`}
-        {skipped.length > 0 && <div className="mt-2"><Button variant="secondary" onClick={() => setSkipped([])}>Go through the skipped ones</Button></div>}
-      </div>
+      <>
+        {head}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-900" data-testid="interview-done">
+          {queue.length === 0
+            ? firstDone ? 'Nothing only your people can tell us is left.' : plan.found.length ? 'No questions are left to ask; confirm the answers found in your sources above.' : 'No open questions are left on this process.'
+            : `No more questions for now: ${queue.length} ${queue.length === 1 ? 'was' : 'were'} skipped.`}
+          {recorded > 0 && ` ${recorded} ${recorded === 1 ? 'answer was' : 'answers were'} recorded.`}
+          {firstDone && ` ${plan.wait.length} can wait until sign-off.`}
+          <div className="mt-2 flex flex-wrap gap-2">
+            {skipped.length > 0 && <Button variant="secondary" onClick={() => setSkipped([])}>Go through the skipped ones</Button>}
+            {firstDone && <Button variant="secondary" onClick={() => { setGoOn(true); setSkipped([]); }} data-testid="interview-go-on">Go on with what can wait ({plan.wait.length})</Button>}
+          </div>
+        </div>
+      </>
     );
   }
 
-  const position = queue.indexOf(item) + 1;
+  const position = Math.max(1, queue.indexOf(item) + 1);
+  const waits = plan.held[item.key] ? holdReason(plan.held[item.key]) : '';
   const skip = () => { setSkipped(s => [...s, item.key]); setPhase({ kind: 'answer', attempt: 1, first: '' }); };
 
   const read = async (attempt: 1 | 2, first: string) => {
@@ -114,10 +145,12 @@ export function InterviewPanel({ store, process, workspace, model, working, star
 
   return (
     <section aria-label="Open questions" data-testid="interview">
+      {head}
       {phase.kind === 'saved' && <p role="status" className="mb-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-900" data-testid="interview-saved">Recorded: {phase.what}</p>}
-      <p className="text-xs font-medium text-slate-500">{questionHeading(item, position, queue.length)}</p>
+      <p className="text-xs font-medium text-slate-500">{questionHeading(item, position, Math.max(queue.length, position))}</p>
       <h3 className="mt-1 font-display text-lg font-semibold leading-7 text-slate-900" data-testid="interview-question">{item.question}</h3>
       <p className="mt-1 text-sm leading-6 text-slate-600">{whyItMatters(item)}</p>
+      {goOn && waits && <p className="mt-1 text-xs text-slate-500">Why it could wait: {waits}</p>}
       <ErrorNote message={error ?? editor.error} />
 
       {!canEdit && (

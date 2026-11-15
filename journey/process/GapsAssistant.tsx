@@ -5,8 +5,13 @@ import React from 'react';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
 import { closeQuestions, deferQuestion, reopenQuestions } from '../../domain/processModel/patch.ts';
 import { ACCESS, all, buildAnswer, record, type Op } from '../../domain/questions/answer.ts';
-import { assessProcess } from '../../domain/assess/process.ts';
-import { GROUP_LABEL, OWNER_LABEL, triage, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
+import { GROUP_LABEL, OWNER_LABEL, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
+import { holdReason, nowHeading, planSummary } from '../../domain/questions/firstList.ts';
+import { lookSummary } from '../../domain/assistant/sourceLook.ts';
+import { useQuestionPlan } from './sourceLook.ts';
+import { FoundAnswers } from './FoundAnswers.tsx';
+
+type View = 'now' | 'found' | 'wait';
 import { Button, cx } from '../ui.tsx';
 import type { ModelEditor } from './useModelEditor.ts';
 import { AnswerBox, SeveralAnswers, type NotesContext } from './AnswerFromNotes.tsx';
@@ -18,20 +23,24 @@ import type { Branding } from '../../domain/docs/branding.ts';
 const GROUP_TONE: Record<QGroup, string> = { decides: 'bg-[#002C4B] text-white', signoff: 'bg-sky-100 text-sky-900', detail: 'bg-slate-100 text-slate-700' };
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
-export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding }: { model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean }; branding?: Branding }) {
+export function GapsAssistant({ processId, model, editor, canEdit, onClose, notes, branding }: { processId: string; model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean }; branding?: Branding }) {
   const [scope, setScope] = React.useState<'one' | 'several'>('one');
   const [reply, setReply] = React.useState<ImportedReply | null>(null);
   const ai = Boolean(notes?.aiAvailable && canEdit);
-  const t = React.useMemo(() => triage(model, assessProcess(model)), [model]);
-  const [group, setGroup] = React.useState<QGroup | 'all'>('all');
+  // The first list (part D): only what people must answer is asked first; answers found in the sources are confirmed; the rest waits.
+  const { plan, found, triage: t, look, looking } = useQuestionPlan(processId, model);
+  const [view, setView] = React.useState<View | null>(null);
+  const shown: View = view ?? (plan.now.length ? 'now' : plan.found.length ? 'found' : 'wait');
   const [owner, setOwner] = React.useState<QOwner | 'all'>('all');
   const [showDeferred, setShowDeferred] = React.useState(false);
-  const list = t.items.filter(i => (group === 'all' || i.group === group) && (owner === 'all' || i.owner === owner) && (showDeferred || !i.deferred));
+  const inView = shown === 'now' ? plan.now : shown === 'found' ? [] : plan.wait;
+  const list = [...inView, ...(showDeferred && shown === 'wait' ? plan.deferred : [])].filter(i => owner === 'all' || i.owner === owner);
   const [index, setIndex] = React.useState(0);
   const at = Math.min(index, Math.max(0, list.length - 1));
   const item = list[at];
   const open = t.items.filter(i => !i.deferred);
-  const counts = (g: QGroup) => open.filter(i => i.group === g).length;
+  const tiles: [View, number, string][] = [['now', plan.now.length, 'Only your people can tell us'], ['found', plan.found.length, 'Found in your sources: confirm'], ['wait', plan.wait.length, 'Can wait until sign-off']];
+  const lookLine = looking ? 'Looking in your sources for answers…' : lookSummary(look, found.length);
 
   return (
     <div className="space-y-5" data-testid="gaps-assistant">
@@ -39,17 +48,18 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold text-[#FFBC03]">Close the gaps</p>
-            <h3 className="mt-1.5 font-display text-2xl font-semibold" data-testid="gaps-count">{open.length} {open.length === 1 ? 'question' : 'questions'} to answer</h3>
-            <p className="mt-1 text-sm text-slate-200">From {t.raw} raised: duplicates merged and what the model already holds set aside. Each answer updates the model, the assessment and the documents at once.</p>
+            <h3 className="mt-1.5 font-display text-2xl font-semibold" data-testid="gaps-count">{nowHeading(plan)}</h3>
+            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} Each answer updates the model, the assessment and the documents at once.</p>
+            {lookLine && <p className="mt-1 text-xs text-slate-300" role="status" data-testid="source-look">{lookLine}</p>}
           </div>
           {onClose && <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/10">Back to the document</button>}
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          {(['decides', 'signoff', 'detail'] as QGroup[]).map(g => (
-            <button key={g} type="button" onClick={() => { setGroup(group === g ? 'all' : g); setIndex(0); }} aria-pressed={group === g}
-              className={cx('rounded-xl p-4 text-left ring-1 ring-inset transition', group === g ? 'bg-white text-[#002C4B] ring-white' : 'bg-white/[0.07] ring-white/10 hover:bg-white/[0.12]')}>
-              <span className="font-display text-2xl font-semibold tabular-nums">{counts(g)}</span>
-              <span className="mt-0.5 block text-sm">{GROUP_LABEL[g]}</span>
+          {tiles.map(([v, n, label]) => (
+            <button key={v} type="button" onClick={() => { setView(v); setIndex(0); }} aria-pressed={shown === v} data-testid={`gaps-view-${v}`}
+              className={cx('rounded-xl p-4 text-left ring-1 ring-inset transition', shown === v ? 'bg-white text-[#002C4B] ring-white' : 'bg-white/[0.07] ring-white/10 hover:bg-white/[0.12]')}>
+              <span className="font-display text-2xl font-semibold tabular-nums">{n}</span>
+              <span className="mt-0.5 block text-sm">{label}</span>
             </button>
           ))}
         </div>
@@ -62,7 +72,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
         </div>
       )}
 
-      <QuestionPacks model={model} t={t} branding={branding} canImport={canEdit} onImported={r => setReply(r)} />
+      <QuestionPacks model={model} t={t} plan={plan} branding={branding} canImport={canEdit} onImported={r => setReply(r)} />
 
       {reply && (
         <section className="rounded-xl border border-[#B58500]/40 bg-white p-6" aria-label="Replies read" data-testid="pack-reply">
@@ -88,10 +98,14 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
         <span className="ml-auto text-xs text-slate-500" data-testid="save-state">{editor.saving ? 'Saving…' : ''}</span>
       </div>
 
-      {!item ? (
+      {shown === 'found' ? (
+        plan.found.length
+          ? <FoundAnswers processId={processId} model={model} items={t.items} found={found} canEdit={canEdit} onApply={(op, summary) => editor.apply(op, summary)} />
+          : <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600" data-testid="found-none">{looking ? 'Looking in your sources…' : 'No answers found in your sources to confirm.'}</p>
+      ) : !item ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="gaps-done">
-          <p className="font-display text-lg font-semibold text-slate-900">{open.length === 0 ? 'No open questions left' : 'Nothing left in this view'}</p>
-          <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : 'Change the filters to see the rest.'}</p>
+          <p className="font-display text-lg font-semibold text-slate-900">{open.length === 0 ? 'No open questions left' : shown === 'now' ? 'Nothing only your people can tell us right now' : 'Nothing left in this view'}</p>
+          <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : shown === 'now' ? `What is left can wait until sign-off (${plan.wait.length}).` : 'Change the filters to see the rest.'}</p>
         </div>
       ) : (
         <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -111,7 +125,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
                 <SeveralAnswers model={model} items={list} editor={editor} ctx={notes!} />
               </>
             ) : (
-              <QuestionCard key={item.key} item={item} model={model} canEdit={canEdit} position={`${at + 1} of ${list.length}`} notes={ai ? notes : undefined}
+              <QuestionCard key={item.key} item={item} model={model} canEdit={canEdit} position={`${at + 1} of ${list.length}`} notes={ai ? notes : undefined} waits={shown === 'wait' ? holdReason(plan.held[item.key]) : ''}
                 onApply={(op, summary) => editor.apply(op, summary)}
                 onSkip={() => setIndex((at + 1) % list.length)} onBack={at > 0 ? () => setIndex(at - 1) : undefined} />
             )}
@@ -124,7 +138,7 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
                   <span className="flex items-start gap-2">
                     <span className="w-5 shrink-0 text-right tabular-nums text-slate-500">{i + 1}.</span>
                     <span className={cx('mt-1.5 h-2 w-2 shrink-0 rounded-full', x.group === 'decides' ? 'bg-[#002C4B]' : x.group === 'signoff' ? 'bg-sky-400' : 'bg-slate-300')} />
-                    <span className="line-clamp-2">{x.question}{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}</span>
+                    <span className="line-clamp-2">{x.question}{x.deferred && <span className="ml-1 text-xs font-normal text-slate-500">(set aside)</span>}{(x.also?.length ?? 0) > 0 && <span className="ml-1 text-xs font-normal text-slate-500">(asked {x.also!.length + 1} times)</span>}</span>
                   </span>
                 </button></li>
               ))}
@@ -136,8 +150,8 @@ export function GapsAssistant({ model, editor, canEdit, onClose, notes, branding
   );
 }
 
-function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack, notes }: {
-  key?: React.Key; item: TriageItem; model: ProcessModel; canEdit: boolean; position: string; notes?: NotesContext;
+function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack, notes, waits }: {
+  key?: React.Key; item: TriageItem; model: ProcessModel; canEdit: boolean; position: string; notes?: NotesContext; waits?: string;
   onApply: (op: Op, summary: string) => Promise<boolean>; onSkip: () => void; onBack?: () => void;
 }) {
   const [text, setText] = React.useState('');
@@ -179,6 +193,8 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
       </div>
       <h4 className="mt-3 font-display text-lg font-semibold leading-snug text-slate-900">{item.question}</h4>
       <p className="mt-1 text-xs text-slate-500">Updates: {item.affects.join(' · ')}</p>
+      {waits && <p className="mt-1 text-xs text-slate-500" data-testid="gap-waits">Why it can wait: {waits}</p>}
+      {(item.also?.length ?? 0) > 0 && <p className="mt-1 text-xs text-slate-500">Also asked as: {item.also!.map(q => `“${q}”`).join('; ')}</p>}
 
       {canEdit && mode === 'answer' && (
         <div className="mt-5 space-y-3">

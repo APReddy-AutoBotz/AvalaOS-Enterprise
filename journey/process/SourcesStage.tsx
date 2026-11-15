@@ -5,6 +5,9 @@ import { applyChanges, proposeChanges, type ChangeSet, type ProposedChange } fro
 import { deepEqual, type JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
+import { assessProcess } from '../../domain/assess/process.ts';
+import { triage } from '../../domain/questions/triage.ts';
+import { planQuestions } from '../../domain/questions/firstList.ts';
 import { FORMAT_LABEL } from '../../domain/workspace/sources.ts';
 import type { ExtractionRow, JourneyStore, SourceRow } from '../store/types.ts';
 import { StoreError } from '../store/types.ts';
@@ -254,6 +257,12 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
     }
   };
 
+  // Part D: of the questions the sources raise, say how few people will be asked first.
+  const firstListLine = (m: ProcessModel) => {
+    if (!m.steps.length) return `It raised ${m.openQuestions.length} open ${m.openQuestions.length === 1 ? 'question' : 'questions'}.`;
+    const p = planQuestions(triage(m, assessProcess(m)), m);
+    return `Of the ${m.openQuestions.length} questions it raised, ${p.now.length} ${p.now.length === 1 ? 'needs' : 'need'} your people first. Avala OS then looks in your sources for answers; the rest can wait until sign-off.`;
+  };
   const groups = new Map<string, ProposedChange[]>();
   for (const c of set.changes) groups.set(c.element, [...(groups.get(c.element) ?? []), c]);
   const toggle = (id: string, on: boolean) => { const n = new Set(picked); if (on) n.add(id); else n.delete(id); setPicked(n); };
@@ -262,7 +271,7 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
     <div className="space-y-3" data-testid="change-review">
       <p className="text-sm text-slate-700">
         {set.first
-          ? `The extraction of ${when(finishedAt)} found ${extracted.steps.length} steps, ${extracted.roles.length} roles, ${extracted.systems.length} systems and ${extracted.openQuestions.length} open questions.`
+          ? `The extraction of ${when(finishedAt)} found ${extracted.steps.length} steps, ${extracted.roles.length} roles and ${extracted.systems.length} systems. ${firstListLine(extracted)}`
           : `The extraction of ${when(finishedAt)} differs from the current model in ${set.changes.length} place${set.changes.length === 1 ? '' : 's'}. Choose what to take.`}
       </p>
       {!set.first && (
