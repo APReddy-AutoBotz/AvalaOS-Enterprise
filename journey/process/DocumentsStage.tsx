@@ -251,14 +251,14 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          {/* The delivery plan's documents first (part B); the others stay one click away, quieter. */}
+          {/* The delivery plan's documents first (part B), marked with an amber dot; the others stay one click away. */}
           <div role="tablist" aria-label="Documents" className="inline-flex flex-wrap rounded-lg bg-slate-200/70 p-0.5">
             {orderedTypes.map(t => (
               <button key={t.id} type="button" role="tab" aria-selected={type === t.id} onClick={() => { setType(t.id); typeChosen.current = true; }} data-planned={planned.has(t.id) ? 'yes' : 'no'}
                 title={planned.has(t.id) ? 'Planned for this process' : 'Not in the plan for this process; one click away'}
-                className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', type === t.id ? 'bg-white text-[#002C4B] shadow-sm' : planned.has(t.id) ? 'text-slate-700 hover:text-slate-900' : 'text-slate-500 hover:text-slate-900')}>
+                className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', type === t.id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>
                 {planned.has(t.id) && <span aria-hidden className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#E69F00] align-middle" />}
-                {t.short}<span className={cx('ml-1.5 hidden font-normal sm:inline', planned.has(t.id) ? 'text-slate-600' : 'text-slate-500')}>{t.label}</span>
+                {t.short}<span className="ml-1.5 hidden font-normal text-slate-600 sm:inline">{t.label}</span>
               </button>
             ))}
           </div>
