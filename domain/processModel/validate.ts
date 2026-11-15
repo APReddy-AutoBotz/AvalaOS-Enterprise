@@ -194,6 +194,7 @@ export function validateModel(model: ProcessModel): ValidationResult {
     const checks: Record<string, (v: unknown) => boolean> = {
       summary: v => typeof v === 'string' && v.trim().length > 0,
       doneToday: one(DONE_TODAY), kind: one(WORK_KINDS), inMind: many(IN_MIND), documents: many(PLANNED_DOCS),
+      building: v => typeof v === 'string' && model.systems.some(s => s.id === v),
     };
     if (!b || typeof b !== 'object' || Array.isArray(b)) err('BRIEF', '/meta/brief', 'brief must be an object.');
     else for (const k of Object.keys(b)) {

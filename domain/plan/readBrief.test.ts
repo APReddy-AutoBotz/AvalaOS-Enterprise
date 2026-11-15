@@ -60,6 +60,14 @@ test('findings become the brief: each line with its passage; disagreement and si
   assert.equal(split.kind!.status, 'unknown', 'nothing said: unknown');
   assert.equal(split.summary!.value, null);
 
+  // What is being built: an application of the process by its exact name; else unknown.
+  const sap = gold().systems.find(x => /SAP/.test(x.name))!;
+  const withModel = briefFromFindings([f('building', sap.name.toUpperCase(), 'req:3', 'will be built')], ingest, gold());
+  assert.deepEqual([withModel.building!.value, withModel.building!.status], [sap.id, 'stated']);
+  assert.equal(briefFromFindings([f('building', 'A tool nobody listed', 'req:3', 'will be built')], ingest, gold()).building!.status, 'unknown');
+  assert.equal(briefFromFindings([f('building', sap.name, 'req:3', 'x'), f('building', 'ServiceNow', 'req:2', 'y')], ingest, gold()).building!.status, 'unknown', 'two different answers');
+  assert.equal(brief.building, undefined, 'without the model, the line is not read');
+
   // Into the model: valid, and a person's line is kept.
   let m = setBriefFact(gold(), { fact: 'kind', value: 'existing_process' }).model;
   m = adoptBrief(m, brief).model;

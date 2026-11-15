@@ -16,6 +16,7 @@
 import type { DoneToday, Fact, InMind, PlannedDoc, ProcessBrief, ProcessModel, WorkKind } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { APPROACH_LABEL, type Approach } from '../assess/scoring.ts';
+import { buildingSystem, notDoneToday } from './intended.ts';
 
 export const DONE_TODAY_LABEL: Record<DoneToday, string> = { yes: 'Done today', partly: 'Partly done today', no: 'Not done today' };
 export const WORK_KIND_LABEL: Record<WorkKind, string> = { existing_process: 'An existing process', new_process: 'A new process', tool: 'A tool to be built', agent: 'An agent to be built' };
@@ -25,9 +26,9 @@ export const DOC_LABEL: Record<PlannedDoc, string> = { brd: 'Business requiremen
 export const BUILT_DOCS: readonly PlannedDoc[] = ['brd', 'pdd', 'frd', 'sdd'];
 const ORDER: PlannedDoc[] = ['brd', 'pdd', 'agent', 'frd', 'sdd'];
 
-export type BriefKey = 'summary' | 'doneToday' | 'kind' | 'applications' | 'inMind' | 'documents';
+export type BriefKey = 'summary' | 'doneToday' | 'kind' | 'building' | 'applications' | 'inMind' | 'documents';
 export const BRIEF_LABEL: Record<BriefKey, string> = {
-  summary: 'What this is', doneToday: 'Done today?', kind: 'What kind of thing', applications: 'Applications it touches', inMind: 'What the team has in mind', documents: 'Documents wanted',
+  summary: 'What this is', doneToday: 'Done today?', kind: 'What kind of thing', building: 'What is being built', applications: 'Applications it touches', inMind: 'What the team has in mind', documents: 'Documents wanted',
 };
 
 export interface BriefLine {
@@ -56,11 +57,16 @@ export function briefLines(m: ProcessModel): BriefLine[] {
     key, label: BRIEF_LABEL[key], fact: f as Fact<unknown> | undefined, state: stateOf(f as Fact<unknown> | undefined),
     text: f && f.value !== null && f.status !== 'unknown' ? words(f.value) : null,
   });
-  const apps = m.systems.filter(s => s.inScope !== false).map(s => s.name);
+  // The application being built is not one the process uses (part C).
+  const building = buildingSystem(m);
+  const apps = m.systems.filter(s => s.inScope !== false && s.id !== building?.id).map(s => s.name);
+  const kind = b.kind && b.kind.status !== 'unknown' ? b.kind.value : null;
+  const showBuilding = Boolean(building) || kind === 'tool' || kind === 'agent';
   return [
     line('summary', b.summary, v => v),
     line('doneToday', b.doneToday, v => DONE_TODAY_LABEL[v]),
     line('kind', b.kind, v => WORK_KIND_LABEL[v]),
+    ...(showBuilding ? [line('building', b.building, v => m.systems.find(s => s.id === v)?.name ?? 'An application no longer in the process')] : []),
     { key: 'applications', label: BRIEF_LABEL.applications, text: apps.length ? listWords(apps) : null, state: apps.length ? 'read' : 'unknown' },
     line('inMind', b.inMind, v => listLabels(v.map(x => IN_MIND_LABEL[x]))),
     line('documents', b.documents, v => listWords(v.map(x => DOC_LABEL[x]))),
@@ -72,12 +78,7 @@ export const briefConfirmed = (m: ProcessModel) => briefLines(m).filter(l => l.k
 /** Whether anything of the brief is known yet. */
 export const hasBrief = (m: ProcessModel) => briefLines(m).some(l => l.key !== 'applications' && l.state !== 'unknown');
 
-/** Whether the work is known not to be done today: the brief says so, or says it is a tool or a new process. */
-export function notDoneToday(m: ProcessModel): boolean {
-  const b = m.meta.brief ?? {};
-  const known = <T>(f: Fact<T> | undefined) => (f && f.status !== 'unknown' ? f.value : null);
-  return known(b.doneToday) === 'no' || ['tool', 'new_process'].includes(known(b.kind) ?? '');
-}
+export { notDoneToday } from './intended.ts';
 
 export type Track = 'existing' | 'ai' | 'new';
 

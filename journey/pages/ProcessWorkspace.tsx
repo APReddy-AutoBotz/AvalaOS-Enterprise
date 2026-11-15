@@ -219,7 +219,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
       const { segments, ingest } = briefSegments(editor.model, sources);
       if (!segments.length) { setReadError('There are no sources to read the brief from yet.'); return; }
       const r = await store.runAiTask(workspaceId, readBrief.id, segments as never);
-      const read = briefFromFindings(((r.data as { findings?: BriefFinding[] } | null)?.findings ?? []), ingest);
+      const read = briefFromFindings(((r.data as { findings?: BriefFinding[] } | null)?.findings ?? []), ingest, editor.model);
       await editor.apply(m => adoptBrief(m, read), 'Brief read from the sources');
     } catch (e) { setReadError(messageOf(e)); } finally { setReading(false); }
   };

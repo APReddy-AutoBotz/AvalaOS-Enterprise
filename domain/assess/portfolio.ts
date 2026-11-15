@@ -74,8 +74,10 @@ export interface ProcessCard {
   /** Upper end of the hours a year automation could take; null when not known. */
   hours: number | null;
   exact: boolean;
-  /** Steps people do today. */
+  /** Steps people do today; for work not done today, the intended steps. */
   steps: number;
+  /** Work not done today (part C): the hours are what it would take by hand. */
+  intended: boolean;
   /** Those steps by how they would be done: rules (RPA or an API), AI (assisted or agentic), or kept with people. */
   split: { rules: number; ai: number; people: number };
 }
@@ -84,7 +86,7 @@ export function processCard(a: ProcessAssessment): ProcessCard | null {
   if (a.assessed === 0) return null;
   const v = a.priority.value, c = a.counts;
   return {
-    lead: a.lead, fit: a.automationFit, steps: a.assessed,
+    lead: a.lead, fit: a.automationFit, steps: a.assessed, intended: a.intended,
     hours: v.computable ? v.value!.hours[1] : null, exact: v.computable ? v.value!.exact : false,
     split: { rules: c.rpa + c.api, ai: c.ai_assist + c.agent, people: c.human },
   };

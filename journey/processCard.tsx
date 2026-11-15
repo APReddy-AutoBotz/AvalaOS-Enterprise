@@ -27,7 +27,7 @@ export const Tile = ({ value, label, className }: { value: React.ReactNode; labe
 export const Figures = ({ card, className }: { card: ProcessCard; className?: string }) => (
   <div className={cx('grid gap-3', className)}>
     <Tile value={approachText(card)} label="Recommended approach" />
-    <Tile value={hoursText(card)} label="Hours a year" />
+    <Tile value={hoursText(card)} label={card.intended ? 'Hours a year by hand' : 'Hours a year'} />
     <Tile value={`${Math.round(card.fit * 100)}%`} label="Steps that fit" />
   </div>
 );
@@ -41,7 +41,7 @@ export function StepSplit({ card }: { card: ProcessCard }) {
   ].filter(p => p.n > 0);
   return (
     <div data-testid="step-split">
-      <p className="text-[13px] font-semibold text-slate-900">How the {card.steps === 1 ? 'step' : `${card.steps} steps`} people do today would be done</p>
+      <p className="text-[13px] font-semibold text-slate-900">{card.intended ? `How the ${card.steps === 1 ? 'intended step' : `${card.steps} intended steps`} would be done` : `How the ${card.steps === 1 ? 'step' : `${card.steps} steps`} people do today would be done`}</p>
       <div aria-hidden className="mt-2.5 flex gap-[3px] overflow-hidden rounded-full">
         {parts.map(p => <span key={p.label} className={cx('block h-2.5', p.cls)} style={{ flexGrow: p.n, flexBasis: 0 }} />)}
       </div>

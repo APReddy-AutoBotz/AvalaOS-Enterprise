@@ -18,7 +18,7 @@ const app = (o: Partial<Application> & { id: string; name: string }): Applicatio
 const vendor = proc({
   id: 'p1', name: 'Vendor invoice processing (India, company code 1000)', status: 'Approved revision 2', openQuestions: 3, proposalsWaiting: 2,
   named: { analyst: 'Meera Iyer', architect: null, approver: 'Rahul Deshpande' },
-  card: { lead: 'rpa', fit: 0.75, hours: 2400, exact: false, steps: 20, split: { rules: 15, ai: 1, people: 4 } }, systems: ['SAP S/4HANA', 'ServiceNow'],
+  card: { lead: 'rpa', fit: 0.75, hours: 2400, exact: false, steps: 20, intended: false, split: { rules: 15, ai: 1, people: 4 } }, systems: ['SAP S/4HANA', 'ServiceNow'],
 });
 const onboarding = proc({ id: 'p2', name: 'Supplier onboarding', named: { analyst: 'Meera Iyer', architect: 'Arjun Rao', approver: null } });
 const portfolio: Portfolio = {

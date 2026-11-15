@@ -4,6 +4,7 @@
 import type { AccessStatus, ElementTarget, OpenQuestion, ProcessModel } from '../processModel/types.ts';
 import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
+import { buildingSystem } from '../plan/intended.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
@@ -124,8 +125,12 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   const items: TriageItem[] = [];
   const bySystem = new Map<string, OpenQuestion[]>();
 
+  // The application being built (part C) is not one the automation reaches: how it is reached is part of its own design.
+  const building = buildingSystem(m);
+  const designOwn = (q: OpenQuestion) => building && q.target.kind === 'system' && q.target.id === building.id
+    ? `${building.name} is what is being built; how it is reached is part of its own design.` : null;
   for (const q of stored) {
-    const why = q.status === 'open' ? answeredBy(m, q) : null;
+    const why = q.status === 'open' ? answeredBy(m, q) ?? designOwn(q) : null;
     if (why) { alreadyKnown.push({ questionId: q.id, question: q.question, why }); continue; }
     if (q.target.kind === 'system' && q.target.field === 'access' && q.target.id) {
       bySystem.set(q.target.id, [...(bySystem.get(q.target.id) ?? []), q]);
@@ -139,7 +144,7 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   }
 
   // One question per system about its interfaces, however many were raised.
-  const systemIds = new Set([...bySystem.keys(), ...gaps(m).filter(g => g.kind === 'system_access_unknown').map(g => g.target.id!)]);
+  const systemIds = new Set([...bySystem.keys(), ...gaps(m).filter(g => g.kind === 'system_access_unknown').map(g => g.target.id!)].filter(id => id !== building?.id));
   for (const id of systemIds) {
     const sys = m.systems.find(s => s.id === id);
     if (!sys) continue;
@@ -156,6 +161,7 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   const covered = (g: Gap) => stored.some(q => q.target.kind === g.target.kind && q.target.id === g.target.id && q.target.field === g.target.field);
   for (const g of gaps(m)) {
     if (g.kind === 'system_access_unknown' || covered(g)) continue;
+    if (building && g.target.kind === 'system' && g.target.id === building.id) continue;
     if (g.kind === 'unsourced_assumption') continue; // confirmed in the Process stage, not by a question
     items.push({ key: `gap:${g.kind}:${g.target.kind}:${g.target.id ?? ''}:${g.target.field ?? ''}`, question: g.label, target: g.target, questionIds: [], kind: kindOf(g.target), assignedTo: null, deferred: false, ...classify(m, g.target, g.label, openSteps) });
   }
