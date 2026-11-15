@@ -141,12 +141,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
 
   const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings, decisions }) : null), [model, decisions, settings]);
   // The delivery plan (part B): its documents come first and the first of them opens, unless the person chose a tab.
-  const plan = React.useMemo(() => (assessment ? deliveryPlan(model, assessment) : null), [model, assessment]);
-  const planned = React.useMemo(() => new Set<DocType>((plan?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)), [plan]);
+  const delivery = React.useMemo(() => (assessment ? deliveryPlan(model, assessment) : null), [model, assessment]);
+  const planned = React.useMemo(() => new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)), [delivery]);
   const orderedTypes = React.useMemo(() => [...TYPES.filter(t => planned.has(t.id)), ...TYPES.filter(t => !planned.has(t.id))], [planned]);
   const typeChosen = React.useRef(false);
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
-  const plannedLine = plan ? `Planned for this process: ${plan.docs.filter(d => d.planned).map(d => (d.available ? d.doc.toUpperCase() : 'the agent document (to come)')).join(', ')}.` : '';
+  const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.available ? d.doc.toUpperCase() : 'the agent document (to come)')).join(', ')}.` : '';
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
   const register = React.useMemo(() => (assessment && stored ? reconcile(deriveRequirements(model, assessment), stored) : null), [model, assessment, stored]);
   React.useEffect(() => {

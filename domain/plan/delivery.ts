@@ -153,7 +153,7 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
  * "An agent was expected; 15 of 20 steps are plain rules (RPA or API) and 1 needs an agent."
  */
 export function expectation(inMind: InMind[], a: ProcessAssessment | null): string | null {
-  const expected = inMind.filter(x => x !== 'open');
+  const expected: InMind[] = inMind.filter(x => x !== 'open');
   if (!expected.length) return null;
   const said = `${listWords(expected.map(x => IN_MIND_LABEL[x]))} ${expected.length === 1 ? 'was' : 'were'} expected`;
   if (!a || a.assessed === 0) return `${said}; there are no steps to compare it with yet.`;
