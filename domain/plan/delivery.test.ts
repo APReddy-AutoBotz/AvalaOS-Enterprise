@@ -53,6 +53,9 @@ test('the delivery plan by its table: existing work, AI or agent, and work not d
   assert.deepEqual(existing.docs.filter(d => d.planned).map(d => d.doc), ['pdd', 'sdd']);
   assert.deepEqual(existing.docs.filter(d => !d.planned).map(d => d.doc), ['brd', 'frd'], 'BRD and FRD one click away');
   assert.equal(existing.unknowns.length, 2, 'not known whether done today, nor what kind');
+  assert.match(existing.why, /^Nobody has said yet whether the work is done today, so it is treated as done today and the assessment leads with/);
+  const yes = setBriefFact(m, { fact: 'doneToday', value: 'yes' }).model;
+  assert.match(deliveryPlan(yes, assessProcess(yes)).why, /^The work is done today \(confirmed by a person\) and the assessment leads with/);
 
   const tool = setBriefFact(setBriefFact(m, { fact: 'doneToday', value: 'no' }).model, { fact: 'kind', value: 'tool' }).model;
   const t = deliveryPlan(tool, assessProcess(tool));

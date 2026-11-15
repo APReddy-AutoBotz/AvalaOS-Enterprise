@@ -57,8 +57,9 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead }: {
                   ) : (
                     <>
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className={cx('text-sm leading-6', l.text ? 'text-slate-900' : 'text-slate-500')}>{l.text ?? 'Not stated in the sources.'}</span>
-                        <Tag tone={STATE[l.state].tone}>{l.key === 'applications' && l.state === 'read' ? 'From the process' : STATE[l.state].text}</Tag>
+                        {/* Unknown after a reading: the sources do not say. Never read nor given: not filled in yet. */}
+                        <span className={cx('text-sm leading-6', l.text ? 'text-slate-900' : 'text-slate-500')}>{l.text ?? (l.fact || l.key === 'applications' ? 'Not stated in the sources.' : 'Not filled in yet.')}</span>
+                        <Tag tone={STATE[l.state].tone}>{l.key === 'applications' && l.state === 'read' ? 'From the process' : l.state === 'unknown' && !l.fact && l.key !== 'applications' ? 'Not yet' : STATE[l.state].text}</Tag>
                         {canEdit && l.key !== 'applications' && <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-900 hover:underline" onClick={() => setEditing(l.key)}>{l.text ? 'Change' : 'Add'}</button>}
                       </div>
                       {l.fact?.sources[0] && l.state !== 'unknown' && (

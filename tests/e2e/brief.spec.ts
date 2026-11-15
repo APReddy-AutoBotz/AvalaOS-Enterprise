@@ -26,9 +26,10 @@ test('no documents: the short form and "in your own words" start the process; th
   await expect(brief.getByTestId('brief-doneToday')).toContainText('Confirmed');
   await expect(brief.getByTestId('brief-inMind')).toContainText('An AI agent');
   await expect(brief.getByTestId('brief-applications')).toContainText('SAP S/4HANA and Coupa');
-  await expect(brief.getByTestId('brief-kind')).toContainText('Not stated');
-  // Nothing the person did not say is filled in.
-  await expect(brief.getByTestId('brief-summary')).toContainText('Not stated in the sources.');
+  await expect(brief.getByTestId('brief-kind')).toContainText('Not filled in yet.');
+  // Nothing the person did not say is filled in, and nothing claims the sources were read.
+  await expect(brief.getByTestId('brief-summary')).toContainText('Not filled in yet.');
+  await expect(brief).not.toContainText('Not stated in the sources.');
   const axe = await new AxeBuilder({ page }).include('[data-testid="brief"]').withTags(['wcag2a', 'wcag2aa']).analyze();
   expect(axe.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
 
