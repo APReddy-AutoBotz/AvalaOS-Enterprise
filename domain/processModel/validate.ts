@@ -190,6 +190,11 @@ export function validateModel(model: ProcessModel): ValidationResult {
   if (model.meta.startedFrom !== undefined && (typeof model.meta.startedFrom !== 'string' || !model.meta.startedFrom.trim())) {
     err('BAD_STARTED_FROM', 'meta.startedFrom', 'meta.startedFrom must name a typical process.');
   }
+  if (model.meta.purpose !== undefined) {
+    const pu: any = model.meta.purpose;
+    if (!pu || typeof pu !== 'object' || !['assess', 'as_is'].includes(pu.value)) err('PURPOSE', '/meta/purpose', 'purpose must say what is wanted from the process.');
+    else if (!(pu.by === null || typeof pu.by === 'string') || typeof pu.at !== 'string' || !pu.at) err('PURPOSE', '/meta/purpose', 'purpose records who answered and when.');
+  }
   if (model.meta.brief !== undefined) {
     const b: any = model.meta.brief;
     const one = (list: readonly string[]) => (v: unknown) => list.includes(v as string);

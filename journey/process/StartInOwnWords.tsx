@@ -15,7 +15,9 @@ import { Button, ErrorNote, messageOf } from '../ui.tsx';
 
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
-export function StartInOwnWords({ store, processId, workspaceId, onSaved }: { store: JourneyStore; processId: string; workspaceId: string; me?: string; onSaved: () => void }) {
+export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksInMind = true }: { store: JourneyStore; processId: string; workspaceId: string; me?: string; onSaved: () => void;
+  /** Whether to ask what the team has in mind: not when the process is documented as it is (domain/plan/purpose.ts). */
+  asksInMind?: boolean }) {
   const [doneToday, setDoneToday] = React.useState<DoneToday | ''>('');
   const [apps, setApps] = React.useState('');
   const [inMind, setInMind] = React.useState<InMind[]>([]);
@@ -37,7 +39,7 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved }: { st
       const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
       await store.addSource(processId, { key, title: `Described in own words, ${date}`, fileName: '', format: 'txt', kind: 'Description', segments, inferred: false, warnings: [], byteSize: new Blob([text]).size });
       // Then the form's answers, as given by a person, in one edit on the working draft.
-      const ops = ownWordsEdits({ doneToday, inMind: inMind.filter(x => x !== 'open' || inMind.length === 1), apps: applicationNames(apps) });
+      const ops = ownWordsEdits({ doneToday, inMind: asksInMind ? inMind.filter(x => x !== 'open' || inMind.length === 1) : [], apps: applicationNames(apps) });
       if (ops.length) {
         const draft = await store.startDraft(processId);
         let m = draft.model; const patch = [];
@@ -66,7 +68,7 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved }: { st
           <input value={apps} onChange={e => setApps(e.target.value)} placeholder="For example: SAP, Outlook, SharePoint" className={`${input} mt-1`} />
         </label>
       </div>
-      <fieldset className="mt-4">
+      {asksInMind && <fieldset className="mt-4">
         <legend className="text-sm font-medium text-slate-700">What do you have in mind? <span className="font-normal text-slate-500">(an expectation; the assessment decides)</span></legend>
         <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
           {IN_MIND.map(v => (
@@ -75,7 +77,7 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved }: { st
             </label>
           ))}
         </div>
-      </fieldset>
+      </fieldset>}
       <div className="mt-4">
         <AnswerBox label="In your own words" value={words} onChange={setWords} rows={7}
           placeholder="For example: Supplier invoices arrive by email. Someone in accounts payable checks them against the purchase order in SAP…"

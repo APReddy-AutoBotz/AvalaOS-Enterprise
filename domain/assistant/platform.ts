@@ -42,6 +42,8 @@ export const PLATFORM_FACTS: PlatformFact[] = [
   fact('edit-requirement', 'documents', 'a requirement is reworded on the Documents stage, on the FRD tab: open "Requirements register" with "Review and edit" and press Edit beside the requirement. "Use the derived wording" goes back to the wording worked out from the process.'),
   // journey/process/SectionComments.tsx.
   fact('comment', 'documents', 'a reviewer leaves a comment where they read: on the Documents stage, Comment on the section heading. The author or an editor resolves it.'),
+  // domain/plan/purpose.ts (whatFollows, asksQuestion); journey/process/BriefPanel.tsx PurposeLine; journey/pages/ProcessesPage.tsx.
+  fact('purpose', 'process', 'a person says what they want from a process: "Assess it and document it", which is what a process is until someone answers, or "Document it as it is". A process documented as it is has no assessment: no score, no ranking and no recommendation; its documents are the process document (PDD), with its map, and the evidence pack, and it is asked no question that only serves an assessment, such as how an automation could reach an application or the figures that size a saving. The answer is given when the process is added, and changed at any time in "The brief" at the top of the Process stage; changing it deletes nothing.'),
   // domain/workitems/board.ts; journey/pages/BoardPage.tsx.
   fact('board', 'work-items', 'work items already on the Delivery board are never changed for you. When a requirement linked to an item changes, the item shows "Upstream changed" with the wording before and after.'),
 ];

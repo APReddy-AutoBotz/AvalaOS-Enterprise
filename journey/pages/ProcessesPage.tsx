@@ -2,6 +2,8 @@
 // its assessment in short), a list (one row each, for when there are many), and the portfolio that
 // compares them. Cards open by default up to CARDS_UP_TO processes, the list beyond that; a person's own
 // choice between the two is remembered in the browser.
+import { NOT_ASSESSED, offersPurpose, PURPOSE_LABEL, PURPOSE_WHAT, PURPOSES, type PurposeValue } from '../../domain/plan/purpose.ts';
+import { setPurpose } from '../../domain/processModel/patch.ts';
 import React from 'react';
 import type { JourneyStore, Member, ProcessRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -41,6 +43,9 @@ export function ProcessesPage({ store, nav, workspace }: { store: JourneyStore; 
 function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; nav: Nav; workspace: Workspace; eyebrow: string }) {
   const [processes, setProcesses] = React.useState<ProcessRow[] | null>(null);
   const [name, setName] = React.useState('');
+  // "Assess it and document it" is chosen to begin with: what every process is until someone answers.
+  const [purpose, setPurpose_] = React.useState<PurposeValue>('assess');
+  const askPurpose = offersPurpose(workspace.modules);
   const [adding, setAdding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -73,6 +78,12 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
     setError(null);
     try {
       const p = await store.createProcess(workspace.id, name);
+      // What is wanted from the process, when it is not the default: kept on its first draft, with who and when.
+      if (askPurpose && purpose !== 'assess') {
+        const [draft, me] = await Promise.all([store.startDraft(p.id), store.currentUser().catch(() => null)]);
+        const r = setPurpose(draft.model, { value: purpose, by: me?.id ?? null, at: new Date().toISOString() });
+        await store.savePatch(draft.revisionId, draft.seq, r.patch, 'user', `What is wanted from the process: ${PURPOSE_LABEL[purpose]}`);
+      }
       nav.go({ page: 'process', processId: p.id, stage: 'sources' });
     } catch (err) {
       setError(messageOf(err));
@@ -81,9 +92,26 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
   };
 
   const addForm = (
-    <form onSubmit={create} className="flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="flex-1"><Field label="Process name" placeholder="e.g. Vendor invoice processing" required maxLength={200} value={name} onChange={e => setName(e.target.value)} autoFocus /></div>
-      <Button type="submit" disabled={busy || !name.trim()}>Add process</Button>
+    <form onSubmit={create} className="w-full max-w-xl space-y-3 text-left">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+        <div className="flex-1"><Field label="Process name" placeholder="e.g. Vendor invoice processing" required maxLength={200} value={name} onChange={e => setName(e.target.value)} autoFocus /></div>
+        <Button type="submit" disabled={busy || !name.trim()}>Add process</Button>
+      </div>
+      {/* Asked when the organisation uses the documents; never worked out by Avala OS (domain/plan/purpose.ts). */}
+      {askPurpose && (
+        <fieldset data-testid="new-purpose">
+          <legend className="text-sm font-medium text-slate-700">What do you want from this process?</legend>
+          <div className="mt-1 space-y-1.5">
+            {PURPOSES.map(v => (
+              <label key={v} className="flex items-start gap-2 text-sm text-slate-800">
+                <input type="radio" name="new-purpose" className="mt-1 h-4 w-4 accent-[#002C4B]" checked={purpose === v} onChange={() => setPurpose_(v)} />
+                <span><span className="font-semibold">{PURPOSE_LABEL[v]}</span><span className="block text-xs leading-5 text-slate-600">{PURPOSE_WHAT[v]}</span></span>
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-slate-500">You can change this later in The brief.</p>
+        </fieldset>
+      )}
     </form>
   );
 
@@ -215,6 +243,8 @@ function ProcessCardView({ p, f, nameOf, open }: { p: ProcessRow; f: LoadedFacts
           <Figures card={f.card} className="mt-5 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.8fr)]" />
           <div className="mt-5"><StepSplit card={f.card} /></div>
         </>
+      ) : f.purpose === 'as_is' ? (
+        <p className="mt-5 rounded-xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600" data-testid="not-assessed">{NOT_ASSESSED}: its process document, map and evidence pack describe how the work is done.</p>
       ) : (
         <p className="mt-5 rounded-xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600">
           {f.status === 'none' ? 'Nothing to assess yet. Add its transcripts, procedures and flowcharts, and the assessment appears here.' : 'Nothing to assess yet. The assessment appears here once the process has steps.'}

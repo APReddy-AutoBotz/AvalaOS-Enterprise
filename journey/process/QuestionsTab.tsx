@@ -2,7 +2,8 @@
 // missing information found by rule, and conflicts between sources (the person picks the value).
 import React from 'react';
 import { addQuestion, answerQuestion, resolveConflict } from '../../domain/processModel/patch.ts';
-import { getElement, untrackedGaps } from '../../domain/processModel/selectors.ts';
+import { askedOpenQuestions, getElement, untrackedGaps } from '../../domain/processModel/selectors.ts';
+import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { Conflict, ElementTarget, OpenQuestion, ProcessModel } from '../../domain/processModel/types.ts';
 import { Button, EmptyState } from '../ui.tsx';
 import type { TabContext } from './ProcessEditor.tsx';
@@ -26,7 +27,7 @@ function valueKind(t: ElementTarget): ValueKind {
 }
 
 export function QuestionsTab({ model, editor, canEdit, questionsNote }: TabContext) {
-  const open = model.openQuestions.filter(q => q.status === 'open');
+  const open = askedOpenQuestions(model);
   const answered = model.openQuestions.filter(q => q.status !== 'open');
   const missing = untrackedGaps(model);
   return (
@@ -41,7 +42,7 @@ export function QuestionsTab({ model, editor, canEdit, questionsNote }: TabConte
 
       <section className="space-y-2">
         <h3 className="font-display text-sm font-semibold text-slate-900">Missing information</h3>
-        <p className="text-xs text-slate-500">Found by checking the model: what the assessment and documents will need.</p>
+        <p className="text-xs text-slate-500">{whatFollows(model).assessed ? 'Found by checking the model: what the assessment and documents will need.' : 'Found by checking the model: what the process document will need.'}</p>
         {missing.length === 0 ? <p className="text-sm text-slate-500">Nothing missing that the checks can see.</p> : (
           <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 bg-white">
             {missing.map((g, i) => (

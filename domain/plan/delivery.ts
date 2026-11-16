@@ -13,6 +13,7 @@
 // BRD and FRD are always one click away. Documents a person chose (`brief.documents`) replace the
 // table's choice, and the table's own choice is still said. What the team had in mind is compared
 // with the assessment and never changes it.
+import { whatFollows } from './purpose.ts';
 import type { DoneToday, Fact, InMind, PlannedDoc, ProcessBrief, ProcessModel, WorkKind } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { APPROACH_LABEL, type Approach } from '../assess/scoring.ts';
@@ -62,14 +63,17 @@ export function briefLines(m: ProcessModel): BriefLine[] {
   const apps = m.systems.filter(s => s.inScope !== false && s.id !== building?.id).map(s => s.name);
   const kind = b.kind && b.kind.status !== 'unknown' ? b.kind.value : null;
   const showBuilding = Boolean(building) || kind === 'tool' || kind === 'agent';
+  const follows = whatFollows(m);
   return [
     line('summary', b.summary, v => v),
     line('doneToday', b.doneToday, v => DONE_TODAY_LABEL[v]),
     line('kind', b.kind, v => WORK_KIND_LABEL[v]),
     ...(showBuilding ? [line('building', b.building, v => m.systems.find(s => s.id === v)?.name ?? 'An application no longer in the process')] : []),
     { key: 'applications', label: BRIEF_LABEL.applications, text: apps.length ? listWords(apps) : null, state: apps.length ? 'read' : 'unknown' },
-    line('inMind', b.inMind, v => listLabels(v.map(x => IN_MIND_LABEL[x]))),
-    line('documents', b.documents, v => listWords(v.map(x => DOC_LABEL[x]))),
+    // Documented as it is (domain/plan/purpose.ts): nothing is being changed, so neither what the team has
+    // in mind for a change nor the documents of a change are asked. Both are kept on the record.
+    ...(follows.asksInMind ? [line('inMind', b.inMind, v => listLabels(v.map(x => IN_MIND_LABEL[x])))] : []),
+    ...(follows.documents === null ? [line('documents', b.documents, v => listWords(v.map(x => DOC_LABEL[x])))] : []),
   ];
 }
 
@@ -143,6 +147,13 @@ const plannedReason = (track: Track, doc: PlannedDoc) => (RULE_DOCS[track].inclu
 
 /** The delivery plan for a process, by the table, with what it rests on. */
 export function deliveryPlan(m: ProcessModel, a: ProcessAssessment | null): DeliveryPlan {
+  // Documented as it is (domain/plan/purpose.ts): nothing is being changed, so one document, and why.
+  if (!whatFollows(m).future) {
+    const why = notDoneToday(m)
+      ? 'This process is documented as it is: nothing is being changed, so one document describes how the work is intended to go.'
+      : 'This process is documented as it is: nothing is being changed, so one document describes how the work is done today.';
+    return { track: 'existing', why, docs: [{ doc: 'pdd', label: DOC_LABEL.pdd, planned: true, available: true, reason: 'How the work is done, step by step, with its map.' }], ruleWouldPlan: null, expectation: null, unknowns: [] };
+  }
   const b = m.meta.brief ?? {};
   const { track, why } = trackOf(m, a);
   const rule = RULE_DOCS[track];

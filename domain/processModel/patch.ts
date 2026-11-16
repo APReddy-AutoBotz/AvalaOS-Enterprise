@@ -413,6 +413,15 @@ export function setProfileFact(model: ProcessModel, args: { fact: 'processChange
  * A person states (or clears, with null) one line of the brief (docs/effort-first-plan.md, part A).
  * The line becomes theirs: a later reading of the sources never overwrites it (`adoptBrief`).
  */
+/**
+ * A person says what they want from the process (domain/plan/purpose.ts). Only the answer changes:
+ * nothing else on the record is removed or rewritten, so switching there and back leaves it as it was.
+ */
+export function setPurpose(model: ProcessModel, args: { value: 'assess' | 'as_is'; by: string | null; at: string }): OpResult {
+  if (!['assess', 'as_is'].includes(args.value)) throw new ModelOpError('BAD_PURPOSE', 'Choose what is wanted from the process.');
+  return commit(model, m => { m.meta.purpose = { value: args.value, by: args.by, at: args.at }; });
+}
+
 export function setBriefFact<K extends keyof ProcessBrief>(model: ProcessModel, args: { fact: K; value: NonNullable<ProcessBrief[K]>['value'] }): OpResult {
   return commit(model, m => {
     m.meta.brief = { ...(m.meta.brief ?? {}), [args.fact]: confirmed(args.value as never) };

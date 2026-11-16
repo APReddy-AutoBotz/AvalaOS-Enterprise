@@ -6,6 +6,7 @@
 // The page is light; the one coloured block is "Needs you", so the eye lands on it. It adapts to how
 // much there is: one need is a single large card, several are a list grouped by process; one process
 // shows its figures, several are compact rows.
+import { NOT_ASSESSED } from '../../domain/plan/purpose.ts';
 import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -204,7 +205,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
 
 const rolesOf = (p: LoadedFacts, userId: string) => (['analyst', 'architect', 'approver'] as const).filter(d => (d === 'analyst' ? p.analystId : d === 'architect' ? p.architectId : p.approverId) === userId).map(d => DUTY[d]);
 /** What to say in place of the figures while a process has nothing to assess. */
-const notAssessed = (p: LoadedFacts) => (p.status === 'none' ? 'No sources yet, so nothing to assess.' : `Not assessed yet${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}`);
+const notAssessed = (p: LoadedFacts) => (p.purpose === 'as_is' ? `${NOT_ASSESSED}${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}` : p.status === 'none' ? 'No sources yet, so nothing to assess.' : `Not assessed yet${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}`);
 
 /** The only process a person has: room for its figures and the people on it. */
 function OneProcess({ p, mine, userId, nameOf, open }: { p: LoadedFacts; mine: boolean; userId: string; nameOf: (id: string) => string; open: (id: string) => void }) {

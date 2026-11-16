@@ -15,6 +15,7 @@ import { DocBuilder, docShort, type Cell, type DocTree, type DocType } from './t
 import { controlOf, typicalLeft, type DocInput } from './common.ts';
 import { testPack } from './tests.ts';
 import { applyTestEdits, packAsRun, CASE_STATE_LABEL, type TestCaseEdit } from './testEdits.ts';
+import { asksQuestion, whatFollows } from '../plan/purpose.ts';
 
 export const NOT_RECORDED = 'Not recorded';
 
@@ -76,6 +77,8 @@ function passagesCell(refs: SourceRef[], titles: Map<string, string>): Cell {
 }
 
 export function buildEvidence(input: EvidenceInput): DocTree {
+  // A process documented as it is has no requirements, work or tests: its pack is the process itself.
+  if (!whatFollows(input.model).future) return buildEvidenceAsIs(input);
   const m = input.model;
   const b = new DocBuilder();
   const name = (id: string | null | undefined) => (id ? input.names[id] ?? null : null);
@@ -188,6 +191,80 @@ export function buildEvidence(input: EvidenceInput): DocTree {
   list('Functional requirements with no test case', noTest.map(r => `${r.code}: ${r.title}`));
   list('Functional requirements whose test has no expected result', noExpected.map(r => `${r.code}: ${r.title}`));
   if (!openQs.length && !typical && !noSource.length && !noWork.length && !noTest.length && !noExpected.length) b.paragraph('Everything the pack covers is evidenced.');
+
+  return { type: 'evidence', title: 'Evidence pack', subtitle: m.meta.name, control: controlOf(input), sections: b.sections, openItems: [] };
+}
+
+/**
+ * The evidence pack of a process documented as it is (domain/plan/purpose.ts): what the pack covers and
+ * who approved it, the sources, each step, rule, exception and control with the source passages behind
+ * it, the review comments, and what is not evidenced. People's choices of approach are kept on the
+ * record and not listed: there is no assessment to choose against.
+ */
+function buildEvidenceAsIs(input: EvidenceInput): DocTree {
+  const m = input.model;
+  const b = new DocBuilder();
+  const name = (id: string | null | undefined) => (id ? input.names[id] ?? null : null);
+  const titles = new Map(input.allSources.map(s => [s.key, s.title]));
+  const current = input.revisions.find(r => r.revNo === input.revNo) ?? null;
+  const approved = input.revision.state === 'approved';
+  const order = orderedSteps(m);
+
+  b.section('1', 'What this pack covers', 1);
+  if (!approved) b.callout('Built from a working draft: this pack is not evidence of an approved state. Approve the revision, then take the pack again.', 'warning');
+  b.paragraph(`The record Avala OS holds for "${m.meta.name}", documented as it is: where each step, rule, exception and control came from, and who approved the process. Everything here is read from the record; nothing is written for the pack.`);
+  b.keyValue('The revision', [
+    ['Process', m.meta.name],
+    ['Revision', input.revision.label],
+    ['State', approved ? 'Approved' : 'Working draft'],
+    ['Created', date(current?.createdAt)],
+    ['Approved by', approved ? personCell(name(current?.approvedBy)) : 'Not approved'],
+    ['Approved on', approved ? (current?.approvedAt ? date(current.approvedAt) : notRecorded()) : 'Not approved'],
+  ]);
+  const earlier = input.revisions.filter(r => r.approvedAt && r.revNo !== input.revNo).sort((a, z) => z.revNo - a.revNo);
+  b.table('Earlier approved revisions', ['Revision', 'Approved by', 'Approved on'],
+    earlier.map(r => [`Revision ${r.revNo}`, personCell(name(r.approvedBy)), date(r.approvedAt)]), 'No earlier revision was approved.');
+
+  b.section('2', 'The sources', 1);
+  b.table('Sources', ['Source', 'Kind', 'Added', 'Passages', 'State'],
+    input.allSources.map(s => [`${s.title} (${s.key})`, s.kind || NOT_RECORDED, date(s.createdAt), String(s.passages), s.archived ? 'Archived' : 'In use']),
+    'No sources were added: the process was entered by hand or started from a typical process.');
+
+  b.section('3', 'The process and where each part came from', 1);
+  b.paragraph('Every step, business rule, exception and control of the process, with the source passages behind it and whether a person confirmed it.');
+  const STATE: Record<string, string> = { stated: 'Stated in a source', inferred: 'Inferred from the sources', 'user-confirmed': 'Confirmed by a person', assumed: 'An assumption to confirm', typical: 'Typical, not confirmed', unknown: NOT_RECORDED };
+  type Part = { kind: string; name: string; status: string; refs: SourceRef[] };
+  const parts: Part[] = [
+    ...order.map((s, i) => ({ kind: `Step ${i + 1}`, name: s.name, status: s.status, refs: s.sources })),
+    ...m.rules.map(r => ({ kind: 'Rule', name: r.name, status: r.status, refs: r.sources })),
+    ...m.exceptions.map(e => ({ kind: 'Exception', name: e.name, status: e.status, refs: e.sources })),
+    ...m.controls.map(c => ({ kind: 'Control', name: c.text, status: c.status, refs: c.sources })),
+  ];
+  b.table('The process', ['Part', 'What', 'Source passages', 'State'],
+    parts.map(p => [p.kind, p.name, passagesCell(p.refs, titles), STATE[p.status] ?? NOT_RECORDED]),
+    'No steps are recorded yet.');
+
+  b.section('4', 'Review comments', 1);
+  const docName = (t: string) => docShort(t as DocType);
+  b.table('Comments on document sections', ['Document', 'Section', 'Comment', 'Written by', 'Written on', 'State'],
+    [...input.comments].sort((a, z) => a.docType.localeCompare(z.docType) || a.sectionTitle.localeCompare(z.sectionTitle) || a.createdAt.localeCompare(z.createdAt)).map(c => [
+      docName(c.docType), c.sectionTitle, c.body, personCell(name(c.authorId)), date(c.createdAt),
+      c.resolvedAt ? (() => { const who = personCell(name(c.resolvedBy)); return `Resolved by ${who.text} on ${date(c.resolvedAt)}`; })() : 'Open',
+    ]), 'No review comments were made.');
+
+  b.section('5', 'What is not evidenced', 1);
+  const openQs = m.openQuestions.filter(q => q.status === 'open' && asksQuestion(m, q));
+  const typical = typicalLeft(m);
+  const noSource = parts.filter(p => !p.refs.length && p.status !== 'user-confirmed');
+  b.keyValue('In short', [
+    ['Open questions', String(openQs.length)],
+    ['Typical items not confirmed', String(typical)],
+    ['Parts of the process with no source passage and not confirmed by a person', String(noSource.length)],
+  ]);
+  const list = (title: string, items: string[]) => { if (items.length) { b.paragraph(`${title}:`); b.list(items); } };
+  list('Open questions', openQs.map(q => q.question));
+  list('Parts with no source passage', noSource.map(p => `${p.kind}: ${p.name}`));
+  if (!openQs.length && !typical && !noSource.length) b.paragraph('Everything the pack covers is evidenced.');
 
   return { type: 'evidence', title: 'Evidence pack', subtitle: m.meta.name, control: controlOf(input), sections: b.sections, openItems: [] };
 }
