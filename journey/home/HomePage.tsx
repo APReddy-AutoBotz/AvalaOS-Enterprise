@@ -318,10 +318,14 @@ export default function HomePage() {
             </ul>
             {!signedIn && <p className="mt-6 text-sm leading-6 text-slate-300">Already have an invitation? <a href="/signin" className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>Sign in</a>. Evaluating Avala OS for your team? Request a pilot and we will set up a workspace for you.</p>}
           </div>
-          {/* The opening picture is always whole (owner, 16 November 2026): it grows past the text column only as far as the window has room. */}
+          {/* The opening picture is always whole (owner, 16 November 2026): it grows past the text column only as far as
+              the window has room, and a phone gets the product's own phone screen, not a cropped desktop one. */}
           <div className="hero-shot">
             <div className="shot-frame">
-              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-full" alt="The Avala OS assessment of a vendor invoice process: RPA-led automation recommended, 80% of steps fit automation, 1 step of 20 needs AI" />
+              <picture>
+                <source media="(max-width: 639px)" srcSet={shot('assessment-phone')} width={780} height={1688} />
+                <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-full" alt="The Avala OS assessment of a vendor invoice process: RPA-led automation recommended, 80% of steps fit automation, 1 step of 20 needs AI" />
+              </picture>
             </div>
           </div>
         </section>

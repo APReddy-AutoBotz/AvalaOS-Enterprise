@@ -95,6 +95,12 @@ test('homepage on a phone: nothing spills off the side', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // The opening picture on a phone is the product's own phone screen, shown whole.
+  const hero = page.getByRole('img', { name: /assessment of a vendor invoice process/ });
+  await expect.poll(() => hero.evaluate((img: HTMLImageElement) => img.complete && img.currentSrc)).toContain('assessment-phone');
+  const box = (await hero.boundingBox())!;
+  const frame = (await hero.locator('xpath=ancestor::div[contains(@class,"shot-frame")]').boundingBox())!;
+  expect(Math.round(box.width)).toBeLessThanOrEqual(Math.round(frame.width));
   await shot(page, '71-homepage-phone');
 });
 
