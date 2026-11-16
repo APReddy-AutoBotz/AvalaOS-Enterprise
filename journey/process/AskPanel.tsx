@@ -10,7 +10,7 @@ import { RECORDED_LABEL } from '../../domain/assistant/recorded.ts';
 import { answerAction, citedFacts, figureTiles, followUps, STAGE_ORDER } from '../../domain/assistant/present.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
-import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
+import { AskMark, Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 
 type Turn = { question: string; answer?: Answer; error?: string; recorded?: boolean };
@@ -63,7 +63,7 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
   };
 
   return (
-    <SidePanel title="Ask Avala" onClose={onClose} wide>
+    <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
         {about}
         <p className="text-sm leading-6 text-slate-600">{subject.intro}</p>
