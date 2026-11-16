@@ -125,3 +125,13 @@ test('a start with no documents: the form writes only what the person gave, as g
   for (const op of ownWordsEdits({ doneToday: '', inMind: [], apps: ['sap'] })) m = op(m).model;
   assert.equal(m.systems.length, 2);
 });
+
+test('the agent document is one click away wherever a step is rated for AI, so the test pack never points at a document that is not there', () => {
+  const m = gold();
+  const a = assessProcess(m);
+  const offered = (x: typeof a) => deliveryPlan(m, x).docs.filter(d => !d.planned).map(d => d.doc);
+  assert.deepEqual(offered({ ...a, lead: 'rpa', counts: { ...a.counts, ai_assist: 0, agent: 0 } }), ['brd', 'frd'], 'no step for AI: not offered');
+  assert.deepEqual(offered({ ...a, lead: 'rpa', counts: { ...a.counts, ai_assist: 1, agent: 0 } }), ['brd', 'frd', 'agent'], 'one AI-assisted step under an RPA lead: offered, after the others');
+  const line = deliveryPlan(m, { ...a, lead: 'rpa', counts: { ...a.counts, ai_assist: 1, agent: 0 } }).docs.find(d => d.doc === 'agent')!;
+  assert.match(line.reason, /what the AI may do alone/);
+});

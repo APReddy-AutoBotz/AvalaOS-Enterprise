@@ -6,7 +6,7 @@ import { NFR_TOPICS } from '../requirements/derive.ts';
 import { criterionText, PRIORITY_LABEL, type Requirement } from '../requirements/register.ts';
 import { processWords } from '../plan/intended.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
-import { ACCESS_TEXT, sourceList, type DocInput } from './common.ts';
+import { controlOf, ACCESS_TEXT, sourceList, type DocInput } from './common.ts';
 
 export function buildFrd(input: DocInput): DocTree {
   const m = input.model;
@@ -95,7 +95,7 @@ export function buildFrd(input: DocInput): DocTree {
 
   return {
     type: 'frd', title: 'Functional Requirements Document', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }

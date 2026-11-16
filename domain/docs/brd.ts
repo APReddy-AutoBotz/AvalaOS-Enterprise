@@ -7,7 +7,7 @@ import { QUADRANT } from '../assess/priority.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
 import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { businessRequirementRows } from './frd.ts';
-import { known, metricCell, sourceList, type DocInput } from './common.ts';
+import { controlOf, known, metricCell, sourceList, type DocInput } from './common.ts';
 
 const hrs = (n: number) => Math.round(n).toLocaleString('en');
 
@@ -102,7 +102,7 @@ export function buildBrd(input: DocInput): DocTree {
 
   return {
     type: 'brd', title: 'Business Requirements Document', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }

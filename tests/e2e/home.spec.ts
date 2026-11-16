@@ -24,6 +24,14 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   await expect(hero).toBeVisible();
   expect(await hero.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
 
+  // What the page promises about people's effort is what the product does, and it never says Avala OS picks a typical process.
+  const effort = page.locator('#effort');
+  await expect(effort.getByRole('heading', { level: 2 })).toHaveText('Avala OS does the work. Your people confirm it.');
+  await expect(effort.getByRole('term')).toHaveText(['A short first list, not a questionnaire', 'Your documents answer first', 'Start from what you have', 'Only the documents this process needs', 'Effort you can show']);
+  await expect(effort).toContainText('at most seven questions');
+  await expect(effort).toContainText('pick a typical process from the list');
+  await expect(page.getByText(/This looks like/)).toHaveCount(0);
+
   // The message that AI is not needed everywhere, with the approaches every step is scored for.
   await expect(page.getByRole('heading', { name: 'AI is not the answer to every step' })).toBeVisible();
   await expect(page.getByRole('list', { name: 'The approaches every step is scored for' }).getByRole('listitem')).toHaveCount(5);

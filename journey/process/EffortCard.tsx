@@ -8,7 +8,7 @@ import { effortLines, effortOf, type Effort } from '../../domain/work/effort.ts'
 
 export function EffortCard({ store, processId, model, sources, plan, documents }: {
   store: JourneyStore; processId: string; model: ProcessModel; sources: SourceRow[];
-  plan: { now: number; found: number; wait: number }; documents: string[];
+  plan: { now: number; found: number; wait: number; deferred?: number }; documents: string[];
 }) {
   const [history, setHistory] = React.useState<Awaited<ReturnType<JourneyStore['history']>> | null>(null);
   React.useEffect(() => { store.history(processId).then(setHistory).catch(() => setHistory({ revisions: [], edits: [] })); }, [store, processId, model]);

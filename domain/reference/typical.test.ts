@@ -10,7 +10,8 @@ import { emptyDecisions } from '../assess/decisions.ts';
 import { buildPdd } from '../docs/pdd.ts';
 import { toMarkdown } from '../docs/markdown.ts';
 import { AP_INVOICE } from './apInvoice.ts';
-import { matchReference, provisionalNote, REFERENCES, restToConfirm, toConfirm, typicalChecklist, typicalCounts, typicalElements } from './typical.ts';
+import * as typicalRules from './typical.ts';
+import { provisionalNote, referenceById, REFERENCES, restToConfirm, toConfirm, typicalChecklist, typicalCounts, typicalElements } from './typical.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const started = (apps: Record<string, string> = {}) => startFromTypical(emptyModel('Supplier invoices'), { elements: typicalElements(AP_INVOICE, apps), from: AP_INVOICE.id }).model;
@@ -31,11 +32,17 @@ test('a reference never carries volumes, times, costs, API facts, amounts or nam
   }
 });
 
-test('a process name suggests the reference; other names do not', () => {
-  assert.equal(matchReference('Vendor invoice processing')?.id, 'ap-invoice');
-  assert.equal(matchReference('Accounts Payable - India')?.id, 'ap-invoice');
-  assert.equal(matchReference('Questionnaire Tooling'), null);
-  assert.equal(matchReference('Email Monitoring'), null);
+test('Avala OS never says which reference fits: nothing matches a process by its name; a person picks from the list', () => {
+  // A guess from the name offered the supplier invoice process to "Customer invoices" (16 November 2026).
+  assert.equal('matchReference' in typicalRules, false);
+  for (const ref of REFERENCES) {
+    assert.equal('keywords' in ref, false, 'a reference carries no words to match a name with');
+    assert.equal(referenceById(ref.id), ref);
+    assert.ok(ref.name.trim() && ref.noun.trim());
+    assert.match(`a typical ${ref.noun}`, /process$/, 'reads as a sentence: "a typical ... process"');
+  }
+  assert.equal(referenceById(undefined), null);
+  assert.equal(referenceById('customer-invoices'), null);
 });
 
 test('starting from the reference: every element typical, the applications mapped to the person\'s own, valid', () => {
@@ -97,7 +104,7 @@ test('with documents, the reference is a checklist of what the sources do not me
   const without = removeStep(g, { stepId: 's-match' }).model;
   const list = typicalChecklist(without, AP_INVOICE);
   assert.deepEqual(list.map(x => x.name), ['Three-way match']);
-  assert.match(list[0].why, /^A typical accounts payable invoice processing has "Three-way match"; your sources do not mention it\.$/);
+  assert.match(list[0].why, /^A typical supplier invoice process has "Three-way match"; your sources do not mention it\.$/);
   const ref = AP_INVOICE.steps.find(s => s.id === 's-match')!;
   const added = addTypicalStep(without, { step: ref }).model;
   assert.equal(added.steps.find(s => s.name === 'Three-way match')!.status, 'typical');
@@ -126,4 +133,52 @@ test('the last card: roles and applications named and confirmed with the decisio
   assert.equal(typicalCounts(m).total, 0);
   assert.equal(provisionalNote(m), null);
   assert.equal(validateModel(m).valid, true);
+});
+
+test('taking a typical step out takes with it what only it needed: its application and a decision that decides nothing', () => {
+  let m = started();
+  assert.ok(m.systems.some(s => s.id === 'sys-scanner') && m.gateways.some(g => g.id === 'g-paper'));
+  m = dropTypical(m, { kind: 'step', id: 's-scan' }).model;
+  assert.ok(!m.systems.some(s => s.id === 'sys-scanner'), 'no step uses the scanner any more, so nobody is asked to name it');
+  assert.ok(!m.gateways.some(g => g.id === 'g-paper'), '"Paper invoice?" led to the same step both ways');
+  assert.ok(m.flows.some(f => f.from === 'e-start' && f.to === 's-log'), 'the start now leads straight to the next step');
+  assert.ok(!m.flows.some(f => f.from === 'g-paper' || f.to === 'g-paper'));
+  assert.equal(validateModel(m).valid, true);
+  // An application other steps still use stays, and so does a decision that still has two ways out.
+  m = dropTypical(m, { kind: 'step', id: 's-return' }).model;
+  assert.ok(m.systems.some(s => s.id === 'sys-mailbox'));
+  assert.ok(m.gateways.some(g => g.id === 'g-complete'));
+  // An application the person named is theirs: it is never taken out this way.
+  let named = started({ 'sys-scanner': 'Kodak i3000' });
+  named = dropTypical(named, { kind: 'step', id: 's-scan' }).model;
+  assert.ok(named.systems.some(s => s.id === 'sys-scanner'));
+});
+
+test('the last card has no dead end: an application the company does not have is taken out, not named', () => {
+  let m = started({ 'sys-sap': 'Oracle Fusion' });
+  for (const x of toConfirm(m)) m = confirmTypical(m, { kind: x.kind, id: x.id }).model;
+  // "We don't use it": off every step that named it, and gone from the card.
+  assert.ok(m.steps.some(s => s.systemIds.includes('sys-tracker')));
+  m = dropTypical(m, { kind: 'system', id: 'sys-tracker' }).model;
+  assert.ok(!m.systems.some(s => s.id === 'sys-tracker') && !m.steps.some(s => s.systemIds.includes('sys-tracker')));
+  assert.ok(!restToConfirm(m).systems.some(s => s.id === 'sys-tracker'));
+  assert.throws(() => dropTypical(m, { kind: 'system', id: 'sys-sap' }), ModelOpError, 'a named application is the person\'s own');
+  // A step deleted in the step table leaves its application unused: it is not asked about, and confirming takes it out.
+  m = removeStep(m, { stepId: 's-scan' }).model;
+  assert.ok(m.systems.some(s => s.id === 'sys-scanner'));
+  assert.ok(!restToConfirm(m).systems.some(s => s.id === 'sys-scanner'));
+  const names = Object.fromEntries(restToConfirm(m).systems.map(s => [s.id, s.name.replace(/^Your /, 'Our ')]));
+  m = confirmTypicalRest(m, { names }).model;
+  assert.ok(!m.systems.some(s => s.id === 'sys-scanner'));
+  assert.equal(typicalCounts(m).total, 0);
+  assert.equal(validateModel(m).valid, true);
+});
+
+test('documents say at the top when typical items remain, and stop saying it once all are confirmed', () => {
+  const m = started({ 'sys-sap': 'SAP S/4HANA' });
+  const input = (model: ProcessModel) => ({ model, assessment: assessProcess(model), decisions: emptyDecisions(), sources: [], revision: { label: 'r', state: 'approved' as const, date: 'd' } });
+  const top = buildPdd(input(m)).control.find(c => c.key === 'Typical content');
+  assert.match(top!.value, /^\d+ items come from a typical process and are not confirmed by the company's people\./);
+  assert.match(toMarkdown(buildPdd(input(m))), /Typical content: \d+ items come from a typical process/);
+  assert.equal(buildPdd(input(gold())).control.some(c => c.key === 'Typical content'), false);
 });

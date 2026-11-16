@@ -197,7 +197,8 @@ const APPROACHES: [string, string][] = [
 ];
 
 const OUTPUTS = [
-  ['Four documents', 'Business requirements (BRD), process definition (PDD), functional requirements (FRD) and solution design (SDD), downloaded as Word with your logo, font, colours and section names. Set them once in Settings, or let them be read from your company\'s Word template.'],
+  ['The documents the process needs', 'Process definition (PDD) and solution design (SDD) for work that is done today; business and functional requirements (BRD, FRD) first when it is not; an agent definition document when AI or an agent leads. The others stay one click away. All download as Word with your logo, font, colours and section names, set once in Settings or read from your company\'s Word template, and reviewers comment on the section they are reading.'],
+  ['Test cases', 'One for each acceptance criterion of the requirements, marked where a step uses AI. Testers change them and add their own, and the pack downloads for Excel.'],
   ['As-Is and To-Be flows', 'Drawn from the process model. The As-Is flow can be edited, and both download as BPMN for other tools.'],
   ['A reviewed backlog', 'Epics, stories, tasks and spikes with acceptance criteria. You can merge, split and reject before anything reaches the board.'],
   ['A Delivery board', 'Six status columns, owners, estimates and dates, sprints, labels, comments and each item\'s history. A team without a tracker can run delivery here; a team with one can import from Jira and export to Jira and Azure DevOps as CSV.'],
@@ -219,6 +220,18 @@ const AI_POINTS: [string, string][] = [
   ['Your key stays on the server', 'Stored encrypted and never sent back to the browser. People see only its last four characters and when it was last used.'],
   ['No quiet switch-over', 'If your key stops working, the work stops and says why. It never moves to our key without you.'],
   ['AI only where it reads or drafts', 'AI reads your sources and drafts text a person checks. The scores and the recommendation come from fixed tables, never from AI.'],
+];
+// The effort promise (docs/effort-first-plan.md: "Avala OS does the work; people confirm it"), as the
+// product keeps it today. Each point names something built: the first list's cap of seven
+// (domain/questions/firstList.ts), the three ways to start, the delivery plan by rule
+// (domain/plan/delivery.ts), the test pack and the effort card. The typical process is named as the one
+// that exists, and the page never says Avala OS picks it: a person does.
+const EFFORT_POINTS: [string, string][] = [
+  ['A short first list, not a questionnaire', 'Of everything a process raises, at most seven questions go to your people first: the ones that could change the recommendation, or that a document cannot be written without. The rest waits until sign-off, one click away.'],
+  ['Your documents answer first', 'Avala OS looks in your own sources for the answer before anyone is asked. What it finds is shown with its passage, for a person to confirm.'],
+  ['Start from what you have', 'Transcripts, procedures, trackers and flowcharts. No documents? Describe the work in a few sentences, or pick a typical process from the list (supplier invoice processing today) and confirm it step by step. It stays marked Typical until your people confirm it.'],
+  ['Only the documents this process needs', 'A plan by rule names the documents a build needs for this process and says why. Nobody writes four documents because a template has four.'],
+  ['Effort you can show', 'Each process shows what it took: the time from the first source to a first draft, the questions your people answered and the ones your documents answered. Counted from the record, never estimated.'],
 ];
 // Ask Avala, as it works: answers with a source on every sentence, the open questions asked one at a
 // time, suggestions a person confirms. It never writes on its own, so the page never says it does.
@@ -311,7 +324,7 @@ export default function HomePage() {
       </div>
 
       <p className="border-b border-slate-200 bg-slate-50 px-6 py-4 text-center text-sm text-slate-700">
-        Every screen on this page is the product itself, running a sample case from a made-up company: 5 source files in; 21 steps (20 scored, one the system already does), 4 documents and a 43-item Delivery board out.
+        Every screen on this page is the product itself, running a sample case from a made-up company: 5 source files in; 21 steps (20 scored, one the system already does), 4 documents, 32 test cases and a 43-item Delivery board out.
       </p>
 
       <main>
@@ -355,6 +368,25 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
+          </div>
+        </section>
+
+        <section id="effort" aria-labelledby="effort-h" className="scroll-mt-6 bg-[#002C4B] text-white">
+          <div className="mx-auto grid max-w-7xl gap-12 px-6 py-20 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-16">
+            <div>
+              <p className="text-sm font-semibold text-[#F2B21E]">Less work for your people</p>
+              <h2 id="effort-h" className="mt-2 font-display text-4xl font-semibold tracking-tight sm:text-5xl">Avala OS does the work. Your people confirm it.</h2>
+              <p className="mt-5 text-lg leading-8 text-slate-200">An assessment should not turn into weeks of workshops and a questionnaire nobody finishes. Avala OS reads what you already have, asks only what it cannot find, and shows what it took.</p>
+              <p className="mt-6"><a href="/demo" className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>See it on the sample case</a></p>
+            </div>
+            <dl className="grid gap-px self-start overflow-hidden rounded-2xl bg-white/15 ring-1 ring-white/15 sm:grid-cols-2">
+              {EFFORT_POINTS.map(([t, x], i) => (
+                <div key={t} className={`bg-[#002C4B] p-6 ${i === EFFORT_POINTS.length - 1 ? 'sm:col-span-2' : ''}`}>
+                  <dt className="font-display text-lg font-semibold text-white">{t}</dt>
+                  <dd className="mt-2 text-base leading-7 text-slate-200">{x}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </section>
 

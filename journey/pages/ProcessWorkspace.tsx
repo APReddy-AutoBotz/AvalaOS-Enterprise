@@ -134,7 +134,12 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
             <Tag tone="warn" data-testid="typical-unconfirmed" title="Approving keeps them marked Typical, not confirmed, in the approved documents">{typicalCounts(model).total} typical {typicalCounts(model).total === 1 ? 'item' : 'items'} not confirmed</Tag>
           )}
           {canApprove && working && (
-            <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => {
+              // An approved revision is never changed, so approving what nobody has confirmed is asked about first.
+              const n = model ? typicalCounts(model).total : 0;
+              if (n > 0 && !window.confirm(`${n} typical ${n === 1 ? 'item has' : 'items have'} not been confirmed by your people. Approving keeps ${n === 1 ? 'it' : 'them'} marked "Typical, not confirmed" in the approved documents, and an approved revision cannot be changed. Approve anyway?`)) return;
+              act(() => store.approve(working.id, working.seq));
+            }}>Approve</Button>
           )}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
@@ -232,7 +237,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
     <>
       <ErrorNote message={readError} />
       <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
-      <TypicalPanel editor={editor} canEdit={canEdit} processName={processName} />
+      <TypicalPanel editor={editor} canEdit={canEdit} />
       <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>
   );

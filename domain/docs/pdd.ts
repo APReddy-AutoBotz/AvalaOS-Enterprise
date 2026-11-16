@@ -6,7 +6,7 @@ import { DocBuilder, missing, type DocTree } from './tree.ts';
 import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { robotsBlocked } from '../assess/scoring.ts';
 import { flowMermaid, flowPicture, modeFromScore } from '../flowchart/svg.ts';
-import { ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
+import { controlOf, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
 
@@ -158,7 +158,7 @@ export function buildPdd(input: DocInput): DocTree {
 
   return {
     type: 'pdd', title: 'Process Definition Document', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }

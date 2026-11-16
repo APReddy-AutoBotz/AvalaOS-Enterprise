@@ -174,7 +174,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       {/* The delivery plan follows the approach in effect, people's choices included (part B). */}
       <DeliveryPlanPanel model={editor.model} result={chosen} firstQuestions={firstQuestions} />
       {/* What it took to get here, counted from what is recorded (part H). */}
-      <EffortCard store={store} processId={processId} model={editor.model} sources={sources} plan={{ now: questionPlanNow.now.length, found: questionPlanNow.found.length, wait: questionPlanNow.wait.length }} documents={readyDocuments(deliveryPlan(editor.model, chosen).docs)} />
+      <EffortCard store={store} processId={processId} model={editor.model} sources={sources} plan={{ now: questionPlanNow.now.length, found: questionPlanNow.found.length, wait: questionPlanNow.wait.length, deferred: questionPlanNow.deferred.length }} documents={readyDocuments(deliveryPlan(editor.model, chosen).docs)} />
       {result.assessed > 0 && <Ranking result={result} />}
       {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
       {result.assessed > 0 && (

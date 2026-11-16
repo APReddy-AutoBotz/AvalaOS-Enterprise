@@ -10,7 +10,7 @@ import { criterionText } from '../requirements/register.ts';
 import { IN_MIND_LABEL, WORK_KIND_LABEL } from '../plan/delivery.ts';
 import { processWords } from '../plan/intended.ts';
 import { DocBuilder, missing, type Cell, type DocTree } from './tree.ts';
-import { accessText, HUMAN_POINT, known, modeOf, type DocInput } from './common.ts';
+import { controlOf, accessText, HUMAN_POINT, known, modeOf, type DocInput } from './common.ts';
 
 /** Approaches that make a step the agent's. */
 export const AGENT_APPROACHES: readonly Approach[] = ['agent', 'ai_assist'];
@@ -160,7 +160,7 @@ export function buildAgent(input: DocInput): DocTree {
 
   return {
     type: 'agent', title: 'Agent Definition Document', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }

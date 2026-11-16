@@ -100,8 +100,26 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await settle(page);
   await snap(page, 'inputs');
 
+  // The brief, as the sample's analyst gives it: the work is done today, it is an existing process, and
+  // nothing is decided yet about how to automate it. Which documents are wanted is left to the plan's rule.
   await stage(page, 'Process');
+  const brief = page.getByTestId('brief');
+  const briefLine = async (key: string, fill: () => Promise<unknown>) => {
+    await brief.getByTestId(`brief-${key}`).getByRole('button', { name: 'Add' }).click();
+    await fill();
+    await brief.getByTestId(`brief-${key}`).getByRole('button', { name: 'Save' }).click();
+    await expect(brief.getByTestId(`brief-${key}`).getByRole('button', { name: 'Change' })).toBeVisible();
+    await saved();
+  };
+  await briefLine('summary', () => brief.getByLabel('What this is').fill('How supplier invoices for the India entity are received, checked, matched to the purchase order and goods receipt, and posted in SAP by the accounts payable team.'));
+  await briefLine('doneToday', () => brief.getByLabel('Done today?').selectOption({ label: 'Done today' }));
+  await briefLine('kind', () => brief.getByLabel('What kind of thing').selectOption({ label: 'An existing process' }));
+  await briefLine('inMind', () => brief.getByLabel('Not decided yet').check());
+  await settle(page);
+  await snap(page, 'brief');
   await page.getByRole('tab', { name: /^Steps/ }).click();
+  await page.getByRole('tab', { name: /^Steps/ }).evaluate(el => el.scrollIntoView({ block: 'start' }));
+  await page.mouse.wheel(0, -24);
   await settle(page);
   await snap(page, 'process');
 
@@ -110,6 +128,9 @@ test('tour: the sample case through every stage', async ({ page }) => {
   console.log(`TOUR_VERDICT ${await page.getByTestId('verdict').innerText()} | ${(await page.locator('section[aria-label="Recommended approach"]').innerText()).replace(/\s+/g, ' ')}`);
   await settle(page);
   await snap(page, 'assessment');
+  await page.getByTestId('effort-card').evaluate(el => el.scrollIntoView({ block: 'center' }));
+  await settle(page);
+  await snap(page, 'effort');
   await page.locator('[data-testid="step-split"]').evaluate(el => el.scrollIntoView({ block: 'center' }));
   await settle(page);
   await snap(page, 'assessment-why');
@@ -133,6 +154,10 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await page.mouse.wheel(0, -5000);
   await settle(page);
   await snap(page, 'document-brd');
+  await page.getByRole('tab', { name: /Tests/ }).click();
+  await expect(page.getByTestId('document')).toContainText('Test Pack');
+  await settle(page);
+  await snap(page, 'tests');
 
   await stage(page, 'Flows');
   await page.getByRole('tab', { name: 'To-Be map' }).click();
