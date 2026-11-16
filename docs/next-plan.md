@@ -10,7 +10,7 @@ Live on avalaos.com since the fifth release (16 November 2026): the whole journe
 
 Proven on real documents so far: two of the owner's own processes (Questionnaire Tooling, Project time writing) and the sample's documents. Each real test found faults the sample had not shown. That is the pattern to expect, and the reason section 4 puts more real processes first.
 
-Releases: 4 production deploys are left until 22 November 2026. Bundle work; one release for section 3.
+Releases: 4 production deploys are left until 22 November 2026. Bundle work; one release for sections 3 and 3b (the owner holds the release until 3b is built, 16 November 2026).
 
 **Update, 16 November 2026 (afternoon):** section 3 is built and merged into `next` (pull requests #162, #163, #164), with no server function or database change. The open pull request `next` → `main` is the preview for the review; nothing is released until the owner says "release". What was built, and where it differs from the plan, is at the start of section 3.
 
@@ -135,13 +135,80 @@ Leave the two "forgotten when the page is left" items as they are; they are ligh
 
 Done on 16 November 2026: the notes are brought up to date here, in `AGENTS.md` and in the project; the pull request `next` → `main` is open as the preview and not merged; the report is with the owner for the review chat.
 
+## 3b. The second bundle, built before the same release (owner, 16 November 2026)
+
+The owner holds the release until more is built; one release then carries section 3 and this section. Three packages. Two of them change the live database and what a server function does, which the preview cannot show, so these rules hold for both:
+
+- **Only additive changes.** A new table, or new keys in what a database function returns. Each migration is applied before the release, so the released site and the released server functions must keep working unchanged once it is applied.
+- **Each migration:** its test in `supabase/tests/`, a rolled-back trial reported to the owner in plain words, the owner's clear yes, then applied. Both migrations may be prepared and trialled at the start, so the owner is asked early; the evidence pack can be built while waiting.
+- **A change to what a server function runs goes live with the release, never before.** Do not deploy a function by hand. The report names each function that changes and what it then does differently.
+
+### Package 4: what was looked up in the sources is kept for everyone
+
+**Why.** Found in the review of 16 November: the same three batches of one process's questions were sent twice, 78 seconds apart, from two browsers. Each browser (and each address: the live site, every preview) keeps its own memory of what it looked up. So a second device pays again, two people can see different "found to confirm" counts, and the wait of package 2 holds only inside one browser.
+
+**What changes.**
+
+- One new table, one row per process: the look as the browser keeps it today (the set of sources, the questions looked up, the answers found, what it cost, what was sent and when, when the allowance ran out) and the suggestions set aside with "Not right". Workspace members read it; editors write it; the database records who wrote and when; it goes when the process goes.
+- The browser reads the server's copy when a process opens and writes after each step of a look. The copy in the browser stays only for when the server cannot be reached, and for the demo.
+- A page reads the server's copy before deciding to look, and the note that questions were sent is written before the call. The three-minute wait and the single repeat then hold across browsers and people.
+- A write never loses what another page found: the two are merged (the builder chooses how: read again and add, or a small database function, with a test of two writers).
+- "Not right" by one editor holds for everyone, because it is a judgement on the suggestion (a working default the owner may change).
+- A browser that already holds a look for a process hands it to the server once, when the server has none for the same sources, so nothing is looked up again after the release.
+
+**Done when.** Unit tests: two looks of the same sources merge with no answer lost; a different set of sources starts afresh; the sent notes and the wait work from the server's copy. A database test: members read, editors write, viewers and other workspaces cannot, the row goes with its process. A browser test with two pages on one process. The review will check with the usage records: the owner's process opened in two browsers within a minute makes one set of calls, and both show the same "found" count and the same effort card.
+
+### Package 5: the weekday email counts what the screens count, and comments reach people
+
+**Why.** The email says every open question (43 on the owner's process) while My work says the few that need people now. And a review comment on a document reaches nobody.
+
+**What changes.**
+
+- **The count.** For each process the email uses the first list, as My work does: what needs people now and the answers found to confirm. Those rules are in `domain/questions/firstList.ts`, which SQL cannot run, so `journey-notify` works the count out itself from each process's current model and the look kept by package 4, with the same functions My work uses. No AI is involved. `needs_digest_input()` returns what that needs as new keys and keeps its existing keys, so the released function is unaffected until the release.
+- A process with only "can wait" questions is not a need, as on My work.
+- **Comments.** A new open comment on a document section is listed in the weekday email of the people named on the process (analyst, architect, approver), never of its author; only comments new since that person's last email, a few shown with a count of the rest (as assigned work is); a resolved comment is not listed; an email can go for comments alone. Each line gives the document, the section's title, who wrote it (a name, never an email address) and a link to the document.
+- **The same on My work.** Open comments show under "Needs you" for the same people by the same rule, so the email never says what the screen does not.
+
+**Underneath.** One migration (the database function, with its test extended), `journey-notify`, `domain/work/digest.ts`, `domain/work/home.ts`. The migration is live once approved; the function with the release.
+
+**Done when.** Unit tests: the email's question count equals My work's for the same process and look; comments that are new, already seen, one's own and resolved; the cap. The database test's groups pass in a rolled-back trial. **Cannot be tried on the preview:** the email is sent by the server. Before the release the proof is the tests; after it, the next weekday email, which the review compares with My work.
+
+### Package 6: the evidence pack
+
+**Why.** Regulated clients are asked to prove which requirement came from where, who approved it, and which test covers it (`docs/effort-first-plan.md`, finding I). Avala OS already holds that chain; nobody can take it away in one piece.
+
+**What a person sees.** On Documents, after Tests, "Evidence pack": a document built like the others, read on screen and downloaded as Word or Markdown. It is always one click away and never one of the planned documents. Built from a working draft it says at its top that it is not evidence of an approved state.
+
+**What is in it**, all by rule from the record, nothing worded by AI:
+
+1. What the pack covers: the process, the revision, its state and date; who approved it and when; earlier approved revisions with who and when.
+2. The sources: each with its kind, when it was added and how many passages; archived ones marked.
+3. Requirements and where each came from: every active requirement with its code and statement, what it was derived from (a step, a rule, an exception, a control), the source passages behind that (the source's title and the place in it), and whether a person changed the wording.
+4. From requirement to work to test: one row per functional requirement with its work items (and their status once on the board) and its test cases; gaps said plainly ("No work item", "No test case", "The test has no expected result").
+5. The test cases as they stand, with testers' edits and what was set aside.
+6. Decisions people made: each choice of approach against the scoring's recommendation, with its reason, who and when.
+7. Review comments: open and resolved, by document section, with who resolved and when.
+8. What is not evidenced: open questions, typical items not confirmed, requirements with no source, no work or no test.
+
+A name or a time the record does not hold says "Not recorded". People are named, never by email address. If a fact cannot be read without a database change, leave it "Not recorded" and say so in the report; do not change the database for this package. No new library.
+
+**Done when.** Unit tests: each section from a fixture; every active functional requirement appears in section 4; a requirement with no test appears in section 8; nothing in the pack that the record does not hold. A browser test on the sample: the pack opens, lists the sample's 25 functional requirements, and downloads as Word. The review will follow three requirements of the owner's process from the pack to their source passage, work item and test case.
+
+### After the second bundle
+
+- Run the Ask Avala measure once (the workflow "Ask Avala measure"): a line about map shapes was added to what Ask Avala knows in package 1 and the measure has not run since. Report the result.
+- Bring the notes up to date as before. The preview stays the open pull request `next` → `main`; do not merge it.
+- The report says, apart from the usual: which migrations were applied and when, which server functions change with the release, and what could not be tried before it.
+
+**Not in this bundle, and why.** The other AI providers (each needs the owner's own key and a run of the reading check). The push to Jira (waits for a pilot that asks). More typical processes (after a real person has used the first). What a failed reading keeps, and server errors in the error monitor (they touch the reading function or need a new library).
+
 ## 4. After that release: the order advised
 
 The owner chooses; this is the advice and the reason for each place.
 
 1. **Three more real processes, of different kinds.** This is still the largest risk and the cheapest way to find faults: one with a flowchart picture or a draw.io file, one long call with several speakers, one existing process with volumes and times (so value and payback are exercised). The owner tests, the review chat repeats the test read-only and lists findings, a builder chat fixes. Runs alongside everything else.
-2. **The weekday email and comments.** The email counts what the screens count, and a comment on a document reaches the people named on the process. One change to the live database and one server function; a rolled-back trial first, then the owner's yes.
-3. **The evidence pack.** Everything in it already exists on the record; it is assembling and a download. Useful to show a regulated client.
+2. **The weekday email and comments** (now package 5 in section 3b). The email counts what the screens count, and a comment on a document reaches the people named on the process. One change to the live database and one server function; a rolled-back trial first, then the owner's yes.
+3. **The evidence pack** (now package 6 in section 3b). Everything in it already exists on the record; it is assembling and a download. Useful to show a regulated client.
 4. **The other AI providers.** Run the extraction check on each (the owner types each key into Settings → AI provider himself), then offer those that pass. The homepage follows on its own.
 5. **Push to Jira.** The largest item here. Advice: wait for a pilot client that asks for it, since the CSV export already gets work into Jira; then Jira first and one way first (send items, with requirement links), status coming back second. It needs a place for the client's Jira token on the server (encrypted, as AI keys are), a server function and a table for the links: all asked for first.
 6. **More typical processes**, once a real person has started from the supplier invoice one.
@@ -152,6 +219,9 @@ The owner chooses; this is the advice and the reason for each place.
 | Decision | Advice |
 | --- | --- |
 | The next release is the three packages in section 3 | Yes |
+| Hold the release until the second bundle (section 3b) is built | Decided by the owner, 16 November 2026 |
+| "Not right" on an answer found in the sources holds for everyone | Yes (a working default) |
+| Open review comments show under "Needs you" for the people named on the process | Yes |
 | Six columns as the limit before a map becomes a simple flow | Start with six; change after seeing real maps |
 | Left to right in the same package | Yes, on screen only, and dropped if it does not look right |
 | Push to Jira and Azure DevOps | Wait for a pilot that asks |
