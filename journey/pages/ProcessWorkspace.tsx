@@ -1,7 +1,7 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import { useProcessChanged } from '../processChanged.ts';
-import { useAutoLook } from '../process/sourceLook.ts';
+import { useAutoLook, useSharedLook } from '../process/sourceLook.ts';
 import { BriefPanel } from '../process/BriefPanel.tsx';
 import { TypicalPanel } from '../process/TypicalPanel.tsx';
 import { typicalCounts } from '../../domain/reference/typical.ts';
@@ -82,6 +82,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   useProcessChanged(processId, load);
   // Before its questions are put to people, the sources are looked in for their answers (part D).
   const shown = data && data !== 'missing' ? data : null;
+  // What was looked up in the sources is shared: read the server's copy for everyone, then look for editors.
+  useSharedLook(store, shown?.process ?? null, Boolean(shown?.workspace && shown.workspace.role !== 'viewer'));
   useAutoLook(store, shown?.process ?? null, shown?.model ?? null, Boolean(shown?.workspace && shown.workspace.role !== 'viewer'));
   // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
   const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;

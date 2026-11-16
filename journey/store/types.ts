@@ -7,6 +7,7 @@ import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { StoredFormat } from '../../domain/workspace/sources.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
+import type { SharedLook, StoredLook } from '../../domain/assistant/sharedLook.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { SectionComment } from '../../domain/docs/review.ts';
@@ -204,6 +205,10 @@ export interface JourneyStore {
   runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown; recorded?: boolean; /** Tokens the call used, as the server reports them. */ usage?: { input: number; output: number } }>;
 
   /** Overrides and the cost rate for a process's assessment (the latest saved). */
+  /** What was looked up in the process's sources, shared by everyone (table process_source_looks); null when nothing is kept yet. */
+  getSourceLook(processId: string): Promise<StoredLook | null>;
+  /** Saves the shared look read at `version` (null: none yet). Returns the new version, or null when another page wrote first. */
+  saveSourceLook(processId: string, workspaceId: string, next: SharedLook, version: number | null): Promise<number | null>;
   getAssessmentDecisions(processId: string): Promise<Decisions>;
   /** Saves the decisions with a snapshot of the result for the model revision it was computed on. */
   saveAssessment(processId: string, input: { revisionId: string; modelHash: string; rulesVersion: string; result: unknown; decisions: Decisions }): Promise<void>;
