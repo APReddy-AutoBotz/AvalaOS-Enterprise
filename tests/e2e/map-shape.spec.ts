@@ -5,7 +5,7 @@
 // domain/flowchart/shape.test.ts.
 import fs from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
-import { signInAndCreateProcess } from './helpers.ts';
+import { shot, signInAndCreateProcess } from './helpers.ts';
 
 const stage = (page: Page, name: string) => page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name }).click();
 const gold = JSON.parse(fs.readFileSync('eval/corpus/ap-invoice/expected.model.json', 'utf8'));
@@ -46,6 +46,7 @@ test('the map shape: the switch changes the maps on Flows and in the PDD, is kep
   await expect(reason).toHaveText('Drawn in swimlanes: the work passes between five roles, one column each, and a column for steps with no role recorded.');
   await expect(map.locator('svg [data-role]')).toHaveCount(0);
   await expect(page.getByTestId('map-direction')).toHaveCount(0);
+  await shot(page, '60-map-swimlanes');
 
   // The switch: one column, each step with its role, kept for everyone.
   await page.getByTestId('map-shape').getByRole('button', { name: 'Simple flow' }).click();
@@ -54,6 +55,7 @@ test('the map shape: the switch changes the maps on Flows and in the PDD, is kep
   await expect(map.locator('svg')).toContainText('AP Clerk');
   await expect(reason).toContainText('A person chose this shape for everyone who opens the process. Avala OS suggests swimlanes.');
   await expect(reason.getByRole('button', { name: 'Use the suggested shape' })).toBeVisible();
+  await shot(page, '61-map-simple');
   await page.getByRole('tab', { name: 'To-Be map' }).click();
   await expect(map.locator('svg [data-role]')).toHaveCount(gold.steps.length);
   await expect(map.locator('svg')).toContainText('Rule-based RPA');
@@ -63,6 +65,7 @@ test('the map shape: the switch changes the maps on Flows and in the PDD, is kep
   await expect(reason).toContainText('Documents always run down the page.');
   const [w, h] = await map.locator('svg').evaluate(el => [Number(el.getAttribute('width')), Number(el.getAttribute('height'))]);
   expect(w).toBeGreaterThan(h);
+  await page.screenshot({ path: 'test-results/screens/62-map-across.jpg', type: 'jpeg', quality: 70 });
 
   // Still there after a reload.
   await page.reload();
@@ -88,6 +91,8 @@ test('the map shape: the switch changes the maps on Flows and in the PDD, is kep
     expect(fh).toBeGreaterThan(fw);
   }
   await expect(doc.getByTestId('chip-changed')).toHaveCount(0);
+  await figures.first().scrollIntoViewIfNeeded();
+  await page.screenshot({ path: 'test-results/screens/63-pdd-simple.jpg', type: 'jpeg', quality: 70 });
 
   // Back to the suggested shape, for everyone.
   await stage(page, 'Flows');
