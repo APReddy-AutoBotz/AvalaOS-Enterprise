@@ -238,7 +238,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
       <ErrorNote message={readError} />
       <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
       <TypicalPanel editor={editor} canEdit={canEdit} />
-      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
+      <ProcessEditor processId={processId} editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>
   );
 }

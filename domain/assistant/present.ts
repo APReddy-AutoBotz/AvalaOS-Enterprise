@@ -68,6 +68,9 @@ const NEXT: Record<Place | 'none', string[]> = {
   applications: ['Which applications are on the list, and how are they reached?', 'Which processes use each application?'],
   people: ['Who are the admins of this workspace?', 'Which processes have no analyst named?'],
 };
+/** On a board, about the process its work comes from: what the board's facts about that process can answer. */
+const BOARD_PROCESS = (name: string): string[] => [`Who owns the process "${name}"?`, `Which work from "${name}" is still to do?`, `What is the process "${name}" for?`];
+
 /** When the answer's facts lead nowhere in particular, by what is asked about. */
 const FALLBACK: Record<'process' | 'board' | 'workspace', string[]> = {
   process: NEXT.none,
@@ -81,7 +84,11 @@ export function followUps(answer: Answer, asked: string[], stages: StageId[], ma
   const out: string[] = [];
   // On the board or the workspace, a process stage's questions ("…about this process") would not fit.
   const places = placesOf(answer, stages).filter(p => scope === 'process' || !isStage(p));
-  for (const list of [...places.map(p => NEXT[p]), FALLBACK[scope]]) {
+  // On a board, an answer about the process behind its work leads to that process's questions the
+  // board can answer (what it is for, who owns it, its work), not to the workspace's.
+  const behind = scope === 'board' ? [...new Set(citedFacts(answer).filter(f => f.id.startsWith('bp:')).map(f => f.label.replace(/^Process: /, '')))] : [];
+  const nextOf = (p: Place | 'none') => (p === 'open-process' && behind.length ? behind.flatMap(BOARD_PROCESS) : NEXT[p]);
+  for (const list of [...places.map(nextOf), FALLBACK[scope]]) {
     for (const q of list) {
       if (out.length >= max) return out;
       if (!seen.has(q.toLowerCase()) && !out.includes(q)) out.push(q);

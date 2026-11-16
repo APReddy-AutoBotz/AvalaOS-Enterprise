@@ -58,3 +58,16 @@ test('figure tiles are worked out from the assessment, matching the facts the an
   assert.deepEqual(figureTiles(answer(step), a), [], 'no figures for an answer about one step');
   assert.deepEqual(figureTiles(answer(verdict), null), []);
 });
+
+test('on a board, an answer about the process behind its work is followed by that process\'s questions, not the workspace\'s', async () => {
+  const { boardProcessFacts } = await import('./board.ts');
+  const [fact] = boardProcessFacts([{ id: 'p1', name: 'Project time writing', objective: 'Bill clients for the hours worked', owner: 'Finance' } as never], { name: 'Time board' });
+  const about = { lead: null, missing: '', sentences: [{ text: 't', quote: 'q', fact, group: '' }] };
+  const next = followUps(about, [], STAGE_ORDER, 2, 'board');
+  assert.deepEqual(next, ['Who owns the process "Project time writing"?', 'Which work from "Project time writing" is still to do?']);
+  for (const q of next) assert.doesNotMatch(q, /workspace|processes/i);
+  // Asked already: the next of that process's questions.
+  assert.deepEqual(followUps(about, ['who owns the process "project time writing"?'], STAGE_ORDER, 2, 'board')[1], 'What is the process "Project time writing" for?');
+  // Across the whole workspace, the same kind of fact still leads to the workspace's questions.
+  assert.match(followUps(about, [], STAGE_ORDER, 2, 'workspace').join(' '), /processes|workspace/);
+});

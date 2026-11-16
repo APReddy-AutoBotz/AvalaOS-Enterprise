@@ -25,12 +25,13 @@ function valueKind(t: ElementTarget): ValueKind {
   return null;
 }
 
-export function QuestionsTab({ model, editor, canEdit }: TabContext) {
+export function QuestionsTab({ model, editor, canEdit, questionsNote }: TabContext) {
   const open = model.openQuestions.filter(q => q.status === 'open');
   const answered = model.openQuestions.filter(q => q.status !== 'open');
   const missing = untrackedGaps(model);
   return (
     <div className="space-y-6">
+      {questionsNote && <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="questions-count-note">{questionsNote}</p>}
       <section className="space-y-2">
         <h3 className="font-display text-sm font-semibold text-slate-900">Open questions</h3>
         {open.length === 0 ? <p className="text-sm text-slate-500">No open questions.</p> : (
