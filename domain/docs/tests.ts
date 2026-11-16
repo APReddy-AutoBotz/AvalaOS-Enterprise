@@ -1,7 +1,8 @@
 // The test pack (docs/effort-first-plan.md, part F): test cases derived by rule from the requirements
 // register, so nothing is tested that no requirement states. One case per acceptance criterion of each
 // active functional requirement (steps the solution takes on, human checks, exception paths); cases at
-// the agent's steps are marked, and the hand-overs there say the agent must stop and hand over. A
+// the AI steps (rated AI-assisted or agentic) are marked, and the hand-overs there say the AI must stop
+// and hand over. It says "the AI", not "the agent": most such steps are AI-assisted, not agentic. A
 // requirement with no criterion yet gets no case: it is listed with why, as an open item. The case
 // number is the requirement's code and the criterion's place (FR-003.1), so it stays stable as the
 // register keeps its codes. Rendered as a document tree (screen, Word, Markdown) and as CSV for Excel.
@@ -11,7 +12,7 @@ import type { Requirement } from '../requirements/register.ts';
 import { csv } from '../workitems/export.ts';
 import { agentSteps } from './agent.ts';
 import { DocBuilder, missing, NOT_PROVIDED, type DocTree } from './tree.ts';
-import type { DocInput } from './common.ts';
+import { controlOf, type DocInput } from './common.ts';
 import { packAsRun, type TestCaseEdit } from './testEdits.ts';
 
 export type CaseKind = 'step' | 'human' | 'exception';
@@ -80,7 +81,7 @@ export function testPack(input: DocInput): TestPack {
   return { cases, noExpected };
 }
 
-/** The pack as a document: about it, the cases, the agent's cases, requirements with no case, open items. */
+/** The pack as a document: about it, the cases, the cases at the AI steps, requirements with no case, open items. */
 export function buildTests(input: DocInput, edits: TestCaseEdit[] = []): DocTree {
   const m = input.model;
   // Testers' versions in, cases set aside left out (testEdits.ts).
@@ -97,7 +98,7 @@ export function buildTests(input: DocInput, edits: TestCaseEdit[] = []): DocTree
     ['Cases with an expected result', `${pack.cases.filter(c => c.expected).length} of ${pack.cases.length}`],
     ['Exception paths', String(pack.cases.filter(c => c.kind === 'exception').length)],
     ['Checks by a person', String(pack.cases.filter(c => c.kind === 'human').length)],
-    ['At the agent\'s steps', String(pack.cases.filter(c => c.agent).length)],
+    ['At the AI steps', String(pack.cases.filter(c => c.agent).length)],
   ]);
   b.paragraph('Proposed, not confirmed: run the cases of each step first, then the exception paths and the checks by a person, then the whole process end to end with the business.');
 
@@ -111,13 +112,13 @@ export function buildTests(input: DocInput, edits: TestCaseEdit[] = []): DocTree
   });
   if (pack.cases.some(c => !c.data.length)) b.note('Which test data (example documents and records) is available for the cases with no data recorded?');
 
-  b.section('3', 'The agent\'s cases', 1);
+  b.section('3', 'Cases at the AI steps', 1);
   const agentCases = pack.cases.filter(c => c.agent);
   if (agentCases.length) {
-    b.paragraph('Cases at the steps the agent takes on (see the agent document). Those for a check by a person or an exception are where the agent must stop and hand the case over, not settle it alone.');
-    b.table('At the agent\'s steps', cols, table(agentCases), '');
-    b.open('Which past cases, with their known right outcomes, are added as examples for the agent, including ones it must refuse or hand over?');
-  } else b.callout('No step is the agent\'s, so there are no agent cases.');
+    b.paragraph('Cases at the steps rated AI-assisted or agentic (the agent definition document sets out what the AI may do there and who reviews it). Those for a check by a person or an exception are where the AI must stop and hand the case over, not settle it alone.');
+    b.table('At the AI steps', cols, table(agentCases), '');
+    b.open('Which past cases, with their known right outcomes, are added as examples for the AI, including ones it must refuse or hand over?');
+  } else b.callout('No step is rated AI-assisted or agentic, so there are no such cases.');
 
   b.section('4', 'Cases with no expected result yet', 1);
   b.table('No expected result yet', ['Requirement', 'What it covers', 'What is missing'], pack.noExpected.map(u => [u.code, u.title, u.why]), 'Every case has an expected result.');
@@ -129,7 +130,7 @@ export function buildTests(input: DocInput, edits: TestCaseEdit[] = []): DocTree
 
   return {
     type: 'tests', title: 'Test Pack', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }
@@ -137,7 +138,7 @@ export function buildTests(input: DocInput, edits: TestCaseEdit[] = []): DocTree
 /** The pack for Excel: one row per case, with what Excel and test tools need as columns. */
 export function testPackCsv(pack: TestPack): string {
   return csv([
-    ['Case', 'Kind', 'At the agent\'s steps', 'What is tested', 'Requirement', 'Prepare', 'Do', 'Check', 'Data', 'Expected result', 'Source'],
+    ['Case', 'Kind', 'At an AI step', 'What is tested', 'Requirement', 'Prepare', 'Do', 'Check', 'Data', 'Expected result', 'Source'],
     ...pack.cases.map(c => [c.code, CASE_KIND_LABEL[c.kind], c.agent ? 'Yes' : 'No', c.title, c.requirement, c.steps[0], c.steps[1], c.steps[2], c.data.join('; ') || NOT_PROVIDED, c.expected ?? NOT_PROVIDED, c.source]),
   ]);
 }

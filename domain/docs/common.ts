@@ -19,6 +19,22 @@ export interface DocInput {
   revision: { label: string; state: 'working' | 'approved'; date: string };
 }
 
+/** How many items of the process still come from a typical process and are not confirmed (part I). */
+export function typicalLeft(m: ProcessModel): number {
+  return [m.steps, m.rules, m.exceptions, m.roles, m.systems, m.gateways, m.events].reduce((n, xs) => n + xs.filter(x => x.status === 'typical').length, 0);
+}
+
+/**
+ * The document control block every document opens with. While typical items remain it says so, in every
+ * format the document is read in, so an approved document never passes a typical process off as the company's own.
+ */
+export function controlOf(input: DocInput): { key: string; value: string }[] {
+  const n = typicalLeft(input.model);
+  const rows: [string, string][] = [['Process', input.model.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]];
+  if (n) rows.push(['Typical content', `${n} ${n === 1 ? 'item comes' : 'items come'} from a typical process and ${n === 1 ? 'is' : 'are'} not confirmed by the company's people. Each is marked "typical, not confirmed" where it appears.`]);
+  return rows.map(([key, value]) => ({ key, value }));
+}
+
 export const known = <T>(f: Fact<T> | undefined): T | null => (f && f.status !== 'unknown' && f.value !== null ? f.value : null);
 /** A fact as a cell: its value with its status, or "Not provided". */
 export function factCell<T>(f: Fact<T> | undefined, show: (v: T) => string = v => String(v)): Cell {

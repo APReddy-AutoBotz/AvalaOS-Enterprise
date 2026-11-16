@@ -370,7 +370,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               {docSettings.branding.logo && <img src={docSettings.branding.logo} alt="" className="mb-3 h-8 object-contain" />}
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{docSettings.branding.organisation ? `${docSettings.branding.organisation} · ` : ''}{doc.title}</p>
               <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-slate-900">{doc.subtitle}</h2>
-              <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">{doc.control.slice(1).map(c => <div key={c.key}><dt className="inline font-semibold">{c.key}: </dt><dd className="inline">{c.value}</dd></div>)}</dl>
+              <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">{doc.control.slice(1).filter(c => c.key !== 'Typical content').map(c => <div key={c.key}><dt className="inline font-semibold">{c.key}: </dt><dd className="inline">{c.value}</dd></div>)}</dl>
+              {doc.control.filter(c => c.key === 'Typical content').map(c => <p key={c.key} data-testid="typical-notice" className="mt-3 rounded-md bg-orange-50 px-3 py-2 text-sm leading-6 text-orange-950 ring-1 ring-inset ring-orange-200"><span className="font-semibold">Typical content.</span> {c.value}</p>)}
               {revision.state === 'working' && <p className="mt-3 inline-block rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold uppercase tracking-wider text-slate-600">Draft until the revision is approved</p>}
             </header>
             {doc.sections.map(s => {

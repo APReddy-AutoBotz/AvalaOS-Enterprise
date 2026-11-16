@@ -127,7 +127,7 @@ export function trackOf(m: ProcessModel, a: ProcessAssessment | null): { track: 
 }
 
 const REASON: Record<Track, Partial<Record<PlannedDoc, string>>> = {
-  existing: { pdd: 'How the work runs today and how it will run, step by step.', sdd: 'How the solution is built.', brd: 'One click away, for reviewers or auditors who want business requirements.', frd: 'One click away, for reviewers or auditors who want functional requirements.' },
+  existing: { pdd: 'How the work runs today and how it will run, step by step.', sdd: 'How the solution is built.', brd: 'One click away, for reviewers or auditors who want business requirements.', frd: 'One click away, for reviewers or auditors who want functional requirements.', agent: 'One click away: what the AI may do alone at the steps rated for it, and who reviews it.' },
   ai: { pdd: 'The process the agent works in, and where people stay.', agent: 'What the agent may do alone, what needs a person, its access, and how it is tested.', sdd: 'How the solution is built.', brd: 'One click away, for reviewers or auditors who want business requirements.', frd: 'One click away, for reviewers or auditors who want functional requirements.' },
   new: { brd: 'What the business needs from the new work, with its goals.', frd: 'What the solution must do, requirement by requirement.', sdd: 'How the solution is built.', pdd: 'Describes work as it is done; nothing is done today.', agent: 'An agent was in mind: what it may do alone, what needs a person.' },
 };
@@ -143,7 +143,10 @@ export function deliveryPlan(m: ProcessModel, a: ProcessAssessment | null): Deli
   const asked = wanted && !chosen ? wanted : [];
   const planned = new Set([...(chosen ?? rule), ...asked]);
   const inMind = b.inMind && b.inMind.status !== 'unknown' ? (b.inMind.value ?? []) : [];
-  const offered = ORDER.filter(d => !planned.has(d) && (d !== 'agent' || inMind.includes('agent') || track === 'ai'));
+  // The agent document is on offer wherever a step is rated for AI (AI-assisted or agentic): it is where
+  // what the AI may do alone and who reviews it are written down, and the test pack points to it.
+  const aiSteps = (a?.counts.ai_assist ?? 0) + (a?.counts.agent ?? 0);
+  const offered = [...ORDER.filter(d => d !== 'agent'), 'agent' as PlannedDoc].filter(d => !planned.has(d) && (d !== 'agent' || inMind.includes('agent') || track === 'ai' || aiSteps > 0));
   const docs: DocLine[] = [...ORDER.filter(d => planned.has(d)), ...offered].map(doc => ({
     doc, label: DOC_LABEL[doc], planned: planned.has(doc), available: BUILT_DOCS.includes(doc),
     reason: chosen && planned.has(doc) ? `Wanted (${from(b.documents)}). ${REASON[track][doc] ?? ''}`.trim()

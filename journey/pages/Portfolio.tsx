@@ -74,7 +74,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
       const qp = model.steps.length ? questionPlan(p.id, model).plan : null;
       const effort = effortOf({
         sources: sources.map(s => ({ key: s.key, createdAt: s.createdAt })), edits: history.edits, firstRevisionAt: history.revisions.map(r => r.createdAt).sort()[0] ?? null, model,
-        plan: qp ? { now: qp.now.length, found: qp.found.length, wait: qp.wait.length } : undefined, documents: readyDocuments(deliveryPlan(model, assessment).docs),
+        plan: qp ? { now: qp.now.length, found: qp.found.length, wait: qp.wait.length, deferred: qp.deferred.length } : undefined, documents: readyDocuments(deliveryPlan(model, assessment).docs),
       });
       return { id: p.id, name: p.name, assessment, rate: decisions?.rate ?? null, costs: decisions?.costs ?? null, effort };
     }));
@@ -144,7 +144,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
             {[
               ['Middle time to a first draft', totals.medianMinutesToDraft !== null ? durationText(totals.medianMinutesToDraft) : NOT_RECORDED],
               ['With a first draft', `${totals.withDraft} of ${totals.processes}`],
-              ['Questions raised', String(totals.raised)],
+              ['Questions so far', String(totals.raised)],
               ['Answered from the sources', String(totals.answeredFromSources)],
               ['Answered by people', String(totals.answeredByPeople)],
               ['Open questions left', String(totals.stillOpen)],

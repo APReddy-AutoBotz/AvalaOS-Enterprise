@@ -144,19 +144,22 @@ export function addStep(model: ProcessModel, args: { step: StepInput; after?: st
 /** Removes a step, joins its predecessors to its successors, and removes references to it. */
 export function removeStep(model: ProcessModel, args: { stepId: string }): OpResult {
   if (!model.steps.some(s => s.id === args.stepId)) throw new ModelOpError('NOT_FOUND', `No step with id ${args.stepId}.`);
-  return commit(model, m => {
-    detach(m, args.stepId);
-    m.steps = m.steps.filter(s => s.id !== args.stepId);
-    const drop = (ids: string[]) => ids.filter(id => id !== args.stepId);
-    m.exceptions.forEach(x => { x.stepIds = drop(x.stepIds); });
-    m.painPoints.forEach(n => { n.stepIds = drop(n.stepIds); });
-    m.risks.forEach(n => { n.stepIds = drop(n.stepIds); });
-    m.controls.forEach(n => { n.stepIds = drop(n.stepIds); });
-    const targetsStep = (t: ElementTarget) => t.kind === 'step' && t.id === args.stepId;
-    m.openQuestions = m.openQuestions.filter(q => !targetsStep(q.target));
-    m.conflicts = m.conflicts.filter(c => !targetsStep(c.target));
-    m.meta.metrics.forEach(x => { if (x.appliesTo === args.stepId) delete x.appliesTo; });
-  });
+  return commit(model, m => takeOutStep(m, args.stepId));
+}
+
+/** Takes a step out of a working copy: its neighbours are joined and nothing keeps pointing at it. */
+function takeOutStep(m: ProcessModel, stepId: string): void {
+  detach(m, stepId);
+  m.steps = m.steps.filter(s => s.id !== stepId);
+  const drop = (ids: string[]) => ids.filter(id => id !== stepId);
+  m.exceptions.forEach(x => { x.stepIds = drop(x.stepIds); });
+  m.painPoints.forEach(n => { n.stepIds = drop(n.stepIds); });
+  m.risks.forEach(n => { n.stepIds = drop(n.stepIds); });
+  m.controls.forEach(n => { n.stepIds = drop(n.stepIds); });
+  const targetsStep = (t: ElementTarget) => t.kind === 'step' && t.id === stepId;
+  m.openQuestions = m.openQuestions.filter(q => !targetsStep(q.target));
+  m.conflicts = m.conflicts.filter(c => !targetsStep(c.target));
+  m.meta.metrics.forEach(x => { if (x.appliesTo === stepId) delete x.appliesTo; });
 }
 
 /** Moves a step to a new position in the flow; its old neighbours are joined. */
@@ -469,6 +472,46 @@ const typicalList = (m: ProcessModel, kind: TypicalTarget['kind']): { id: string
   ({ step: m.steps, rule: m.rules, exception: m.exceptions, role: m.roles, system: m.systems, gateway: m.gateways, event: m.events })[kind];
 
 /**
+ * After typical steps are taken out of a working copy, what only they needed goes too, so nobody is
+ * asked about it: a typical application no step uses any more, and a typical decision point that no
+ * longer decides anything (every way out of it leads to the same place). A person's own applications
+ * and decision points are never touched.
+ */
+function tidyTypical(m: ProcessModel): void {
+  const unused = new Set(m.systems.filter(s => s.status === 'typical' && !m.steps.some(st => st.systemIds.includes(s.id))).map(s => s.id));
+  if (unused.size) {
+    m.systems = m.systems.filter(s => !unused.has(s.id));
+    const about = (t: ElementTarget) => t.kind === 'system' && unused.has(t.id ?? '');
+    m.openQuestions = m.openQuestions.filter(q => !about(q.target));
+    m.conflicts = m.conflicts.filter(c => !about(c.target));
+  }
+  for (let again = true; again;) {
+    again = false;
+    for (const g of m.gateways.filter(x => x.status === 'typical')) {
+      const outs = m.flows.filter(f => f.from === g.id);
+      const targets = [...new Set(outs.map(f => f.to))];
+      if (targets.length !== 1 || targets[0] === g.id) continue;
+      const to = targets[0];
+      const ins = m.flows.filter(f => f.to === g.id);
+      m.flows = m.flows.filter(f => f.from !== g.id && f.to !== g.id);
+      for (const i of ins) {
+        if (i.from === to || m.flows.some(f => f.from === i.from && f.to === to)) continue;
+        const flow: Flow = { id: i.id, from: i.from, to };
+        if (i.label !== undefined) flow.label = i.label;
+        if (i.isException || outs.every(o => o.isException)) flow.isException = true;
+        m.flows.push(flow);
+      }
+      m.gateways = m.gateways.filter(x => x.id !== g.id);
+      const about = (t: ElementTarget) => t.kind === 'gateway' && t.id === g.id;
+      m.openQuestions = m.openQuestions.filter(q => !about(q.target));
+      m.conflicts = m.conflicts.filter(c => !about(c.target));
+      again = true;
+      break;
+    }
+  }
+}
+
+/**
  * A person confirms a typical item: "we do this" (as it stands) or "ours is different" (with their own
  * name and description, or rule wording). It becomes theirs (confirmed by a person).
  */
@@ -500,9 +543,12 @@ export function confirmTypicalRest(model: ProcessModel, args: { names?: Record<s
   }
   const names = args.names ?? {};
   const named = (id: string, old: string) => (names[id]?.trim() || old);
-  const placeholder = model.systems.find(s => s.status === 'typical' && /^Your /.test(named(s.id, s.name)));
-  if (placeholder) throw new ModelOpError('NAME_APPLICATION', `Give "${placeholder.name}" the name of your application first.`);
+  // Only an application a step still uses needs a name; one no step uses goes out with this confirmation.
+  const used = (id: string) => model.steps.some(st => st.systemIds.includes(id));
+  const placeholder = model.systems.find(s => s.status === 'typical' && used(s.id) && /^Your /.test(named(s.id, s.name)));
+  if (placeholder) throw new ModelOpError('NAME_APPLICATION', `Give "${placeholder.name}" the name of your application first, or say you don't use it.`);
   return commit(model, m => {
+    tidyTypical(m);
     for (const r of m.roles) if (r.status === 'typical') { r.name = named(r.id, r.name); r.status = 'user-confirmed'; }
     for (const s of m.systems) if (s.status === 'typical') { s.name = named(s.id, s.name); s.status = 'user-confirmed'; }
     for (const g of m.gateways) if (g.status === 'typical') g.status = 'user-confirmed';
@@ -510,12 +556,16 @@ export function confirmTypicalRest(model: ProcessModel, args: { names?: Record<s
   });
 }
 
-/** "We don't do this": a typical step, rule or exception is taken out (a step's neighbours are joined). */
-export function dropTypical(model: ProcessModel, args: { kind: 'step' | 'rule' | 'exception'; id: string }): OpResult {
+/**
+ * "We don't do this": a typical step, rule or exception is taken out (a step's neighbours are joined),
+ * and "We don't use it": a typical application is taken off the steps that named it. What only the
+ * taken-out steps needed goes with them (`tidyTypical`).
+ */
+export function dropTypical(model: ProcessModel, args: { kind: 'step' | 'rule' | 'exception' | 'system'; id: string }): OpResult {
   const item = typicalList(model, args.kind).find(x => x.id === args.id);
   if (!item) throw new ModelOpError('NOT_FOUND', `No ${args.kind} with id ${args.id}.`);
   if (item.status !== 'typical') throw new ModelOpError('NOT_TYPICAL', 'Only a typical item is taken out this way; delete your own in the Process stage.');
-  if (args.kind === 'step') return removeStep(model, { stepId: args.id });
+  if (args.kind === 'step') return commit(model, m => { takeOutStep(m, args.id); tidyTypical(m); });
   return removeElement(model, { kind: args.kind, id: args.id });
 }
 

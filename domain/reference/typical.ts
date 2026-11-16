@@ -7,16 +7,19 @@
 // times, costs, or whether an application has an API (a reference has no field for them, and a test
 // keeps them out). With documents present, the reference is a checklist of what a typical process has
 // that the sources do not mention.
+// Avala OS never says which reference fits a process (agreed by the owner on 16 November 2026: a guess
+// from the process name offered the supplier invoice process to "Customer invoices"). A person picks a
+// reference from the list, sees what is in it, and only then starts from it or compares with it.
 import type { ExceptionPath, Flow, Gateway, ProcessEvent, ProcessModel, Role, Step, SystemRef } from '../processModel/types.ts';
 import { contentWords, wordOverlap } from '../questions/triage.ts';
 import { AP_INVOICE } from './apInvoice.ts';
 
 export interface ReferenceProcess {
   id: string;
-  /** Its name in plain words, for "Start from a typical …". */
+  /** Its name in the list a person picks from. */
   name: string;
-  /** Words in a process name that suggest this reference. */
-  keywords: string[];
+  /** What one such process is called in a sentence: "a typical <noun>". */
+  noun: string;
   roles: Pick<Role, 'id' | 'name' | 'kind' | 'inScope'>[];
   /** Placeholders ("Your ERP") a person maps to their own applications. */
   systems: Pick<SystemRef, 'id' | 'name' | 'kind'>[];
@@ -31,11 +34,8 @@ export interface ReferenceProcess {
 /** The references that ship. The trial has one; more only if it shows people reach documents faster. */
 export const REFERENCES: readonly ReferenceProcess[] = [AP_INVOICE];
 
-/** The reference a process name suggests: one of its keywords as whole words in the name. */
-export function matchReference(name: string): ReferenceProcess | null {
-  const n = ` ${name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
-  return REFERENCES.find(r => r.keywords.some(k => n.includes(` ${k} `))) ?? null;
-}
+/** The reference with this id (the one a process was started from, or the one a person picked). */
+export const referenceById = (id: string | undefined): ReferenceProcess | null => REFERENCES.find(r => r.id === id) ?? null;
 
 const typical = { status: 'typical' as const, sources: [] };
 
@@ -79,10 +79,17 @@ export function toConfirm(m: ProcessModel): { kind: 'step' | 'rule' | 'exception
 }
 const lowerFirst = (s: string) => (s ? s.charAt(0).toLowerCase() + s.slice(1) : s);
 
-/** What the last card of the confirm pass covers: typical roles and applications (to name), and how many decision points and events. */
+/** A typical application no step uses any more (its steps were taken out): it goes with them, never asked about. */
+export const unusedTypicalSystems = (m: ProcessModel) => m.systems.filter(s => s.status === 'typical' && !m.steps.some(st => st.systemIds.includes(s.id)));
+
+/**
+ * What the last card of the confirm pass covers: typical roles and applications (to name, or to take out
+ * with "We don't use it"), and how many decision points and events. An application no step uses is not asked about.
+ */
 export function restToConfirm(m: ProcessModel): { roles: { id: string; name: string }[]; systems: { id: string; name: string }[]; gateways: number; events: number } {
   const t = <X extends { status: string }>(xs: X[]) => xs.filter(x => x.status === 'typical');
-  return { roles: t(m.roles).map(r => ({ id: r.id, name: r.name })), systems: t(m.systems).map(s => ({ id: s.id, name: s.name })), gateways: t(m.gateways).length, events: t(m.events).length };
+  const unused = new Set(unusedTypicalSystems(m).map(s => s.id));
+  return { roles: t(m.roles).map(r => ({ id: r.id, name: r.name })), systems: t(m.systems).filter(s => !unused.has(s.id)).map(s => ({ id: s.id, name: s.name })), gateways: t(m.gateways).length, events: t(m.events).length };
 }
 
 /** A sentence for the provisional assessment, or null when nothing typical is left among the steps. */
@@ -106,7 +113,6 @@ export function typicalChecklist(m: ProcessModel, ref: ReferenceProcess): { step
   const mentioned = (r: ReferenceProcess['steps'][number]) => own.some(s =>
     wordOverlap(s.name, r.name) >= 0.6 || wordOverlap(`${s.name} ${s.description}`, `${r.name} ${r.description}`) >= 0.45
     || [...contentWords(r.name)].every(w => contentWords(`${s.name} ${s.description}`).has(w)));
-  const what = ref.name.charAt(0).toLowerCase() + ref.name.slice(1);
   return ref.steps.filter(r => !mentioned(r) && !m.steps.some(s => s.id === r.id))
-    .map(r => ({ stepId: r.id, name: r.name, why: `A typical ${what} has "${r.name}"; your sources do not mention it.` }));
+    .map(r => ({ stepId: r.id, name: r.name, why: `A typical ${ref.noun} has "${r.name}"; your sources do not mention it.` }));
 }

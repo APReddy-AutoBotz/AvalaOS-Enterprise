@@ -9,8 +9,8 @@ import type { ReferenceProcess } from './typical.ts';
 
 export const AP_INVOICE: ReferenceProcess = {
   id: 'ap-invoice',
-  name: 'Accounts payable invoice processing',
-  keywords: ['invoice', 'invoices', 'accounts payable', 'ap', 'supplier invoice', 'vendor invoice', 'purchase to pay', 'p2p', 'procure to pay'],
+  name: 'Supplier invoice processing (accounts payable)',
+  noun: 'supplier invoice process',
   "roles": [
     {
       "id": "r-clerk",
@@ -881,7 +881,7 @@ export const AP_INVOICE: ReferenceProcess = {
       "kind": "business",
       "name": "Quantity exceeds goods received",
       "trigger": "More is invoiced than was received",
-      "handling": "Park the invoice and refer it to the buyer",
+      "handling": "Park the invoice and ask the requester or stores about the difference",
       "stepIds": [
         "s-match"
       ],

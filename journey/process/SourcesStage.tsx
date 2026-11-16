@@ -147,7 +147,7 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
         <>
           <EmptyState title="No sources yet">Every extracted fact keeps a link back to the passage it came from in these files.</EmptyState>
           {canEdit && <StartInOwnWords store={store} processId={processId} workspaceId={workspaceId} me={me} onSaved={() => { load(); onSourcesChanged(); onModelChanged(); }} />}
-          {canEdit && !hasSteps && <StartFromTypical store={store} processId={processId} processName={processName} onStarted={() => { onModelChanged(); goToProcess(); }} />}
+          {canEdit && !hasSteps && <StartFromTypical store={store} processId={processId} onStarted={() => { onModelChanged(); goToProcess(); }} />}
         </>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">

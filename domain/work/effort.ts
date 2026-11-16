@@ -12,8 +12,12 @@ export interface EffortInput {
   /** When the first revision was started, if any. */
   firstRevisionAt: string | null;
   model: ProcessModel | null;
-  /** The first list of questions (part D), when worked out: only people can answer now, found in the sources, can wait. */
-  plan?: { now: number; found: number; wait: number };
+  /**
+   * The first list of questions (part D), when worked out: only people can answer now, found in the sources,
+   * can wait, and left with a named person. It counts what is open the way the screens do: the recorded
+   * questions with repeats merged, plus what the process still lacks that nobody has asked about yet.
+   */
+  plan?: { now: number; found: number; wait: number; deferred?: number };
   /** The documents the delivery plan names that can be produced now. */
   documents: string[];
 }
@@ -30,7 +34,12 @@ export interface Effort {
   draftAt: string | null;
   draftFrom: StartKind | null;
   minutesToDraft: number | null;
-  /** Every question the record has held, and how they ended. */
+  /**
+   * Every question so far, and how each ended. With the first list known, the lines add up:
+   * raised = answered by people + answered from the sources + still open + left with a named person,
+   * and still open = only people can answer + found to confirm + can wait. Without it, the same sums
+   * hold over the recorded questions alone.
+   */
   raised: number;
   answeredByPeople: number;
   answeredFromSources: number;
@@ -65,13 +74,18 @@ export function effortOf(i: EffortInput): Effort {
   const minutes = first && startedAt ? Math.round((Date.parse(first.createdAt) - Date.parse(startedAt)) / 60000) : null;
   const qs = i.model?.openQuestions ?? [];
   const answered = qs.filter(q => q.status === 'answered');
+  const byPeople = answered.filter(q => answerOrigin(q.answer) === 'person').length;
+  const fromSources = answered.length - byPeople;
+  // One basis for what is open: the first list when it is known, the recorded questions otherwise.
+  const stillOpen = i.plan ? i.plan.now + i.plan.found + i.plan.wait : qs.filter(q => q.status === 'open').length;
+  const deferred = i.plan?.deferred ?? qs.filter(q => q.status === 'deferred').length;
   return {
     startedAt, draftAt: first?.createdAt ?? null, draftFrom, minutesToDraft: minutes !== null && minutes >= 0 ? minutes : null,
-    raised: qs.length,
-    answeredByPeople: answered.filter(q => answerOrigin(q.answer) === 'person').length,
-    answeredFromSources: answered.filter(q => answerOrigin(q.answer) === 'source').length,
-    deferred: qs.filter(q => q.status === 'deferred').length,
-    stillOpen: qs.filter(q => q.status === 'open').length,
+    raised: byPeople + fromSources + stillOpen + deferred,
+    answeredByPeople: byPeople,
+    answeredFromSources: fromSources,
+    deferred,
+    stillOpen,
     onlyPeopleNow: i.plan?.now ?? null, foundToConfirm: i.plan?.found ?? null, canWait: i.plan?.wait ?? null,
     documents: hasSteps ? i.documents : [],
   };
@@ -95,12 +109,13 @@ export function effortLines(e: Effort): { key: string; label: string; value: str
   return [
     { key: 'draft', label: 'From the first source to a first draft', value: e.minutesToDraft !== null ? durationText(e.minutesToDraft) : e.draftAt ? NOT_RECORDED : 'No draft yet' },
     { key: 'start', label: 'How the first draft came', value: e.draftFrom ? START_LABEL[e.draftFrom] : 'No draft yet' },
-    { key: 'raised', label: 'Questions the process raised', value: String(e.raised) },
+    { key: 'raised', label: 'Questions so far, answered and open', value: String(e.raised) },
     { key: 'people', label: 'Answered by people', value: String(e.answeredByPeople) },
     { key: 'sources', label: 'Answered from the sources', value: String(e.answeredFromSources) },
-    { key: 'now', label: 'Only people can answer, still to ask', value: n(e.onlyPeopleNow) },
-    { key: 'found', label: 'Found in the sources, to confirm', value: n(e.foundToConfirm) },
-    { key: 'wait', label: 'Can wait until sign-off', value: n(e.canWait) },
+    { key: 'now', label: 'Of those open: only people can answer', value: n(e.onlyPeopleNow) },
+    { key: 'found', label: 'Of those open: found in the sources, to confirm', value: n(e.foundToConfirm) },
+    { key: 'wait', label: 'Of those open: can wait until sign-off', value: n(e.canWait) },
+    ...(e.deferred ? [{ key: 'held', label: 'Left with a named person', value: String(e.deferred) }] : []),
     { key: 'open', label: 'Open questions left', value: String(e.stillOpen) },
     { key: 'docs', label: 'Documents ready', value: e.documents.length ? e.documents.join(', ') : 'None yet' },
   ];
@@ -114,6 +129,7 @@ export interface EffortTotals {
   raised: number;
   answeredByPeople: number;
   answeredFromSources: number;
+  /** Still open, those left with a named person included, so raised = answered + this. */
   stillOpen: number;
   documents: number;
 }
@@ -125,7 +141,7 @@ export function effortTotals(list: Effort[]): EffortTotals {
   const sum = (k: keyof Effort) => list.reduce((t, e) => t + (e[k] as number), 0);
   return {
     processes: list.length, withDraft: list.filter(e => e.draftAt).length, medianMinutesToDraft: mid,
-    raised: sum('raised'), answeredByPeople: sum('answeredByPeople'), answeredFromSources: sum('answeredFromSources'), stillOpen: sum('stillOpen'),
+    raised: sum('raised'), answeredByPeople: sum('answeredByPeople'), answeredFromSources: sum('answeredFromSources'), stillOpen: sum('stillOpen') + sum('deferred'),
     documents: list.reduce((t, e) => t + e.documents.length, 0),
   };
 }

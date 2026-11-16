@@ -890,7 +890,7 @@ test('a step set to agentic AI gets the agent document: planned, its steps and a
   await page.getByRole('tablist', { name: 'Documents' }).getByRole('tab', { name: /^Tests/ }).click();
   await expect(doc).toContainText('Test Pack');
   await expect(page.getByTestId('tests-note')).toContainText('nothing is tested that no requirement states');
-  await expect(doc.getByRole('heading', { name: /The agent's cases/ })).toBeVisible();
+  await expect(doc.getByRole('heading', { name: /Cases at the AI steps/ })).toBeVisible();
   await expect(doc).toContainText('Post invoice in SAP');
   await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
   // A tester's edit: change the data of a case; the document follows, and the case is marked edited.

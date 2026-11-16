@@ -27,7 +27,13 @@ test('read from the sources: time to the first draft, how it came, and every que
   assert.equal(e.startedAt, '2026-11-15T09:00:00Z');
   assert.equal(e.minutesToDraft, 42);
   assert.equal(e.draftFrom, 'sources');
-  assert.deepEqual([e.raised, e.answeredFromSources, e.answeredByPeople, e.deferred, e.stillOpen], [5, 1, 1, 1, 2]);
+  // With the first list known, what is open is counted the way the screens count it, and the lines add up.
+  assert.deepEqual([e.raised, e.answeredFromSources, e.answeredByPeople, e.deferred, e.stillOpen], [15, 1, 1, 1, 12]);
+  assert.equal(e.raised, e.answeredFromSources + e.answeredByPeople + e.stillOpen + e.deferred);
+  assert.equal(e.stillOpen, e.onlyPeopleNow! + e.foundToConfirm! + e.canWait!);
+  // Without it, the same sums hold over the recorded questions alone.
+  const bare = effortOf({ sources: [], edits: [], firstRevisionAt: null, model: m, documents: [] });
+  assert.deepEqual([bare.raised, bare.answeredFromSources, bare.answeredByPeople, bare.deferred, bare.stillOpen], [5, 1, 1, 1, 2]);
   const lines = Object.fromEntries(effortLines(e).map(l => [l.key, l.value]));
   assert.equal(lines.draft, '42 minutes');
   assert.equal(lines.now, '2');
@@ -37,7 +43,7 @@ test('read from the sources: time to the first draft, how it came, and every que
 test('other starts: own words, a typical process, by hand; nothing guessed when a record is missing', () => {
   const m = gold();
   assert.equal(effortOf({ sources: [{ key: 'own-1', createdAt: '2026-11-15T09:00:00Z' }], edits: [{ origin: 'extraction', summary: 'Model extracted from sources', createdAt: '2026-11-15T09:03:00Z' }], firstRevisionAt: null, model: m, documents: [] }).draftFrom, 'own_words');
-  const t = effortOf({ sources: [], edits: [{ origin: 'user', summary: 'Started from a typical accounts payable invoice processing (every item marked Typical until confirmed)', createdAt: '2026-11-15T09:01:00Z' }], firstRevisionAt: '2026-11-15T09:00:00Z', model: m, documents: [] });
+  const t = effortOf({ sources: [], edits: [{ origin: 'user', summary: 'Started from a typical supplier invoice process (every item marked Typical until confirmed)', createdAt: '2026-11-15T09:01:00Z' }], firstRevisionAt: '2026-11-15T09:00:00Z', model: m, documents: [] });
   assert.equal(t.draftFrom, 'typical');
   assert.equal(t.minutesToDraft, 1);
   assert.equal(effortOf({ sources: [], edits: [{ origin: 'user', summary: 'Added a step', createdAt: '2026-11-15T09:01:00Z' }], firstRevisionAt: null, model: m, documents: [] }).draftFrom, 'by_hand');

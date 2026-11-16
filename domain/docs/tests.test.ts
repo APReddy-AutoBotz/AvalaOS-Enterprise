@@ -45,7 +45,7 @@ test('the document: counts, the three kinds, requirements with no case, open ite
   const md = toMarkdown(d);
   assert.doesNotMatch(md, FILLER);
   assert.equal(d.type, 'tests');
-  assert.deepEqual(d.sections.filter(s => s.level === 1).map(s => s.title), ['About this test pack', 'Test cases', 'The agent\'s cases', 'Cases with no expected result yet', 'Open items']);
+  assert.deepEqual(d.sections.filter(s => s.level === 1).map(s => s.title), ['About this test pack', 'Test cases', 'Cases at the AI steps', 'Cases with no expected result yet', 'Open items']);
   assert.match(md, /Proposed, not confirmed/);
   const closing = d.sections.at(-1)!.blocks.find(b => b.kind === 'table') as any;
   assert.equal(closing.rows.length, d.openItems.length);
@@ -65,7 +65,9 @@ test('cases at the agent\'s steps are marked, and the agent section asks for exa
   assert.ok(d.openItems.some(o => /past cases/.test(o.text)));
   // Without an agent step there are no agent cases, and the document says so.
   assert.equal(testPack(base).cases.filter(c => c.agent).length, 0);
-  assert.match(toMarkdown(buildTests(base)), /No step is the agent's/);
+  assert.match(toMarkdown(buildTests(base)), /No step is rated AI-assisted or agentic/);
+  // The pack never calls an AI-assisted step "the agent's": the assessment keeps the two apart.
+  assert.doesNotMatch(toMarkdown(d), /the agent's (steps|cases)/i);
 });
 
 test('the Excel file: a header and one row per case, readable as UTF-8 by Excel', () => {
