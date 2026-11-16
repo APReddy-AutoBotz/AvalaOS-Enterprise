@@ -12,7 +12,7 @@
 // after that wait the questions go once more (`repeats`), and never a third time on their own. "Look in
 // the sources" on the Suggestions tab always looks, as a person asked for it.
 import { answersIt, type Suggestion } from './suggest.ts';
-import { decisive, weightOf } from '../questions/firstList.ts';
+import { decisive, weightFor } from '../questions/firstList.ts';
 import type { Triage, TriageItem } from '../questions/triage.ts';
 
 /**
@@ -73,7 +73,7 @@ export function toLookUp(t: Triage, look: SourceLook | null, sources: string, li
   // A question about the shape of the flow is fixed in the Process stage; no passage answers it.
   const open = t.items.filter(i => !i.deferred && !looked.has(i.key) && !givenUp(i.key) && i.target.kind !== 'gateway');
   const asIs = { asIs: t.purpose === 'as_is' };
-  const first = open.filter(i => decisive(i, asIs)).map((i, n) => ({ i, n })).sort((a, b) => weightOf(b.i, asIs) - weightOf(a.i, asIs) || a.n - b.n).map(x => x.i);
+  const first = open.filter(i => decisive(i, asIs)).map((i, n) => ({ i, n })).sort((a, b) => weightFor(b.i, asIs) - weightFor(a.i, asIs) || a.n - b.n).map(x => x.i);
   const order = [...first, ...open.filter(i => !decisive(i, asIs))].slice(0, limit.perBatch * limit.batches);
   const out: TriageItem[][] = [];
   for (let k = 0; k < order.length; k += limit.perBatch) out.push(order.slice(k, k + limit.perBatch));

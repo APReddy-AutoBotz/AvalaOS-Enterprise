@@ -49,7 +49,7 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead, purp
       </button>
       {open && (
         <div className="border-t border-slate-100 px-5 pb-5 pt-3">
-          {purpose && <PurposeLine editor={editor} canEdit={canEdit} meId={purpose.meId} names={purpose.names} />}
+          {purpose && <dl><PurposeLine editor={editor} canEdit={canEdit} meId={purpose.meId} names={purpose.names} /></dl>}
           <dl className="divide-y divide-slate-100">
             {lines.map(l => (
               <div key={l.key} className="grid gap-1 py-3 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4" data-testid={`brief-${l.key}`}>

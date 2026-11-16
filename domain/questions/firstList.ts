@@ -51,7 +51,10 @@ export const decisive = (i: TriageItem, opts?: { asIs?: boolean }) => !i.deferre
  * value rests on; then other questions that change the recommendation, a little higher for each other
  * wording merged into them (asked several times in the sources).
  */
-export function weightOf(i: TriageItem, opts?: { asIs?: boolean }): number {
+export const weightOf = (i: TriageItem): number => weightFor(i);
+
+/** The same weight, for a process documented as it is when `asIs` holds: what sign-off needs comes first. */
+export function weightFor(i: TriageItem, opts?: { asIs?: boolean }): number {
   if (blocksDocument(i)) return 1000;
   if (opts?.asIs) return i.group === 'signoff' ? 100 + 5 * (i.also?.length ?? 0) : 0;
   if (i.group !== 'decides') return 0;
@@ -120,7 +123,7 @@ export function planQuestions(t: Triage, m: ProcessModel, opts: { found?: Readon
   const rest = open.filter(i => !found.has(i.key));
 
   const asIs = { asIs: t.purpose === 'as_is' };
-  const pool = rest.filter(i => decisive(i, asIs)).map((i, n) => ({ i, n, w: weightOf(i, asIs) })).sort((a, b) => b.w - a.w || a.n - b.n).map(x => x.i);
+  const pool = rest.filter(i => decisive(i, asIs)).map((i, n) => ({ i, n, w: weightFor(i, asIs) })).sort((a, b) => b.w - a.w || a.n - b.n).map(x => x.i);
   const now: TriageItem[] = [];
   for (const i of pool) {
     const cover = coveredBy(i, t.items, m);
