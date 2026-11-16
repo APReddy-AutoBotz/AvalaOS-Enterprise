@@ -301,6 +301,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       state.revisions.filter(r => r.processId === rev.processId && r.state === 'approved').forEach(r => { r.state = 'superseded'; });
       rev.state = 'approved';
       rev.approvedAt = now();
+      rev.approvedBy = state.me!.id;
       save();
     },
     async listSources(processId) {
