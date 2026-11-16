@@ -152,8 +152,8 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
           </div>
           <p className="text-sm text-slate-600" data-testid="map-shape-reason">
             {shapeLine}
-            {showSuggested && <> <button type="button" className="font-semibold text-[#002C4B] hover:underline" disabled={shapeBusy} onClick={() => chooseShape(shape.suggested)}>Use the suggested shape</button></>}
             {runsAcross && <> Documents always run down the page.</>}
+            {showSuggested && <> <button type="button" className="font-semibold text-[#002C4B] hover:underline" disabled={shapeBusy} onClick={() => chooseShape(shape.suggested)}>Use the suggested shape</button></>}
           </p>
         </div>
         <figure className="rounded-xl border border-slate-200 bg-white p-4" data-testid="flow-map" data-shape={shape.shape}>
