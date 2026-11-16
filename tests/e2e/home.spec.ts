@@ -73,6 +73,17 @@ test('homepage: with reduced motion nothing moves on its own, and every stage is
   expect(bad).toEqual([]);
 });
 
+test('homepage: the opening picture is whole at laptop and desktop widths, never cut off by the edge of the window', async ({ page }) => {
+  for (const [width, height] of [[1024, 700], [1280, 720], [1366, 650], [1440, 800], [1536, 730], [1920, 950]]) {
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    const box = (await page.getByRole('img', { name: /assessment of a vendor invoice process/ }).boundingBox())!;
+    const inner = await page.evaluate(() => document.documentElement.clientWidth);
+    expect(box.x + box.width, `at ${width} wide the picture ends inside the page`).toBeLessThanOrEqual(inner - 16);
+    expect(box.width, `at ${width} wide the picture is still large enough to read`).toBeGreaterThanOrEqual(480);
+  }
+});
+
 test('the sign-in page still opens from the homepage link', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('link', { name: 'Sign in' }).first().click();
@@ -84,6 +95,12 @@ test('homepage on a phone: nothing spills off the side', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  // The opening picture on a phone is the product's own phone screen, shown whole.
+  const hero = page.getByRole('img', { name: /assessment of a vendor invoice process/ });
+  await expect.poll(() => hero.evaluate((img: HTMLImageElement) => img.complete && img.currentSrc)).toContain('assessment-phone');
+  const box = (await hero.boundingBox())!;
+  const frame = (await hero.locator('xpath=ancestor::div[contains(@class,"shot-frame")]').boundingBox())!;
+  expect(Math.round(box.width)).toBeLessThanOrEqual(Math.round(frame.width));
   await shot(page, '71-homepage-phone');
 });
 

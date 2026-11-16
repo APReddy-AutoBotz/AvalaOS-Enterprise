@@ -138,6 +138,15 @@ test('tour: the sample case through every stage', async ({ page }) => {
   console.log(`TOUR_VERDICT ${await page.getByTestId('verdict').innerText()} | ${(await page.locator('section[aria-label="Recommended approach"]').innerText()).replace(/\s+/g, ' ')}`);
   await settle(page);
   await snap(page, 'assessment');
+  // The same screen on a phone, for the homepage's opening picture on phones.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId('verdict').evaluate(el => el.closest('section')!.scrollIntoView({ block: 'start' }));
+  await page.mouse.wheel(0, -150);
+  await settle(page);
+  await snap(page, 'assessment-phone');
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.mouse.wheel(0, -5000);
+  await settle(page);
   await page.getByTestId('effort-card').evaluate(el => el.scrollIntoView({ block: 'center' }));
   await settle(page);
   await snap(page, 'effort');
