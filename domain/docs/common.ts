@@ -7,6 +7,7 @@ import { orderedSteps, processMetric } from '../processModel/selectors.ts';
 import { missing, NOT_PROVIDED, type Cell } from './tree.ts';
 import type { Requirement } from '../requirements/register.ts';
 import type { MapShape } from '../flowchart/shape.ts';
+import { decidedSummary, type DecidedSummary } from '../assess/decided.ts';
 
 export interface DocInput {
   model: ProcessModel;
@@ -24,7 +25,12 @@ export interface DocInput {
    * never makes a section "Changed".
    */
   mapShape?: MapShape;
+  /** People's names by user id: who decided an approach for the whole process is named, never by email address. */
+  names?: Record<string, string>;
 }
+
+/** The approach decided for the whole process, summed up, when there is one (package 9). */
+export const decidedIn = (input: DocInput): DecidedSummary | null => decidedSummary(input.model, input.assessment);
 
 /** How many items of the process still come from a typical process and are not confirmed (part I). */
 export function typicalLeft(m: ProcessModel): number {

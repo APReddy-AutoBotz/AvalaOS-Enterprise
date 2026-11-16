@@ -1,6 +1,7 @@
 // What Ask Avala can be asked about, each with how its record is read and how its facts are built. The
 // panel (AskPanel.tsx) is the same for all of them: it asks the subject for its facts and its task.
-import { purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
+import { DECIDED_LIST_LINE, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
+import { APPROACH_LABEL } from '../../domain/assess/scoring.ts';
 import { askedOpenQuestions } from '../../domain/processModel/selectors.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
@@ -126,6 +127,7 @@ export function workspaceSubject(store: JourneyStore, w: { workspace: { id: stri
           named: { analyst: nameOf(p.analystId), architect: nameOf(p.architectId), approver: nameOf(p.approverId) },
           card: assessment ? processCard(assessment) : null, systems: model ? model.systems.map(s => s.name) : [],
           ...(purposeOf(model) !== 'assess' ? { purpose: purposeOf(model) } : {}),
+          ...(purposeOf(model) === 'decided' && model?.meta.decidedApproach ? { decidedLine: DECIDED_LIST_LINE(APPROACH_LABEL[model.meta.decidedApproach.approach]) } : {}),
         };
         return { proc, item: assessment ? { id: p.id, name: p.name, assessment, rate: decisions?.rate ?? null, costs: decisions?.costs ?? null } : null };
       }));

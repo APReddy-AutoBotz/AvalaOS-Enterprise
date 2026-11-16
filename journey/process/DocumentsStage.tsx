@@ -20,6 +20,7 @@ import { GapsAssistant } from './GapsAssistant.tsx';
 import { useQuestionPlan } from './sourceLook.ts';
 import { nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
+import { DecidedPanel } from './DecidedPanel.tsx';
 import { documentsNote, offersDocument, PURPOSE_LABEL, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
 import { useModelEditor } from './useModelEditor.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
@@ -127,7 +128,9 @@ async function withPngFigures(doc: DocTree): Promise<DocTree> {
   return { ...doc, sections };
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null, onFix }: {
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null, onFix, currentRevisionId = '' }: {
+  /** The revision shown (the working draft, else the approved one): a person's choice for a step is saved against it. */
+  currentRevisionId?: string;
   /** The number of the latest approved revision, if any: the SDD is written once one exists. */
   approvedRevision?: number | null;
   /** The latest approved revision, when the working draft is newer: sections changed since then are marked. */
@@ -183,6 +186,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     })().catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
   }, [type, evidenceRecord, store, processId, workspaceId]);
+  const nameById = React.useMemo(() => Object.fromEntries(members.map(m => [m.userId, m.name])), [members]);
   const reviewCtx: ReviewContext = { store, processId, me: myId, canEdit, isAdmin: members.find(m => m.userId === myId)?.role === 'admin', members, onChanged: next => setComments(next) };
   const saveTestEdit = async (e: TestCaseEdit) => { await store.saveTestEdit(processId, e); setTestEdits(cur => [...cur.filter(x => x.caseCode !== e.caseCode), e]); };
   const removeTestEdit = async (code: string) => { await store.removeTestEdit(processId, code); setTestEdits(cur => cur.filter(x => x.caseCode !== code)); };
@@ -212,7 +216,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
 
   const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
-    const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
+    const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements, names: nameById };
     if (type === 'evidence') {
       // Read-only and built from the record as it is: no section edits, no company layout.
       if (!evidenceRecord || !register) return null;
@@ -230,7 +234,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     if (!raw) return null;
     const edited = applyEdits(raw, edits);
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
-  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits, evidenceRecord, comments, members]);
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits, evidenceRecord, comments, members, nameById]);
   const doc = built?.doc ?? null;
   const scrolled = React.useRef(false);
   React.useEffect(() => {
@@ -336,6 +340,11 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           <p className="text-sm text-amber-950"><span className="font-semibold">{nowHeading(toAnswer)}</span>. {planSummary(toAnswer)}</p>
           <Button onClick={() => setAnswering(true)}>{toAnswer.now.length || toAnswer.found.length ? 'Answer them' : 'See what can wait'}</Button>
         </div>
+      )}
+      {/* An approach decided for the whole process (package 9): what it can do, step by step, and why. */}
+      {assessment && decisions && model.meta.decidedApproach && (
+        <DecidedPanel model={model} assessment={assessment} names={nameById} meId={myId} canEdit={canEdit} editor={editor} store={store} processId={processId}
+          revisionId={working?.id ?? currentRevisionId} decisions={decisions} onDecisions={setDecisions} onAnswerQuestions={() => setAnswering(true)} />
       )}
       {documentsNote(model) && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="documents-note">{documentsNote(model)}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">

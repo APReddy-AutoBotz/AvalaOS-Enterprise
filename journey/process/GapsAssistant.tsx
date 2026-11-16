@@ -6,7 +6,7 @@ import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
 import { closeQuestions, deferQuestion, reopenQuestions } from '../../domain/processModel/patch.ts';
 import { ACCESS, all, buildAnswer, record, type Op } from '../../domain/questions/answer.ts';
-import { GROUP_LABEL, OWNER_LABEL, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
+import { groupLabel, OWNER_LABEL, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
 import { holdReason, nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { lookSummary } from '../../domain/assistant/sourceLook.ts';
 import { useQuestionPlan } from './sourceLook.ts';
@@ -189,7 +189,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
     <article data-testid="gap-question">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold tabular-nums text-slate-500">Question {position}</span>
-        <span className={cx('rounded-full px-2.5 py-0.5 font-semibold', GROUP_TONE[item.group])}>{GROUP_LABEL[item.group]}</span>
+        <span className={cx('rounded-full px-2.5 py-0.5 font-semibold', GROUP_TONE[item.group])}>{groupLabel(item)}</span>
         <span className="rounded-full bg-amber-50 px-2.5 py-0.5 font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">Ask: {item.assignedTo ?? OWNER_LABEL[item.owner]}</span>
       </div>
       <h4 className="mt-3 font-display text-lg font-semibold leading-snug text-slate-900">{item.question}</h4>

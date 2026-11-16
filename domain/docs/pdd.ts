@@ -8,8 +8,9 @@ import { buildingSystem, existingSystems, processWords } from '../plan/intended.
 import { robotsBlocked } from '../assess/scoring.ts';
 import { flowMermaid, flowPicture, modeFromScore } from '../flowchart/svg.ts';
 import { shapeInEffect } from '../flowchart/shape.ts';
-import { controlOf, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, metricText, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
+import { controlOf, decidedIn, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, metricText, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 import { asksQuestion, whatFollows } from '../plan/purpose.ts';
+import { decidedSentence } from '../assess/decided.ts';
 import { processMetric } from '../processModel/selectors.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
@@ -124,7 +125,9 @@ export function buildPdd(input: DocInput): DocTree {
     else b.callout('No steps are recorded, so there is no map yet.');
   }
   b.section('3.2', 'Delivery model');
-  b.paragraph(`${a.verdict}. ${a.split}`);
+  // Decided for the whole process: who decided, when and why, in place of the scoring's verdict.
+  const dec = decidedIn(input);
+  b.paragraph(dec ? `${decidedSentence(dec, input.names)} ${a.split}` : `${a.verdict}. ${a.split}`);
   b.table('Delivery model', ['#', 'Step', 'Today', 'Future mode', 'Person in the loop', 'Reason'],
     steps.map(s => {
       const md = modeOf(input, s);
@@ -137,7 +140,7 @@ export function buildPdd(input: DocInput): DocTree {
       const md = modeOf(input, s);
       const via = md.approach === 'api' ? 'API' : md.approach === 'rpa' ? 'Screens (UI)' : md.approach === 'ai_assist' ? 'AI reads; a person reviews' : 'Agent within set limits';
       return [String(no(s.id)), s.name, MODE_LABEL[md.approach!], s.inputs.join(', '), s.outputs.join(', '), s.systemIds.length ? `${names(s.systemIds, m.systems)} via ${via}` : via];
-    }), 'No step is recommended for automation yet.');
+    }), dec ? `${dec.label}, the approach decided, can do no step yet.` : 'No step is recommended for automation yet.');
   b.section('3.4', 'In scope for automation');
   b.table('In scope for automation', ['#', 'Step', 'Mode', 'Reason'], steps.map(s => ({ s, md: modeOf(input, s) })).filter(x => x.md.approach && x.md.approach !== 'human').map(({ s, md }) => [String(no(s.id)), s.name, MODE_LABEL[md.approach!], md.why]), 'None yet.');
   b.section('3.5', 'Out of scope for automation');

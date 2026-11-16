@@ -4,7 +4,7 @@
 // written to the model without a person confirming it.
 import type { ProcessModel } from '../processModel/types.ts';
 import { DocBuilder, type DocTree } from '../docs/tree.ts';
-import { GROUP_LABEL, OWNER_LABEL, type QOwner, type Triage, type TriageItem } from './triage.ts';
+import { groupLabel, OWNER_LABEL, type QOwner, type Triage, type TriageItem } from './triage.ts';
 import type { QuestionPlan } from './firstList.ts';
 
 export const PACK_PREFIX: Record<QOwner, string> = { business: 'B', it: 'T', finance: 'F' };
@@ -50,7 +50,7 @@ export function packDocument(pack: QuestionPack, processName: string, date: stri
   const firsts = pack.items.filter(p => p.first).length;
   if (firsts) b.paragraph(`Please answer the ${firsts === 1 ? 'question' : `${firsts} questions`} marked "Answer first" before the others: ${firsts === 1 ? 'it is' : 'they are'} what only you can tell us and what the recommendation depends on. The others can wait until sign-off.`);
   b.table('Questions', ['Ref', 'Question', 'Why it matters', 'How to answer', 'Your answer'],
-    pack.items.map(p => [p.ref, p.item.question, p.first ? `Answer first. ${GROUP_LABEL[p.item.group]}` : GROUP_LABEL[p.item.group], p.how, '']), 'No questions.');
+    pack.items.map(p => [p.ref, p.item.question, p.first ? `Answer first. ${groupLabel(p.item)}` : groupLabel(p.item), p.how, '']), 'No questions.');
   return {
     type: 'questions', title: 'Questions to answer', subtitle: `${processName}: ${pack.label}`,
     control: [['Process', processName], ['For', pack.label], ['Questions', String(pack.items.length)], ['Date', date]].map(([key, value]) => ({ key, value })),

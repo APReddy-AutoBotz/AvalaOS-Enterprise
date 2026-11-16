@@ -7,7 +7,7 @@ import { orderedSteps } from '../processModel/selectors.ts';
 import { APPROACH_LABEL, type Approach } from '../assess/scoring.ts';
 import { criterionText } from '../requirements/register.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
-import { controlOf, ACCESS_TEXT, modeOf, sourceList, type DocInput } from './common.ts';
+import { controlOf, decidedIn, ACCESS_TEXT, modeOf, sourceList, type DocInput } from './common.ts';
 
 export interface AutomationUnit { id: string; approach: Approach; systemIds: string[]; steps: Step[] }
 
@@ -46,6 +46,7 @@ export function buildSdd(input: DocInput): DocTree {
   b.section('1', 'Solution overview and architecture', 1);
   b.paragraph(units.length
     ? `The solution for ${m.meta.name} has ${units.length} automation ${units.length === 1 ? 'unit' : 'units'} covering ${units.reduce((n, u) => n + u.steps.length, 0)} of ${steps.length} steps. The remaining steps stay with people, as set out in the PDD section "Delivery model". What each unit must do is in the FRD.`
+    : decidedIn(input) ? `${decidedIn(input)!.label}, the approach decided for ${m.meta.name}, can do no step yet, so there is nothing to design. The PDD section "Delivery model" shows why.`
     : `No step of ${m.meta.name} is recommended for automation yet, so there is nothing to design. The PDD section "Delivery model" shows why.`);
   b.table('Automation units', ['Unit', 'Approach', 'Applications', 'Steps'], units.map(u => [u.id, APPROACH_LABEL[u.approach], u.systemIds.map(sys).join(', ') || missing(), u.steps.map(s => String(no(s.id))).join(', ')]), 'No automation units.');
   if (units.length > 1) decide('Do the automation units run as one process or as separate jobs handing work over through a queue?', 'One process; separate jobs with a work queue');

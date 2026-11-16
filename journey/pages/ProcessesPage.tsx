@@ -3,7 +3,8 @@
 // compares them. Cards open by default up to CARDS_UP_TO processes, the list beyond that; a person's own
 // choice between the two is remembered in the browser.
 import { NOT_ASSESSED, offersPurpose, PURPOSE_LABEL, PURPOSE_WHAT, PURPOSES, type PurposeValue } from '../../domain/plan/purpose.ts';
-import { setPurpose } from '../../domain/processModel/patch.ts';
+import { decideApproach, setPurpose } from '../../domain/processModel/patch.ts';
+import { DecidedFields } from '../process/BriefPanel.tsx';
 import React from 'react';
 import type { JourneyStore, Member, ProcessRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -46,6 +47,8 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
   // "Assess it and document it" is chosen to begin with: what every process is until someone answers.
   const [purpose, setPurpose_] = React.useState<PurposeValue>('assess');
   const askPurpose = offersPurpose(workspace.modules);
+  const [approach, setApproach] = React.useState<'rpa' | 'api' | 'ai_assist' | 'agent'>('rpa');
+  const [reason, setReason] = React.useState('');
   const [adding, setAdding] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -81,7 +84,8 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
       // What is wanted from the process, when it is not the default: kept on its first draft, with who and when.
       if (askPurpose && purpose !== 'assess') {
         const [draft, me] = await Promise.all([store.startDraft(p.id), store.currentUser().catch(() => null)]);
-        const r = setPurpose(draft.model, { value: purpose, by: me?.id ?? null, at: new Date().toISOString() });
+        const at = new Date().toISOString();
+        const r = purpose === 'decided' ? decideApproach(draft.model, { approach, reason, by: me?.id ?? null, at }) : setPurpose(draft.model, { value: purpose, by: me?.id ?? null, at });
         await store.savePatch(draft.revisionId, draft.seq, r.patch, 'user', `What is wanted from the process: ${PURPOSE_LABEL[purpose]}`);
       }
       nav.go({ page: 'process', processId: p.id, stage: 'sources' });
@@ -95,7 +99,7 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
     <form onSubmit={create} className="w-full max-w-xl space-y-3 text-left">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1"><Field label="Process name" placeholder="e.g. Vendor invoice processing" required maxLength={200} value={name} onChange={e => setName(e.target.value)} autoFocus /></div>
-        <Button type="submit" disabled={busy || !name.trim()}>Add process</Button>
+        <Button type="submit" disabled={busy || !name.trim() || (purpose === 'decided' && !reason.trim())}>Add process</Button>
       </div>
       {/* Asked when the organisation uses the documents; never worked out by Avala OS (domain/plan/purpose.ts). */}
       {askPurpose && (
@@ -109,6 +113,7 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
               </label>
             ))}
           </div>
+          {purpose === 'decided' && <DecidedFields approach={approach} reason={reason} onApproach={setApproach} onReason={setReason} />}
           <p className="mt-1 text-xs text-slate-500">You can change this later in The brief.</p>
         </fieldset>
       )}
@@ -243,6 +248,8 @@ function ProcessCardView({ p, f, nameOf, open }: { p: ProcessRow; f: LoadedFacts
           <Figures card={f.card} className="mt-5 sm:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)_minmax(0,0.8fr)]" />
           <div className="mt-5"><StepSplit card={f.card} /></div>
         </>
+      ) : f.decidedLine ? (
+        <p className="mt-5 rounded-xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600" data-testid="decided-card">{f.decidedLine}. Its documents are written for that approach; no score and no place in a ranking.</p>
       ) : f.purpose === 'as_is' ? (
         <p className="mt-5 rounded-xl bg-slate-50 px-4 py-4 text-sm leading-6 text-slate-600" data-testid="not-assessed">{NOT_ASSESSED}: its process document, map and evidence pack describe how the work is done.</p>
       ) : (

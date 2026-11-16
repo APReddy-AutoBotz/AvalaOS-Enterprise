@@ -205,7 +205,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
 
 const rolesOf = (p: LoadedFacts, userId: string) => (['analyst', 'architect', 'approver'] as const).filter(d => (d === 'analyst' ? p.analystId : d === 'architect' ? p.architectId : p.approverId) === userId).map(d => DUTY[d]);
 /** What to say in place of the figures while a process has nothing to assess. */
-const notAssessed = (p: LoadedFacts) => (p.purpose === 'as_is' ? `${NOT_ASSESSED}${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}` : p.status === 'none' ? 'No sources yet, so nothing to assess.' : `Not assessed yet${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}`);
+const notAssessed = (p: LoadedFacts) => (p.decidedLine ? `${p.decidedLine}${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}` : p.purpose === 'as_is' ? `${NOT_ASSESSED}${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}` : p.status === 'none' ? 'No sources yet, so nothing to assess.' : `Not assessed yet${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}`);
 
 /** The only process a person has: room for its figures and the people on it. */
 function OneProcess({ p, mine, userId, nameOf, open }: { p: LoadedFacts; mine: boolean; userId: string; nameOf: (id: string) => string; open: (id: string) => void }) {

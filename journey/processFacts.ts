@@ -9,12 +9,15 @@ import { processCard, type ProcessCard } from '../domain/assess/portfolio.ts';
 import type { AssessmentSettings } from '../domain/assess/settings.ts';
 import { sharedLookOf } from './process/sourceLook.ts';
 import { firstListCounts } from '../domain/questions/counts.ts';
-import { purposeOf, whatFollows } from '../domain/plan/purpose.ts';
+import { DECIDED_LIST_LINE, purposeOf, whatFollows } from '../domain/plan/purpose.ts';
+import { APPROACH_LABEL } from '../domain/assess/scoring.ts';
 
 export type LoadedFacts = ProcessFacts & {
   statusLabel: string; statusTone: 'neutral' | 'draft' | 'approved' | 'changed';
-  /** The assessment in short; null until the process has a step to assess, and for a process documented as it is. */
+  /** The assessment in short; null until the process has a step to assess, and for a process documented as it is or with its approach decided. */
   card: ProcessCard | null;
+  /** "Approach decided by a person: Rule-based RPA", when how it will be built is already decided. */
+  decidedLine?: string;
 };
 export const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
@@ -38,5 +41,6 @@ export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, setti
     // A process documented as it is has no assessment: no score, no recommendation, no place in a ranking.
     card: model && whatFollows(model).assessed ? processCard(assessProcess(model, { settings, decisions })) : null,
     ...(purposeOf(model) !== 'assess' ? { purpose: purposeOf(model) } : {}),
+    ...(purposeOf(model) === 'decided' && model?.meta.decidedApproach ? { decidedLine: DECIDED_LIST_LINE(APPROACH_LABEL[model.meta.decidedApproach.approach]) } : {}),
   };
 }

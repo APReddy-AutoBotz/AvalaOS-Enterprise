@@ -5,7 +5,9 @@
 // filled in for the person. Rules and words: domain/plan/delivery.ts; edits: setBriefFact, confirmBrief.
 import React from 'react';
 import type { DoneToday, InMind, PlannedDoc, ProcessBrief, WorkKind } from '../../domain/processModel/types.ts';
-import { confirmBrief, setBriefFact, setPurpose, updateFact } from '../../domain/processModel/patch.ts';
+import { confirmBrief, decideApproach, removeDecidedApproach, setBriefFact, setPurpose, updateFact } from '../../domain/processModel/patch.ts';
+import { APPROACH_LABEL } from '../../domain/assess/scoring.ts';
+import { decidedBy } from '../../domain/assess/decided.ts';
 import { PURPOSE_LABEL, PURPOSE_WHAT, PURPOSES, purposeOf, type PurposeValue } from '../../domain/plan/purpose.ts';
 import { DONE_TODAY, IN_MIND, PLANNED_DOCS, WORK_KINDS } from '../../domain/processModel/validate.ts';
 import { briefLines, DOC_LABEL, DONE_TODAY_LABEL, hasBrief, IN_MIND_LABEL, WORK_KIND_LABEL, type BriefLine } from '../../domain/plan/delivery.ts';
@@ -198,12 +200,22 @@ export function PurposeLine({ editor, canEdit, meId, names }: { editor: ModelEdi
   const value = purposeOf(m);
   const [editing, setEditing] = React.useState(false);
   const [pick, setPick] = React.useState<PurposeValue>(value);
-  React.useEffect(() => { if (!editing) setPick(value); }, [value, editing]);
+  const decided = m.meta.decidedApproach ?? null;
+  const [approach, setApproach] = React.useState<'rpa' | 'api' | 'ai_assist' | 'agent'>(decided?.approach ?? 'rpa');
+  const [reason, setReason] = React.useState(decided?.reason ?? '');
+  React.useEffect(() => { if (!editing) { setPick(value); setApproach(decided?.approach ?? 'rpa'); setReason(decided?.reason ?? ''); } }, [value, editing, decided]);
   const who = given?.by ? names[given.by] ?? null : null;
   const date = given ? when(given.at) : null;
+  const sameDecision = Boolean(decided && decided.approach === approach && decided.reason === reason.trim());
   const save = async () => {
-    if (await editor.apply(mm => setPurpose(mm, { value: pick, by: meId, at: new Date().toISOString() }), `What is wanted from the process: ${PURPOSE_LABEL[pick]}`)) setEditing(false);
+    const at = new Date().toISOString();
+    const ok = pick === 'decided'
+      ? await editor.apply(mm => decideApproach(mm, { approach, reason, by: meId, at }), `How it will be built is decided: ${APPROACH_LABEL[approach]}`)
+      : await editor.apply(mm => setPurpose(mm, { value: pick, by: meId, at }), `What is wanted from the process: ${PURPOSE_LABEL[pick]}`);
+    if (ok) setEditing(false);
   };
+  // Removing the decision: each step goes back to the scoring's answer; "decided" goes back to "assess" in the same edit.
+  const remove = () => editor.apply(mm => removeDecidedApproach(mm, { by: meId, at: new Date().toISOString() }), 'The decided approach removed');
   return (
     <div className="grid gap-1 border-b border-slate-100 py-3 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4" data-testid="brief-purpose">
       <dt className="text-sm font-medium text-slate-600">What do you want from this process?</dt>
@@ -219,9 +231,10 @@ export function PurposeLine({ editor, canEdit, meId, names }: { editor: ModelEdi
                 </label>
               ))}
             </div>
+            {pick === 'decided' && <DecidedFields approach={approach} reason={reason} onApproach={setApproach} onReason={setReason} />}
             <p className="mt-2 text-xs text-slate-500">Nothing is deleted when you change this: answers, choices, edits and comments stay, and come back if you change it again.</p>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Button disabled={editor.saving || (pick === value && Boolean(given))} onClick={save}>Save</Button>
+              <Button disabled={editor.saving || (pick === 'decided' ? !reason.trim() || (value === 'decided' && sameDecision) : pick === value && Boolean(given))} onClick={save}>Save</Button>
               <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
             </div>
           </fieldset>
@@ -235,9 +248,32 @@ export function PurposeLine({ editor, canEdit, meId, names }: { editor: ModelEdi
             <p className="mt-1 text-xs leading-5 text-slate-500">
               {given ? `Answered by ${who ?? 'someone whose name is not recorded'}${date ? ` on ${date}` : ''}.` : 'Until someone answers, the process is assessed and documented.'}
             </p>
+            {decided && (
+              <div className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800 ring-1 ring-inset ring-slate-200" data-testid="decided-approach">
+                <span className="font-semibold">{APPROACH_LABEL[decided.approach]}</span> for the whole process, decided {decidedBy(decided, names)}: "{decided.reason}".
+                {value !== 'decided' && <span className="block text-xs text-slate-600">Still in effect for every step a person has not set themselves, until it is removed.</span>}
+                {canEdit && <button type="button" className="ml-2 text-xs font-semibold text-[#002C4B] hover:underline" disabled={editor.saving} onClick={remove}>Remove the decided approach</button>}
+              </div>
+            )}
           </>
         )}
       </dd>
+    </div>
+  );
+}
+
+/** The approach decided for the whole process and the reason, which is required (package 9). */
+export function DecidedFields({ approach, reason, onApproach, onReason }: { approach: 'rpa' | 'api' | 'ai_assist' | 'agent'; reason: string; onApproach: (a: 'rpa' | 'api' | 'ai_assist' | 'agent') => void; onReason: (r: string) => void }) {
+  return (
+    <div className="mt-2 grid gap-2 pl-6 sm:grid-cols-[14rem_minmax(0,1fr)]" data-testid="decided-fields">
+      <label className="text-xs font-medium text-slate-700">Which approach
+        <select aria-label="Which approach" value={approach} onChange={e => onApproach(e.target.value as 'rpa')} className={`${input} mt-0.5`}>
+          {(['rpa', 'api', 'ai_assist', 'agent'] as const).map(a => <option key={a} value={a}>{APPROACH_LABEL[a]}</option>)}
+        </select>
+      </label>
+      <label className="text-xs font-medium text-slate-700">Why (required)
+        <input aria-label="Why this approach" value={reason} maxLength={500} onChange={e => onReason(e.target.value)} className={`${input} mt-0.5`} placeholder="e.g. The client runs this platform for every process" />
+      </label>
     </div>
   );
 }

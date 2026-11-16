@@ -14,7 +14,7 @@ import { prioritise, type Priority } from './priority.ts';
 import { notDoneToday, processWords } from '../plan/intended.ts';
 import { DEFAULT_SETTINGS, type AssessmentSettings } from './settings.ts';
 import type { Decisions } from './decisions.ts';
-import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
+import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, decidedFits, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
 
 export const THRESHOLDS = {
   /** Simplify first when this share of steps is rework or duplicate entry. */
@@ -136,10 +136,26 @@ export function yearlyVolume(m: ProcessModel): Computed<Range> {
  * and everything built from them follow the approach in effect. Scores never change. Without
  * `decisions` it is the scoring alone.
  */
-export function assessProcess(model: ProcessModel, options: { rate?: Rate | null; settings?: AssessmentSettings; decisions?: Decisions | null } = {}): ProcessAssessment {
+export function assessProcess(model: ProcessModel, options: { rate?: Rate | null; settings?: AssessmentSettings; decisions?: Decisions | null; scoringAlone?: boolean } = {}): ProcessAssessment {
   const chosen = options.decisions?.overrides ?? {};
+  // An approach decided for the whole process (package 9) applies everywhere except where the scoring
+  // alone is asked for (the Assessment page's own rows). The order for each step: a person's own choice
+  // for it; else the decided approach where it can do the step; else the step stays with a person.
+  const decided = options.scoringAlone ? null : model.meta.decidedApproach ?? null;
+  const fits = decided ? decidedFits(model, decided.approach) : null;
   const steps = scoreSteps(model).map(s => {
     const o = chosen[s.stepId];
+    const fit = fits?.get(s.stepId);
+    if (decided && fit && !s.alreadyAutomated) {
+      const info = { ...fit, approach: decided.approach };
+      if (o) return { ...(o.approach !== s.winner ? { ...s, winner: o.approach, recommended: s.winner } : s), decided: { ...info, person: true as const } };
+      const to: Approach = fit.status === 'can' ? decided.approach : 'human';
+      const label = APPROACH_LABEL[decided.approach];
+      const reason = fit.status === 'can' ? `${label} was decided for the whole process and can do this step.`
+        : fit.status === 'unknown' ? `Not known yet whether ${label} can do this step: ${fit.questions.map(q => q.question).join(' ')} Until it is known, the step stays with a person.`
+        : `${label} cannot do this step: ${lower(fit.reason) || 'its score is low on what is known'} The step stays with a person.`;
+      return { ...s, winner: to, ...(to !== s.winner ? { recommended: s.winner } : {}), reason, decided: info };
+    }
     return o && !s.alreadyAutomated && o.approach !== s.winner ? { ...s, winner: o.approach, recommended: s.winner } : s;
   });
   const anyChosen = steps.some(s => s.recommended);

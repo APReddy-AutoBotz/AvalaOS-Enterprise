@@ -76,10 +76,10 @@ function ProfileField({ label, hint, status, quote, children, from, candidates, 
   );
 }
 
-const YES_NO: [string, string][] = [['', 'Unknown'], ['true', 'Yes'], ['false', 'No']];
+export const YES_NO: [string, string][] = [['', 'Unknown'], ['true', 'Yes'], ['false', 'No']];
 const CHANGE: [string, string][] = [['', 'Unknown'], ['none', 'No change expected'], ['minor', 'Minor change'], ['major', 'Major change']];
-const API: [string, string][] = [['unknown', 'Unknown'], ['confirmed', 'Yes, confirmed'], ['reported', 'Said to exist, not confirmed'], ['confirmed_absent', 'No API']];
-const STEP_COLUMNS: { trait: TraitName; head: string; title: string; options: [string, string][] }[] = [
+export const API_CHOICES: [string, string][] = [['unknown', 'Unknown'], ['confirmed', 'Yes, confirmed'], ['reported', 'Said to exist, not confirmed'], ['confirmed_absent', 'No API']];
+export const STEP_COLUMNS: { trait: TraitName; head: string; title: string; options: [string, string][] }[] = [
   { trait: 'rulesComplete', head: 'Rules written', title: 'Rules stated in full and stable', options: YES_NO },
   { trait: 'input', head: 'Input', title: 'Form of the input', options: [['', 'Unknown'], ['structured', 'Structured'], ['semi_structured', 'Semi-structured'], ['unstructured', 'Documents'], ['paper', 'Paper']] },
   { trait: 'judgment', head: 'Judgment', title: 'Needs a judgment or accountable decision', options: YES_NO },
@@ -87,7 +87,7 @@ const STEP_COLUMNS: { trait: TraitName; head: string; title: string; options: [s
   { trait: 'language', head: 'Free text', title: 'Drafts, summarises or classifies free text', options: YES_NO },
   { trait: 'write', head: 'Changes', title: 'What it changes', options: [['', 'Unknown'], ['none', 'Nothing'], ['record', 'A record'], ['financial', 'Money'], ['irreversible', 'Cannot be undone']] },
 ];
-const parseTrait = (trait: TraitName, v: string): unknown => (v === '' ? null : trait === 'input' || trait === 'write' ? v : v === 'true');
+export const parseTrait = (trait: TraitName, v: string): unknown => (v === '' ? null : trait === 'input' || trait === 'write' ? v : v === 'true');
 const traitText = (s: Step, trait: TraitName): string => { const v = known((s.traits as Record<string, Fact<unknown>> | undefined)?.[trait]); return v === null ? '' : String(v); };
 
 export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, reading, onRead }: {
@@ -208,7 +208,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                   return (
                     <tr key={s.id} data-testid="application-row">
                       <td className="px-4 py-3 font-medium text-slate-900">{s.name}{apis[0]?.name ? <span className="block text-xs font-normal text-slate-500">{apis[0].name}</span> : null}</td>
-                      <td className="w-56 px-4 py-3"><Pick cell label={`API of ${s.name}`} value={api === 'unknown' ? '' : api} options={API.map(([v, l]) => [v === 'unknown' ? '' : v, l])} disabled={!canEdit} onChange={v => editor.apply(m => setSystemApi(m, { systemId: s.id, access: (v || 'unknown') as AccessStatus }), `API of ${s.name}`)} /></td>
+                      <td className="w-56 px-4 py-3"><Pick cell label={`API of ${s.name}`} value={api === 'unknown' ? '' : api} options={API_CHOICES.map(([v, l]) => [v === 'unknown' ? '' : v, l])} disabled={!canEdit} onChange={v => editor.apply(m => setSystemApi(m, { systemId: s.id, access: (v || 'unknown') as AccessStatus }), `API of ${s.name}`)} /></td>
                       <td className="w-36 px-4 py-3"><Pick cell label={`Robots allowed on the screens of ${s.name}`} value={known(s.uiAllowed) === null ? '' : String(known(s.uiAllowed))} options={YES_NO} disabled={!canEdit} onChange={v => editor.apply(m => setSystemUiAllowed(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Robots on the screens of ${s.name}`)} />{robotsBlocked(s) && <span className="mt-1 block text-[11px] leading-4 text-rose-700">{known(s.uiAllowed) === false ? 'RPA ruled out here' : `RPA ruled out: ${s.access.find(a => a.method === 'ui' && a.access === 'confirmed_absent')?.name ?? 'UI automation'} not available`}</span>}{quoteOf(s.uiAllowed) && <span className="mt-1 block max-w-[14rem] text-[11px] italic leading-4 text-slate-500">“{quoteOf(s.uiAllowed)!.slice(0, 90)}{quoteOf(s.uiAllowed)!.length > 90 ? '…' : ''}”</span>}</td>
                       <td className="w-36 px-4 py-3"><Pick cell label={`Screens of ${s.name} stable`} value={known(s.uiStable) === null ? '' : String(known(s.uiStable))} options={YES_NO} disabled={!canEdit} onChange={v => editor.apply(m => setSystemUiStable(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Screens of ${s.name}`)} /></td>
                       <td className="w-36 px-4 py-3"><Pick cell label={`${s.name} through a remote desktop`} value={known(s.remote) === null ? '' : String(known(s.remote))} options={YES_NO} disabled={!canEdit} onChange={v => editor.apply(m => setSystemRemote(m, { systemId: s.id, value: v === '' ? null : v === 'true' }), `Remote desktop for ${s.name}`)} /></td>
