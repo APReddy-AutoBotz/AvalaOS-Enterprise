@@ -1,3 +1,4 @@
+-- Applied 16 November 2026 (09:53 UTC) on the owner's yes.
 -- Package 4 of docs/next-plan.md (section 3b; applied only on the owner's yes after a rolled-back trial).
 -- What Avala OS looked up in a process's sources, kept on the server for everyone instead of in each
 -- browser: the look (the set of sources, the questions looked up, the answers found, what it cost, what was
