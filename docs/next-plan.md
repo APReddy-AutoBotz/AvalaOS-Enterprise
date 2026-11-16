@@ -14,6 +14,8 @@ Releases: 3 production deploys are left until 22 November 2026 (after the sixth 
 
 **Update, 16 November 2026 (late evening): the sixth release.** Sections 3 and 3b and the homepage package (package 7) are live (merge commit `218943a` on `main`, on the owner's word), reviewed first (`claude/review-sixth-release-16-nov.md` and `claude/review-second-bundle-16-nov.md` in the project). Where a section below says "in review", read "released". The server functions were redeployed from `main` (the first run failed on GitHub's rate limit before deploying anything; the second succeeded). Still to be seen: the first weekday email with the new count and comments, compared with My work. What comes next is section 4, with three additions from the reviews: an inquiry form on the homepage (today "Book a walkthrough" opens an email; it needs a server function, a place to keep requests, spam control and a line in the privacy notice: ask first); the evidence pack saying that its count of open questions is every item as recorded (the screens merge repeats); and recording who made a choice of approach by name or id.
 
+**Update, 16 November 2026 (night): the next work is section 3c.** After the release the owner asked whether a team can get its documents without the assessment. It can, with a modest change: a person says what they want from a process, and two new answers are built as packages 8 and 9. One small change is waiting in `next` for the next release: the heading of the homepage tour (#174, "From your documents to a Delivery board").
+
 **Update, 16 November 2026 (afternoon):** section 3 is built and merged into `next` (pull requests #162, #163, #164), with no server function or database change. The open pull request `next` → `main` is the preview for the review; nothing is released until the owner says "release". What was built, and where it differs from the plan, is at the start of section 3.
 
 **Update, 16 November 2026 (evening):** section 3b is built and merged into `next` too (pull requests #168, #169, #170). Its two database changes were applied on the owner's yes after rolled-back trials, at 09:53 and 09:54 UTC (`process_source_looks`, `digest_counts_and_comments`); the email server function `journey-notify` changes with the release and was not deployed by hand. One release carries sections 3 and 3b. What was built, and where it differs from the plan, is at the start of section 3b.
@@ -39,7 +41,10 @@ The weekday email's count, review comments in it and on My work, and the look in
 | Feature | State |
 | --- | --- |
 | Push to Jira and Azure DevOps, with status coming back | Not built. The owner has not decided. Today: CSV export for both, CSV import from Jira. |
-| Evidence pack for regulated clients | Built (section 3b, package 6), in review. |
+| Evidence pack for regulated clients | Built (section 3b, package 6), released. |
+| Documents without the assessment: "Document it as it is", and "how it will be built is already decided" | Not built. Section 3c, packages 8 and 9. |
+| "Custom software" as an approach, with a solution design for an application | Not built. The owner decides later; larger than section 3c. |
+| A fifth set-up for an organisation: documents without the assessment | Not built. A database change; after a real person has used package 8. |
 | More typical processes to start from | One only (supplier invoice processing), as a trial. More only after a real person has used the trial. |
 | Other AI providers offered to workspaces | Built for Anthropic, Amazon Bedrock, Mistral AI and a company's own endpoint, but offered only to the platform owner until the extraction check has been run on each. OpenAI and Azure OpenAI are offered. |
 | Ask Avala: drafts of document sections as suggestions | Not built. Depends on the decision below about a company's own sections. |
@@ -218,6 +223,74 @@ The owner found the page too long; two outside reviews (in the owner's hands) ag
 
 **Not in this bundle, and why.** The other AI providers (each needs the owner's own key and a run of the reading check). The push to Jira (waits for a pilot that asks). More typical processes (after a real person has used the first). What a failed reading keeps, and server errors in the error monitor (they touch the reading function or need a new library).
 
+## 3c. The third bundle: documents without the assessment (owner, 16 November 2026)
+
+**Not built. For a builder chat; the review chat reviews it on the preview before any release.**
+
+**Where it comes from.** The owner's first idea for Avala OS was that a team hands over its transcripts, SOPs and pictures and gets its documents. Every department documents its processes; most of them are not automating anything. He asked whether a person could say, when the files are added, that they want the documents and not an assessment.
+
+**What is true today (read from the code on 16 November 2026).** The documents are written from the process record, not from the Assessment page. Documents opens as soon as the process has steps; the assessment is worked out in the background whether or not anyone opens its page. So nothing has to be rebuilt. Three things are in the way: the Assessment page sits between Process and Documents and looks like a required step; every document assumes a change is being made (the PDD has a To-Be half and a delivery model, the FRD has requirements only for steps recommended for automation, the SDD has nothing to design without them); and a person who never opened the assessment would get documents shaped by a recommendation they did not look at.
+
+**What is decided.** A person says what they want from a process. Avala OS never works this out from the sources and never assumes it:
+
+1. **Assess it and document it.** As today. This is what every existing process is, and what a process is when nobody has answered.
+2. **Document it as it is.** No change is being made. Package 8.
+3. **Document it: how it will be built is already decided.** A person names the one approach. Package 9.
+
+The promise stays narrow, on the owner's word ("let's not bloat the application"): **process documentation for any team**, each line traced to its source. Not documentation in general: a product specification that starts from an idea, an architecture description, an API reference, a manual, a policy or a contract has no process behind it, so there would be nothing to trace it to.
+
+**Rules for this bundle.**
+
+- **No database change and no server function change is expected.** The answer is a fact a person gives about one process, like the facts of the brief, or an entry in the decisions list, like the map's shape: both are already stored. If the build needs a migration after all, stop and ask first, by the rules of section 3b (additive only, its test, a rolled-back trial, the owner's yes).
+- **A change under `domain/` that a server function reads goes live with the release.** Ask Avala's knowledge of the platform is one. Name every such change in the report. Do not deploy a function by hand.
+- **One rule decides what is shown, in one place.** A page, a count, a document, the email and Ask Avala must all ask the same function what this process's purpose is and what follows from it, as `stagesFor` does for an organisation's parts. No page decides for itself.
+- **Nothing is deleted by switching.** A process switched from one answer to another and back is exactly as it was: its answers, a person's choices of approach, the edits and comments on its documents, its approved revisions.
+- **Build for the general case.** Try each package on the sample, on a process that is not done today, and on a process with three steps and no applications.
+- Package 8 first. Package 9 starts only when package 8 is merged. If package 9 grows larger than package 8 was, stop and report instead of finishing it.
+
+### Package 8: document a process as it is
+
+**Why.** Finance, HR, procurement, operations and compliance teams document how work is done with no plan to automate it. Today they would get a document that talks about robots, a To-Be process and what is in scope for automation.
+
+**Where a person answers.** When a process is started, before or with the first files: "What do you want from this process?", with the answers above (the third arrives with package 9). And in "The brief", where it can be changed at any time by someone who may edit the process. It shows who answered and when.
+
+**What a person then sees, for "Document it as it is".**
+
+- **Pages of the process:** Sources, Process, Documents, Flows. Assessment and Work items are not shown. A link that lands on one of them says in one line that this process is documented as it is, and where to change that.
+- **Documents:** the process document (PDD) and the evidence pack. The BRD, FRD, SDD, agent document and test pack each describe a change; they are not offered, and one line on Documents says so and where to switch. The delivery plan says the same: one document, and why.
+- **The process document, as it is:** what the process is for, who is involved, the applications, the map, the steps in detail, decisions and business rules, input data, pain points, exceptions as people handle them today, reporting and audit, other observations, sources, open gaps. Left out: prerequisites for automation, the To-Be process and its map, the delivery model, in and out of scope for automation, application error handling for a solution. No sentence anywhere in it speaks of automation, a robot, an agent, a recommendation, a score or hours saved. Section numbers run without gaps. A process that is not done today keeps the words it has now ("intended").
+- **Flows:** the one map of the process. No To-Be map.
+- **Questions:** only those about the process itself. A question that exists to choose an approach, to size a saving or to plan a build is not asked, not counted and not emailed. My work, the Processes list, the Portfolio and the weekday email show the same number. The automatic look in the sources works on the questions that remain.
+- **Lists of processes** (My work, Processes, Portfolio, the process's summary): the process appears with "Documented as it is, not assessed". It has no score, no recommendation and no place in a ranking, and it is not counted in a total of savings.
+- **Ask Avala:** knows what the answer is and what follows from it. Asked for the recommendation or a score of such a process, it says the process is not assessed and how to change that. It never cites a score for it.
+- **Approval, review comments, downloads, the company's own sections and look:** unchanged.
+
+**Done when.** Unit tests: the one rule (pages, documents, question kinds) for each answer; the as-is process document on three fixtures (the sample, a process not done today, three steps with no applications) contains no section and no sentence from the left-out list, and its numbers run without gaps; the question count is the same from every place that shows it; a process switched there and back is unchanged apart from the answer itself. Browser tests on the sample: a process started as "Document it as it is" has no Assessment page, shows one map, and its process document downloads as Word; switched to "Assess it and document it", everything is back. The existing tests pass untouched for a process nobody has answered for. The review will read the as-is document of one of the owner's own processes, on a copy, line by line for any word about automation.
+
+### Package 9: how it will be built is already decided
+
+**Why.** A team, or a consulting partner whose client has already chosen the technology, wants the PDD and the SDD without reading a recommendation and then changing it one step at a time, each with a reason. Today that is the only way, and Ask Avala says so ("there is no single setting that puts one approach on every step").
+
+**What a person sees.** The third answer, then one question: which approach (rule-based RPA, API integration, AI that assists people, an AI agent), and a short reason, which is required as it is for a single step. Exactly one approach: a team that wants a mix wants the assessment. It is recorded with who and when.
+
+**What follows, by rule.**
+
+- **Each step:** a person's own choice for that step, if there is one; otherwise the decided approach where the scoring's rules say that approach can do the step (the rule Ask Avala already uses for "what RPA alone could do"); otherwise the step stays with a person, with the reason in the rules' own words. Never a different technology from the one named.
+- **Documents:** all of them, as for an assessed process, written from those steps. Where they say "recommended" today they say who decided, when and why. At the top of Documents, one line: the approach, who decided it, how many of the steps it can do and how many stay with people, with a way to see which and why. The evidence pack lists the decision among the decisions people made.
+- **Pages:** the Assessment page is not shown; Work items is, when the organisation has the board. Switched to "Assess it and document it", the Assessment page shows the scoring's own recommendation beside the decided approach, as it shows a person's choice for a step today, and the decided approach stays in effect until a person removes it.
+- **Questions:** those a build needs (access to the applications, exceptions, rules) stay. Those that only serve choosing between approaches go, as in package 8. The plan says which kinds stay before anything is built.
+- **Lists of processes:** "Approach decided by a person: RPA", with no score and no place in a ranking.
+- **Ask Avala:** the fact about there being no single setting is replaced by how this works. Run the Ask Avala measure afterwards and report it.
+
+**Done when.** Unit tests: the order of precedence for a step; a step the approach cannot do stays with a person with its reason; no document of a decided process says "recommended"; the evidence pack lists the decision; removing the decision returns the process to the scoring's answer. A browser test on the sample: decided as RPA, the documents name only RPA and people, and the line at the top of Documents gives the two counts. The Ask Avala measure meets its targets.
+
+### After the third bundle
+
+- Bring the notes up to date (`AGENTS.md`, this file and its copy in the project). Open the pull request `next` → `main` as the preview; do not merge it.
+- The report says, apart from the usual: whether anything under `domain/` that a server function reads has changed, and what could not be tried before a release.
+
+**Not in this bundle, and why.** "Custom software" as an approach, with a solution design for an application instead of automation units: a real gap for software teams, larger than both packages, and the owner decides later (the brief already knows "a tool to be built", which plans a BRD, FRD and SDD). A fifth set-up for an organisation, documents without the assessment: the set-ups are checked in the database, so it is a migration, and it should wait until a real person has used package 8. The homepage: it claims only what is live, so its wording changes after the release that carries this, by the review chat.
+
 ## 4. After that release: the order advised
 
 The owner chooses; this is the advice and the reason for each place.
@@ -240,6 +313,9 @@ The owner chooses; this is the advice and the reason for each place.
 | Open review comments show under "Needs you" for the people named on the process | Yes |
 | Six columns as the limit before a map becomes a simple flow | Start with six; change after seeing real maps |
 | Left to right in the same package | Yes, on screen only, and dropped if it does not look right |
+| What Avala OS promises to document | Process documentation for any team, not documentation in general (owner, 16 November 2026) |
+| A person says what they want from a process; Avala OS never works it out | Yes (section 3c) |
+| The line above the homepage headline names analysis and delivery teams too | Asked, not yet answered |
 | Push to Jira and Azure DevOps | Wait for a pilot that asks |
 | The interview replaces "Closing the gaps" | Not yet |
 | A company's own document section may have text per process | Yes, when Ask Avala's section drafts are built |
