@@ -12,24 +12,15 @@ Proven on real documents so far: two of the owner's own processes (Questionnaire
 
 Releases: 4 production deploys are left until 22 November 2026. Bundle work; one release for section 3.
 
+**Update, 16 November 2026 (afternoon):** section 3 is built and merged into `next` (pull requests #162, #163, #164), with no server function or database change. The open pull request `next` → `main` is the preview for the review; nothing is released until the owner says "release". What was built, and where it differs from the plan, is at the start of section 3.
+
 ## 2. Everything still open
-
-### From the owner's test of 16 November
-
-| Item | What is wrong today |
-| --- | --- |
-| The map has one shape | Every map is a top-to-bottom swimlane with one column per role. On a process where one role does most of the work, or with many roles, most columns are nearly empty and arrows run long. Nothing chooses another shape. |
-| The automatic look in the sources repeats work | A look cut short by leaving or reloading the page is started again: 9 calls where 4 were needed on the owner's process, about 45,000 tokens. |
 
 ### Small faults, no server or database change
 
-- A question typed in Ask Avala while the panel is still reading the record is ignored without a word.
-- Ask Avala on a board offers follow-up questions about the workspace after answering about the process behind the board.
-- A long step name is cut off in the Process stage's step table.
-- The Process stage's "Open questions" tab counts every raw item; the first list counts after merging repeats. Two numbers for one thing.
-- When the month's AI allowance is used up, the automatic look stops and says nothing.
-- A narrative check (`groundingIssues`) lets two real names put together pass as one known name.
-- A typical-process comparison a person asked for, and "Skip for now", are forgotten when the page is left.
+- A typical-process comparison a person asked for, and "Skip for now", are forgotten when the page is left (left as they are on purpose: light conveniences).
+
+The map's single shape, the repeated look in the sources and the other small faults of the owner's test of 16 November are built (section 3), in review.
 
 ### Small faults that need a change to the live server or database (ask first, one by one)
 
@@ -74,6 +65,12 @@ Releases: 4 production deploys are left until 22 November 2026. Bundle work; one
 ## 3. The next release: one bundle, three packages
 
 All three change only the screens and the browser's rules. No server function and no database change, so everything can be tried on the preview. Build in this order, one pull request each into `next`.
+
+**Built (16 November 2026), in review.** Each package's "Done when" is met with the tests it names; the details are in `AGENTS.md` (Progress). Where the build differs from the text below, and why:
+
+- Package 1: "Across the page" is in; turning the simple flow on its side needed only the labels of events and decision points moved under and before their shapes, so no flow runs through them. The choice of direction is kept in the person's browser (it changes only how the screen reads); a viewer's choice of shape lasts for the visit and is followed by the documents on screen during it. Choosing the suggested shape removes the stored choice, so the suggestion follows the process again. The sample is six columns (five roles and "No role recorded"), exactly at the limit, so it stays in swimlanes; its swimlane maps are byte-for-byte as before.
+- Package 2: a page that opens while any call is under three minutes old and unanswered sends nothing at all, not only those questions (two tabs open on one process would otherwise each send the next batch); it looks once the wait is over. The allowance message shows wherever the look's line does: Ask Avala's "Questions" tab, Closing the gaps and Suggestions.
+- Package 3, item 1: the question is kept and asked when the panel is ready, also when it was typed while an answer was coming. Item 5: besides two names put together, the process's own text was being read as one string, so the end of one name and the start of the next counted as a phrase; each piece now keeps a boundary.
 
 ### Package 1: the map takes the shape that fits the process
 
@@ -136,9 +133,7 @@ Leave the two "forgotten when the page is left" items as they are; they are ligh
 
 ### After the three packages
 
-- Update `AGENTS.md` (Progress, and the note of what is next), this file (move what was built out of section 2), and `claude/handover.md` and `claude/next-plan.md` in the project.
-- Open the pull request `next` → `main` so the owner has the preview. Do not merge it. The owner says "release" after the review.
-- Write the report for the review: what changed on screen, what was checked and how, what was not checked.
+Done on 16 November 2026: the notes are brought up to date here, in `AGENTS.md` and in the project; the pull request `next` → `main` is open as the preview and not merged; the report is with the owner for the review chat.
 
 ## 4. After that release: the order advised
 
