@@ -20,12 +20,17 @@ export interface ProcessFacts {
   questions?: { now: number; found: number; wait: number };
   /** Proposed work items not yet confirmed to the board or rejected. */
   proposalsWaiting: number;
+  /** Open review comments on the process's documents (package 5 of docs/next-plan.md), when they were read. */
+  comments?: OpenComment[];
 }
+
+/** An open review comment on a document section: who wrote it by id and name, never an email address. */
+export interface OpenComment { id: string; docType: string; sectionKey: string; sectionTitle: string; authorId: string | null; author: string; createdAt: string }
 
 export interface Person extends MemberFacts { userId: string }
 
 export type Duty = 'analyst' | 'architect' | 'approver';
-export interface Need { processId: string; processName: string; duty: Duty; text: string; stage: StageId; /** Nobody is named for this duty; shown to everyone who holds the role. */ unassigned: boolean }
+export interface Need { processId: string; processName: string; duty: Duty; text: string; stage: StageId; /** Nobody is named for this duty; shown to everyone who holds the role. */ unassigned: boolean; /** Open review comments, rather than work of the duty. */ kind?: 'comments' }
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
@@ -57,6 +62,27 @@ export function needsFor(me: Person, processes: ProcessFacts[]): Need[] {
     if (p.status === 'draft' || p.status === 'changed') add('approver', p.status === 'changed' ? 'Changes since the approved revision are waiting for approval' : 'A revision is waiting for approval', 'process');
   }
   return out;
+}
+
+/** The duties a person is named for on a process, in the order analyst, architect, approver. */
+export const namedDuties = (userId: string, p: Pick<ProcessFacts, 'analystId' | 'architectId' | 'approverId'>): Duty[] =>
+  (['analyst', 'architect', 'approver'] as const).filter(d => (d === 'analyst' ? p.analystId : d === 'architect' ? p.architectId : p.approverId) === userId);
+
+/**
+ * Open review comments that reach a person: on a process they are named on (analyst, architect or
+ * approver), never their own. The weekday email lists the same comments (domain/work/digest.ts).
+ */
+export const commentsFor = (userId: string, p: Pick<ProcessFacts, 'analystId' | 'architectId' | 'approverId' | 'comments'>): OpenComment[] =>
+  namedDuties(userId, p).length ? (p.comments ?? []).filter(c => c.authorId !== userId) : [];
+
+/** Under "Needs you" on My work: one line per process with open comments for this person, leading to its documents. */
+export function commentNeeds(me: Person, processes: ProcessFacts[]): Need[] {
+  return processes.flatMap(p => {
+    const mine = commentsFor(me.userId, p);
+    if (!mine.length) return [];
+    return [{ processId: p.id, processName: p.name, duty: namedDuties(me.userId, p)[0]!, stage: 'documents' as StageId, unassigned: false, kind: 'comments' as const,
+      text: `${plural(mine.length, 'open review comment', 'open review comments')} on the documents` }];
+  });
 }
 
 /** The processes this person is named on; those with nobody named are listed for editors and admins. */

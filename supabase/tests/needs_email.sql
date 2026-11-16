@@ -1,11 +1,11 @@
--- Weekday "Needs you" emails. Rolls back; success ends with the error "ALL_TESTS_PASSED (7 groups)";
+-- Weekday "Needs you" emails. Rolls back; success ends with the error "ALL_TESTS_PASSED (8 groups)";
 -- any other error names the failed check.
 do $test$
 declare
   ana uuid := gen_random_uuid();
   ben uuid := gen_random_uuid();
   ws uuid; proc uuid; n int; r jsonb; t uuid; ok boolean; passed int := 0;
-  proj uuid; given uuid; own uuid; finished uuid; moved uuid;
+  proj uuid; given uuid; own uuid; finished uuid; moved uuid; c_open uuid; c_done uuid; archived uuid;
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (ana, 'ana-' || ana || '@example.test', now(), now()), (ben, 'ben-' || ben || '@example.test', now(), now());
@@ -106,6 +106,37 @@ begin
   if n <> 0 then raise exception 'FAILED 7b: self-assigned or done work listed'; end if;
   select count(*) into n from jsonb_array_elements(r -> 'assigned') a where a ->> 'id' = moved::text and a ->> 'ownerId' = ben::text;
   if n <> 1 then raise exception 'FAILED 7c: a reassignment was not listed for the new owner'; end if;
+  passed := passed + 1;
+
+  -- 8. Package 5 of docs/next-plan.md: each process also brings its current model, what was looked up in its
+  --    sources and what was set aside, and the input lists open review comments with the author's name;
+  --    resolved comments and those of archived processes are not listed; the keys it had are all still there.
+  insert into public.process_source_looks (process_id, workspace_id, look, dismissed)
+    values (proc, ws, '{"sources":"s1","looked":["q1"],"found":[],"questions":1,"passages":2,"tokens":10,"calls":1}', '["answer:q1:x"]');
+  perform set_config('request.jwt.claims', json_build_object('sub', ben, 'role', 'authenticated')::text, true);
+  execute 'set local role authenticated';
+  insert into public.document_comments (workspace_id, process_id, doc_type, section_key, section_title, body)
+    values (ws, proc, 'pdd', 's-2-4', 'Detailed As-Is steps', 'Step 4 misses the call-back.') returning id into c_open;
+  insert into public.document_comments (workspace_id, process_id, doc_type, section_key, section_title, body)
+    values (ws, proc, 'brd', 's-1', 'Introduction', 'Fine now.') returning id into c_done;
+  update public.document_comments set resolved_at = now() where id = c_done;
+  execute 'reset role';
+  insert into public.processes (workspace_id, name, created_by, archived_at) values (ws, 'Old one', ana, now()) returning id into archived;
+  insert into public.document_comments (workspace_id, process_id, doc_type, section_key, section_title, body, author_id)
+    values (ws, archived, 'pdd', 's-1', 'Introduction', 'Never mind.', ben);
+  r := public.needs_digest_input();
+  select count(*) into n from jsonb_array_elements(r -> 'processes') p
+    where p ->> 'id' = proc::text and jsonb_array_length(p -> 'model' -> 'openQuestions') = 3
+      and p -> 'look' ->> 'sources' = 's1' and p -> 'dismissed' ? 'answer:q1:x'
+      and p ? 'status' and p ? 'openQuestions' and p ? 'proposalsWaiting' and p ? 'analystId';
+  if n <> 1 then raise exception 'FAILED 8a: process keys %', r -> 'processes'; end if;
+  select count(*) into n from jsonb_array_elements(r -> 'comments') c
+    where c ->> 'id' = c_open::text and c ->> 'processId' = proc::text and c ->> 'author' = 'Ben Iyer' and c ->> 'authorId' = ben::text
+      and c ->> 'docType' = 'pdd' and c ->> 'sectionTitle' = 'Detailed As-Is steps' and (c ->> 'workspaceId')::uuid = ws and c ? 'createdAt' and not c ? 'email';
+  if n <> 1 then raise exception 'FAILED 8b: open comment %', r -> 'comments'; end if;
+  select count(*) into n from jsonb_array_elements(r -> 'comments') c where c ->> 'id' = c_done::text or c ->> 'processId' = archived::text;
+  if n <> 0 then raise exception 'FAILED 8c: a resolved comment or an archived process''s comment is listed'; end if;
+  if not (r ? 'people' and r ? 'processes' and r ? 'seen' and r ? 'assigned') then raise exception 'FAILED 8d: a key it had is gone'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;

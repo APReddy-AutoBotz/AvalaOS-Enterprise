@@ -136,7 +136,9 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [answering, setAnswering] = React.useState(false);
   const [previewSdd, setPreviewSdd] = React.useState(false);
   const sddReady = approvedRevision !== null || previewSdd;
-  const [type, setType] = React.useState<DocType>('pdd');
+  // A link from the weekday email opens the document it names (?doc=pdd) at the section it names (#s-2-4).
+  const asked = React.useRef(typeof location !== 'undefined' ? new URLSearchParams(location.search).get('doc') : null);
+  const [type, setType] = React.useState<DocType>(() => (asked.current && ['brd', 'pdd', 'frd', 'sdd', 'agent', 'tests'].includes(asked.current) ? asked.current as DocType : 'pdd'));
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
@@ -168,7 +170,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   // The agent document is a tab only when the delivery plan lists it, planned or one click away (part E).
   const types = React.useMemo(() => TYPES.filter(t => t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent')), [delivery]);
   const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
-  const typeChosen = React.useRef(false);
+  const typeChosen = React.useRef(Boolean(asked.current));
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
   const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.doc === 'agent' ? 'the agent document' : d.doc.toUpperCase())).join(', ')}.` : '';
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
@@ -191,6 +193,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
   }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits]);
   const doc = built?.doc ?? null;
+  const scrolled = React.useRef(false);
+  React.useEffect(() => {
+    if (scrolled.current || !doc || typeof location === 'undefined' || !location.hash) return;
+    const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (el) { scrolled.current = true; el.scrollIntoView({ block: 'start' }); }
+  }, [doc]);
   const reviewView = React.useMemo(() => (doc ? reviewOf(doc, comments) : null), [doc, comments]);
   const testPackNow = React.useMemo(() => {
     if (type !== 'tests' || !decisions || !assessment) return null;
