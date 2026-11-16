@@ -16,7 +16,8 @@ import { readyDocuments } from '../../domain/work/effort.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
 import { provisionalNote } from '../../domain/reference/typical.ts';
 import { useQuestionPlan } from './sourceLook.ts';
-import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
+import { assessmentResult } from '../../domain/assess/record.ts';
+import { DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
 import { applyProfileFindings, profileFacts, profileSegments, type ProfileFinding } from '../../domain/assess/profileFacts.ts';
@@ -78,12 +79,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
     try {
       await store.saveAssessment(processId, {
         revisionId: working?.id ?? revisionId, modelHash: hashModel(editor.model), rulesVersion: MODEL_VERSION, decisions: next,
-        result: {
-          verdict: result.verdict, split: result.split,
-          ranking: result.ranking.map(r => ({ approach: r.approach, rank: r.rank, score: r.score, stepsWon: r.stepsWon })),
-          steps: result.steps.map(s => ({ stepId: s.stepId, winner: s.winner, score: s.scores[0]?.score ?? null, human: s.human })),
-          decisions: decisionsToEntries(next),
-        },
+        result: assessmentResult(result, next),
       });
     } catch (e) { setDecisions(prev); setError(messageOf(e)); }
   };

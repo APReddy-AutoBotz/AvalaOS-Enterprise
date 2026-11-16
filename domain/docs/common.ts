@@ -6,6 +6,7 @@ import { APPROACH_LABEL, type Approach, type StepScore } from '../assess/scoring
 import { orderedSteps, processMetric } from '../processModel/selectors.ts';
 import { missing, NOT_PROVIDED, type Cell } from './tree.ts';
 import type { Requirement } from '../requirements/register.ts';
+import type { MapShape } from '../flowchart/shape.ts';
 
 export interface DocInput {
   model: ProcessModel;
@@ -17,6 +18,12 @@ export interface DocInput {
   requirements?: Requirement[];
   /** The revision the document is built from. */
   revision: { label: string; state: 'working' | 'approved'; date: string };
+  /**
+   * The shape the maps are drawn in. Unset: the shape in effect for this model (`shapeInEffect`). A
+   * comparison with an approved revision passes the current shape to both sides, so the shape alone
+   * never makes a section "Changed".
+   */
+  mapShape?: MapShape;
 }
 
 /** How many items of the process still come from a typical process and are not confirmed (part I). */

@@ -194,7 +194,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           : stage === 'work-items' && model && model.steps.length > 0
           ? <WorkItemsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} canEdit={canEdit} onOpenBoard={id => nav.go({ page: 'board', projectId: id })} />
           : stage === 'flows' && model && model.steps.length > 0
-          ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
+          ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} revisionId={current?.id ?? ''} canEdit={canEdit} me={me} onSaved={load} />
           : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}

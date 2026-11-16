@@ -34,6 +34,8 @@ import { reconcile, type StoredRequirement } from '../../domain/requirements/reg
 import { RequirementsPanel } from './RequirementsPanel.tsx';
 import { applyEdits, EditError, makeEdit, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
 import { changedSections, type SectionChange } from '../../domain/docs/changes.ts';
+import { shapeInEffect } from '../../domain/flowchart/shape.ts';
+import { viewDecisions } from './mapShape.ts';
 import { draftNarrative, draftToHtml, generatedText, groundingIssues, handoffChecklist, modelFacts, overlaps, SECTION_BRIEF } from '../../domain/docs/narrative.ts';
 
 const SectionEditor = React.lazy(() => import('./SectionEditor.tsx'));
@@ -151,7 +153,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [commenting, setCommenting] = React.useState<string | null>(null);
   React.useEffect(() => {
     Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId), store.listDocumentEdits(processId)])
-      .then(([d, s, ds, r, ed]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
+      .then(([d, s, ds, r, ed]) => { setDecisions(viewDecisions(processId, d, canEdit)); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
     Promise.all([store.listSectionComments(processId), store.listTestEdits(processId), store.listMembers(workspaceId), store.currentUser()])
       .then(([c, t, mem, u]) => { setComments(c); setTestEdits(t); setMembers(mem); setMyId(u?.id ?? ''); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
@@ -200,10 +202,11 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const sinceApproved = React.useMemo<SectionChange[]>(() => {
     if (!approvedModel || !doc || !decisions || !stored) return [];
     const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
-    const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
+    // Both sides are drawn in the shape the maps are in now, so the shape alone never marks a section changed.
+    const input = { model: approvedModel, assessment: a, decisions, mapShape: shapeInEffect(model, decisions).shape, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
     const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input, testEdits) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
-  }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
+  }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings, model]);
   const changedIds = new Set(sinceApproved.map(c => c.id));
   // All four documents, for the hand-over checklist, the overlap check and what counts as grounded.
   const all = React.useMemo(() => {
