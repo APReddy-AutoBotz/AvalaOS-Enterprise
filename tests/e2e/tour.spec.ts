@@ -48,7 +48,15 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await page.evaluate(({ gold, keys }) => {
     const KEY = 'avala.journey.memory.v1';
     const state = JSON.parse(localStorage.getItem(KEY)!);
-    state.revisions.find((r: { state: string }) => r.state === 'working').model = gold;
+    const rev = state.revisions.find((r: { state: string }) => r.state === 'working');
+    rev.model = gold;
+    // The hand-checked model stands in for the extraction, so the history records it as one: read from the
+    // sources, three minutes after the first source was added. That is what the real extraction of these
+    // documents took on the live server (12 November 2026: sources at 04:42:10, done at 04:45:17 UTC).
+    rev.seq = 1;
+    state.edits.push({ processId: rev.processId, revisionId: rev.id, seq: 1, origin: 'extraction', summary: 'Model extracted from sources', createdAt: new Date().toISOString(),
+      operations: gold.steps.length + gold.roles.length + gold.systems.length + gold.rules.length + gold.exceptions.length });
+    for (const s of state.sources) s.createdAt = new Date(Date.parse(s.createdAt) - 187_000).toISOString();
     for (const s of state.sources) for (const [key, file] of Object.entries(keys)) if (s.fileName === file) s.key = key;
     // The team of the sample company, and who is named on this process.
     const ws = state.workspaces[0].id, since = new Date().toISOString();
@@ -117,9 +125,11 @@ test('tour: the sample case through every stage', async ({ page }) => {
   await briefLine('inMind', () => brief.getByLabel('Not decided yet').check());
   await settle(page);
   await snap(page, 'brief');
+  // The steps, with the brief folded to its one line (a reload clears the note about the last change).
+  await page.reload();
+  await brief.getByRole('button', { name: /^The brief/ }).click();
+  await expect(brief.getByTestId('brief-summary')).toHaveCount(0);
   await page.getByRole('tab', { name: /^Steps/ }).click();
-  await page.getByRole('tab', { name: /^Steps/ }).evaluate(el => el.scrollIntoView({ block: 'start' }));
-  await page.mouse.wheel(0, -24);
   await settle(page);
   await snap(page, 'process');
 

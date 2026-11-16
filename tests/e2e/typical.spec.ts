@@ -46,7 +46,7 @@ test('a typical process: picked by a person from a list, shown before it is adde
   // Approving what nobody has confirmed is asked about first; saying no leaves the draft as it is.
   let asked = '';
   page.once('dialog', d => { asked = d.message(); void d.dismiss(); });
-  await page.getByRole('button', { name: 'Approve' }).click();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
   expect(asked).toContain(`${total - 5} typical items have not been confirmed by your people`);
   await expect(page.getByTestId('revision-status')).not.toContainText('Approved');
 
