@@ -38,6 +38,21 @@ test('grounding flags names, numbers and filler that are not in the process', ()
   assert.deepEqual(groundingIssues('Cut the time from receipt to posting. Always. Every invoice counts.', gold, known), []);
 });
 
+test('grounding does not pass two names the process holds put together as one', () => {
+  const m: ProcessModel = structuredClone(gold);
+  m.systems.push({ ...structuredClone(m.systems[0]), id: 'sys-coupa', name: 'Coupa portal' });
+  const flagged = (t: string) => groundingIssues(t, m, known).filter(i => i.kind === 'name').map(i => i.text);
+  // Each word is known (from "SAP S/4HANA" and "Coupa portal"), but "SAP Coupa" is no name of the process.
+  assert.deepEqual(flagged('Invoices are posted in SAP Coupa by the clerk.'), ['SAP Coupa']);
+  // Two names run together read like one that does not exist.
+  assert.deepEqual(flagged('Then the Treasury Vendor checks it.'), ['Treasury Vendor']);
+  assert.deepEqual(flagged('Then the Finance Controller Treasury checks it.'), ['Finance Controller Treasury']);
+  // Each name on its own, and the names written in full, still pass.
+  assert.deepEqual(flagged('Invoices are posted in SAP S/4HANA and read in the Coupa portal by the AP Clerk.'), []);
+  assert.deepEqual(flagged('The AP Clerk and the Finance Controller check it with Treasury.'), []);
+  assert.deepEqual(flagged('The AP Team Lead asks the Vendor Master Data team.'), []);
+});
+
 test('the checklist covers the plan\'s seven checks and links each failure to the element to fix', () => {
   const c = handoffChecklist(gold, docs);
   assert.equal(c.length, 7);

@@ -47,3 +47,24 @@ test('signing in lands on My work; what needs you comes from the process, and na
   await page.getByRole('button', { name: 'Sign in' }).click();
   await expect(page).toHaveURL(/\/work$/);
 });
+
+test('an open review comment from someone else shows under "Needs you" for the people named on the process, not for its author', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await page.getByTestId('process-people').getByLabel('Analyst').selectOption({ label: 'analyst' });
+  await expect(page.getByTestId('process-people').getByLabel('Analyst')).toHaveValue(/.+/);
+  // Two open comments on the PDD (one by someone else, one by the analyst) and one resolved.
+  await page.evaluate(() => {
+    const KEY = 'avala.journey.memory.v1';
+    const state = JSON.parse(localStorage.getItem(KEY)!);
+    const processId = state.processes[0].id;
+    const at = new Date().toISOString();
+    const c = (id: string, authorId: string, resolvedAt: string | null) => ({ id, processId, docType: 'pdd', sectionKey: 's-2-4', sectionTitle: 'Detailed As-Is steps', authorId, body: 'Step 4 misses the call-back.', createdAt: at, editedAt: null, resolvedAt, resolvedBy: null });
+    state.sectionComments = [c('c-1', crypto.randomUUID(), null), c('c-2', state.me.id, null), c('c-3', crypto.randomUUID(), at)];
+    localStorage.setItem(KEY, JSON.stringify(state));
+  });
+  await page.goto('/work');
+  const needs = page.getByTestId('needs-you');
+  await expect(needs).toContainText('1 open review comment on the documents');
+  await needs.getByRole('button', { name: 'Open: 1 open review comment on the documents, Vendor invoice processing' }).click();
+  await expect(page).toHaveURL(/\/process\/[0-9a-f-]{36}\/documents$/);
+});

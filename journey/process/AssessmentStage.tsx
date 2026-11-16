@@ -16,7 +16,8 @@ import { readyDocuments } from '../../domain/work/effort.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
 import { provisionalNote } from '../../domain/reference/typical.ts';
 import { useQuestionPlan } from './sourceLook.ts';
-import { decisionsToEntries, DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
+import { assessmentResult } from '../../domain/assess/record.ts';
+import { DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
 import { applyProfileFindings, profileFacts, profileSegments, type ProfileFinding } from '../../domain/assess/profileFacts.ts';
@@ -78,12 +79,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
     try {
       await store.saveAssessment(processId, {
         revisionId: working?.id ?? revisionId, modelHash: hashModel(editor.model), rulesVersion: MODEL_VERSION, decisions: next,
-        result: {
-          verdict: result.verdict, split: result.split,
-          ranking: result.ranking.map(r => ({ approach: r.approach, rank: r.rank, score: r.score, stepsWon: r.stepsWon })),
-          steps: result.steps.map(s => ({ stepId: s.stepId, winner: s.winner, score: s.scores[0]?.score ?? null, human: s.human })),
-          decisions: decisionsToEntries(next),
-        },
+        result: assessmentResult(result, next),
       });
     } catch (e) { setDecisions(prev); setError(messageOf(e)); }
   };
@@ -145,10 +141,12 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   if (view === 'report') return <AssessmentReport model={editor.model} result={chosen} scoring={result} decisions={d} onBack={() => setView('assessment')} />;
 
+  // How many of the Inputs view's lines have a value. Not the same figure as "N% of the facts are known"
+  // under the confidence (the facts behind the recommendations), so the tab does not say "known".
   const known = Math.round(result.priority.inputs.share * 100);
   const tabs = (
     <div role="tablist" aria-label="Assessment views" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
-      {([['assessment', 'Result'], ['inputs', `Inputs · ${known}% known`]] as const).map(([id, label]) => (
+      {([['assessment', 'Result'], ['inputs', `Inputs · ${known}% complete`]] as const).map(([id, label]) => (
         <button key={id} type="button" role="tab" aria-selected={view === id} onClick={() => setView(id)}
           className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', view === id ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{label}</button>
       ))}

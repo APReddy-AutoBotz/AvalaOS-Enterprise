@@ -7,7 +7,7 @@ import { assessProcess } from '../assess/process.ts';
 import { triage } from '../questions/triage.ts';
 import { decisive, planQuestions } from '../questions/firstList.ts';
 import type { Suggestion } from './suggest.ts';
-import { addLook, AUTO_LOOK, foundFor, foundKeys, lookSummary, sourcesKey, toLookUp } from './sourceLook.ts';
+import { addLook, allowanceStopped, allowanceUsedUp, AUTO_LOOK, foundFor, foundKeys, lookSummary, noteSent, noteStopped, sourcesKey, toLookUp, waitingUntil, type SourceLook } from './sourceLook.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 function many(): ProcessModel {
@@ -91,4 +91,65 @@ test('a passage that leaves the matter open, or an answer that repeats the quest
   const withGateway = addQuestion(g, { target: { kind: 'gateway', id: g.gateways[0].id }, question: 'Decision "Match?" has only one outcome.' }).model;
   const tg = triage(withGateway, assessProcess(withGateway));
   assert.ok(!toLookUp(tg, null, 'k', { perBatch: 500, batches: 1 }).flat().some(i => i.target.kind === 'gateway'));
+});
+
+test('a look cut short: within the wait nothing is sent, after it the same questions go once more, then never again on their own', () => {
+  const m = many();
+  const t = triage(m, assessProcess(m));
+  const key = 'a,b';
+  const t0 = Date.parse('2026-11-16T08:00:00Z');
+  const min = 60_000;
+  assert.equal(AUTO_LOOK.waitMs, 3 * min);
+  assert.equal(AUTO_LOOK.repeats, 1);
+  // The first page notes its first call, then is reloaded before the answer comes back.
+  const first = toLookUp(t, null, key, AUTO_LOOK, t0)[0];
+  let look: SourceLook = noteSent(null, key, first, t0);
+  // Pages opened within three minutes send nothing at all, not even questions not sent yet.
+  for (const at of [t0 + 10_000, t0 + min, t0 + 2 * min, t0 + 3 * min - 1]) assert.deepEqual(toLookUp(t, look, key, AUTO_LOOK, at), [], `at ${(at - t0) / 1000}s`);
+  assert.equal(waitingUntil(look, key, t0 + min), t0 + 3 * min);
+  // After the wait the lost questions go once more, first, with the rest of the look.
+  const again = toLookUp(t, look, key, AUTO_LOOK, t0 + 3 * min);
+  assert.deepEqual(again[0].map(i => i.key), first.map(i => i.key));
+  look = noteSent(look, key, again[0], t0 + 3 * min);
+  assert.ok(first.every(i => look.sent![i.key].times === 2));
+  // Lost again: after the next wait they are never sent again on their own; the others still are.
+  const later = toLookUp(t, look, key, AUTO_LOOK, t0 + 7 * min).flat().map(i => i.key);
+  assert.ok(first.every(i => !later.includes(i.key)));
+  assert.ok(later.length > 0);
+  // "Look in the sources", pressed by a person, still sends them.
+  const manual = toLookUp(t, look, key, AUTO_LOOK, t0 + 7 * min, true).flat().map(i => i.key);
+  assert.ok(first.every(i => manual.includes(i.key)));
+  assert.deepEqual(toLookUp(t, look, key, AUTO_LOOK, t0 + 4 * min, true).length > 0, true, 'a person is never held by the wait');
+});
+
+test('an answered call is no longer waiting, and a new or archived source starts afresh', () => {
+  const m = many();
+  const t = triage(m, assessProcess(m));
+  const t0 = Date.parse('2026-11-16T08:00:00Z');
+  const first = toLookUp(t, null, 'a,b', AUTO_LOOK, t0)[0];
+  let look: SourceLook = noteSent(null, 'a,b', first, t0);
+  look = addLook(look, 'a,b', { items: first, found: [], passages: 4, tokens: 100 });
+  assert.equal(look.sent, undefined);
+  assert.equal(waitingUntil(look, 'a,b', t0 + 1000), null);
+  // The rest of the look goes at once; what was answered does not go again.
+  const next = toLookUp(t, look, 'a,b', AUTO_LOOK, t0 + 1000).flat().map(i => i.key);
+  assert.ok(next.length > 0 && first.every(i => !next.includes(i.key)));
+  // Another set of sources: nothing waits and everything is looked up again, as before.
+  const held = noteSent(null, 'a,b', first, t0);
+  assert.deepEqual(toLookUp(t, held, 'a,b', AUTO_LOOK, t0 + 1000), []);
+  assert.deepEqual(toLookUp(t, held, 'a,b,c', AUTO_LOOK, t0 + 1000), toLookUp(t, null, 'a,b,c', AUTO_LOOK, t0 + 1000));
+  assert.deepEqual(toLookUp(t, held, 'a', AUTO_LOOK, t0 + 1000).flat().length, toLookUp(t, null, 'a', AUTO_LOOK, t0 + 1000).flat().length);
+});
+
+test('when the month\'s AI allowance is used up the look stops and says so in plain words', () => {
+  const now = Date.parse('2026-11-16T08:00:00Z');
+  assert.ok(allowanceUsedUp({ status: 429, message: 'This workspace has used its AI allowance for the month.' }));
+  assert.ok(allowanceUsedUp(new Error('This workspace has used its AI allowance for the month.')));
+  assert.ok(!allowanceUsedUp({ status: 500, message: 'The AI provider did not answer.' }));
+  const look = noteStopped(null, 'a,b', now);
+  assert.ok(allowanceStopped(look, now + 3_600_000));
+  assert.ok(!allowanceStopped(look, Date.parse('2026-12-01T00:00:00Z')), 'a new month starts again');
+  assert.match(lookSummary(look, 0, now)!, /^Avala OS stopped looking in your sources for answers: this workspace has used its AI allowance for the month\./);
+  // A later successful look clears it.
+  assert.equal(addLook(look, 'a,b', { items: [], found: [], passages: 0, tokens: 0 }).stopped, undefined);
 });

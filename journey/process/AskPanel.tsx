@@ -12,6 +12,7 @@ import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { AskMark, Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
+import { nextQuestion, submitQuestion, waitingNote } from '../../domain/assistant/queue.ts';
 
 type Turn = { question: string; answer?: Answer; error?: string; recorded?: boolean };
 
@@ -31,6 +32,8 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
   const [question, setQuestion] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Questions asked before the panel could answer them: kept, shown, and asked in order once it can.
+  const [waiting, setWaiting] = React.useState<string[]>([]);
   const end = React.useRef<HTMLDivElement>(null);
 
   // The record the answers come from: read once when the panel opens.
@@ -41,16 +44,25 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
     return () => { live = false; };
   }, [subject]);
 
-  React.useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [turns]);
+  React.useEffect(() => { end.current?.scrollIntoView({ block: 'end' }); }, [turns, waiting]);
 
-  const ask = async (text: string) => {
-    if (!record || busy) return;
+  const ask = (text: string) => {
     setError(null);
     let q: string;
     try { q = validateQuestion(text, subject.noun); } catch (x) { setError(x instanceof AskError ? x.message : messageOf(x)); return; }
+    setQuestion('');
+    const step = submitQuestion({ ready: Boolean(record), busy, waiting }, q);
+    if (step.ask) run(step.ask); else setWaiting(step.waiting);
+  };
+  React.useEffect(() => {
+    const step = nextQuestion({ ready: Boolean(record), busy, waiting });
+    if (step.ask) { setWaiting(step.waiting); run(step.ask); }
+  }, [record, busy, waiting]); // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (q: string) => {
+    if (!record) return;
     // The last answered turns go along so a follow-up ("and who owns it?") is understood; they are never cited.
     const earlier = turns.filter(t => t.answer).map(t => ({ question: t.question, answer: t.answer! }));
-    setBusy(true); setQuestion('');
+    setBusy(true);
     setTurns(t => [...t, { question: q }]);
     try {
       const facts = await subject.facts(q, record);
@@ -97,17 +109,23 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
               </section>
             );
           })}
+          {waiting.map((q, n) => (
+            <section key={`w${n}`} aria-label={`Waiting question ${n + 1}`} data-testid="ask-waiting">
+              <p className="ml-auto w-fit max-w-[90%] rounded-xl bg-[#002C4B]/80 px-3.5 py-2 text-sm text-white">{q}</p>
+              <p role="status" className="mt-3 text-sm text-slate-600">{waitingNote({ ready: Boolean(record), failed: Boolean(loadError) })}</p>
+            </section>
+          ))}
           <div ref={end} />
         </div>
         <form className="sticky bottom-0 mt-6 border-t border-slate-100 bg-white pt-4" onSubmit={e => { e.preventDefault(); ask(question); }}>
           <label htmlFor="ask-question" className="sr-only">Your question</label>
-          <textarea id="ask-question" rows={2} value={question} maxLength={500} disabled={!record} placeholder={subject.placeholder}
+          <textarea id="ask-question" rows={2} value={question} maxLength={500} placeholder={subject.placeholder}
             onChange={e => setQuestion(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask(question); } }}
             className="block w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20" />
           <ErrorNote message={error} />
           <div className="mt-2 flex items-center justify-between gap-3">
             <span className="text-xs text-slate-500">Enter to ask, Shift + Enter for a new line</span>
-            <Button type="submit" disabled={!record || busy || !question.trim()}>{busy ? 'Reading…' : 'Ask'}</Button>
+            <Button type="submit" disabled={!question.trim()}>{busy || !record ? 'Ask when ready' : 'Ask'}</Button>
           </div>
         </form>
       </div>

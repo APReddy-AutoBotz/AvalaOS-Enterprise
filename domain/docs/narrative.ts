@@ -34,7 +34,31 @@ function corpus(m: ProcessModel, extra = ''): { text: string; numbers: Set<strin
   for (const x of m.meta.metrics) parts.push(x.label, String(x.value ?? ''), x.unit ?? '', ...(x.range ? [String(x.range[0]), String(x.range[1])] : []));
   const text = `${parts.join(' \n ')} \n ${extra}`;
   const numbers = new Set((text.match(/\d[\d,]*(?:\.\d+)?/g) ?? []).map(n => n.replace(/,/g, '')));
-  return { text: ` ${norm(text)} `, numbers, parts: parts.filter(p => p.trim().length > 30) };
+  // Each piece of text, and each line, keeps a boundary ("#"), so the end of one name and the start of
+  // the next never read as one phrase.
+  const pieces = [...parts, ...extra.split('\n')].map(norm).filter(Boolean);
+  return { text: ` ${pieces.join(' # ')} `, numbers, parts: parts.filter(p => p.trim().length > 30) };
+}
+
+/** The names a process holds: its own, its owner's, and those of its roles, applications and data. */
+function knownNames(m: ProcessModel): string[][] {
+  const all = [m.meta.name, String(m.meta.owner.value ?? ''), ...m.roles.map(r => r.name), ...m.systems.map(x => x.name), ...m.dataObjects.map(d => d.name)];
+  return [...new Set(all.map(norm).filter(Boolean))].map(x => x.split(' '));
+}
+
+/**
+ * Whether a run of capitalised words (not itself in the process's text) is made of words from two or
+ * more different names the process holds, so that it reads like a name without being one. Words that
+ * belong to no name, or only to "allowed" words, leave the older word-by-word check in charge.
+ */
+function joinsNames(run: string, names: string[][]): boolean {
+  const words = run.split(' ').filter(w => !ALLOWED.has(w));
+  if (words.length < 2) return false;
+  const owners = words.map(w => names.filter(n => n.includes(w)));
+  if (owners.some(o => o.length === 0)) return false;
+  // One name holding every word (in any order) is that name, written differently: not a join.
+  if (names.some(n => words.every(w => n.includes(w)))) return false;
+  return true;
 }
 
 export interface GroundingIssue { kind: 'name' | 'number' | 'filler'; text: string }
@@ -49,6 +73,7 @@ export function groundingIssues(text: string, m: ProcessModel, known = ''): Grou
   const plain = text.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim();
   if (!plain) return [];
   const { text: corpusText, numbers } = corpus(m, known);
+  const names = knownNames(m);
   const issues: GroundingIssue[] = [];
   const seen = new Set<string>();
   const add = (kind: GroundingIssue['kind'], t: string) => { const k = `${kind}:${t.toLowerCase()}`; if (!seen.has(k)) { seen.add(k); issues.push({ kind, text: t }); } };
@@ -70,7 +95,11 @@ export function groundingIssues(text: string, m: ProcessModel, known = ''): Grou
       run = [];
       if (!name || ALLOWED.has(name.toLowerCase())) return;
       const n = norm(name);
-      if (n && !corpusText.includes(` ${n} `) && !n.split(' ').every(w => ALLOWED.has(w) || corpusText.includes(` ${w} `))) add('name', name);
+      if (!n || corpusText.includes(` ${n} `)) return;
+      // Each word known on its own is not enough when the words come from two or more different names:
+      // "SAP Coupa" is not a name the process holds just because "SAP S/4HANA" and "Coupa portal" are.
+      if (joinsNames(n, names)) { add('name', name); return; }
+      if (!n.split(' ').every(w => ALLOWED.has(w) || corpusText.includes(` ${w} `))) add('name', name);
     };
     words.forEach((w, i) => {
       const clean = w.replace(/^[("'“]+|[)"'”,;:.!?]+$/g, '');

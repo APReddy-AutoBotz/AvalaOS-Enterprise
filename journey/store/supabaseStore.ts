@@ -54,7 +54,7 @@ function fail(error: { message: string; code?: string; status?: number } | null,
 
 const toRevision = (r: Record<string, any>): RevisionRow => ({
   id: r.id, revNo: r.rev_no ?? r.revNo, state: r.state, seq: Number(r.edit_seq ?? r.seq ?? 0), modelHash: r.model_hash ?? r.modelHash ?? null,
-  basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, approvedAt: r.approved_at ?? r.approvedAt ?? null,
+  basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, approvedAt: r.approved_at ?? r.approvedAt ?? null, approvedBy: r.approved_by ?? r.approvedBy ?? null,
 });
 const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at, analystId: p.analyst_id ?? null, architectId: p.architect_id ?? null, approverId: p.approver_id ?? null });
 const toSource = (r: Record<string, any>): SourceRow => ({
@@ -206,7 +206,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
 
     async listRevisions(processId) {
       const { data, error } = await db.from('process_model_revisions')
-        .select('id, rev_no, state, edit_seq, model_hash, based_on, created_at, approved_at')
+        .select('id, rev_no, state, edit_seq, model_hash, based_on, created_at, approved_at, approved_by')
         .eq('process_id', processId).order('rev_no', { ascending: false });
       if (error) fail(error);
       return (data ?? []).map(toRevision);
@@ -275,6 +275,27 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const r = await call('journey-ai', { action: 'run', workspaceId, task, segments });
       const u = r.usage as { input?: number; output?: number } | undefined;
       return { data: r.data, usage: u ? { input: Number(u.input) || 0, output: Number(u.output) || 0 } : undefined };
+    },
+    async getSourceLook(processId) {
+      const { data, error } = await db.from('process_source_looks').select('look, dismissed, version').eq('process_id', processId).maybeSingle();
+      if (error) fail(error);
+      if (!data) return null;
+      const look = data.look && typeof data.look === 'object' && typeof (data.look as any).sources === 'string' ? data.look : null;
+      return { look, dismissed: Array.isArray(data.dismissed) ? data.dismissed.filter((k: unknown) => typeof k === 'string') : [], version: Number(data.version) };
+    },
+    async saveSourceLook(processId, workspaceId, next, version) {
+      const row = { look: next.look ?? {}, dismissed: next.dismissed };
+      if (version === null) {
+        const { data, error } = await db.from('process_source_looks').insert({ process_id: processId, workspace_id: workspaceId, ...row }).select('version').maybeSingle();
+        // Another page added it first: read again.
+        if (error?.code === '23505') return null;
+        if (error) fail(error);
+        return Number(data?.version ?? 1);
+      }
+      // Only a write on the version that was read goes through; the database counts it.
+      const { data, error } = await db.from('process_source_looks').update(row).eq('process_id', processId).eq('version', version).select('version');
+      if (error) fail(error);
+      return data && data.length ? Number(data[0].version) : null;
     },
     async getAssessmentDecisions(processId) {
       const { data, error } = await db.from('assessments').select('overrides').eq('process_id', processId).order('updated_at', { ascending: false }).limit(1).maybeSingle();

@@ -1,6 +1,6 @@
 # Avala OS: the effort-first plan
 
-Agreed by the owner on 15 November 2026. Built (on the preview, not released on 16 November 2026): every part in the agreed order, D, A, B, C, I, E, F (with G's review comments) and H, with one trial reference, supplier invoice processing; the brief's reading task is live on the server (15 November 2026). Left: the tracker push (the owner has not decided), G's evidence pack, and more reference processes. Part C was built without changing the extraction function: whether the work is done today comes from the brief. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
+Agreed by the owner on 15 November 2026. Built and released (fifth release, 16 November 2026): every part in the agreed order, D, A, B, C, I, E, F (with G's review comments) and H, with one trial reference, supplier invoice processing; the brief's reading task is live on the server (15 November 2026). Left: the tracker push (the owner has not decided), G's evidence pack, and more reference processes; they are carried in `docs/next-plan.md`, which is what is built next. Part C was built without changing the extraction function: whether the work is done today comes from the brief. It follows the owner's first test on real documents and takes in the owner's ideas: an intake, a choice of documents, an agent document, test cases, a start with no documents, and typical processes to start from.
 
 This file is kept in two places: `docs/effort-first-plan.md` in the repository (the source of truth) and `claude/effort-first-plan.md` in the owner's project. Change both together.
 
@@ -169,7 +169,7 @@ Agreed by the owner on 15 November 2026 as a change to the rule "invent nothing"
 7. **H** (scorecard) alongside, since it only counts.
 8. **Tracker push** when the owner decides.
 
-Releases: about six production deploys remain (15 November 2026). Two releases are enough for this plan: one after steps 1 to 3, one after 4 to 7. Everything is tried on the preview first. Server and database changes cannot be held on the preview (it shares the live server and database), so each is named, measured and approved one by one.
+Releases: about six production deploys remain (15 November 2026). Two releases are enough for this plan: one after steps 1 to 3, one after 4 to 7. Everything is tried on the preview first. Server and database changes cannot be held on the preview (it shares the live server and database), so each is named, measured and approved one by one. (Done in one: the fifth release, 16 November 2026; four deploys remain until 22 November.)
 
 ## 7. What this plan deliberately does not do
 

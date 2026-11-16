@@ -158,3 +158,22 @@ test('on a process, Ask Avala suggests changes to review where they are made, an
     await expect(tab.getByTestId('suggestions-none')).toBeVisible();
   }
 });
+
+test('a question typed while Ask Avala is still busy is kept and asked as soon as it can be, never lost', async ({ page }) => {
+  await page.goto('/demo/processes');
+  await ask(page).click();
+  const panel = page.getByTestId('ask-panel');
+  // Typed at once, without waiting for the record: the box takes it.
+  await panel.getByLabel('Your question').fill('Where does each process stand?');
+  await panel.getByLabel('Your question').press('Enter');
+  // A second question while the first is still being answered: kept, then asked.
+  await panel.getByLabel('Your question').fill('What is open across the workspace?');
+  await panel.getByLabel('Your question').press('Enter');
+  const turns = panel.getByTestId('ask-turn');
+  await expect(turns).toHaveCount(2);
+  await expect(turns.nth(0)).toContainText('Where does each process stand?');
+  await expect(turns.nth(1)).toContainText('What is open across the workspace?');
+  await expect(turns.nth(0).getByTestId('ask-recorded')).toHaveText('Recorded answer on the sample case');
+  await expect(turns.nth(1).getByTestId('ask-recorded')).toHaveText('Recorded answer on the sample case');
+  await expect(panel.getByTestId('ask-waiting')).toHaveCount(0);
+});

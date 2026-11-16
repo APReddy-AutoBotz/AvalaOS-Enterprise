@@ -6,6 +6,7 @@ import { DocBuilder, missing, type DocTree } from './tree.ts';
 import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { robotsBlocked } from '../assess/scoring.ts';
 import { flowMermaid, flowPicture, modeFromScore } from '../flowchart/svg.ts';
+import { shapeInEffect } from '../flowchart/shape.ts';
 import { controlOf, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
@@ -16,6 +17,8 @@ export function buildPdd(input: DocInput): DocTree {
   const steps = orderedSteps(m);
   const no = stepNumber(m);
   const roleName = (id: string) => m.roles.find(r => r.id === id)?.name ?? id;
+  // Both maps in the shape every screen draws them in; documents always run down the page.
+  const shape = input.mapShape ?? shapeInEffect(m, input.decisions).shape;
 
   // ---- 1 Introduction
   b.section('1', 'Introduction', 1);
@@ -79,8 +82,8 @@ export function buildPdd(input: DocInput): DocTree {
   }
   b.section('2.3', words.intended ? words.map : 'As-Is process map');
   {
-    const f = flowPicture(m, { title: `${words.map} of ${m.meta.name}` });
-    if (m.steps.length) b.figure(words.intended ? words.map : 'As-Is process map', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m) });
+    const f = flowPicture(m, { shape, title: `${words.map} of ${m.meta.name}` });
+    if (m.steps.length) b.figure(words.intended ? words.map : 'As-Is process map', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m, undefined, shape) });
     else b.callout('No steps are recorded, so there is no map yet.');
     if (m.steps.length && !m.flows.length) b.open('How do the steps connect: which step follows which, and where does the process branch?');
   }
@@ -110,8 +113,8 @@ export function buildPdd(input: DocInput): DocTree {
   b.section('3.1', 'To-Be process map');
   {
     const modes = new Map(m.steps.map(s => { const x = modeOf(input, s); return [s.id, modeFromScore(x.approach, Boolean(x.score?.alreadyAutomated), x.score?.human)] as const; }));
-    const f = flowPicture(m, { modes, title: `To-Be map of ${m.meta.name}` });
-    if (m.steps.length) b.figure('To-Be process map, coloured by delivery mode', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m, modes) });
+    const f = flowPicture(m, { modes, shape, title: `To-Be map of ${m.meta.name}` });
+    if (m.steps.length) b.figure('To-Be process map, coloured by delivery mode', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m, modes, shape) });
     else b.callout('No steps are recorded, so there is no map yet.');
   }
   b.section('3.2', 'Delivery model');

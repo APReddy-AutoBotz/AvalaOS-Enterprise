@@ -111,3 +111,38 @@ test('editing after approval starts a new working draft and keeps the approved r
   await page.getByRole('button', { name: 'History' }).click();
   await expect(page.getByRole('dialog', { name: 'History' })).toContainText('Revision 2');
 });
+
+test('a long step name wraps in the step table instead of being cut off, and still saves with Enter', async ({ page }) => {
+  await openProcessStage(page);
+  const long = 'Check the supplier invoice against the purchase order and the goods receipt, and send any difference above the tolerance to the buyer for a decision';
+  await addStep(page, long);
+  const field = page.getByLabel('Name of step 1', { exact: true });
+  await expect(field).toHaveValue(long);
+  // Every word is in view: the box is taller than one line and nothing runs past its edge.
+  const [scrollW, clientW, h] = await field.evaluate(el => [el.scrollWidth, el.clientWidth, el.getBoundingClientRect().height]);
+  expect(scrollW).toBeLessThanOrEqual(clientW);
+  expect(h).toBeGreaterThan(40);
+  // Enter saves the name and adds no new line.
+  await field.fill(`${long} today`);
+  await field.press('Enter');
+  await saved(page);
+  await page.reload();
+  await expect(page.getByLabel('Name of step 1', { exact: true })).toHaveValue(`${long} today`);
+});
+
+test('the open questions tab shows the same count as Ask Avala\'s questions, and says why it lists more items', async ({ page }) => {
+  await openProcessStage(page);
+  await addRoles(page, ['AP Clerk']);
+  await addStep(page, 'Scan paper invoice');
+  await addStep(page, 'Post invoice');
+  const tab = page.getByRole('tab', { name: /^Open questions/ });
+  const count = Number((await tab.textContent())!.replace(/\D/g, '') || '0');
+  expect(count).toBeGreaterThan(0);
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  await expect(page.getByRole('dialog', { name: 'Ask Avala' }).getByRole('tab', { name: `Questions (${count})` })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await tab.click();
+  const raw = await page.getByTestId('open-question').count() + await page.getByTestId('gap-row').count();
+  if (raw === count) await expect(page.getByTestId('questions-count-note')).toHaveCount(0);
+  else await expect(page.getByTestId('questions-count-note')).toContainText(`${count} ${count === 1 ? 'question needs' : 'questions need'} people now: the same list as Ask Avala's questions. Below is every open item as recorded, ${raw} in all;`);
+});

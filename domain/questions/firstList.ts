@@ -171,3 +171,16 @@ export function holdReason(h: Hold | undefined): string {
 
 /** The order the interview asks in: the first list, then (when the person goes on) what can wait. */
 export const askingOrder = (p: QuestionPlan, includeWait: boolean): TriageItem[] => (includeWait ? [...p.now, ...p.wait] : p.now);
+
+/**
+ * The count the Process stage's "Open questions" tab shows: the first list, as Ask Avala's questions tab
+ * counts it (what needs people now and answers found to confirm). The tab itself lists every open item
+ * as recorded; when that is a different number, `note` says why the two differ.
+ */
+export function questionsTabCount(plan: QuestionPlan, raw: number): { count: number; note: string | null } {
+  const count = plan.now.length + plan.found.length;
+  if (raw === count) return { count, note: null };
+  const need = `${count} ${count === 1 ? 'question needs' : 'questions need'} people now`;
+  const found = plan.found.length ? ` (${plan.found.length} of them found in the sources, to confirm)` : '';
+  return { count, note: `${need}${found}: the same list as Ask Avala's questions. Below is every open item as recorded, ${raw} in all; the first list merges repeated wordings and leaves out what can wait until sign-off.` };
+}

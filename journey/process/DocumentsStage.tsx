@@ -10,7 +10,10 @@ import { buildBrd } from '../../domain/docs/brd.ts';
 import { buildPdd } from '../../domain/docs/pdd.ts';
 import { toMarkdown } from '../../domain/docs/markdown.ts';
 import { docShort, type Block, type Cell, type DocTree, type DocType } from '../../domain/docs/tree.ts';
-import type { JourneyStore, SourceRow } from '../store/types.ts';
+import type { JourneyStore, RevisionRow, SourceRow } from '../store/types.ts';
+import type { Proposal } from '../../domain/workitems/register.ts';
+import { FORMAT_LABEL } from '../../domain/workspace/sources.ts';
+import { buildEvidence } from '../../domain/docs/evidence.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { StatusBadge } from './widgets.tsx';
 import { GapsAssistant } from './GapsAssistant.tsx';
@@ -34,6 +37,8 @@ import { reconcile, type StoredRequirement } from '../../domain/requirements/reg
 import { RequirementsPanel } from './RequirementsPanel.tsx';
 import { applyEdits, EditError, makeEdit, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
 import { changedSections, type SectionChange } from '../../domain/docs/changes.ts';
+import { shapeInEffect } from '../../domain/flowchart/shape.ts';
+import { viewDecisions } from './mapShape.ts';
 import { draftNarrative, draftToHtml, generatedText, groundingIssues, handoffChecklist, modelFacts, overlaps, SECTION_BRIEF } from '../../domain/docs/narrative.ts';
 
 const SectionEditor = React.lazy(() => import('./SectionEditor.tsx'));
@@ -45,6 +50,8 @@ const TYPES: { id: DocType; short: string; label: string; ready: boolean }[] = [
   { id: 'sdd', short: 'SDD', label: 'Solution design', ready: true },
   { id: 'agent', short: 'Agent', label: 'Agent definition', ready: true },
   { id: 'tests', short: 'Tests', label: 'Test pack', ready: true },
+  // Always one click away and never one of the planned documents (package 6 of docs/next-plan.md).
+  { id: 'evidence', short: 'Evidence pack', label: 'Evidence pack', ready: true },
 ];
 
 const PRINT_CSS = `
@@ -134,7 +141,9 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [answering, setAnswering] = React.useState(false);
   const [previewSdd, setPreviewSdd] = React.useState(false);
   const sddReady = approvedRevision !== null || previewSdd;
-  const [type, setType] = React.useState<DocType>('pdd');
+  // A link from the weekday email opens the document it names (?doc=pdd) at the section it names (#s-2-4).
+  const asked = React.useRef(typeof location !== 'undefined' ? new URLSearchParams(location.search).get('doc') : null);
+  const [type, setType] = React.useState<DocType>(() => (asked.current && ['brd', 'pdd', 'frd', 'sdd', 'agent', 'tests'].includes(asked.current) ? asked.current as DocType : 'pdd'));
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
@@ -151,10 +160,25 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [commenting, setCommenting] = React.useState<string | null>(null);
   React.useEffect(() => {
     Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId), store.listDocumentEdits(processId)])
-      .then(([d, s, ds, r, ed]) => { setDecisions(d); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
+      .then(([d, s, ds, r, ed]) => { setDecisions(viewDecisions(processId, d, canEdit)); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
     Promise.all([store.listSectionComments(processId), store.listTestEdits(processId), store.listMembers(workspaceId), store.currentUser()])
       .then(([c, t, mem, u]) => { setComments(c); setTestEdits(t); setMembers(mem); setMyId(u?.id ?? ''); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
+  // What only the evidence pack reads: every revision with who approved it, the work proposals, and the
+  // status of the board items they became. Loaded when the pack is opened.
+  const [evidenceRecord, setEvidenceRecord] = React.useState<{ revisions: RevisionRow[]; proposals: Proposal[]; boardStatus: Record<string, string> } | null>(null);
+  React.useEffect(() => {
+    if (type !== 'evidence' || evidenceRecord) return;
+    let live = true;
+    (async () => {
+      const [revisions, proposals, projects] = await Promise.all([store.listRevisions(processId), store.listProposals(processId), store.listProjects(workspaceId).catch(() => [])]);
+      const onBoard = new Set(proposals.map(p => p.workItemId).filter(Boolean));
+      const boardStatus: Record<string, string> = {};
+      if (onBoard.size) for (const items of await Promise.all(projects.map(p => store.listWorkItems(p.id).catch(() => [])))) for (const i of items) if (onBoard.has(i.id)) boardStatus[i.id] = i.status;
+      if (live) setEvidenceRecord({ revisions, proposals, boardStatus });
+    })().catch(e => { if (live) setError(messageOf(e)); });
+    return () => { live = false; };
+  }, [type, evidenceRecord, store, processId, workspaceId]);
   const reviewCtx: ReviewContext = { store, processId, me: myId, canEdit, isAdmin: members.find(m => m.userId === myId)?.role === 'admin', members, onChanged: next => setComments(next) };
   const saveTestEdit = async (e: TestCaseEdit) => { await store.saveTestEdit(processId, e); setTestEdits(cur => [...cur.filter(x => x.caseCode !== e.caseCode), e]); };
   const removeTestEdit = async (code: string) => { await store.removeTestEdit(processId, code); setTestEdits(cur => cur.filter(x => x.caseCode !== code)); };
@@ -166,7 +190,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   // The agent document is a tab only when the delivery plan lists it, planned or one click away (part E).
   const types = React.useMemo(() => TYPES.filter(t => t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent')), [delivery]);
   const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
-  const typeChosen = React.useRef(false);
+  const typeChosen = React.useRef(Boolean(asked.current));
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
   const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.doc === 'agent' ? 'the agent document' : d.doc.toUpperCase())).join(', ')}.` : '';
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
@@ -183,12 +207,31 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
+    if (type === 'evidence') {
+      // Read-only and built from the record as it is: no section edits, no company layout.
+      if (!evidenceRecord || !register) return null;
+      const current = evidenceRecord.revisions.find(r => r.state === (revision.state === 'approved' ? 'approved' : 'working')) ?? evidenceRecord.revisions[0];
+      const doc = buildEvidence({
+        ...input, revNo: current?.revNo ?? 0,
+        revisions: evidenceRecord.revisions.map(r => ({ revNo: r.revNo, state: r.state, createdAt: r.createdAt, approvedAt: r.approvedAt, approvedBy: r.approvedBy ?? null })),
+        allSources: sources.map(s => ({ key: s.key, title: s.title, kind: FORMAT_LABEL[s.format] ?? '', createdAt: s.createdAt, passages: s.segmentCount, archived: s.archived })),
+        proposals: evidenceRecord.proposals, boardStatus: evidenceRecord.boardStatus, testEdits, comments,
+        names: Object.fromEntries(members.map(m => [m.userId, m.name])),
+      });
+      return { doc, status: {} };
+    }
     const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input, testEdits) : sddReady ? buildSdd(input) : null;
     if (!raw) return null;
     const edited = applyEdits(raw, edits);
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
-  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits]);
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits, evidenceRecord, comments, members]);
   const doc = built?.doc ?? null;
+  const scrolled = React.useRef(false);
+  React.useEffect(() => {
+    if (scrolled.current || !doc || typeof location === 'undefined' || !location.hash) return;
+    const el = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+    if (el) { scrolled.current = true; el.scrollIntoView({ block: 'start' }); }
+  }, [doc]);
   const reviewView = React.useMemo(() => (doc ? reviewOf(doc, comments) : null), [doc, comments]);
   const testPackNow = React.useMemo(() => {
     if (type !== 'tests' || !decisions || !assessment) return null;
@@ -198,12 +241,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [approvedModel, setApprovedModel] = React.useState<ProcessModel | null>(null);
   React.useEffect(() => { setApprovedModel(null); if (approvedRevisionId) store.getModel(approvedRevisionId).then(setApprovedModel).catch(() => setApprovedModel(null)); }, [store, approvedRevisionId]);
   const sinceApproved = React.useMemo<SectionChange[]>(() => {
-    if (!approvedModel || !doc || !decisions || !stored) return [];
+    if (!approvedModel || !doc || !decisions || !stored || type === 'evidence') return [];
     const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
-    const input = { model: approvedModel, assessment: a, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
+    // Both sides are drawn in the shape the maps are in now, so the shape alone never marks a section changed.
+    const input = { model: approvedModel, assessment: a, decisions, mapShape: shapeInEffect(model, decisions).shape, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
     const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input, testEdits) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
-  }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings]);
+  }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings, model]);
   const changedIds = new Set(sinceApproved.map(c => c.id));
   // All four documents, for the hand-over checklist, the overlap check and what counts as grounded.
   const all = React.useMemo(() => {
@@ -386,7 +430,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
                   {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}
                   <span className="no-print ml-auto flex items-center gap-3">
-                    <CommentButton number={s.number} open={commenting === s.id} count={(reviewView!.bySection.get(s.id) ?? []).filter(c => !c.resolvedAt).length} onClick={() => setCommenting(commenting === s.id ? null : s.id)} />
+                    {type !== 'evidence' && <CommentButton number={s.number} open={commenting === s.id} count={(reviewView!.bySection.get(s.id) ?? []).filter(c => !c.resolvedAt).length} onClick={() => setCommenting(commenting === s.id ? null : s.id)} />}
                     {editable && editing !== s.id && <button type="button" className="font-sans text-xs font-medium text-slate-500 hover:text-[#002C4B] hover:underline focus-visible:text-[#002C4B]" aria-label={`Edit section ${s.number}`} onClick={() => setEditing(s.id)}>Edit</button>}
                   </span>
                 </span>
@@ -396,7 +440,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {s.level === 1
                     ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900">{head}</h3>
                     : <h4 className="mt-6 font-display text-base font-semibold text-slate-900">{head}</h4>}
-                  <React.Fragment key={`${type}:${s.id}`}><SectionComments ctx={reviewCtx} docType={type} sectionKey={s.id} sectionTitle={s.title} comments={reviewView!.bySection.get(s.id) ?? []} startOpen={commenting === s.id} /></React.Fragment>
+                  {type !== 'evidence' && <React.Fragment key={`${type}:${s.id}`}><SectionComments ctx={reviewCtx} docType={type} sectionKey={s.id} sectionTitle={s.title} comments={reviewView!.bySection.get(s.id) ?? []} startOpen={commenting === s.id} /></React.Fragment>}
                   {st?.state === 'needs_review' && mine && (
                     <div className="no-print mt-3 rounded-xl bg-amber-50 p-4 ring-1 ring-inset ring-amber-200" data-testid="review-update">
                       <p className="text-sm text-amber-950"><span className="font-semibold">The process changed since you edited this section.</span> The generated text now reads:</p>
