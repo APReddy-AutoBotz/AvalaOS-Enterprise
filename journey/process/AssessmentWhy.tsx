@@ -126,7 +126,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
         </Card>
 
         <Card testid="why-ai" icon="spark" tone="bg-violet-50 text-violet-800 ring-1 ring-inset ring-violet-200" title="Where AI is needed">
-          <Big value={result.aiSteps} of={n} label={result.aiSteps === 1 ? 'step' : 'steps'} />
+          <Big value={result.aiSteps} of={n} label={n === 1 ? 'step' : 'steps'} />
           {result.aiSteps === 0 ? (
             <p className="mt-2 text-sm leading-6 text-slate-600">Rules on structured data do the work. AI would add cost and risk without doing more.</p>
           ) : (
@@ -138,7 +138,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
         </Card>
 
         <Card testid="why-people" icon="person" tone="bg-slate-100 text-slate-700 ring-1 ring-inset ring-slate-200" title="What stays with people">
-          <Big value={people} of={n} label={people === 1 ? 'step' : 'steps'} />
+          <Big value={people} of={n} label={n === 1 ? 'step' : 'steps'} />
           {people === 0 && <p className="mt-2 text-sm text-slate-600">No step needs a person on what is known.</p>}
           {result.mustStayStepIds.length > 0 && <>
             <p className="mb-2 mt-3 text-xs font-semibold text-slate-500">Judgment, accountability or physical work</p>
