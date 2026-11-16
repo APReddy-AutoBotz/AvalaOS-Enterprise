@@ -16,6 +16,8 @@ Releases: 3 production deploys are left until 22 November 2026 (after the sixth 
 
 **Update, 16 November 2026 (night): the next work is section 3c.** After the release the owner asked whether a team can get its documents without the assessment. It can, with a modest change: a person says what they want from a process, and two new answers are built as packages 8 and 9. One small change is waiting in `next` for the next release: the heading of the homepage tour (#174, "From your documents to a Delivery board").
 
+**Update, 16 November 2026 (late night): section 3c is built and merged into `next`** (package 8, #176; package 9, #177), in review on the open pull request `next` → `main`. No database change. Packages 8 and 9 must go out in one release (see the start of section 3c). What was built, and where it differs from the plan, is at the start of section 3c.
+
 **Update, 16 November 2026 (afternoon):** section 3 is built and merged into `next` (pull requests #162, #163, #164), with no server function or database change. The open pull request `next` → `main` is the preview for the review; nothing is released until the owner says "release". What was built, and where it differs from the plan, is at the start of section 3.
 
 **Update, 16 November 2026 (evening):** section 3b is built and merged into `next` too (pull requests #168, #169, #170). Its two database changes were applied on the owner's yes after rolled-back trials, at 09:53 and 09:54 UTC (`process_source_looks`, `digest_counts_and_comments`); the email server function `journey-notify` changes with the release and was not deployed by hand. One release carries sections 3 and 3b. What was built, and where it differs from the plan, is at the start of section 3b.
@@ -42,7 +44,7 @@ The weekday email's count, review comments in it and on My work, and the look in
 | --- | --- |
 | Push to Jira and Azure DevOps, with status coming back | Not built. The owner has not decided. Today: CSV export for both, CSV import from Jira. |
 | Evidence pack for regulated clients | Built (section 3b, package 6), released. |
-| Documents without the assessment: "Document it as it is", and "how it will be built is already decided" | Not built. Section 3c, packages 8 and 9. |
+| Documents without the assessment: "Document it as it is", and "how it will be built is already decided" | Built (section 3c, packages 8 and 9), in review. |
 | "Custom software" as an approach, with a solution design for an application | Not built. The owner decides later; larger than section 3c. |
 | A fifth set-up for an organisation: documents without the assessment | Not built. A database change; after a real person has used package 8. |
 | More typical processes to start from | One only (supplier invoice processing), as a trial. More only after a real person has used the trial. |
@@ -225,7 +227,14 @@ The owner found the page too long; two outside reviews (in the owner's hands) ag
 
 ## 3c. The third bundle: documents without the assessment (owner, 16 November 2026)
 
-**Not built. For a builder chat; the review chat reviews it on the preview before any release.**
+**Built (16 November 2026), in review; not released.** Each package's "Done when" is met with the tests it names; the details are in `AGENTS.md` (Progress). Where the build differs from the text below, and why:
+
+- **Where the answer is kept.** On the record as `meta.purpose`, beside the brief and not as a line of it: checked on `main`, the released site's check refuses a brief line it does not know ("Unknown brief fact", and every edit then stops), but never lists the keys of `meta`. The decided approach is `meta.decidedApproach`, kept apart so it stays in effect under "assess" until removed. Who answered and who decided are kept by the person's id and shown by name.
+- **One release for both packages.** The check in package 8 knows two answers; package 9 adds the third. With package 8 alone live, a process given the third answer on a preview could not be edited on the live site. Release them together.
+- **Package 8.** The first reading of the sources replaced the whole record and would have dropped an answer given when the process was added; it now keeps it. An approved revision's documents follow the answer it was approved with; when the draft's differs, Documents says so in one line instead of marking every section changed. Figures are kept in the as-is document with their source when the record holds them, never asked for and never "Not provided".
+- **Package 9.** "Not known yet" is kept apart from "cannot": a step is not settled when the decided approach falls short only because a fact is unknown, and the facts that move the score are named. Those about an application's API lead the first list as before; the step facts and screen stability had no place to be answered outside the Assessment page, so they come into the first list as choices answered in Closing the gaps (and inline at the top of Documents), and the email counts them. A step that stays with people can be set by a person at the top of Documents. Size: 38 files and 902 lines changed, against 36 files and 1,036 lines for package 8.
+
+The plan as it was written:
 
 **Where it comes from.** The owner's first idea for Avala OS was that a team hands over its transcripts, SOPs and pictures and gets its documents. Every department documents its processes; most of them are not automating anything. He asked whether a person could say, when the files are added, that they want the documents and not an assessment.
 
@@ -288,6 +297,7 @@ The promise stays narrow, on the owner's word ("let's not bloat the application"
 
 - Bring the notes up to date (`AGENTS.md`, this file and its copy in the project). Open the pull request `next` → `main` as the preview; do not merge it.
 - The report says, apart from the usual: whether anything under `domain/` that a server function reads has changed, and what could not be tried before a release.
+  Done on 16 November 2026: the notes are brought up to date; the preview is open; the Ask Avala measure was run on `next` with both packages merged: every target met, 88 of 88; no name or number in an answer that is in no fact; the question on setting one approach for a whole process (W05) answered from the new line on how a decided approach works; about 18,700 tokens a question on a process, 9,300 on a board, 7,200 on the workspace; 1.42 million tokens in all, counted against the workspace "Avala check".
 
 **Not in this bundle, and why.** "Custom software" as an approach, with a solution design for an application instead of automation units: a real gap for software teams, larger than both packages, and the owner decides later (the brief already knows "a tool to be built", which plans a BRD, FRD and SDD). A fifth set-up for an organisation, documents without the assessment: the set-ups are checked in the database, so it is a migration, and it should wait until a real person has used package 8. The homepage: it claims only what is live, so its wording changes after the release that carries this, by the review chat.
 
