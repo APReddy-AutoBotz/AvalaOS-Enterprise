@@ -138,11 +138,24 @@ export interface ProcessMeta {
    * Kept here, beside the brief, because the released site ignores a new entry of `meta`.
    */
   purpose?: ProcessPurpose;
+  /**
+   * One approach a person decided for the whole process, with the reason (package 9). Kept apart from
+   * `purpose`, so it stays in effect when the answer goes back to "assess" until a person removes it.
+   */
+  decidedApproach?: DecidedApproach;
+}
+
+/** An approach decided for the whole process: who decided (the person's id, never an email address), when and why. */
+export interface DecidedApproach {
+  approach: 'rpa' | 'api' | 'ai_assist' | 'agent';
+  reason: string;
+  by: string | null;
+  at: string;
 }
 
 /** What a person wants from a process, who said so (the person's id, never an email address) and when. */
 export interface ProcessPurpose {
-  value: 'assess' | 'as_is';
+  value: 'assess' | 'as_is' | 'decided';
   by: string | null;
   at: string;
 }

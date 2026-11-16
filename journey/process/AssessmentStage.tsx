@@ -61,7 +61,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   React.useEffect(() => { store.getAssessmentDecisions(processId).then(setDecisions).catch(e => setError(messageOf(e))); }, [store, processId]);
   React.useEffect(() => { store.getSettings(workspaceId).then(r => setSettings(r.settings)).catch(e => setError(messageOf(e))); }, [store, workspaceId]);
 
-  const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings }), [editor.model, decisions?.rate, settings]);
+  const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings, scoringAlone: true }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
   const questionPlanNow = useQuestionPlan(processId, editor.model).plan;
   const firstQuestions = questionPlanNow.now.length;
@@ -168,6 +168,12 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       <ErrorNote message={error ?? editor.error} />
       {/* A process started from a typical one is assessed provisionally until its steps are confirmed (part I). */}
       {provisionalNote(editor.model) && <p className="rounded-xl bg-orange-50 px-4 py-3 text-sm leading-6 text-orange-950 ring-1 ring-inset ring-orange-200" data-testid="provisional">{provisionalNote(editor.model)}</p>}
+      {/* An approach decided for the whole process stays in effect here until a person removes it (package 9). */}
+      {editor.model.meta.decidedApproach && (
+        <p className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm leading-6 text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="decided-in-effect">
+          <span className="font-semibold">{APPROACH_LABEL[editor.model.meta.decidedApproach.approach]} was decided for the whole process</span> and is in effect for every step a person has not set themselves, where it can do the step. The scoring's own recommendation is shown beside it. To go back to the scoring alone, remove the decided approach in The brief, on the Process page.
+        </p>
+      )}
       <Hero result={chosen} scoring={result} onReport={() => setView('report')} />
       {/* The delivery plan follows the approach in effect, people's choices included (part B). */}
       <DeliveryPlanPanel model={editor.model} result={chosen} firstQuestions={firstQuestions} />

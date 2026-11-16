@@ -6,32 +6,45 @@
 // The answer is kept on the record as `meta.purpose`, beside the brief and not inside it: the released
 // site checks every line of the brief and refuses one it does not know, but ignores a new entry of the
 // record's `meta`. Switching the answer changes only that entry; nothing else is removed or rewritten.
-import type { ElementTarget, ProcessModel, ProcessPurpose } from '../processModel/types.ts';
+import type { DecidedApproach, ElementTarget, ProcessModel, ProcessPurpose } from '../processModel/types.ts';
 import type { DocType } from '../docs/tree.ts';
 import { STAGES, type StageId } from '../workspace/route.ts';
 import { stagesFor } from '../workspace/modules.ts';
 
-export const PURPOSES = ['assess', 'as_is'] as const;
+export const PURPOSES = ['assess', 'as_is', 'decided'] as const;
 export type PurposeValue = (typeof PURPOSES)[number];
 
-export type { ProcessPurpose };
+export type { DecidedApproach, ProcessPurpose };
 
 export const PURPOSE_LABEL: Record<PurposeValue, string> = {
   assess: 'Assess it and document it',
   as_is: 'Document it as it is',
+  decided: 'Document it: how it will be built is already decided',
 };
 export const PURPOSE_WHAT: Record<PurposeValue, string> = {
   assess: 'Avala OS assesses how each step could be done and writes the documents for the change: BRD, PDD, FRD, SDD and the rest.',
   as_is: 'No change is being made: the process document, its map and the evidence pack describe how the work is done, and nothing is assessed.',
+  decided: 'One approach is already chosen for the whole process: every document is written for it, with no recommendation to read first. A step it cannot do stays with a person.',
 };
 /** The line a list of processes shows instead of a score, when there is one. */
 export const NOT_ASSESSED = 'Documented as it is, not assessed';
 
-/** The answer in effect: "assess" when nobody has answered. */
+/** The answer in effect: "assess" when nobody has answered. "decided" counts only with its approach. */
 export function purposeOf(m: ProcessModel | null | undefined): PurposeValue {
   const v = m?.meta.purpose?.value;
+  if (v === 'decided' && !m?.meta.decidedApproach) return 'assess';
   return v && (PURPOSES as readonly string[]).includes(v) ? v : 'assess';
 }
+
+/**
+ * The approach a person decided for the whole process, when there is one. It is in effect whatever the
+ * answer, until a person removes it: switched to "Assess it and document it", the Assessment page shows
+ * the scoring's own recommendation beside it, as it shows a person's choice for one step.
+ */
+export const decidedOf = (m: ProcessModel | null | undefined): DecidedApproach | null => m?.meta.decidedApproach ?? null;
+
+/** The words lists of processes show for a decided approach: "Approach decided by a person: Rule-based RPA". */
+export const DECIDED_LIST_LINE = (approachLabel: string) => `Approach decided by a person: ${approachLabel}`;
 
 /** What follows from the answer. */
 export interface WhatFollows {
@@ -56,6 +69,11 @@ export const whatFollows = (m: ProcessModel | null | undefined): WhatFollows => 
 export function followsFrom(purpose: PurposeValue = 'assess'): WhatFollows {
   if (purpose === 'as_is') {
     return { purpose, assessed: false, hiddenStages: ['assessment', 'work-items'], documents: ['pdd', 'evidence'], future: false, asksInMind: false, plansWork: false };
+  }
+  // Decided (package 9): every document, written for the decided approach, and work planned when the
+  // organisation has the board; no score, no ranking and no recommendation to read first.
+  if (purpose === 'decided') {
+    return { purpose, assessed: false, hiddenStages: ['assessment'], documents: null, future: true, asksInMind: false, plansWork: true };
   }
   return { purpose, assessed: true, hiddenStages: [], documents: null, future: true, asksInMind: true, plansWork: true };
 }
@@ -86,6 +104,7 @@ const stageLabel = (s: StageId) => STAGES.find(x => x.id === s)?.label ?? s;
 export function purposeOffMessage(stage: StageId, m: ProcessModel | null | undefined): string | null {
   const w = whatFollows(m);
   if (!w.hiddenStages.includes(stage)) return null;
+  if (w.purpose === 'decided') return `${stageLabel(stage)} is not part of this process: how it will be built is already decided, so there is no recommendation to read. What the decided approach can do, step by step, is at the top of Documents. To have the process assessed, answer "What do you want from this process?" in The brief, on the Process page.`;
   return `${stageLabel(stage)} is not part of this process: it is documented as it is, with no assessment. To change that, answer "What do you want from this process?" in The brief, on the Process page.`;
 }
 
@@ -109,9 +128,11 @@ const FIGURE_WORDS = /\b(handling[- ]times?|time per (?:case|item|invoice|reques
  * free words about one). Nothing is closed: a question not asked stays on the record as it was.
  */
 export function asksQuestion(m: ProcessModel, q: { target: ElementTarget; question: string }): boolean {
-  if (purposeOf(m) !== 'as_is') return true;
+  const purpose = purposeOf(m);
+  if (purpose === 'assess') return true;
   const t = q.target;
-  if (t.kind === 'system' && t.field === 'access') return false;
+  // Decided: how each application is reached is what the build needs, so it stays asked.
+  if (purpose === 'as_is' && t.kind === 'system' && t.field === 'access') return false;
   if (t.kind === 'metric') {
     const kind = t.id ? m.meta.metrics.find(x => x.id === t.id)?.kind : t.field;
     if (kind && SAVING_FIGURES.has(kind)) return false;

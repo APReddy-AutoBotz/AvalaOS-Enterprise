@@ -61,6 +61,7 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
   const [error, setError] = React.useState<string | null>(null);
   const [totals, setTotals] = React.useState<EffortTotals | null>(null);
   const [notAssessed, setNotAssessed] = React.useState<string[]>([]);
+  const [decided, setDecided] = React.useState<string[]>([]);
   React.useEffect(() => {
     let live = true;
     store.getSettings(workspaceId).then(async rec => {
@@ -80,18 +81,18 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
         plan: qp ? { now: qp.now.length, found: qp.found.length, wait: qp.wait.length, deferred: qp.deferred.length } : undefined, documents: readyDocuments(deliveryPlan(model, assessment).docs),
       });
       // A process documented as it is has no place in the ranking; its effort still counts (domain/plan/purpose.ts).
-      return { id: p.id, name: p.name, assessment, rate: decisions?.rate ?? null, costs: decisions?.costs ?? null, effort, assessed: whatFollows(model).assessed };
+      return { id: p.id, name: p.name, assessment, rate: decisions?.rate ?? null, costs: decisions?.costs ?? null, effort, assessed: whatFollows(model).assessed, decided: whatFollows(model).purpose === 'decided' };
     }));
     }).then(items => {
       const kept = items.filter((i): i is NonNullable<typeof i> => i !== null);
-      if (live) { setData(buildPortfolio(kept.filter(i => i.assessed))); setTotals(effortTotals(kept.map(i => i.effort))); setNotAssessed(kept.filter(i => !i.assessed).map(i => i.name)); }
+      if (live) { setData(buildPortfolio(kept.filter(i => i.assessed))); setTotals(effortTotals(kept.map(i => i.effort))); setNotAssessed(kept.filter(i => !i.assessed && !i.decided).map(i => i.name)); setDecided(kept.filter(i => i.decided).map(i => i.name)); }
     }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };
   }, [store, processes, workspaceId]);
 
   if (error) return <ErrorNote message={error} />;
   if (!data || !settings) return <Spinner label="Assessing the processes" />;
-  const asIsLine = notAssessed.length > 0 && <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="portfolio-not-assessed">{NOT_ASSESSED}, so not in this comparison: {notAssessed.join(', ')}.</p>;
+  const asIsLine = (notAssessed.length > 0 || decided.length > 0) && <div className="space-y-2">{decided.length > 0 && <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="portfolio-decided">With the approach decided by a person, so not in this comparison: {decided.join(', ')}.</p>}{notAssessed.length > 0 && <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="portfolio-not-assessed">{NOT_ASSESSED}, so not in this comparison: {notAssessed.join(', ')}.</p>}</div>;
   if (data.assessed === 0) return <div className="space-y-4">{asIsLine}<EmptyState title="Nothing to compare yet">A process appears here once it has steps to assess. Open a process and add its sources, or assess it as one step from the Inputs tab.</EmptyState></div>;
   const name = (id: string) => data.rows.find(r => r.id === id)?.name ?? id;
   const open = (id: string) => nav.go({ page: 'process', processId: id, stage: 'assessment' });

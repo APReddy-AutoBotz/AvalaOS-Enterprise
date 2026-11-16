@@ -11,6 +11,7 @@
 // - Source text is untrusted: the task's instructions say a passage that reads like an instruction is
 //   content to report. Nothing is stored and nothing in the process changes.
 import { asksQuestion, whatFollows } from '../plan/purpose.ts';
+import { decidedSummary } from '../assess/decided.ts';
 import type { TaskDefinition } from '../ai/gateway.ts';
 import type { ProcessModel, SourceLocator, SourceRef } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
@@ -132,7 +133,15 @@ export function askFacts(question: string, ctx: AskContext): Fact[] {
   // What the person wants from the process (domain/plan/purpose.ts): documented as it is, no score, ranking
   // or recommendation is sent at all, and no question that only serves an assessment. A rule, not an instruction.
   const assessed = whatFollows(m).assessed;
-  if (!assessed) out.push({ id: 'f:purpose', text: `${m.meta.name} is documented as it is, not assessed: it has no score, no ranking and no recommendation. To have it assessed, change "What do you want from this process?" in The brief on the Process stage.`, label: 'The process', target: { kind: 'process' } });
+  const decided = whatFollows(m).purpose === 'decided' ? (ctx.assessment ? decidedSummary(m, ctx.assessment) : null) : null;
+  if (decided) {
+    // Decided for the whole process (package 9): the approach and what it can do, step by step; no score,
+    // ranking or recommendation is sent. Who decided is not sent, as with a person's choice for a step.
+    out.push({ id: 'f:decided', text: `${decided.label} was decided for the whole process of ${m.meta.name}, because: "${decided.decided.reason}". It is not assessed: there is no score, ranking or recommendation. ${decided.label} can do ${decided.can.length} steps; for ${decided.unknown.length} it is not known yet; ${decided.cannot.length} stay with people because it cannot do them; a person set ${decided.person.length} themselves.`, label: 'The process', target: { kind: 'process' } });
+    for (const s of [...decided.unknown, ...decided.cannot, ...decided.person]) {
+      out.push({ id: `f:decided:${s.stepId}`, text: `Step "${s.name}": ${decided.person.includes(s) ? `set by a person to ${APPROACH_LABEL[s.approach]}.` : s.reason}`, label: `Step ${s.no}: ${s.name}`, target: { kind: 'step', stepId: s.stepId } });
+    }
+  } else if (!assessed) out.push({ id: 'f:purpose', text: `${m.meta.name} is documented as it is, not assessed: it has no score, no ranking and no recommendation. To have it assessed, change "What do you want from this process?" in The brief on the Process stage.`, label: 'The process', target: { kind: 'process' } });
   for (const q of m.openQuestions.filter(x => x.status === 'open' && asksQuestion(m, x))) {
     out.push({ id: `f:oq:${q.id}`, text: `Open question: ${q.question}${q.whyItMatters ? ` Why it matters: ${q.whyItMatters}` : ''}`, label: 'Open question', target: { kind: 'process' } });
   }
@@ -150,7 +159,7 @@ export function askFacts(question: string, ctx: AskContext): Fact[] {
     for (const f of singleApproachFacts(a, id => stepNo.get(id) ?? 0)) out.push({ id: `a:only:${f.approach}`, text: f.text, label: 'Assessment', target: { kind: 'assessment' } });
   }
   for (const p of PLATFORM_FACTS) out.push({ id: p.id, text: p.text, label: PLATFORM_LABEL, target: { kind: 'platform', stage: p.stage } });
-  for (const r of assessed ? ctx.requirements ?? [] : []) out.push({ id: `r:${r.code}`, text: `${r.code}: ${r.statement}`, label: r.code, target: { kind: 'requirement', code: r.code } });
+  for (const r of assessed || decided ? ctx.requirements ?? [] : []) out.push({ id: `r:${r.code}`, text: `${r.code}: ${r.statement}`, label: r.code, target: { kind: 'requirement', code: r.code } });
   for (const i of ctx.items ?? []) out.push({ id: `w:${i.id}`, text: `Board item (${i.type}) "${i.title}": status ${i.status.replace(/_/g, ' ')}${i.owner ? `, owner ${i.owner}` : ', no owner'}.`, label: `Board: ${i.title}`, target: { kind: 'item', itemId: i.id, projectId: i.projectId } });
   relevantPassages(question, ctx.passages ?? []).forEach((p, n) => {
     const where = locatorLabel(p.locator);

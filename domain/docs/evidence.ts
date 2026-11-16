@@ -16,6 +16,7 @@ import { controlOf, typicalLeft, type DocInput } from './common.ts';
 import { testPack } from './tests.ts';
 import { applyTestEdits, packAsRun, CASE_STATE_LABEL, type TestCaseEdit } from './testEdits.ts';
 import { asksQuestion, whatFollows } from '../plan/purpose.ts';
+import { decidedSummary } from '../assess/decided.ts';
 
 export const NOT_RECORDED = 'Not recorded';
 
@@ -149,15 +150,23 @@ export function buildEvidence(input: EvidenceInput): DocTree {
 
   // ---- 6 Decisions people made
   b.section('6', 'Decisions people made', 1);
+  // An approach decided for the whole process (package 9): what, why, who and when, and what it can do.
+  const dec = decidedSummary(m, input.assessment);
+  if (dec) {
+    b.table('The approach decided for the whole process', ['Approach', 'Reason', 'Who', 'When', 'What it can do'],
+      [[dec.label, dec.decided.reason, personCell(name(dec.decided.by)), date(dec.decided.at),
+        `${dec.can.length} ${dec.can.length === 1 ? 'step' : 'steps'}; not known yet for ${dec.unknown.length}; ${dec.cannot.length} stay with people`]], '');
+  }
   const overrides = Object.values(input.decisions.overrides);
   const order = orderedSteps(m);
-  b.table('Choices of approach against the scoring', ['Step', 'Approach chosen', 'The scoring recommended', 'Reason', 'Who', 'When'],
+  // Decided: a person's choice for a step is set against the decided approach, not against a recommendation.
+  b.table(dec ? 'Steps a person set themselves' : 'Choices of approach against the scoring', ['Step', 'Approach chosen', dec ? 'The scoring alone gives' : 'The scoring recommended', 'Reason', 'Who', 'When'],
     overrides.map(o => {
       const i = order.findIndex(s => s.id === o.stepId);
       const score = input.assessment.steps.find(s => s.stepId === o.stepId);
       const rec = score ? (score.recommended ?? score.winner) : null;
-      return [i >= 0 ? `${i + 1}. ${order[i]!.name}` : 'A step no longer in the process', APPROACH_LABEL[o.approach], rec ? APPROACH_LABEL[rec] : notRecorded(), o.rationale, personCell(o.by), date(o.at)];
-    }), 'Nobody has chosen another approach than the scoring recommends.');
+      return [i >= 0 ? `${i + 1}. ${order[i]!.name}` : 'A step no longer in the process', APPROACH_LABEL[o.approach], rec ? APPROACH_LABEL[rec] : notRecorded(), o.rationale, personCell(input.names[o.by] ?? o.by), date(o.at)];
+    }), dec ? 'Nobody set a step themselves.' : 'Nobody has chosen another approach than the scoring recommends.');
 
   // ---- 7 Review comments
   b.section('7', 'Review comments', 1);

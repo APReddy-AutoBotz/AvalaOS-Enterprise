@@ -147,7 +147,7 @@
       "say": [["override", "overridden"], ["reason"]] },
     { "id": "W05", "kind": "platform", "question": "Can I set one approach for the whole process in one go?",
       "cite": ["h:step-by-step"],
-      "say": [["step by step", "each step", "every step", "one step", "single setting", "per step"]] },
+      "say": [["The brief", "already decided", "decided for", "whole process"]] },
     { "id": "W06", "kind": "platform", "question": "If I edit a section of a document and the process changes later, do I lose my text?",
       "cite": ["h:edits-kept"],
       "say": [["kept", "keep", "Needs review"]] },

@@ -6,7 +6,7 @@ import { NFR_TOPICS } from '../requirements/derive.ts';
 import { criterionText, PRIORITY_LABEL, type Requirement } from '../requirements/register.ts';
 import { processWords } from '../plan/intended.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
-import { controlOf, ACCESS_TEXT, sourceList, type DocInput } from './common.ts';
+import { controlOf, decidedIn, ACCESS_TEXT, sourceList, type DocInput } from './common.ts';
 
 export function buildFrd(input: DocInput): DocTree {
   const m = input.model;
@@ -35,7 +35,8 @@ export function buildFrd(input: DocInput): DocTree {
   b.open('Which accounts and permissions will the solution use in each application?', { kind: 'meta', field: 'access' });
 
   b.section('3', 'Functional requirements', 1);
-  if (!fr.length) b.callout('No step is recommended for automation yet, so there are no functional requirements. They appear when the assessment recommends automating a step.');
+  const dec = decidedIn(input);
+  if (!fr.length) b.callout(dec ? `${dec.label}, the approach decided, can do no step yet, so there are no functional requirements. They appear when it can do a step.` : 'No step is recommended for automation yet, so there are no functional requirements. They appear when the assessment recommends automating a step.');
   for (const r of fr) {
     b.section(`3.${fr.indexOf(r) + 1}`, `${r.code} ${r.title}`);
     b.paragraph(r.statement);

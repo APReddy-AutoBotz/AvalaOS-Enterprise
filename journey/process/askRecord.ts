@@ -22,7 +22,8 @@ export async function loadAskRecord(store: JourneyStore, p: { processId: string;
   const name = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? null : null);
   return {
     // Documented as it is (domain/plan/purpose.ts): no assessment is read at all.
-    assessment: whatFollows(model).assessed ? assessProcess(model, { rate: decisions?.rate ?? null, decisions, ...(settings ? { settings: settings.settings } : {}) }) : null,
+    // Decided (package 9): worked out for what the approach can do step by step; askFacts sends no score from it.
+    assessment: whatFollows(model).assessed || whatFollows(model).purpose === 'decided' ? assessProcess(model, { rate: decisions?.rate ?? null, decisions, ...(settings ? { settings: settings.settings } : {}) }) : null,
     requirements: requirements.filter(r => r.state === 'active').map(r => ({ code: r.code, statement: r.statement })),
     items: items.map(i => ({ id: i.id, projectId: i.projectId, title: i.title, type: i.type, status: STATUS_LABEL[i.status], owner: name(i.ownerId) })),
     passages,

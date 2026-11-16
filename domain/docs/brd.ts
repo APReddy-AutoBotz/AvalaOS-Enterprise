@@ -7,7 +7,8 @@ import { QUADRANT } from '../assess/priority.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
 import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { businessRequirementRows } from './frd.ts';
-import { controlOf, known, metricCell, sourceList, type DocInput } from './common.ts';
+import { controlOf, decidedIn, known, metricCell, sourceList, type DocInput } from './common.ts';
+import { decidedLine, decidedSentence } from '../assess/decided.ts';
 
 const hrs = (n: number) => Math.round(n).toLocaleString('en');
 
@@ -19,13 +20,15 @@ export function buildBrd(input: DocInput): DocTree {
   const owner = known(m.meta.owner);
 
   b.section('1', 'Executive summary', 1);
-  b.paragraph(`Recommended for ${m.meta.name}: ${a.verdict}. ${a.takeaway}`);
+  const dec = decidedIn(input);
+  b.paragraph(dec ? `${decidedSentence(dec, input.names)} ${decidedLine(dec, input.names).replace(/^[^"]*"[^"]*"\.\s*/, '')}` : `Recommended for ${m.meta.name}: ${a.verdict}. ${a.takeaway}`);
   b.list([
     a.split,
     `Readiness: ${p.readiness.label}. ${p.readiness.reasons.join(' ')}`,
     p.value.computable ? `${p.value.value!.exact ? '' : 'Up to '}${p.value.value!.exact && Math.round(p.value.value!.hours[0]) !== Math.round(p.value.value!.hours[1]) ? `${hrs(p.value.value!.hours[0])} to ` : ''}${hrs(p.value.value!.hours[1])} ${p.value.value!.basis === 'by_hand' ? 'hours a year: what this work would take by hand (nothing of it is done today).' : 'hands-on hours a year could be automated.'}` : `The hours that could be automated are not known yet: ${p.value.reason}`,
-    p.placement.placed ? `Priority: ${QUADRANT[p.placement.quadrant!].label}. ${QUADRANT[p.placement.quadrant!].text}` : `Priority is not settled yet. ${p.placement.reason}`,
-  ]);
+    // Decided: no place in a ranking is given, because no approach was chosen against others.
+    dec ? '' : p.placement.placed ? `Priority: ${QUADRANT[p.placement.quadrant!].label}. ${QUADRANT[p.placement.quadrant!].text}` : `Priority is not settled yet. ${p.placement.reason}`,
+  ].filter(Boolean));
   for (const c of a.cautions.filter(c => c.fired)) b.callout(`${c.label}. ${c.reason}`, 'warning');
 
   b.section('2', 'Business context and problem statement', 1);
@@ -81,7 +84,7 @@ export function buildBrd(input: DocInput): DocTree {
     ...m.controls.map(c => [c.text, sourceList(c.sources)]),
   ];
   b.table('Constraints', ['Constraint', 'Source'], constraints, 'No constraints are recorded.');
-  b.table('Dependencies', ['Dependency', 'Steps affected'], a.apiSwitch.steps ? [[`Confirming the API of ${a.apiSwitch.systems.join(', ')}`, String(a.apiSwitch.steps)]] : [], 'No open dependency changes the recommendation.');
+  b.table('Dependencies', ['Dependency', 'Steps affected'], a.apiSwitch.steps ? [[`Confirming the API of ${a.apiSwitch.systems.join(', ')}`, String(a.apiSwitch.steps)]] : [], dec ? `No open dependency holds back ${dec.label}.` : 'No open dependency changes the recommendation.');
 
   b.section('10', 'Risks and issues', 1);
   b.table('Risks', ['Risk', 'Source'], m.risks.map(r => [r.text, sourceList(r.sources)]), 'No risks are recorded.');

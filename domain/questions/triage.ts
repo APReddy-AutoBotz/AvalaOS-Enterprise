@@ -6,12 +6,16 @@ import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { buildingSystem } from '../plan/intended.ts';
 import { asksQuestion, purposeOf, type PurposeValue } from '../plan/purpose.ts';
+import { APPROACH_LABEL } from '../assess/scoring.ts';
+import { choicesFor } from './answer.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
-export type AnswerKind = 'role' | 'system' | 'number' | 'text' | 'access' | 'free';
+export type AnswerKind = 'role' | 'system' | 'number' | 'text' | 'access' | 'free' | 'choice';
 
 export const GROUP_LABEL: Record<QGroup, string> = { decides: 'Changes the recommendation', signoff: 'Needed for sign-off', detail: 'Detail' };
+/** An item's group in words: for an approach decided for the process, what leads settles that approach. */
+export const groupLabel = (i: Pick<TriageItem, 'group' | 'affects'>) => (i.group === 'decides' && i.affects[0]?.startsWith('Settles whether') ? 'Settles the decided approach' : GROUP_LABEL[i.group]);
 export const OWNER_LABEL: Record<QOwner, string> = { business: 'Process owner or SME', it: 'IT or application owner', finance: 'Finance or controls' };
 
 export interface TriageItem {
@@ -28,6 +32,8 @@ export interface TriageItem {
   kind: AnswerKind;
   /** For merged interface questions: the interfaces to settle, by their index in the system's access list. */
   interfaces?: { index: number; label: string; access: AccessStatus }[];
+  /** For a fact of a step or an application that settles a decided approach (package 9): the answers to choose from. */
+  choices?: [string, string][];
   /** A person it is assigned to, when deferred. */
   assignedTo: string | null;
   deferred: boolean;
@@ -177,10 +183,36 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   // Documented as it is (domain/plan/purpose.ts): what only serves an assessment is not asked, and
   // nothing left can change a recommendation, because there is none. The questions stay on the record.
   const purpose = purposeOf(m);
+  // Decided (package 9): there is no recommendation to change. What leads instead is what settles whether
+  // the decided approach can do a step not known yet: the question about that application's API.
+  const settles = new Map<string, number>();
+  if (purpose === 'decided') for (const s of a.steps) for (const q of s.decided?.status === 'unknown' ? s.decided.questions : []) {
+    if (q.target.kind === 'api') settles.set(q.target.systemId, (settles.get(q.target.systemId) ?? 0) + 1);
+  }
+  const label = m.meta.decidedApproach ? APPROACH_LABEL[m.meta.decidedApproach.approach] : '';
   const asked = purpose === 'as_is'
     ? items.filter(i => asksQuestion(m, i)).map(i => (i.group === 'decides' ? { ...i, group: 'signoff' as const, affects: i.affects.filter(x => !x.startsWith('Assessment')) } : i))
+    : purpose === 'decided'
+    ? items.filter(i => asksQuestion(m, i)).map(i => {
+      const n = i.target.kind === 'system' && i.target.field === 'access' && i.target.id ? settles.get(i.target.id) ?? 0 : 0;
+      if (n) return { ...i, group: 'decides' as const, uses: n, affects: [`Settles whether ${label} can do ${n} ${n === 1 ? 'step' : 'steps'}`, ...i.affects.filter(x => !x.startsWith('Assessment'))] };
+      return i.group === 'decides' ? { ...i, group: 'signoff' as const, affects: i.affects.filter(x => !x.startsWith('Assessment')) } : i;
+    })
     : items;
+  // The facts of a step or of an application's screens that settle a step not known yet lead too, answered by a choice.
+  if (purpose === 'decided') {
+    const seen = new Set<string>();
+    for (const s of a.steps) for (const q of s.decided?.status === 'unknown' ? s.decided.questions : []) {
+      if (q.target.kind === 'api' || seen.has(q.key)) continue;
+      seen.add(q.key);
+      const target: ElementTarget = q.target.kind === 'trait' ? { kind: 'step', id: q.target.stepId, field: `traits.${q.target.trait}` } : { kind: 'system', id: q.target.systemId, field: 'uiStable' };
+      const n = a.steps.filter(x => x.decided?.status === 'unknown' && x.decided.questions.some(y => y.key === q.key)).length;
+      asked.push({ key: `decided:${q.key}`, question: q.question, target, questionIds: [], kind: 'choice', choices: choicesFor(q.target.kind === 'trait' ? q.target.trait : 'uiStable'),
+        assignedTo: null, deferred: false, group: 'decides', owner: q.target.kind === 'screens' ? 'it' : 'business', uses: n,
+        affects: [`Settles whether ${label} can do ${n} ${n === 1 ? 'step' : 'steps'}`] });
+    }
+  }
   asked.sort((x, y) => Number(x.deferred) - Number(y.deferred) || ORDER[x.group] - ORDER[y.group] || x.owner.localeCompare(y.owner));
   const gapCount = gaps(m).length + m.exceptions.filter(x => !x.routedToRoleId).length;
-  return { items: asked, alreadyKnown, raw: stored.length + gapCount, ...(purpose === 'as_is' ? { purpose } : {}) };
+  return { items: asked, alreadyKnown, raw: stored.length + gapCount, ...(purpose !== 'assess' ? { purpose } : {}) };
 }

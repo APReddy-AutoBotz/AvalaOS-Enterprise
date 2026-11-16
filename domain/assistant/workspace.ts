@@ -28,6 +28,8 @@ export interface WorkspaceProcess {
   card: ProcessCard | null;
   /** What a person wants from the process (domain/plan/purpose.ts), when it is not the default. */
   purpose?: PurposeValue;
+  /** "Approach decided by a person: …", when how it will be built is already decided. */
+  decidedLine?: string;
   /** The applications its process model names. */
   systems: string[];
 }
@@ -124,7 +126,7 @@ export function workspaceFacts(question: string, ctx: WorkspaceContext, named?: 
         plural(p.openQuestions, 'open question'),
         p.proposalsWaiting && followsFrom(p.purpose).plansWork ? `${plural(p.proposalsWaiting, 'work-item proposal')} waiting for review` : '',
         // Documented as it is: no score, recommendation or place in the portfolio is said, because there is none.
-        !followsFrom(p.purpose).assessed ? NOT_ASSESSED.toLowerCase() : c ? `${c.lead ? `${APPROACH_LABEL[c.lead]} leads` : 'no step recommended for automation'}; of ${plural(c.steps, 'step')} people do today, ${c.split.rules} by rules (RPA or an API), ${c.split.ai} with AI, ${c.split.people} stay with people` : 'no steps to assess yet',
+        p.decidedLine ? p.decidedLine.replace(/^./, x => x.toLowerCase()) : !followsFrom(p.purpose).assessed ? NOT_ASSESSED.toLowerCase() : c ? `${c.lead ? `${APPROACH_LABEL[c.lead]} leads` : 'no step recommended for automation'}; of ${plural(c.steps, 'step')} people do today, ${c.split.rules} by rules (RPA or an API), ${c.split.ai} with AI, ${c.split.people} stay with people` : 'no steps to assess yet',
         c?.hours && followsFrom(p.purpose).assessed ? `automation could take up to ${Math.round(c.hours).toLocaleString('en')} hours a year` : '',
         row && followsFrom(p.purpose).assessed ? `in the portfolio ${row.rank} of ${ctx.portfolio!.rows.length}${row.quadrant ? `, ${QUADRANT[row.quadrant].label.toLowerCase()}` : ', not placed yet'}` : '',
         p.systems.length ? `applications: ${p.systems.join(', ')}` : '',
