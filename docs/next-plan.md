@@ -202,6 +202,10 @@ A name or a time the record does not hold says "Not recorded". People are named,
 
 **Done when.** Unit tests: each section from a fixture; every active functional requirement appears in section 4; a requirement with no test appears in section 8; nothing in the pack that the record does not hold. A browser test on the sample: the pack opens, lists the sample's 25 functional requirements, and downloads as Word. The review will follow three requirements of the owner's process from the pack to their source passage, work item and test case.
 
+### Package 7: a shorter homepage (owner, 16 November 2026; built the same day by the review chat on the owner's "go")
+
+The owner found the page too long; two outside reviews (in the owner's hands) agreed on a crowded opening and a text-heavy lower half. Taken from them: one action in the opening beside the demo ("Book a walkthrough"), who the page is for, the lower half cut and reordered around the buyer, a product screen beside Ask Avala, a sharing card, and two real wording faults in the product ("1 of 20 step"; two different figures both called "known": the Inputs tab now says "complete"). Not taken: softening "The score is arithmetic, not an opinion" and the motto; the owner's name, photograph and LinkedIn (held until the lawyer has read the contract); an email gate on sample files; analytics and A/B tests. Left for its own package, asked first: an inquiry form on the page (a server function, storage, spam control, privacy wording). What the page now is: `AGENTS.md`, "Homepage". Screens only.
+
 ### After the second bundle
 
 - Run the Ask Avala measure once (the workflow "Ask Avala measure"): a line about map shapes was added to what Ask Avala knows in package 1 and the measure has not run since. Report the result.

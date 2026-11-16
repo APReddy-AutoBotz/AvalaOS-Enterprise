@@ -259,4 +259,17 @@ test('tour: the sample case through every stage', async ({ page }) => {
   const sample = await page.evaluate(() => localStorage.getItem('avala.journey.memory.v1'));
   fs.mkdirSync('test-results/demo', { recursive: true });
   fs.writeFileSync('test-results/demo/sample.json', JSON.stringify(JSON.parse(sample!)));
+
+  // Ask Avala for the homepage: the demo plays back an answer recorded on the sample case, each sentence
+  // with its source (the walk's own store has no AI and no recorded answers).
+  await page.goto('/demo/processes');
+  await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
+  await stage(page, 'Assessment');
+  await expect(page.getByTestId('verdict')).toBeVisible();
+  await page.getByRole('button', { name: 'Ask Avala' }).click();
+  const panel = page.getByTestId('ask-panel');
+  await panel.getByRole('group', { name: 'Questions to start with' }).getByRole('button', { name: 'Why is this the recommended approach?' }).click();
+  await expect(panel.getByTestId('ask-lead')).toBeVisible();
+  await settle(page);
+  await snap(page, 'ask');
 });

@@ -12,7 +12,7 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
   page.on('request', r => { if (!r.url().startsWith('http://127.0.0.1:4173/')) outside.push(r.url()); });
 
   await page.goto('/');
-  await page.getByRole('link', { name: 'Try the demo' }).click();
+  await page.getByRole('link', { name: 'Try the live demo' }).first().click();
   await expect(page).toHaveURL(/\/demo(\/work)?$/);
   await expect(page.getByTestId('demo-banner')).toContainText('made-up company');
   await expect(page.getByRole('link', { name: 'Leave the demo' })).toHaveAttribute('href', '/');
