@@ -65,6 +65,8 @@ export interface RevisionRow {
   basedOn: string | null;
   createdAt: string;
   approvedAt: string | null;
+  /** Who approved it (a user id); null when not approved or not recorded. */
+  approvedBy?: string | null;
 }
 
 export interface EditRow { revisionId: string; seq: number; origin: string; summary: string; createdAt: string; operations: number }
