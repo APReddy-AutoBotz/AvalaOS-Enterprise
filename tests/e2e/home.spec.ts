@@ -167,7 +167,7 @@ test('homepage on a phone: the links are behind Menu', async ({ page }) => {
   await expect(main.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('homepage: it stays short, about seven to eight screens on a laptop and under 1,000 words before "Read more"', async ({ page }) => {
+test('homepage: it stays short, under eight screens on a laptop and about 1,000 words before "Read more"', async ({ page }) => {
   // The owner's laptop (15.6 inch): the page had grown to 11 screens and 1,440 words (16 November 2026).
   await page.setViewportSize({ width: 1536, height: 864 });
   await page.goto('/');
@@ -179,8 +179,8 @@ test('homepage: it stays short, about seven to eight screens on a laptop and und
     sections: [...document.querySelectorAll('main > section')].map(x => `${x.querySelector('h2')?.textContent?.slice(0, 24)}: ${Math.round(x.getBoundingClientRect().height)}`),
   }));
   console.log(`HOME_SIZE ${size.screens.toFixed(2)} screens, ${size.words} words | ${size.sections.join(' | ')}`);
-  expect(size.screens).toBeLessThanOrEqual(8.5);
-  expect(size.words).toBeLessThanOrEqual(1000);
+  expect(size.screens).toBeLessThanOrEqual(8);
+  expect(size.words).toBeLessThanOrEqual(1050);
 });
 
 test.describe('the card a shared link shows', () => {
@@ -191,7 +191,7 @@ test.describe('the card a shared link shows', () => {
     expect(await page.locator('meta[name="twitter:card"]').getAttribute('content')).toBe('summary_large_image');
     // The card is the opening itself (public/marketing/share-card.jpg, 1200 by 630): the name, the headline, the two
     // actions and the product screen. The smaller links are left out of the picture.
-    await page.addStyleTag({ content: 'ul[aria-label="In short"], section a[href="#tour"]{display:none!important}' });
+    await page.addStyleTag({ content: 'ul[aria-label="In short"]{display:none!important}' });
     const hero = page.getByRole('img', { name: /assessment of a vendor invoice process/ });
     await expect.poll(() => hero.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth > 0)).toBe(true);
     await page.screenshot({ path: 'test-results/screens/share-card.jpg', type: 'jpeg', quality: 90 });

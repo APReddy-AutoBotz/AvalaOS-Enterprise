@@ -190,22 +190,22 @@ function Tour() {
 const REASONS = [
   {
     title: 'The score is arithmetic, not an opinion',
-    text: 'Every step is scored out of 100 for each approach, from fixed tables you can read. The same facts always give the same ranking, and your people can overrule any step, with a reason.',
-    more: 'AI helps read your sources, but it does not decide, and where rules are enough the answer is “AI unnecessary”. A person’s choice is recorded beside the scoring’s own recommendation, never in place of it.',
+    text: 'Every step is scored out of 100 for each approach, from fixed tables you can read. Your people can overrule any step, with a reason.',
+    more: 'The same facts always give the same ranking. AI helps read your sources, but it does not decide, and where rules are enough the answer is “AI unnecessary”. A person’s choice is recorded beside the scoring’s own recommendation, never in place of it.',
     id: 'why-score', img: 'reason-score', w: 1700, h: 907, tint: 'bg-sky-100',
     alt: 'The step-by-step table: one step marked AI needed, the others AI unnecessary, each with its score and reasons',
   },
   {
     title: 'Every line traces to a source',
-    text: 'A fact your sources did not give is never filled in. It shows as “Not provided” and becomes an open question with a likely owner.',
-    more: 'What is reported but not confirmed is marked so, and every gap is listed again at the end of each document, so it cannot hide in a confident paragraph. Start from a typical process if you like: it stays labelled Typical until your people confirm it.',
+    text: 'A fact your sources did not give is never filled in. It becomes an open question with a likely owner.',
+    more: 'It shows as “Not provided” in the documents. What is reported but not confirmed is marked so, and every gap is listed again at the end of each document, so it cannot hide in a confident paragraph. Start from a typical process if you like: it stays labelled Typical until your people confirm it.',
     id: 'why-facts', img: 'reason-facts', w: 1700, h: 1172, tint: 'bg-amber-100',
     alt: 'Part of a generated document: one access marked Not provided, one reported but not confirmed, and a figure marked Inferred',
   },
   {
     title: 'A named person signs off',
-    text: 'Each process names its analyst, architect and approver. Only an approver can approve a revision, and an approved revision is never changed.',
-    more: 'Who invited, changed and approved what is kept in the audit trail.',
+    text: 'Each process names its analyst, architect and approver. An approved revision is never changed.',
+    more: 'Only an approver can approve a revision. Who invited, changed and approved what is kept in the audit trail.',
     id: 'why-people', img: 'reason-people', w: 1700, h: 963, tint: 'bg-emerald-100',
     alt: 'The list of what each of the six roles can do, above the audit trail',
   },
@@ -232,7 +232,7 @@ const CASE: [string, string][] = [
 // release of 16 November 2026.
 const OUTPUTS: [string, string][] = [
   ['The documents this process needs', 'PDD and SDD, BRD and FRD, or an agent definition, chosen by rule. In Word, in your company’s template.'],
-  ['Test cases', 'One for each acceptance criterion. Testers edit and add their own, and the pack downloads for Excel.'],
+  ['Test cases', 'One for each acceptance criterion. Testers edit and add their own; the pack downloads for Excel.'],
   ['As-Is and To-Be flows', 'Drawn from the process, as swimlanes or a simple flow. Both download as BPMN.'],
   ['A backlog and a Delivery board', 'Epics, stories and tasks with acceptance criteria. Run delivery here, or move it to Jira or Azure DevOps as CSV.'],
   ['A portfolio view', 'Every assessed process side by side, by value against ease of implementation.'],
@@ -252,10 +252,10 @@ const providers = (Object.keys(AI_PROVIDERS) as AiProvider[]).map(p => ({ id: p,
 // What a security reviewer asks, beside "Your AI, your key". A client's own workspace and an install in a
 // company's own cloud are offered, not described (no such install has been done yet).
 const TRUST_POINTS: [string, string][] = [
-  ['Your key stays on the server', 'Stored encrypted and never sent back to the browser. If it stops working, the work stops and says why; it never moves to our key without you.'],
+  ['Your key stays on the server', 'Stored encrypted, never sent back to the browser. If it stops working, the work stops and says why: it never moves to our key without you.'],
   ['AI only where it reads or drafts', 'AI reads your sources and drafts text a person checks. The scores and the recommendation come from fixed tables, never from AI.'],
   ['A workspace for each client', 'With its own people, document set-up and AI key. People see only the workspaces they are members of.'],
-  ['Inside your own cloud, on request', 'Avala OS can be installed in your company’s own cloud. Tell us what your security team needs and we will plan it with you.'],
+  ['Inside your own cloud, on request', 'Avala OS can be installed in your company’s own cloud. We plan it with your security team.'],
 ];
 // The effort promise (docs/effort-first-plan.md: "Avala OS does the work; people confirm it") as three
 // outcomes a buyer recognises, with the product's own detail behind "Read more". Each point names
@@ -294,7 +294,7 @@ const HERO_FACTS: [string, string][] = [
 /** The longer explanation of a point, one click away, so the page stays short. */
 function More({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
   return (
-    <details className="mt-3">
+    <details className="mt-2">
       <summary className={`w-fit cursor-pointer rounded text-sm font-semibold underline decoration-[#E69F00] decoration-2 underline-offset-4 ${dark ? 'text-white' : 'text-[#002C4B]'} ${focus} ${dark ? 'focus-visible:outline-white' : 'focus-visible:outline-[#002C4B]'}`}>Read more</summary>
       <div className={`mt-2 text-base leading-7 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>{children}</div>
     </details>
@@ -311,14 +311,14 @@ function Reasons() {
     </div>
   );
   return (
-    <div className="mt-10 grid items-start gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-12">
-      <ul aria-label="Why the answer can be defended" className="space-y-3">
+    <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-12">
+      <ul aria-label="Why the answer can be defended" className="space-y-2.5">
         {REASONS.map((r, i) => (
-          <li key={r.id} id={r.id} onMouseEnter={() => setOpen(i)} className={`scroll-mt-10 rounded-2xl bg-white p-5 ring-1 ring-inset ${i === open ? 'ring-2 ring-[#002C4B]' : 'ring-slate-200'}`}>
+          <li key={r.id} id={r.id} onMouseEnter={() => setOpen(i)} className={`scroll-mt-10 rounded-2xl bg-white px-5 py-4 ring-1 ring-inset ${i === open ? 'ring-2 ring-[#002C4B]' : 'ring-slate-200'}`}>
             <h3 className="font-display text-xl font-semibold tracking-tight text-[#002C4B]">
               <button type="button" aria-pressed={i === open} onClick={() => setOpen(i)} className={`rounded text-left ${focus} focus-visible:outline-[#002C4B]`}>{r.title}</button>
             </h3>
-            <p className="mt-2 text-base leading-7 text-slate-700">{r.text}</p>
+            <p className="mt-1.5 text-base leading-7 text-slate-700">{r.text}</p>
             <More>{r.more}</More>
             <div className="mt-4 lg:hidden">{picture(r)}</div>
           </li>
@@ -370,7 +370,7 @@ export default function HomePage() {
           <a href="/" className={`rounded ${focus} focus-visible:outline-white`}><img src="/brand/avala-os-logo-light.svg" alt="Avala OS, home" className="h-10 w-auto" /></a>
           <SiteNav go={go} />
         </header>
-        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-16 pt-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-20 lg:pt-12 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
+        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-14 pt-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-16 lg:pt-10 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
           <div>
             <p className="text-sm font-semibold text-[#F2B21E]">For automation teams and consulting partners</p>
             <h1 className="mt-3 font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
@@ -380,7 +380,6 @@ export default function HomePage() {
               {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} className={cta}>{WALK_LABEL}</a>}
               <a href="/demo" className={second}>Try the live demo</a>
             </div>
-            <p className="mt-4 text-sm"><a href="#tour" className={`rounded font-semibold text-slate-200 underline decoration-white/40 underline-offset-4 hover:text-white ${focus} focus-visible:outline-white`}>Watch the 30-second tour</a></p>
             <ul aria-label="In short" className="mt-6 space-y-2 text-sm font-semibold text-slate-100">
               {HERO_FACTS.map(([href, label]) => (
                 <li key={href} className="flex items-start gap-2.5">
@@ -419,7 +418,7 @@ export default function HomePage() {
                 </ul>
               </div>
             </div>
-            <div className="mt-10 rounded-3xl bg-amber-100 p-4 sm:p-8">
+            <div className="mt-8 rounded-3xl bg-amber-100 p-4 sm:p-6">
               <div className="shot-frame"><img src={shot('motto-split')} width={1800} height={563} loading="lazy" className="block h-auto w-[170%] max-w-none sm:w-full" alt="How the 20 steps of the sample split: 15 rule-based RPA, 1 AI-assisted, 4 stay with people, with the reasons for each" /></div>
             </div>
             <dl className="mt-8 grid gap-x-8 gap-y-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -448,7 +447,7 @@ export default function HomePage() {
                 <p className="text-sm font-semibold text-[#9A6700]">Less work for your people</p>
                 <h2 id="effort-h" className="mt-2 font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Avala OS does the work. Your people confirm it.</h2>
               </div>
-              <p className="self-end text-lg leading-8 text-slate-700">An assessment should not turn into weeks of workshops and a questionnaire nobody finishes. Avala OS reads what you already have, asks only what it cannot find, and shows what it took.</p>
+              <p className="self-end text-lg leading-8 text-slate-700">An assessment should not turn into weeks of workshops. Avala OS reads what you already have, asks only what it cannot find, and shows what it took.</p>
             </div>
             <ul aria-label="What you get" className="mt-10 grid gap-4 lg:grid-cols-3">
               {OUTCOMES.map(([t, x]) => (
@@ -494,7 +493,7 @@ export default function HomePage() {
               <p className="mt-6"><a href="/demo" className={`rounded font-semibold text-[#002C4B] underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-[#002C4B]`}>Try it in the demo</a></p>
             </div>
             <div className="rounded-3xl bg-amber-100 p-4 sm:p-8">
-              <div className="shot-frame"><img src={shot('ask')} width={1600} height={1418} loading="lazy" className="block h-auto w-full" alt="Ask Avala open on the sample case: the question “Why is this the recommended approach?” answered in sentences, each with a numbered source" /></div>
+              <div className="shot-frame"><img src={shot('ask')} width={1600} height={1173} loading="lazy" className="block h-auto w-full" alt="Ask Avala open on the sample case: the question “Why is this the recommended approach?” answered in sentences, each with a numbered source" /></div>
             </div>
           </div>
         </section>
@@ -520,7 +519,7 @@ export default function HomePage() {
               <div id="ai" className="scroll-mt-10 self-start rounded-2xl bg-[#002C4B] p-6 text-white">
                 <p className="text-sm font-semibold text-[#F2B21E]">Bring your own AI key (BYOK)</p>
                 <h3 className="mt-2 font-display text-3xl font-semibold tracking-tight">Your AI, your key</h3>
-                <p className="mt-4 text-base leading-7 text-slate-200">Connect the AI provider your company already trusts, with your own key. For AI reading, your documents then go to that provider and to no other AI provider. Or start on the Avala OS allowance and connect your key later.</p>
+                <p className="mt-4 text-base leading-7 text-slate-200">Connect the AI provider your company already trusts, with your own key. For AI reading, your documents then go to that provider and to no other AI provider.</p>
                 <p className="mt-6 text-sm font-semibold text-white">Available now</p>
                 <ul aria-label="AI providers available now" className="mt-2 flex flex-wrap gap-2">
                   {providers.filter(p => p.ready).map(p => <li key={p.id} className="rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-semibold text-emerald-900 ring-1 ring-inset ring-emerald-200">{p.label}</li>)}
@@ -550,7 +549,7 @@ export default function HomePage() {
         <section id="start" aria-labelledby="start-h" className="scroll-mt-6 bg-slate-50">
           <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="start-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Start with one part, or use it all</h2>
-            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later. Nothing is lost when you switch parts on or off.</p>
+            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later; nothing is lost when a part is switched on or off.</p>
             <ul aria-label="Ways to start" className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {PLANS.map((p, i) => (
                 <li key={p.id} className={`flex flex-col rounded-2xl p-6 ring-1 ring-inset ${i === 0 ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white ring-slate-200'}`}>
@@ -564,7 +563,7 @@ export default function HomePage() {
         </section>
 
         <section aria-labelledby="close-h" className="bg-[#001B2F] text-white">
-          <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 px-6 py-16 lg:flex-row lg:items-center lg:gap-16">
+          <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 px-6 py-14 lg:flex-row lg:items-center lg:gap-16">
             <Mark lit={4} size={168} dark />
             <div>
               <p className="font-display text-xl font-semibold tracking-tight text-slate-200">
@@ -576,8 +575,8 @@ export default function HomePage() {
                 {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} className={cta}>{WALK_LABEL}</a>}
                 <a href="/demo" className={second}>Try the live demo</a>
               </div>
-              {!signedIn && <p className="mt-5 text-base text-slate-300">Or write to <a href={`mailto:${CONTACT_EMAIL}`} className={`rounded font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>{CONTACT_EMAIL}</a>. Access is by invitation: after the walkthrough we set up a workspace for you.</p>}
-              <p className="mt-8 max-w-2xl border-l-4 border-[#E69F00] pl-4 text-base leading-7 text-slate-300"><span className="font-semibold text-white">Built by a practitioner.</span> A business analyst and project manager with 13+ years leading RPA and AI automation delivery across regulated industries. The scoring tables, document sections and sign-off rules follow how that work is done.</p>
+              {!signedIn && <p className="mt-5 text-base text-slate-300">Or write to <a href={`mailto:${CONTACT_EMAIL}`} className={`rounded font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>{CONTACT_EMAIL}</a>.</p>}
+              <p className="mt-6 max-w-2xl border-l-4 border-[#E69F00] pl-4 text-base leading-7 text-slate-300"><span className="font-semibold text-white">Built by a practitioner.</span> A business analyst and project manager with 13+ years leading RPA and AI automation delivery across regulated industries. The scoring tables, document sections and sign-off rules follow how that work is done.</p>
             </div>
           </div>
         </section>
