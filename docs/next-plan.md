@@ -10,7 +10,9 @@ Live on avalaos.com since the fifth release (16 November 2026): the whole journe
 
 Proven on real documents so far: two of the owner's own processes (Questionnaire Tooling, Project time writing) and the sample's documents. Each real test found faults the sample had not shown. That is the pattern to expect, and the reason section 4 puts more real processes first.
 
-Releases: 4 production deploys are left until 22 November 2026. Bundle work; one release for sections 3 and 3b (the owner holds the release until 3b is built, 16 November 2026).
+Releases: 3 production deploys are left until 22 November 2026 (after the sixth release). Bundle work.
+
+**Update, 16 November 2026 (late evening): the sixth release.** Sections 3 and 3b and the homepage package (package 7) are live (merge commit `218943a` on `main`, on the owner's word), reviewed first (`claude/review-sixth-release-16-nov.md` and `claude/review-second-bundle-16-nov.md` in the project). Where a section below says "in review", read "released". The server functions were redeployed from `main` (the first run failed on GitHub's rate limit before deploying anything; the second succeeded). Still to be seen: the first weekday email with the new count and comments, compared with My work. What comes next is section 4, with three additions from the reviews: an inquiry form on the homepage (today "Book a walkthrough" opens an email; it needs a server function, a place to keep requests, spam control and a line in the privacy notice: ask first); the evidence pack saying that its count of open questions is every item as recorded (the screens merge repeats); and recording who made a choice of approach by name or id.
 
 **Update, 16 November 2026 (afternoon):** section 3 is built and merged into `next` (pull requests #162, #163, #164), with no server function or database change. The open pull request `next` → `main` is the preview for the review; nothing is released until the owner says "release". What was built, and where it differs from the plan, is at the start of section 3.
 
@@ -55,10 +57,11 @@ The weekday email's count, review comments in it and on My work, and the look in
 - An employment lawyer's reading of the contract's clauses on outside business and intellectual property.
 - The database's plan: the Free plan keeps no backups of its own (a nightly encrypted copy with a restore check stands in). Decide whether to move to a paid plan.
 - Payment. Organisations are switched on by the owner by hand; nothing takes money.
-- "Request a pilot" is an email link until a form exists.
+- "Book a walkthrough" (before 16 November: "Request a pilot") is an email link until a form exists.
 - Installation in a company's own cloud is offered on the homepage and has never been done.
 - Two-step sign-in on Sentry, and "Allow join requests" off there. Leftover `claude/` branches can be deleted.
-- To confirm: Google and Microsoft sign-in are switched on in Supabase (the page shows a button only for a provider that is).
+- Google and Microsoft sign-in are switched on (both buttons show on the sign-in page, seen 16 November 2026).
+- Real names in people's profiles: the evidence pack and the emails show the profile name.
 
 ### On the owner's test process
 
