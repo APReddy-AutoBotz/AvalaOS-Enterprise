@@ -40,6 +40,7 @@ test('Ask Avala is in the top bar: away from a process it asks about the workspa
   panel = page.getByTestId('ask-panel');
   await expect(panel.getByLabel('Asking about').locator('option:checked')).toHaveText('Vendor invoice processing');
   await expect(panel).toContainText('it changes nothing');
+  await expect(page.getByRole('dialog', { name: 'Ask Avala' }).locator('h2 span[aria-hidden="true"]')).toHaveClass(/bg-\[#E69F00\]/);
   // One click widens to the whole workspace, and back.
   await panel.getByLabel('Asking about').selectOption('w');
   await expect(page.getByTestId('ask-panel')).toContainText('Ask about this workspace');
@@ -75,6 +76,8 @@ test('on the Delivery board Ask Avala asks about that board, and a board can be 
   let panel = page.getByTestId('ask-panel');
   await expect(panel.getByLabel('Asking about').locator('option:checked')).toHaveText('Invoice automation');
   await expect(panel).toContainText('Ask about this Delivery board');
+  // The open panel is plainly Ask Avala's: the amber head, and "Asking about" outlined (owner, 16 November 2026).
+  await expect(page.getByRole('dialog', { name: 'Ask Avala' }).locator('h2 span[aria-hidden="true"]')).toHaveClass(/bg-\[#E69F00\]/);
   const start = panel.getByRole('group', { name: 'Questions to start with' });
   await expect(start.getByRole('button')).toHaveCount(3);
   const result = await new AxeBuilder({ page }).include('[data-testid="ask-panel"]').withTags(['wcag2a', 'wcag2aa']).analyze();

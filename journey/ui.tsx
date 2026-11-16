@@ -54,6 +54,11 @@ export function AvalaSpark({ className = 'h-4 w-4' }: { className?: string }) {
  * The Ask Avala button: the brand amber with navy text (contrast above 6:1), so it stands apart from the
  * page's actions. `compact` is the top bar's: a little smaller, and only the mark on narrow screens.
  */
+/** Ask Avala's mark for the open panel's head: the button's amber, so the open panel is plainly Ask Avala. */
+export function AskMark() {
+  return <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#E69F00] text-[#002C4B] shadow-sm"><AvalaSpark /></span>;
+}
+
 export function AskAvalaButton({ compact, ...props }: React.ComponentProps<'button'> & { compact?: boolean }) {
   return (
     <button type="button" aria-label="Ask Avala" {...props}

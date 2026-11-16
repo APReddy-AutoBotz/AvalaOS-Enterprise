@@ -18,7 +18,7 @@ import type { Suggestion } from '../domain/assistant/suggest.ts';
 import { useProcessChanged } from './processChanged.ts';
 import { questionPlan, useSourceLook } from './process/sourceLook.ts';
 import { SidePanel } from './process/widgets.tsx';
-import { AskAvalaButton, AvalaSpark, ErrorNote, messageOf, Spinner } from './ui.tsx';
+import { AskAvalaButton, AskMark, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
 interface LoadedProcess { process: ProcessRow; model: ProcessModel | null; sources: SourceRow[]; working: { id: string; seq: number } | null }
 
@@ -31,9 +31,6 @@ async function loadProcess(store: JourneyStore, processId: string): Promise<Load
   const draft = revisions.find(r => r.state === 'working');
   return { process, model: current ? await store.getModel(current.id) : null, sources, working: draft ? { id: draft.id, seq: draft.seq } : null };
 }
-
-/** Ask Avala's mark in the panel's head: the button's amber, so the open panel is plainly Ask Avala. */
-const ASK_MARK = <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#E69F00] text-[#002C4B] shadow-sm"><AvalaSpark /></span>;
 
 export function AskAvala({ store, nav, workspace }: { store: JourneyStore; nav: Nav; workspace: Workspace }) {
   const stages = stagesFor(workspace.modules);
@@ -147,7 +144,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   );
   if (proc && view === 'interview') {
     return (
-      <SidePanel title="Ask Avala" onClose={onClose} wide brand={ASK_MARK}>
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={`${proc.process.id}:${start?.itemKey ?? ''}`}>
@@ -165,7 +162,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
       nav.go({ page: 'process', processId: proc.process.id, stage: stages.includes(sg.target.stage) ? sg.target.stage : 'process' });
     };
     return (
-      <SidePanel title="Ask Avala" onClose={onClose} wide brand={ASK_MARK}>
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={proc.process.id}>
@@ -184,7 +181,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   }
   const lists = Boolean(processes && projects);
   return (
-    <SidePanel title="Ask Avala" onClose={onClose} wide brand={ASK_MARK}>
+    <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
       <div data-testid="ask-panel">
         {about}
         <ErrorNote message={error} />
