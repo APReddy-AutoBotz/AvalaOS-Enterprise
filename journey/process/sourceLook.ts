@@ -13,7 +13,7 @@ import { answerFromNotes, type NoteFinding } from '../../domain/questions/notes.
 import { planQuestions, type QuestionPlan } from '../../domain/questions/firstList.ts';
 import type { Passage } from '../../domain/assistant/ask.ts';
 import { answerSuggestions, sourceSegments, type Suggestion } from '../../domain/assistant/suggest.ts';
-import { addLook, foundFor, foundKeys, sourcesKey, toLookUp, type SourceLook } from '../../domain/assistant/sourceLook.ts';
+import { addLook, allowanceStopped, allowanceUsedUp, AUTO_LOOK, foundFor, foundKeys, noteSent, noteStopped, sourcesKey, toLookUp, waitingUntil, type SourceLook } from '../../domain/assistant/sourceLook.ts';
 
 const EVENT = 'avala:source-look';
 const lookKey = (processId: string) => `avala:source-look:${processId}`;
@@ -83,7 +83,10 @@ export function lookInSources(store: JourneyStore, process: { id: string; worksp
     const key = sourcesKey(sources);
     const t = triage(model, assessProcess(model));
     let look = again ? null : current(process.id);
-    const batches = toLookUp(t, look, key);
+    // On its own, Avala OS does not look while the month's allowance is used up, nor send what an
+    // earlier page sent and has not had answered within the wait (package 2 of docs/next-plan.md).
+    if (!again && allowanceStopped(look, Date.now())) return look;
+    const batches = toLookUp(t, look, key, AUTO_LOOK, Date.now(), again);
     if (!batches.length || !sources.length) return look;
     dispatchEvent(new CustomEvent(EVENT, { detail: { processId: process.id } }));
     const passages: Passage[] = (await Promise.all(sources.map(async s => (await store.getSourceSegments(s.id).catch(() => []))
@@ -91,7 +94,14 @@ export function lookInSources(store: JourneyStore, process: { id: string; worksp
     for (const items of batches) {
       const { segments, ids, passageOf } = sourceSegments(model, items, passages);
       if (passageOf.size === 0) { look = addLook(look, key, { items, found: [], passages: 0, tokens: 0 }); writeLook(process.id, look); continue; }
-      const r = await store.runAiTask(process.workspaceId, answerFromNotes.id, segments as never);
+      // Noted before the call, so a page left meanwhile does not send the same questions again at once.
+      look = noteSent(look, key, items, Date.now());
+      writeLook(process.id, look);
+      let r: Awaited<ReturnType<JourneyStore['runAiTask']>>;
+      try { r = await store.runAiTask(process.workspaceId, answerFromNotes.id, segments as never); } catch (e) {
+        if (allowanceUsedUp(e)) { look = noteStopped(look, key, Date.now()); writeLook(process.id, look); }
+        throw e;
+      }
       const found = answerSuggestions(model, items, ids, ((r.data as { answers?: NoteFinding[] } | null)?.answers ?? []), passageOf);
       look = addLook(look, key, { items, found, passages: passageOf.size, tokens: (r.usage?.input ?? 0) + (r.usage?.output ?? 0) });
       writeLook(process.id, look);
@@ -110,15 +120,23 @@ const failed = new Set<string>();
 /**
  * On the process page: looks in the sources on its own when there are questions not yet looked up, for
  * a person who can edit the process (suggestions are changes) and only where the server reads with AI.
+ * While an earlier page's call is within its wait, the page waits too, and looks once the wait is over.
  */
 export function useAutoLook(store: JourneyStore, process: { id: string; workspaceId: string } | null, model: ProcessModel | null, canEdit: boolean): void {
   const pid = process?.id ?? '';
   const wid = process?.workspaceId ?? '';
+  const [tick, setTick] = React.useState(0);
   React.useEffect(() => {
     if (!pid || !model || !model.steps.length || !canEdit || !store.aiAvailable || failed.has(pid)) return;
+    let wake = 0, live = true;
     const t = window.setTimeout(() => {
-      lookInSources(store, { id: pid, workspaceId: wid }, model).catch(() => { failed.add(pid); });
+      lookInSources(store, { id: pid, workspaceId: wid }, model).then(() => {
+        // Held by an earlier page's call: try again when its wait ends.
+        const look = current(pid);
+        const until = look ? waitingUntil(look, look.sources, Date.now()) : null;
+        if (live && until !== null && !running.has(pid)) wake = window.setTimeout(() => setTick(n => n + 1), Math.max(1000, until - Date.now() + 500));
+      }, () => { failed.add(pid); });
     }, 600);
-    return () => window.clearTimeout(t);
-  }, [store, pid, wid, model, canEdit]);
+    return () => { live = false; window.clearTimeout(t); window.clearTimeout(wake); };
+  }, [store, pid, wid, model, canEdit, tick]);
 }
