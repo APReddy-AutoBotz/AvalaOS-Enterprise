@@ -7,6 +7,7 @@ import type { Approach, HumanPoint } from '../assess/scoring.ts';
 import { orderedSteps } from '../processModel/selectors.ts';
 import { graphToBpmn, modelToGraph, type Box } from './bpmn.ts';
 import type { FlowGraph, FlowNode } from './graph.ts';
+import { laneColumns, type MapShape } from './shape.ts';
 
 export type FlowMode = 'rpa' | 'api' | 'ai_assist' | 'agent' | 'human' | 'system';
 export interface StepMode { mode: FlowMode; check: boolean }
@@ -82,29 +83,52 @@ export interface VerticalLayout {
   laneIds: string[];
   lanes: { id: string; name: string; x: number; w: number }[];
   pool: { x: number; y: number; w: number; h: number };
-  /** Height of the pool's title band, and of each lane's name band below it. */
+  /** Height of the pool's title band, and of each lane's name band below it (none in a simple flow). */
   titleH: number; headH: number;
   noFlows: boolean;
   centre: (n: FlowNode) => { x: number; y: number };
   half: (n: FlowNode) => { w: number; h: number };
   routes: Route[];
   order: ReturnType<typeof orderedSteps>;
+  /** The shape drawn, and whether a simple flow runs across the page. */
+  shape: MapShape;
+  across: boolean;
+  /** A step's box, which in a simple flow has room for its role under the name. */
+  task: { w: number; h: number };
 }
 
+/** How the map is drawn: swimlanes (the default) or a simple flow, which may run across the page. */
+export interface LayoutOptions { shape?: MapShape; across?: boolean }
+
+// A simple flow has one column, and each step's box has a line for its role. Across the page, the
+// same layout is turned on its side: rows become columns, so the gap along the flow is wider, for the
+// labels on paths.
+const SIMPLE_TASK_H = 70, SIMPLE_ROW = 104, ACROSS_STEP = 230, ACROSS_CROSS = 104;
+
 /**
- * The top-to-bottom layout shared by the maps and the BPMN editor: one column per role, rows by the
- * place in the flow, and a route for each flow (back flows run up the right edge).
+ * The layout shared by the maps and the BPMN editor: rows by the place in the flow and a route for
+ * each flow (back flows run along the far edge). In swimlanes, one column per role, top to bottom. In
+ * a simple flow, one column; `across` lays the same rows out left to right. Everything is worked out
+ * along the flow (`a`) and across it (`c`), then placed on the page.
  */
-export function verticalLayout(model: ProcessModel): VerticalLayout {
+export function verticalLayout(model: ProcessModel, opts: LayoutOptions = {}): VerticalLayout {
+  const shape: MapShape = opts.shape ?? 'swimlanes';
+  const simple = shape === 'simple';
+  const across = simple && Boolean(opts.across);
+  const taskH = simple ? SIMPLE_TASK_H : TASK_H;
+  // Sizes along the flow and across it.
+  const STEP = across ? ACROSS_STEP : simple ? SIMPLE_ROW : ROW_H;
+  const CROSS = across ? ACROSS_CROSS : COL_W;
+  const headH = simple ? 0 : HEAD_H;
   const graph = modelToGraph(model);
   const noFlows = graph.edges.length === 0;
   const order = orderedSteps(model);
   const forLayout: FlowGraph = noFlows ? { ...graph, edges: order.slice(1).map((s, i) => ({ id: `order-${i}`, from: order[i].id, to: s.id })) } : graph;
   const { rank, back } = ranks(forLayout);
 
-  // Columns: roles that have something in the map, in the model's order, then "No role recorded".
-  const laneIds = [...graph.lanes.map(l => l.id).filter(id => graph.nodes.some(n => n.laneId === id)), ...(graph.nodes.some(n => !n.laneId || !graph.lanes.some(l => l.id === n.laneId)) ? [''] : [])];
-  const laneOf = (n: FlowNode) => (n.laneId && laneIds.includes(n.laneId) ? n.laneId : '');
+  // Columns: roles that have something in the map, in the model's order, then "No role recorded". A simple flow has one.
+  const laneIds = simple ? [''] : laneColumns(graph);
+  const laneOf = (n: FlowNode) => (!simple && n.laneId && laneIds.includes(n.laneId) ? n.laneId : '');
   // Several nodes in one role and row sit side by side; the column widens to hold them.
   const slot = new Map<string, number>();
   const perCell = new Map<string, number>();
@@ -123,77 +147,133 @@ export function verticalLayout(model: ProcessModel): VerticalLayout {
       perCell.set(cell, (perCell.get(cell) ?? 0) + 1);
     }
   }
-  const widthOf = (lane: string) => Math.max(1, ...[...perCell.entries()].filter(([k]) => k.startsWith(`${lane}|`)).map(([, v]) => v)) * COL_W;
-  const laneX = new Map<string, number>();
-  let x = SIDE;
-  for (const id of laneIds) { laneX.set(id, x); x += widthOf(id); }
+  const widthOf = (lane: string) => Math.max(1, ...[...perCell.entries()].filter(([k]) => k.startsWith(`${lane}|`)).map(([, v]) => v)) * CROSS;
+  const laneC = new Map<string, number>();
+  let c0 = 0;
+  for (const id of laneIds) { laneC.set(id, c0); c0 += widthOf(id); }
   const backCount = graph.edges.filter(e => back.has(e.id)).length;
-  const poolW = x - SIDE + Math.min(backCount, 6) * 8 + (backCount ? 12 : 0);
+  const crossLen = c0 + Math.min(backCount, 6) * 8 + (backCount ? 12 : 0);
   const rows = Math.max(1, ...[...rank.values()].map(r => r + 1));
-  const top = TITLE_H + HEAD_H;
-  const poolH = HEAD_H + rows * ROW_H;
-  const centre = (n: FlowNode) => ({ x: laneX.get(laneOf(n))! + slot.get(n.id)! * COL_W + COL_W / 2, y: top + rank.get(n.id)! * ROW_H + ROW_H / 2 });
-  const half = (n: FlowNode) => (n.kind === 'start' || n.kind === 'end' ? { w: EVENT / 2, h: EVENT / 2 } : n.kind === 'gateway' ? { w: GATE / 2, h: GATE / 2 } : { w: TASK_W / 2, h: TASK_H / 2 });
+  const top = TITLE_H + headH;
+  const alongLen = headH + rows * STEP;
+  // Where a node sits along the flow and across it, and half its size in the same terms.
+  const flowCentre = (n: FlowNode) => ({ c: laneC.get(laneOf(n))! + slot.get(n.id)! * CROSS + CROSS / 2, a: rank.get(n.id)! * STEP + STEP / 2 });
+  const flowHalf = (n: FlowNode) => (n.kind === 'start' || n.kind === 'end' ? { c: EVENT / 2, a: EVENT / 2 } : n.kind === 'gateway' ? { c: GATE / 2, a: GATE / 2 } : across ? { c: taskH / 2, a: TASK_W / 2 } : { c: TASK_W / 2, a: taskH / 2 });
+  const place = (c: number, a: number): [number, number] => (across ? [SIDE + a, top + c] : [SIDE + c, top + a]);
   const routes: Route[] = [];
   let lane = 0;
   const byId = new Map(graph.nodes.map(n => [n.id, n]));
-  const right = SIDE + poolW - 6;
+  const far = crossLen - 6;
+  const crossHalf = across ? taskH / 2 : TASK_W / 2;
   for (const e of graph.edges) {
     const a = byId.get(e.from), b = byId.get(e.to);
     if (!a || !b) continue;
-    const ca = centre(a), cb = centre(b), ha = half(a), hb = half(b);
-    let points: [number, number][], lx: number, ly: number;
-    if (!back.has(e.id) && cb.y > ca.y) {
-      const y1 = ca.y + ha.h, y2 = cb.y - hb.h;
-      // Each source's turn is at its own height, so flows from neighbouring shapes do not share a line.
-      const ym = y1 + 8 + (slot.get(a.id)! % 3) * 6;
+    const ca = flowCentre(a), cb = flowCentre(b), ha = flowHalf(a), hb = flowHalf(b);
+    let pts: [number, number][], label: [number, number];
+    if (!back.has(e.id) && cb.a > ca.a) {
+      const a1 = ca.a + ha.a, a2 = cb.a - hb.a;
+      // Each source's turn is at its own place, so flows from neighbouring shapes do not share a line.
+      const am = a1 + 8 + (slot.get(a.id)! % 3) * 6;
       const skips = rank.get(b.id)! - rank.get(a.id)! > 1;
-      const blocked = skips && graph.nodes.some(n => n.id !== a.id && n.id !== b.id && Math.abs(centre(n).x - cb.x) < TASK_W / 2 && centre(n).y > ca.y && centre(n).y < cb.y);
+      const blocked = skips && graph.nodes.some(n => n.id !== a.id && n.id !== b.id && Math.abs(flowCentre(n).c - cb.c) < crossHalf && flowCentre(n).a > ca.a && flowCentre(n).a < cb.a);
       if (blocked) {
-        // A flow that skips rows would cross the shapes between: it goes down the column's left gutter.
-        const gx = (ca.x === cb.x ? cb.x : Math.min(ca.x, cb.x)) - TASK_W / 2 - 5;
-        points = [[ca.x, y1], [ca.x, ym], [gx, ym], [gx, y2 - 12], [cb.x, y2 - 12], [cb.x, y2]];
-        lx = gx + 4; ly = ym + 12;
+        // A flow that skips rows would cross the shapes between: it goes along the column's near gutter.
+        const gc = (ca.c === cb.c ? cb.c : Math.min(ca.c, cb.c)) - crossHalf - 5;
+        pts = [[ca.c, a1], [ca.c, am], [gc, am], [gc, a2 - 12], [cb.c, a2 - 12], [cb.c, a2]];
+        label = across ? [gc - 5, am + 6] : [gc + 4, am + 12];
       } else {
-        points = ca.x === cb.x ? [[ca.x, y1], [cb.x, y2]] : [[ca.x, y1], [ca.x, ym], [cb.x, ym], [cb.x, y2]];
+        pts = ca.c === cb.c ? [[ca.c, a1], [cb.c, a2]] : [[ca.c, a1], [ca.c, am], [cb.c, am], [cb.c, a2]];
         // The label sits on the last leg, beside the shape it leads to, so two labels from one decision never meet.
-        lx = cb.x + 5; ly = ca.x === cb.x ? y1 + 12 : ym + 12;
+        label = across ? [cb.c - 5, (ca.c === cb.c ? a1 : am) + 6] : [cb.c + 5, ca.c === cb.c ? a1 + 12 : am + 12];
       }
     } else {
-      const gx = right - (lane++ % 6) * 8;
-      points = [[ca.x + ha.w, ca.y], [gx, ca.y], [gx, cb.y], [cb.x + hb.w, cb.y]];
-      lx = ca.x + ha.w + 4; ly = ca.y - 4;
+      const gc = far - (lane++ % 6) * 8;
+      pts = [[ca.c + ha.c, ca.a], [gc, ca.a], [gc, cb.a], [cb.c + hb.c, cb.a]];
+      label = across ? [ca.c + ha.c + 12, ca.a + 6] : [ca.c + ha.c + 4, ca.a - 4];
     }
-    routes.push({ id: e.id, points, label: e.label ? { x: lx, y: ly } : null });
+    const [lx, ly] = place(label[0], label[1]);
+    routes.push({ id: e.id, points: pts.map(([c, a]) => place(c, a)), label: e.label ? { x: lx, y: ly } : null });
   }
+  const centre = (n: FlowNode) => { const f = flowCentre(n); const [x, y] = place(f.c, f.a); return { x, y }; };
+  const half = (n: FlowNode) => { const h = flowHalf(n); return across ? { w: h.a, h: h.c } : { w: h.c, h: h.a }; };
+  const poolW = across ? alongLen : crossLen;
+  const poolH = TITLE_H + (across ? crossLen : alongLen);
   return {
-    graph, laneIds, lanes: laneIds.map(id => ({ id, name: graph.lanes.find(l => l.id === id)?.name ?? '', x: laneX.get(id)!, w: widthOf(id) })),
-    pool: { x: SIDE, y: 0, w: poolW, h: TITLE_H + poolH }, titleH: TITLE_H, headH: HEAD_H, noFlows, centre, half, routes, order,
+    graph, laneIds, lanes: laneIds.map(id => ({ id, name: graph.lanes.find(l => l.id === id)?.name ?? '', x: SIDE + laneC.get(id)!, w: widthOf(id) })),
+    pool: { x: SIDE, y: 0, w: poolW, h: poolH }, titleH: TITLE_H, headH, noFlows, centre, half, routes, order, shape, across, task: across ? { w: TASK_W, h: taskH } : { w: TASK_W, h: taskH },
   };
 }
 
-export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, StepMode>; title?: string } = {}): FlowPicture {
-  const L = verticalLayout(model);
+const ROLE_H = 18;
+
+/**
+ * Each step's role, for a simple flow: its names (all of them on hover), and whether it differs from
+ * the role of the step before, so a hand-over can be seen without columns. "Before" follows the flow
+ * back through decision points and events; with no flows recorded, it is the step before in order.
+ */
+function stepRoles(model: ProcessModel, L: VerticalLayout): Map<string, { name: string; title: string; handover: boolean }> {
+  const roleName = new Map(model.roles.map(r => [r.id, r.name]));
+  const byId = new Map(L.graph.nodes.map(n => [n.id, n]));
+  const edges = L.noFlows ? L.order.slice(1).map((s, i) => ({ from: L.order[i].id, to: s.id })) : L.graph.edges;
+  const tasksBefore = (id: string): FlowNode[] => {
+    const seen = new Set<string>([id]);
+    const out: FlowNode[] = [];
+    let frontier = [id];
+    while (frontier.length) {
+      const next: string[] = [];
+      for (const to of frontier) for (const e of edges.filter(x => x.to === to)) {
+        if (seen.has(e.from)) continue;
+        seen.add(e.from);
+        const n = byId.get(e.from);
+        if (!n) continue;
+        if (n.kind === 'task' || n.kind === 'subprocess') out.push(n); else next.push(n.id);
+      }
+      frontier = next;
+    }
+    return out;
+  };
+  const lane = (n: FlowNode) => (n.laneId && roleName.has(n.laneId) ? n.laneId : '');
+  const out = new Map<string, { name: string; title: string; handover: boolean }>();
+  for (const step of model.steps) {
+    const n = byId.get(step.id);
+    if (!n) continue;
+    const names = step.roleIds.map(id => roleName.get(id)).filter((x): x is string => Boolean(x));
+    const name = names.length ? names.join(', ') : 'No role recorded';
+    out.set(step.id, { name, title: names.length ? `Role: ${name}` : 'No role recorded', handover: tasksBefore(step.id).some(p => lane(p) !== lane(n)) });
+  }
+  return out;
+}
+
+export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, StepMode>; title?: string } & LayoutOptions = {}): FlowPicture {
+  const L = verticalLayout(model, opts);
   const { graph, laneIds, centre, half, noFlows, order } = L;
-  const poolW = L.pool.w, poolH = L.pool.h - TITLE_H, top = TITLE_H + HEAD_H;
+  const simple = L.shape === 'simple';
+  const poolW = L.pool.w, poolH = L.pool.h - TITLE_H, top = TITLE_H + L.headH;
   const laneX = new Map(L.lanes.map(l => [l.id, l.x]));
   const widthOf = (id: string) => L.lanes.find(l => l.id === id)!.w;
   void top;
   const legendH = opts.modes ? 52 : 0;
   const noteH = noFlows && graph.nodes.length ? 22 : 0;
   // Room on the right for labels beside shapes in the last column.
-  const width = Math.max(SIDE * 2 + poolW + 60, opts.modes ? 520 : 0);
+  const mapW = SIDE * 2 + poolW + 60;
+  const width = Math.max(mapW, opts.modes ? 520 : 0);
   const height = TITLE_H + poolH + 14 + noteH + legendH;
+  // A narrow simple flow sits in the middle of a picture made wide by its legend.
+  const shift = simple && width > mapW ? Math.round((width - mapW) / 2) : 0;
 
   const out: string[] = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" font-family="Segoe UI, Calibri, Arial, sans-serif" role="img" aria-label="${esc(opts.title ?? model.meta.name)}">`);
   out.push('<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#334155"/></marker></defs>');
   out.push(`<rect x="0" y="0" width="${width}" height="${height}" fill="#ffffff"/>`);
-  // Pool title, then one column per role with its name at the top.
+  if (shift) out.push(`<g transform="translate(${shift},0)">`);
+  // Pool title, then one column per role with its name at the top (a simple flow has no columns).
   out.push(`<rect x="${SIDE + 0.5}" y="0.5" width="${poolW - 1}" height="${TITLE_H + poolH - 1}" fill="none" stroke="#94A3B8"/>`);
   out.push(`<rect x="${SIDE + 0.5}" y="0.5" width="${poolW - 1}" height="${TITLE_H}" fill="#F8FAFC" stroke="#94A3B8"/>`);
-  out.push(`<text x="${SIDE + poolW / 2}" y="${TITLE_H / 2 + 5}" text-anchor="middle" font-size="13" font-weight="600" fill="#0F172A">${esc(wrap(model.meta.name, 70, 1)[0] ?? '')}</text>`);
-  for (const id of laneIds) {
+  // Across the page the map is long, so its title starts at the left where reading starts.
+  out.push(L.across
+    ? `<text x="${SIDE + 12}" y="${TITLE_H / 2 + 5}" font-size="13" font-weight="600" fill="#0F172A">${esc(wrap(model.meta.name, 120, 1)[0] ?? '')}</text>`
+    : `<text x="${SIDE + poolW / 2}" y="${TITLE_H / 2 + 5}" text-anchor="middle" font-size="13" font-weight="600" fill="#0F172A">${esc(wrap(model.meta.name, simple ? Math.max(20, Math.floor(poolW / 7.5)) : 70, 1)[0] ?? '')}</text>`);
+  if (!simple) for (const id of laneIds) {
     const lx = laneX.get(id)!, lw = widthOf(id);
     const name = graph.lanes.find(l => l.id === id)?.name ?? 'No role recorded';
     out.push(`<rect x="${lx + 0.5}" y="${TITLE_H + 0.5}" width="${lw - 1}" height="${poolH - 1}" fill="${id ? '#ffffff' : '#FFFBEB'}" stroke="#CBD5E1"/>`);
@@ -201,6 +281,7 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
     const ls = wrap(name, Math.floor(lw / 7), 2);
     ls.forEach((l, i) => out.push(`<text x="${lx + lw / 2}" y="${TITLE_H + HEAD_H / 2 + 4 - (ls.length - 1) * 6.5 + i * 13}" text-anchor="middle" font-size="11" font-weight="600" fill="#334155">${esc(l)}</text>`));
   }
+  const roles = simple ? stepRoles(model, L) : null;
   // Flows: down from the bottom of one shape to the top of the next; flows going back run up the right edge.
   let drawn = 0;
   for (const r of L.routes) {
@@ -212,7 +293,8 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
     // A path's label in full, on up to three lines (owner's process, 16 November 2026: one line cut 15 labels).
     if (e.label && r.label) {
       const ll = wrap(e.label, 20, 3);
-      out.push(`<text x="${r.label.x}" y="${r.label.y}" font-size="10" font-weight="600" fill="#334155"><title>${esc(e.label)}</title>${ll.map((l, i) => `<tspan x="${r.label!.x}" dy="${i ? 11 : 0}">${esc(l)}</tspan>`).join('')}</text>`);
+      const ly = L.across ? r.label.y - (ll.length - 1) * 11 : r.label.y;
+      out.push(`<text x="${r.label.x}" y="${ly}" font-size="10" font-weight="600" fill="#334155"><title>${esc(e.label)}</title>${ll.map((l, i) => `<tspan x="${r.label!.x}" dy="${i ? 11 : 0}">${esc(l)}</tspan>`).join('')}</text>`);
     }
   }
   // Shapes.
@@ -221,7 +303,10 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
     if (n.kind === 'start' || n.kind === 'end') {
       out.push(`<circle cx="${c.x}" cy="${c.y}" r="${EVENT / 2}" fill="#ffffff" stroke="#0F172A" stroke-width="${n.kind === 'end' ? 3.5 : 1.5}"/>`);
       out.push(`<g><title>${esc(n.label)}</title>`);
-      wrap(n.label, 20, 2).forEach((l, i) => out.push(`<text x="${c.x + EVENT / 2 + 6}" y="${c.y + 4 + i * 11}" font-size="10" fill="#334155">${esc(l)}</text>`));
+      // Beside the circle; across the page, under it, where no flow runs.
+      wrap(n.label, 20, 2).forEach((l, i) => out.push(L.across
+        ? `<text x="${c.x}" y="${c.y + EVENT / 2 + 12 + i * 11}" text-anchor="middle" font-size="10" fill="#334155">${esc(l)}</text>`
+        : `<text x="${c.x + EVENT / 2 + 6}" y="${c.y + 4 + i * 11}" font-size="10" fill="#334155">${esc(l)}</text>`));
       out.push('</g>');
     } else if (n.kind === 'gateway') {
       const g = GATE / 2;
@@ -231,22 +316,36 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
         : `<path d="M${c.x - 7},${c.y - 7} L${c.x + 7},${c.y + 7} M${c.x + 7},${c.y - 7} L${c.x - 7},${c.y + 7}" stroke="#B45309" stroke-width="3"/>`);
       const gl = wrap(n.label, 18, 3);
       out.push(`<g><title>${esc(n.label)}</title>`);
-      gl.forEach((l, i) => out.push(`<text x="${c.x + g + 6}" y="${c.y - 4 - (gl.length - 1) * 5.5 + i * 11}" font-size="10" fill="#92400E">${esc(l)}</text>`));
+      // Beside the diamond; across the page, above and before it, clear of the ways out.
+      gl.forEach((l, i) => out.push(L.across
+        ? `<text x="${c.x - 4}" y="${c.y - g - 6 - (gl.length - 1 - i) * 11}" text-anchor="end" font-size="10" fill="#92400E">${esc(l)}</text>`
+        : `<text x="${c.x + g + 6}" y="${c.y - 4 - (gl.length - 1) * 5.5 + i * 11}" font-size="10" fill="#92400E">${esc(l)}</text>`));
       out.push('</g>');
     } else {
       const m = opts.modes?.get(n.id);
       const st = m ? MODE_STYLE[m.mode] : { fill: '#ffffff', stroke: '#334155' };
-      const bx = c.x - TASK_W / 2, by = c.y - TASK_H / 2;
-      out.push(`<rect x="${bx}" y="${by}" width="${TASK_W}" height="${TASK_H}" rx="9" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.5"/>`);
+      const th = L.task.h;
+      const bx = c.x - TASK_W / 2, by = c.y - th / 2;
+      out.push(`<rect x="${bx}" y="${by}" width="${TASK_W}" height="${th}" rx="9" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.5"/>`);
       const lines = wrap(n.label, 22, 3);
+      // In a simple flow the name sits above a line for the role.
+      const mid = roles ? by + (th - ROLE_H) / 2 : c.y;
       out.push(`<g><title>${esc(n.label)}</title>`);
-      lines.forEach((l, i) => out.push(`<text x="${c.x}" y="${c.y - (lines.length - 1) * 6.5 + i * 13 + 4}" text-anchor="middle" font-size="11" fill="#0F172A">${esc(l)}</text>`));
+      lines.forEach((l, i) => out.push(`<text x="${c.x}" y="${mid - (lines.length - 1) * 6.5 + i * 13 + 4}" text-anchor="middle" font-size="11" fill="#0F172A">${esc(l)}</text>`));
       out.push('</g>');
+      const role = roles?.get(n.id);
+      if (role) {
+        // The role on a small line of its own; darker where the work changes hands.
+        const ry = by + th - ROLE_H;
+        out.push(`<path d="M${bx + 8},${ry} H${bx + TASK_W - 8}" stroke="${st.stroke}" stroke-opacity="0.35"/>`);
+        out.push(`<g data-role="${role.handover ? 'handover' : 'same'}"><title>${esc(role.title)}</title><text x="${c.x}" y="${ry + 12}" text-anchor="middle" font-size="9" font-weight="${role.handover ? 700 : 400}" fill="${role.handover ? '#0F172A' : '#475569'}">${esc(wrap(role.name, 28, 1)[0] ?? '')}</text></g>`);
+      }
       const no = order.findIndex(s => s.id === n.id) + 1;
       if (no) out.push(`<text x="${bx + 6}" y="${by + 12}" font-size="9" font-weight="700" fill="${st.stroke}">${no}</text>`);
       if (m?.check) out.push(`<circle cx="${bx + TASK_W - 8}" cy="${by + 8}" r="5" fill="#F59E0B" stroke="#ffffff"><title>A person checks the result</title></circle>`);
     }
   }
+  if (shift) out.push('</g>');
   let y = TITLE_H + poolH + 18;
   if (noteH) { out.push(`<text x="${SIDE}" y="${y}" font-size="11" fill="#92400E">The flow between steps is not recorded yet: steps are shown in order, without arrows.</text>`); y += noteH; }
   if (opts.modes) {
@@ -271,19 +370,29 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
   return { svg: out.join(''), width, height, drawnFlows: drawn, steps: model.steps.length };
 }
 
-/** A read-only Mermaid text of the same map, for Markdown and wikis. */
-export function flowMermaid(model: ProcessModel, modes?: Map<string, StepMode>): string {
+/** A read-only Mermaid text of the same map, for Markdown and wikis. A simple flow has no lanes; each step names its role. */
+export function flowMermaid(model: ProcessModel, modes?: Map<string, StepMode>, shape: MapShape = 'swimlanes'): string {
   const g = modelToGraph(model);
   const id = (s: string) => `n_${s.replace(/[^\w]/g, '_')}`;
   const label = (s: string) => s.replace(/["\n]/g, ' ').trim();
-  const shape = (n: FlowNode) => n.kind === 'start' || n.kind === 'end' ? `((${JSON.stringify(label(n.label))}))` : n.kind === 'gateway' ? `{${JSON.stringify(label(n.label))}}` : `[${JSON.stringify(label(n.label))}]`;
+  const roleName = new Map(model.roles.map(r => [r.id, r.name]));
+  const withRole = (n: FlowNode) => {
+    const step = shape === 'simple' && (n.kind === 'task' || n.kind === 'subprocess') ? model.steps.find(s => s.id === n.id) : undefined;
+    if (!step) return n.label;
+    const names = step.roleIds.map(r => roleName.get(r)).filter(Boolean);
+    return `${n.label} (${names.length ? names.join(', ') : 'no role recorded'})`;
+  };
+  const shapeOf = (n: FlowNode) => n.kind === 'start' || n.kind === 'end' ? `((${JSON.stringify(label(n.label))}))` : n.kind === 'gateway' ? `{${JSON.stringify(label(n.label))}}` : `[${JSON.stringify(label(withRole(n)))}]`;
   const lines = ['flowchart TB'];
-  for (const lane of g.lanes) {
-    lines.push(`  subgraph ${id(lane.id)}[${JSON.stringify(label(lane.name))}]`);
-    for (const n of g.nodes.filter(x => x.laneId === lane.id)) lines.push(`    ${id(n.id)}${shape(n)}`);
-    lines.push('  end');
+  if (shape === 'simple') for (const n of g.nodes) lines.push(`  ${id(n.id)}${shapeOf(n)}`);
+  else {
+    for (const lane of g.lanes) {
+      lines.push(`  subgraph ${id(lane.id)}[${JSON.stringify(label(lane.name))}]`);
+      for (const n of g.nodes.filter(x => x.laneId === lane.id)) lines.push(`    ${id(n.id)}${shapeOf(n)}`);
+      lines.push('  end');
+    }
+    for (const n of g.nodes.filter(x => !x.laneId)) lines.push(`  ${id(n.id)}${shapeOf(n)}`);
   }
-  for (const n of g.nodes.filter(x => !x.laneId)) lines.push(`  ${id(n.id)}${shape(n)}`);
   for (const e of g.edges) lines.push(`  ${id(e.from)} -->${e.label ? `|${label(e.label)}|` : ''} ${id(e.to)}`);
   if (modes) {
     for (const [mode, st] of Object.entries(MODE_STYLE)) lines.push(`  classDef ${mode} fill:${st.fill},stroke:${st.stroke}`);
