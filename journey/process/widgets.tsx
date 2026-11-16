@@ -23,10 +23,24 @@ export function StatusBadge({ status }: { status: FactStatus }) {
 }
 
 /** A text value edited in place: saved on Enter or when focus leaves, reverted on Escape. */
-export function InlineText({ value, onSave, label, multiline, placeholder, disabled, className }: {
-  value: string; onSave: (v: string) => void; label: string; multiline?: boolean; placeholder?: string; disabled?: boolean; className?: string;
+export function InlineText({ value, onSave, label, multiline, wrap, placeholder, disabled, className }: {
+  value: string; onSave: (v: string) => void; label: string; multiline?: boolean;
+  /** One line of text that wraps instead of being cut off: the box grows with its words; Enter saves. */
+  wrap?: boolean;
+  placeholder?: string; disabled?: boolean; className?: string;
 }) {
   const [draft, setDraft] = React.useState(value);
+  const box = React.useRef<HTMLTextAreaElement>(null);
+  // The wrapping box is as tall as its text, at any width.
+  React.useLayoutEffect(() => {
+    const el = box.current;
+    if (!wrap || !el) return;
+    const fit = () => { el.style.height = 'auto'; el.style.height = `${el.scrollHeight + 2}px`; };
+    fit();
+    const ro = typeof ResizeObserver === 'function' ? new ResizeObserver(fit) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [wrap, draft]);
   React.useEffect(() => setDraft(value), [value]);
   const commit = () => { const v = draft.trim(); if (v !== value.trim()) { if (v) onSave(v); else setDraft(value); } };
   const common = {
@@ -40,6 +54,11 @@ export function InlineText({ value, onSave, label, multiline, placeholder, disab
   };
   if (multiline) {
     return <textarea {...common} rows={3} onKeyDown={e => { if (e.key === 'Escape') setDraft(value); }} />;
+  }
+  if (wrap) {
+    return <textarea {...common} ref={box} rows={1} className={cx(common.className, 'block resize-none overflow-hidden leading-5')}
+      onChange={e => setDraft(e.target.value.replace(/\s*\n\s*/g, ' '))}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLTextAreaElement).blur(); } if (e.key === 'Escape') setDraft(value); }} />;
   }
   return <input {...common} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); if (e.key === 'Escape') setDraft(value); }} />;
 }

@@ -3,6 +3,8 @@
 import React from 'react';
 import type { ProcessModel, RoleKind, SourceRef, SystemKind, TaskType } from '../../domain/processModel/types.ts';
 import { addRole, addStep, addSystem, moveStep, ModelOpError, removeElement, removeStep, updateFact } from '../../domain/processModel/patch.ts';
+import { questionsTabCount } from '../../domain/questions/firstList.ts';
+import { useQuestionPlan } from './sourceLook.ts';
 import { openItemCount, orderedSteps, stepsForRole, stepsForSystem } from '../../domain/processModel/selectors.ts';
 import { Button, cx, ErrorNote } from '../ui.tsx';
 import type { ModelEditor, ModelOp } from './useModelEditor.ts';
@@ -41,15 +43,19 @@ export interface TabContext {
   impactOf(op: ModelOp): string | null;
   /** The workspace's applications list, once loaded. */
   appList: AppList | null;
+  /** Why the questions tab's count differs from the items it lists, when it does. */
+  questionsNote?: string | null;
 }
 
 type TabId = 'steps' | 'roles' | 'rules' | 'exceptions' | 'data' | 'questions' | 'conflicts';
 
-export function ProcessEditor({ editor, canEdit, me, sourceTitle, impact = null, appList = null }: { editor: ModelEditor; canEdit: boolean; me: string; sourceTitle: (id: string) => string; impact?: ImpactContext | null; appList?: AppList | null }) {
+export function ProcessEditor({ processId, editor, canEdit, me, sourceTitle, impact = null, appList = null }: { processId: string; editor: ModelEditor; canEdit: boolean; me: string; sourceTitle: (id: string) => string; impact?: ImpactContext | null; appList?: AppList | null }) {
   const model = editor.model;
   const [tab, setTab] = React.useState<TabId>('steps');
   const [panel, setPanel] = React.useState<{ title: string; sources: SourceRef[] } | null>(null);
-  const openCount = openItemCount(model);
+  // One count of open questions everywhere: the first list, as Ask Avala's questions tab counts it.
+  const { plan } = useQuestionPlan(processId, model);
+  const { count: openCount, note: questionsNote } = questionsTabCount(plan, openItemCount(model));
   const conflictCount = model.conflicts.filter(c => !c.resolution).length;
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: 'steps', label: 'Steps', count: model.steps.length },
@@ -61,7 +67,7 @@ export function ProcessEditor({ editor, canEdit, me, sourceTitle, impact = null,
     { id: 'conflicts', label: 'Conflicts', count: conflictCount },
   ];
   const impactOf = (op: ModelOp) => { const i = previewImpact(impact, model, op); return i ? impactSummary(i) : null; };
-  const ctx: TabContext = { model, editor, canEdit, me, sourceTitle, showSources: (title, sources) => setPanel({ title, sources }), impactOf, appList };
+  const ctx: TabContext = { model, editor, canEdit, me, sourceTitle, showSources: (title, sources) => setPanel({ title, sources }), impactOf, appList, questionsNote };
 
   return (
     <div>
@@ -118,7 +124,7 @@ function StepsTab({ model, editor, canEdit, showSources, sourceTitle, impactOf }
           <tr key={s.id} data-testid="step-row" className="align-top">
             <td className="px-3 py-2.5 text-xs tabular-nums text-slate-500">{i + 1}</td>
             <td className="min-w-56 px-1 py-1">
-              <InlineText value={s.name} label={`Name of step ${i + 1}`} disabled={!canEdit} onSave={v => set(s.id, 'name', v, s.name, 'Changed the name')} />
+              <InlineText wrap value={s.name} label={`Name of step ${i + 1}`} disabled={!canEdit} onSave={v => set(s.id, 'name', v, s.name, 'Changed the name')} />
               <button type="button" onClick={() => setDetails(s.id)} className="ml-2 text-xs text-slate-500 hover:text-[#002C4B]">Details</button>
             </td>
             <td className="px-3 py-2"><RefChips ids={s.roleIds} options={roles} label={`Roles for ${s.name}`} disabled={!canEdit} onChange={v => set(s.id, 'roleIds', v, s.name, 'Changed roles')} /></td>

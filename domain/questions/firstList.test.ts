@@ -5,7 +5,8 @@ import type { ProcessModel } from '../processModel/types.ts';
 import { addQuestion, deferQuestion } from '../processModel/patch.ts';
 import { assessProcess } from '../assess/process.ts';
 import { sameQuestion, triage } from './triage.ts';
-import { askingOrder, blocksDocument, FIRST_LIST, holdReason, nowHeading, planQuestions, planSummary, weightOf } from './firstList.ts';
+import { askingOrder, blocksDocument, FIRST_LIST, holdReason, nowHeading, planQuestions, planSummary, questionsTabCount, weightOf } from './firstList.ts';
+import { openItemCount } from '../processModel/selectors.ts';
 import { buildPacks } from './packs.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
@@ -155,4 +156,18 @@ test('packs put the first list first, marked "Answer first"', () => {
     const firsts = pack.items.map(x => x.first);
     assert.deepEqual(firsts, [...firsts].sort((a, b) => Number(b) - Number(a)), `${pack.label}: first-list questions lead`);
   }
+});
+
+test('the Process stage\'s questions tab shows the first list\'s count, and says why when it lists more raw items', () => {
+  const m = realShape();
+  const plan = planQuestions(triage(m, assessProcess(m)), m);
+  const raw = openItemCount(m);
+  const { count, note } = questionsTabCount(plan, raw);
+  // The same number Ask Avala's questions tab shows.
+  assert.equal(count, plan.now.length + plan.found.length);
+  assert.ok(raw > count, `${raw} raw items, ${count} in the first list`);
+  assert.match(note!, new RegExp(`^${count} questions need people now: the same list as Ask Avala's questions\\. Below is every open item as recorded, ${raw} in all;`));
+  // When the two agree there is nothing to explain.
+  assert.equal(questionsTabCount(plan, count).note, null);
+  assert.match(questionsTabCount({ ...plan, now: plan.now.slice(0, 1), found: [] }, raw).note!, /^1 question needs people now/);
 });
