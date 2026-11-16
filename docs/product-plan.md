@@ -606,7 +606,9 @@ Section headings for the classic UiPath PDD and SDD tables (process overview fie
 
 Released: the journey from sources to the Delivery board, people and roles, My work, merge and split, the release gate, the logo, the public homepage with the real-screen tour, invite-only sign-up, and the domain avalaos.com.
 
-Released on 14 November 2026 (second release): all of Phase A; from Phase B bring your own key, the AI use screen, "Needs you" and "assigned to you" emails, a workspace per client, error monitoring and the nightly backup; from Phase C Ask Avala on a process, change impact and the applications list; the parts an organisation uses; the Delivery board's second step; the application shell and the lighter look. Still open: proof on real processes (Phase B), and from Phase C the rest of Ask Avala, the tracker push, review comments on document sections and platform packs.
+Released on 14 November 2026 (second release): all of Phase A; from Phase B bring your own key, the AI use screen, "Needs you" and "assigned to you" emails, a workspace per client, error monitoring and the nightly backup; from Phase C Ask Avala on a process, change impact and the applications list; the parts an organisation uses; the Delivery board's second step; the application shell and the lighter look. Still open then: proof on real processes (Phase B), and from Phase C the rest of Ask Avala, the tracker push, review comments on document sections and platform packs.
+
+Released since: Ask Avala across the platform (third release, 14 November 2026); the interview and suggestions a person confirms, UiPath's PDD headings, the homepage for buyers and the phone layout (fourth, 15 November); the effort-first plan (`docs/effort-first-plan.md`) with review comments on document sections and the test pack, and the fixes from the owner's own test (fifth, 16 November). What is still open, and what is built next, is kept in `docs/next-plan.md`.
 
 ### Phase A: finish the public face
 
