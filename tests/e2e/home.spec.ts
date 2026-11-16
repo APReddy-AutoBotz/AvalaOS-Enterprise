@@ -171,6 +171,8 @@ test('homepage: it stays short, about seven to eight screens on a laptop and und
   // The owner's laptop (15.6 inch): the page had grown to 11 screens and 1,440 words (16 November 2026).
   await page.setViewportSize({ width: 1536, height: 864 });
   await page.goto('/');
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'What comes out' })).toBeVisible();
   const size = await page.evaluate(() => ({
     screens: document.documentElement.scrollHeight / window.innerHeight,
     words: (document.querySelector('main')!.innerText.match(/\S+/g) ?? []).length,

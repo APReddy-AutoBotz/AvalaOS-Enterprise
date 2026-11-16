@@ -33,7 +33,7 @@ const TOUR: { id: string; name: string; line: string; caption: string; shots: [S
     id: 'validate', name: 'Validate', line: 'People confirm what is true',
     caption: 'Each step shows the sources it came from. What the sources did not say stays “Not provided” and becomes a question for a person.',
     shots: [
-      { src: 'process', origin: '85% 35%', alt: 'The Process screen: 21 steps with who does them, the systems used and how many sources support each, plus 15 open questions' },
+      { src: 'process', origin: '85% 35%', alt: 'The Process screen: 21 steps with who does them, the systems used and how many sources support each, and the questions still open' },
       { src: 'document-2', origin: '50% 12%', alt: 'A generated document where access nobody has confirmed is marked Not provided or reported, not confirmed' },
     ],
   },
@@ -409,7 +409,7 @@ export default function HomePage() {
 
       <main>
         <section aria-labelledby="motto-h">
-          <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="mx-auto max-w-7xl px-6 py-12">
             <div className="grid gap-6 lg:grid-cols-2 lg:gap-16">
               <h2 id="motto-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">AI is not the answer to every step</h2>
               <div>
@@ -434,7 +434,7 @@ export default function HomePage() {
         </section>
 
         <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-[#002C4B] text-white">
-          <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From five files to a Delivery board</h2>
             <p className="mt-4 max-w-2xl text-lg text-slate-200">Avala is the five stages every process passes through. Watch the sample case go through them, or pick a stage to look at it.</p>
             <Tour />
@@ -442,7 +442,7 @@ export default function HomePage() {
         </section>
 
         <section id="effort" aria-labelledby="effort-h" className="scroll-mt-6">
-          <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="mx-auto max-w-7xl px-6 py-12">
             <div className="grid gap-6 lg:grid-cols-2 lg:gap-16">
               <div>
                 <p className="text-sm font-semibold text-[#9A6700]">Less work for your people</p>
@@ -472,17 +472,17 @@ export default function HomePage() {
         </section>
 
         <section id="why" aria-labelledby="why-h" className="scroll-mt-6 bg-slate-50">
-          <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="why-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Built so you can defend the answer</h2>
             <Reasons />
           </div>
         </section>
 
         <section id="ask" aria-labelledby="ask-h" className="scroll-mt-6">
-          <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 py-14 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-16">
+          <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 py-12 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-16">
             <div>
               <h2 id="ask-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Ask Avala, and check its answer</h2>
-              <p className="mt-5 text-lg leading-8 text-slate-700">One assistant on every page. It answers only from your own record, and changes nothing until a person confirms.</p>
+              <p className="mt-4 text-lg leading-8 text-slate-700">One assistant on every page, answering only from your own record.</p>
               <dl className="mt-6 space-y-4">
                 {ASK_POINTS.map(([t, x]) => (
                   <div key={t} className="border-l-4 border-[#E69F00] pl-4">
@@ -494,13 +494,13 @@ export default function HomePage() {
               <p className="mt-6"><a href="/demo" className={`rounded font-semibold text-[#002C4B] underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-[#002C4B]`}>Try it in the demo</a></p>
             </div>
             <div className="rounded-3xl bg-amber-100 p-4 sm:p-8">
-              <div className="shot-frame"><img src={shot('ask')} width={1600} height={1200} loading="lazy" className="block h-auto w-full" alt="Ask Avala open on the sample case: the question “Why is this the recommended approach?” answered in sentences, each with a numbered source" /></div>
+              <div className="shot-frame"><img src={shot('ask')} width={1600} height={1418} loading="lazy" className="block h-auto w-full" alt="Ask Avala open on the sample case: the question “Why is this the recommended approach?” answered in sentences, each with a numbered source" /></div>
             </div>
           </div>
         </section>
 
         <section aria-labelledby="out-h" className="bg-[#FFF3D1]">
-          <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="out-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">What comes out</h2>
             <dl className="mt-8 grid gap-x-10 gap-y-6 sm:grid-cols-2 lg:grid-cols-3">
               {OUTPUTS.map(([t, x]) => (
@@ -514,7 +514,7 @@ export default function HomePage() {
         </section>
 
         <section id="trust" aria-labelledby="trust-h" className="scroll-mt-6">
-          <div className="mx-auto max-w-7xl px-6 py-14">
+          <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="trust-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">What your security team will ask</h2>
             <div className="mt-10 grid gap-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:gap-12">
               <div id="ai" className="scroll-mt-10 self-start rounded-2xl bg-[#002C4B] p-6 text-white">
@@ -548,12 +548,10 @@ export default function HomePage() {
         </section>
 
         <section id="start" aria-labelledby="start-h" className="scroll-mt-6 bg-slate-50">
-          <div className="mx-auto max-w-7xl px-6 py-14">
-            <div className="grid gap-6 lg:grid-cols-2 lg:gap-16">
-              <h2 id="start-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Start with one part, or use it all</h2>
-              <p className="self-end text-lg leading-8 text-slate-700">Use the whole journey, or only the part you need today and add the rest later. Nothing is lost when you switch parts on or off.</p>
-            </div>
-            <ul aria-label="Ways to start" className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mx-auto max-w-7xl px-6 py-12">
+            <h2 id="start-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Start with one part, or use it all</h2>
+            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later. Nothing is lost when you switch parts on or off.</p>
+            <ul aria-label="Ways to start" className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {PLANS.map((p, i) => (
                 <li key={p.id} className={`flex flex-col rounded-2xl p-6 ring-1 ring-inset ${i === 0 ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white ring-slate-200'}`}>
                   <h3 className={`font-display text-xl font-semibold ${i === 0 ? 'text-white' : 'text-[#002C4B]'}`}>{p.label}</h3>
@@ -566,7 +564,7 @@ export default function HomePage() {
         </section>
 
         <section aria-labelledby="close-h" className="bg-[#001B2F] text-white">
-          <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 px-6 py-20 lg:flex-row lg:items-center lg:gap-16">
+          <div className="mx-auto flex max-w-7xl flex-col items-start gap-10 px-6 py-16 lg:flex-row lg:items-center lg:gap-16">
             <Mark lit={4} size={168} dark />
             <div>
               <p className="font-display text-xl font-semibold tracking-tight text-slate-200">
