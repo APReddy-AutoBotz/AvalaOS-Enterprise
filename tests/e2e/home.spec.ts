@@ -46,6 +46,9 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   await expect(page.getByText('What went in')).toBeVisible();
   await expect(page.getByText('One step: reading the invoice.')).toBeVisible();
 
+  // The heading is about any process's documents, not the sample's five files, which sat confusingly above "five stages" (owner, 16 November 2026).
+  await expect(page.getByRole('heading', { name: 'From your documents to a Delivery board' })).toBeVisible();
+  await expect(page.getByText(/From five files/)).toHaveCount(0);
   const stages = page.getByRole('list', { name: 'The five stages' }).getByRole('button');
   await expect(stages).toHaveCount(5);
   await expect(stages.first()).toHaveAttribute('aria-current', 'step');

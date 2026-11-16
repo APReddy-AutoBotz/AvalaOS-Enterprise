@@ -434,8 +434,8 @@ export default function HomePage() {
 
         <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-[#002C4B] text-white">
           <div className="mx-auto max-w-7xl px-6 py-12">
-            <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From five files to a Delivery board</h2>
-            <p className="mt-4 max-w-2xl text-lg text-slate-200">Avala is the five stages every process passes through. Watch the sample case go through them, or pick a stage to look at it.</p>
+            <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From your documents to a Delivery board</h2>
+            <p className="mt-4 max-w-2xl text-lg text-slate-200">Five stages take a process from its source files to the board: Assess, Validate, Assemble, Launch, Audit. Watch the sample case go through them, or pick a stage to look at it.</p>
             <Tour />
           </div>
         </section>
