@@ -120,3 +120,16 @@ test('an answer from the board\'s counts offers to open the board', () => {
   const action = answerAction({ lead: null, missing: '', sentences: [{ text: 'One item is blocked.', quote: '1 item is blocked', fact: f, group: '' }] }, ['process']);
   assert.deepEqual(action, { label: 'Open the board', target: { kind: 'board', projectId: 'b1' } });
 });
+
+test('on a board, what the work is for comes from the process it came from, and leads to that process', () => {
+  const ctx = { ...board([item({ processId: 'p1' })]), about: [{ id: 'p1', name: 'Vendor onboarding', summary: 'How new vendors are set up', objective: 'Set up vendors in two days.', owner: 'Meera Iyer', doneToday: 'yes', kind: 'existing_process' }] };
+  const facts = boardFacts('What is the objective of this tool?', ctx);
+  const f = facts.find(x => x.id === 'bp:p1')!;
+  assert.equal(f.text, 'Work on the board "Vendor onboarding" comes from the process "Vendor onboarding"; what it is: How new vendors are set up; its objective: Set up vendors in two days; process owner: Meera Iyer; it is an existing process; the work is done today.');
+  assert.deepEqual(f.target, { kind: 'open-process', processId: 'p1' });
+  // An objective nobody has stated is said as such, never guessed.
+  const none = boardFacts('Why?', { ...ctx, about: [{ id: 'p1', name: 'Vendor onboarding' }] }).find(x => x.id === 'bp:p1')!;
+  assert.match(none.text, /its objective is not stated yet\.$/);
+  // A board with no process behind it has no such fact.
+  assert.equal(boardFacts('Why?', board([item({})])).some(x => x.id.startsWith('bp:')), false);
+});

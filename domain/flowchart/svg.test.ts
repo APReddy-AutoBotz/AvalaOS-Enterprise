@@ -68,3 +68,13 @@ test('the editor\'s BPMN is drawn top to bottom like the maps and reads back to 
   assert.ok(!/isHorizontal="true"/.test(xml));
   assert.deepEqual(graphSignature(parseBpmn(xml)), graphSignature(modelToGraph(gold)));
 });
+
+test('a path label is drawn in full on up to three lines, and every name is there whole on hover', () => {
+  const m: ProcessModel = JSON.parse(JSON.stringify(gold));
+  const f0 = m.flows.find(f => f.label)!;
+  f0.label = 'Direct SAP CATS entry by the contractor';
+  const svg = flowPicture(m).svg;
+  for (const w of ['Direct SAP CATS', 'entry by the', 'contractor']) assert.ok(svg.includes(w), w);
+  assert.ok(svg.includes('<title>Direct SAP CATS entry by the contractor</title>'));
+  for (const s of m.steps) assert.ok(svg.includes(`<title>${s.name.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}</title>`), s.name);
+});

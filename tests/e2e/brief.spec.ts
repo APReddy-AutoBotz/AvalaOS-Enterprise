@@ -106,3 +106,36 @@ test('work not done today: the intended process in words, one map, and no hours 
   await expect(doc).not.toContainText('As-Is');
   await shot(page, '64-intended-pdd');
 });
+
+test('the objective and the process owner are changed in the brief, and the documents take the new wording', async ({ page }) => {
+  await signInAndCreateProcess(page);
+  await stage(page, 'Process');
+  await page.getByRole('button', { name: 'Start the process model' }).click();
+  await page.getByLabel('New step', { exact: true }).fill('Check the invoice');
+  await page.getByRole('button', { name: 'Add step' }).click();
+  await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+  const brief = page.getByTestId('brief');
+  const objective = brief.getByTestId('brief-objective');
+  await expect(objective).toContainText('Not stated yet.');
+  await objective.getByRole('button', { name: 'Add' }).click();
+  await objective.getByLabel('Objective').fill('Pay suppliers on time eithr way');
+  await objective.getByRole('button', { name: 'Save' }).click();
+  await expect(objective).toContainText('Pay suppliers on time eithr way');
+  // A spelling mistake is corrected in the same place.
+  await objective.getByRole('button', { name: 'Change' }).click();
+  await objective.getByLabel('Objective').fill('Pay suppliers on time, either way.');
+  await objective.getByRole('button', { name: 'Save' }).click();
+  await expect(objective).toContainText('Pay suppliers on time, either way.');
+  await expect(objective).toContainText('Confirmed');
+  const owner = brief.getByTestId('brief-owner');
+  await owner.getByRole('button', { name: 'Add' }).click();
+  await owner.getByLabel('Process owner').fill('Meera Iyer');
+  await owner.getByRole('button', { name: 'Save' }).click();
+  await expect(owner).toContainText('Meera Iyer');
+  await stage(page, 'Documents');
+  await page.getByRole('tab', { name: /^PDD/ }).click();
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Pay suppliers on time, either way.');
+  await expect(doc).not.toContainText('eithr');
+  await expect(doc).toContainText('Meera Iyer');
+});

@@ -75,3 +75,12 @@ test('with no AI steps it says so, and an agent in mind is compared, never assum
   assert.ok(d.openItems.some(o => o.text === 'Which steps should the agent take on?'));
   assert.ok(!d.openItems.some(o => /never do/.test(o.text)), 'no limits asked for an agent with no steps');
 });
+
+test('with only AI-assisted steps, the document says no step is agentic and nothing acts on its own', () => {
+  const assist = { ...emptyDecisions(), overrides: { [s3]: ov(s3, 'ai_assist') } };
+  const md = toMarkdown(buildAgent(inputOf(gold, assist)));
+  assert.match(md, /No step is agentic, so nothing here acts on its own/);
+  assert.doesNotMatch(md, /what an AI agent would do/);
+  // With an agentic step it is an agent's document.
+  assert.match(toMarkdown(buildAgent(inputOf(gold, withAi()))), /what an AI agent would do/);
+});

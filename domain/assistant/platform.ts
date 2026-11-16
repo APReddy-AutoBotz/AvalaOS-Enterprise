@@ -31,6 +31,15 @@ export const PLATFORM_FACTS: PlatformFact[] = [
   fact('edits-kept', 'documents', 'documents are rebuilt from the process, the assessment and the choices people made. Text a person edited in a section is kept; when the generated text under it changes, the section is marked "Needs review" and the person chooses Keep mine, Take update or Edit mine.'),
   // domain/docs/changes.ts; the model_approve rule.
   fact('approved', 'documents', 'an approved revision is never changed. Later changes are made in the working draft, and Documents shows what changed since the approved revision.'),
+  // Where a person changes things (owner, 16 November 2026: asked how to correct the objective's wording, Ask
+  // Avala knew the rules but not where to act). journey/process/BriefPanel.tsx MetaLine; patch.ts updateFact.
+  fact('change-objective', 'process', 'the process objective and the process owner are changed in "The brief" at the top of the Process stage: press Change beside Objective or Process owner, then Save. Every document, requirement and new work item takes the new wording; items already on the Delivery board keep theirs.'),
+  // journey/process/DocumentsStage.tsx (Edit on each section heading); domain/docs/edits.ts.
+  fact('edit-section', 'documents', 'the wording of a document section is changed on the Documents stage: open the document and press Edit on the section heading. Tables and open items come from the process itself, so a wrong value in a table is corrected in the process, not in the document.'),
+  // journey/process/RequirementsPanel.tsx, shown on the FRD tab.
+  fact('edit-requirement', 'documents', 'a requirement is reworded on the Documents stage, on the FRD tab: open "Requirements register" with "Review and edit" and press Edit beside the requirement. "Use the derived wording" goes back to the wording worked out from the process.'),
+  // journey/process/SectionComments.tsx.
+  fact('comment', 'documents', 'a reviewer leaves a comment where they read: on the Documents stage, Comment on the section heading. The author or an editor resolves it.'),
   // domain/workitems/board.ts; journey/pages/BoardPage.tsx.
   fact('board', 'work-items', 'work items already on the Delivery board are never changed for you. When a requirement linked to an item changes, the item shows "Upstream changed" with the wording before and after.'),
 ];

@@ -209,14 +209,20 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
     const dash = model.flows.find(f => f.id === e.id)?.isException ? ' stroke-dasharray="5 4"' : '';
     const d = r.points.map(([px, py], i) => `${i ? 'L' : 'M'}${px},${py}`).join(' ');
     out.push(`<path d="${d}" fill="none" stroke="#334155" stroke-width="1.3"${dash} marker-end="url(#arrow)"/>`);
-    if (e.label && r.label) out.push(`<text x="${r.label.x}" y="${r.label.y}" font-size="10" font-weight="600" fill="#334155">${esc(wrap(e.label, 18, 1)[0])}</text>`);
+    // A path's label in full, on up to three lines (owner's process, 16 November 2026: one line cut 15 labels).
+    if (e.label && r.label) {
+      const ll = wrap(e.label, 20, 3);
+      out.push(`<text x="${r.label.x}" y="${r.label.y}" font-size="10" font-weight="600" fill="#334155"><title>${esc(e.label)}</title>${ll.map((l, i) => `<tspan x="${r.label!.x}" dy="${i ? 11 : 0}">${esc(l)}</tspan>`).join('')}</text>`);
+    }
   }
   // Shapes.
   for (const n of graph.nodes) {
     const c = centre(n);
     if (n.kind === 'start' || n.kind === 'end') {
       out.push(`<circle cx="${c.x}" cy="${c.y}" r="${EVENT / 2}" fill="#ffffff" stroke="#0F172A" stroke-width="${n.kind === 'end' ? 3.5 : 1.5}"/>`);
+      out.push(`<g><title>${esc(n.label)}</title>`);
       wrap(n.label, 20, 2).forEach((l, i) => out.push(`<text x="${c.x + EVENT / 2 + 6}" y="${c.y + 4 + i * 11}" font-size="10" fill="#334155">${esc(l)}</text>`));
+      out.push('</g>');
     } else if (n.kind === 'gateway') {
       const g = GATE / 2;
       out.push(`<path d="M${c.x},${c.y - g} L${c.x + g},${c.y} L${c.x},${c.y + g} L${c.x - g},${c.y} Z" fill="#FFFBEB" stroke="#B45309" stroke-width="1.5"/>`);
@@ -224,14 +230,18 @@ export function flowPicture(model: ProcessModel, opts: { modes?: Map<string, Ste
         ? `<path d="M${c.x - 9},${c.y} H${c.x + 9} M${c.x},${c.y - 9} V${c.y + 9}" stroke="#B45309" stroke-width="3"/>`
         : `<path d="M${c.x - 7},${c.y - 7} L${c.x + 7},${c.y + 7} M${c.x + 7},${c.y - 7} L${c.x - 7},${c.y + 7}" stroke="#B45309" stroke-width="3"/>`);
       const gl = wrap(n.label, 18, 3);
+      out.push(`<g><title>${esc(n.label)}</title>`);
       gl.forEach((l, i) => out.push(`<text x="${c.x + g + 6}" y="${c.y - 4 - (gl.length - 1) * 5.5 + i * 11}" font-size="10" fill="#92400E">${esc(l)}</text>`));
+      out.push('</g>');
     } else {
       const m = opts.modes?.get(n.id);
       const st = m ? MODE_STYLE[m.mode] : { fill: '#ffffff', stroke: '#334155' };
       const bx = c.x - TASK_W / 2, by = c.y - TASK_H / 2;
       out.push(`<rect x="${bx}" y="${by}" width="${TASK_W}" height="${TASK_H}" rx="9" fill="${st.fill}" stroke="${st.stroke}" stroke-width="1.5"/>`);
       const lines = wrap(n.label, 22, 3);
+      out.push(`<g><title>${esc(n.label)}</title>`);
       lines.forEach((l, i) => out.push(`<text x="${c.x}" y="${c.y - (lines.length - 1) * 6.5 + i * 13 + 4}" text-anchor="middle" font-size="11" fill="#0F172A">${esc(l)}</text>`));
+      out.push('</g>');
       const no = order.findIndex(s => s.id === n.id) + 1;
       if (no) out.push(`<text x="${bx + 6}" y="${by + 12}" font-size="9" font-weight="700" fill="${st.stroke}">${no}</text>`);
       if (m?.check) out.push(`<circle cx="${bx + TASK_W - 8}" cy="${by + 8}" r="5" fill="#F59E0B" stroke="#ffffff"><title>A person checks the result</title></circle>`);
