@@ -76,7 +76,7 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead }: {
               (owner, 16 November 2026: a typed objective with spelling mistakes reached every document). */}
           <dl className="divide-y divide-slate-100 border-t border-slate-100" data-testid="brief-process-facts">
             {(['objective', 'owner'] as const).map(f => (
-              <MetaLine key={f} field={f} editor={editor} canEdit={canEdit} sourceTitle={sourceTitle} />
+              <React.Fragment key={f}><MetaLine field={f} editor={editor} canEdit={canEdit} sourceTitle={sourceTitle} /></React.Fragment>
             ))}
           </dl>
           {canEdit && (

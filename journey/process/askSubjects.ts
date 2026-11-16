@@ -68,9 +68,9 @@ export function boardSubject(store: JourneyStore, b: { workspaceId: string; proj
         const rev = name ? (await store.listRevisions(id).catch(() => []))[0] : undefined;
         const model = rev ? await store.getModel(rev.id).catch(() => null) : null;
         if (!name || !model) return null;
-        const known = <T,>(f: { value: T | null; status: string } | undefined) => (f && f.status !== 'unknown' ? f.value : null);
+        const known = (f: { value: unknown; status: string } | undefined): string | null => (f && f.status !== 'unknown' && typeof f.value === 'string' ? f.value : null);
         const brief = model.meta.brief ?? {};
-        return { id, name, summary: known(brief.summary), objective: known(model.meta.objective), owner: known(model.meta.owner), doneToday: known(brief.doneToday), kind: known(brief.kind) };
+        return { id, name: String(name), summary: known(brief.summary), objective: known(model.meta.objective), owner: known(model.meta.owner), doneToday: known(brief.doneToday), kind: known(brief.kind) };
       }))).filter((x): x is NonNullable<typeof x> => x !== null);
       return { project: b.project, items, sprints, members: members.map(m => ({ userId: m.userId, name: m.name })), processes: processes.map(p => ({ id: p.id, name: p.name })), today: new Date().toISOString().slice(0, 10), about };
     },
