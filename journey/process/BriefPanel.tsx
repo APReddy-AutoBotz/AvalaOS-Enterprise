@@ -5,7 +5,7 @@
 // filled in for the person. Rules and words: domain/plan/delivery.ts; edits: setBriefFact, confirmBrief.
 import React from 'react';
 import type { DoneToday, InMind, PlannedDoc, ProcessBrief, WorkKind } from '../../domain/processModel/types.ts';
-import { confirmBrief, setBriefFact } from '../../domain/processModel/patch.ts';
+import { confirmBrief, setBriefFact, updateFact } from '../../domain/processModel/patch.ts';
 import { DONE_TODAY, IN_MIND, PLANNED_DOCS, WORK_KINDS } from '../../domain/processModel/validate.ts';
 import { briefLines, DOC_LABEL, DONE_TODAY_LABEL, hasBrief, IN_MIND_LABEL, WORK_KIND_LABEL, type BriefLine } from '../../domain/plan/delivery.ts';
 import type { ModelEditor } from './useModelEditor.ts';
@@ -72,6 +72,13 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead }: {
               </div>
             ))}
           </dl>
+          {/* The objective and the owner: answered once in the open questions, and always changeable here
+              (owner, 16 November 2026: a typed objective with spelling mistakes reached every document). */}
+          <dl className="divide-y divide-slate-100 border-t border-slate-100" data-testid="brief-process-facts">
+            {(['objective', 'owner'] as const).map(f => (
+              <MetaLine key={f} field={f} editor={editor} canEdit={canEdit} sourceTitle={sourceTitle} />
+            ))}
+          </dl>
           {canEdit && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
               {toConfirm > 0 && <Button variant="accent" disabled={editor.saving} onClick={() => editor.apply(confirmBrief, 'Confirmed the brief')}>Confirm the brief</Button>}
@@ -126,5 +133,50 @@ function LineEditor({ k, brief, systems, onSave, onCancel }: {
       </div>
       {buttons(options.map(o => o[0]).filter(v => many.includes(v)), 'set', many.length > 0)}
     </fieldset>
+  );
+}
+
+const META_LABEL = { objective: 'Objective', owner: 'Process owner' } as const;
+
+/** The process's objective or owner: shown with where it came from, and changed by a person here. */
+function MetaLine({ field, editor, canEdit, sourceTitle }: { field: 'objective' | 'owner'; editor: ModelEditor; canEdit: boolean; sourceTitle: (key: string) => string }) {
+  const fact = editor.model.meta[field];
+  const value = fact.status !== 'unknown' && fact.value ? String(fact.value) : null;
+  const [editing, setEditing] = React.useState(false);
+  const [text, setText] = React.useState(value ?? '');
+  React.useEffect(() => { if (!editing) setText(value ?? ''); }, [value, editing]);
+  const save = async () => {
+    const next = text.trim();
+    if (await editor.apply(m => updateFact(m, { target: { kind: 'meta', field }, value: next || null }), `${META_LABEL[field]} ${next ? 'changed' : 'cleared'}`)) setEditing(false);
+  };
+  return (
+    <div className="grid gap-1 py-3 sm:grid-cols-[12rem_minmax(0,1fr)] sm:gap-4" data-testid={`brief-${field}`}>
+      <dt className="text-sm font-medium text-slate-600">{META_LABEL[field]}</dt>
+      <dd className="min-w-0">
+        {editing ? (
+          <div>
+            {field === 'objective'
+              ? <textarea aria-label={META_LABEL[field]} rows={3} maxLength={1000} value={text} onChange={e => setText(e.target.value)} className={input} />
+              : <input aria-label={META_LABEL[field]} maxLength={200} value={text} onChange={e => setText(e.target.value)} className={input} />}
+            <p className="mt-1 text-xs text-slate-500">Every document, requirement and new work item takes the new wording. Items already on the board keep theirs.</p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button disabled={editor.saving || text.trim() === (value ?? '')} onClick={save}>Save</Button>
+              <Button variant="ghost" onClick={() => setEditing(false)}>Cancel</Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className={cx('text-sm leading-6', value ? 'text-slate-900' : 'text-slate-500')}>{value ?? 'Not stated yet.'}</span>
+              <Tag tone={fact.status === 'user-confirmed' ? 'ok' : value ? 'info' : 'neutral'}>{fact.status === 'user-confirmed' ? 'Confirmed' : value ? 'From the sources' : 'Not yet'}</Tag>
+              {canEdit && <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-900 hover:underline" onClick={() => setEditing(true)}>{value ? 'Change' : 'Add'}</button>}
+            </div>
+            {fact.sources[0] && fact.status !== 'user-confirmed' && (
+              <p className="mt-1 text-xs leading-5 text-slate-500">“{fact.sources[0].excerpt}” <span>({sourceTitle(fact.sources[0].sourceId)})</span></p>
+            )}
+          </>
+        )}
+      </dd>
+    </div>
   );
 }

@@ -135,3 +135,15 @@ test('the agent document is one click away wherever a step is rated for AI, so t
   const line = deliveryPlan(m, { ...a, lead: 'rpa', counts: { ...a.counts, ai_assist: 1, agent: 0 } }).docs.find(d => d.doc === 'agent')!;
   assert.match(line.reason, /what the AI may do alone/);
 });
+
+test('a document a person chose is planned, and its reason never says "one click away"', () => {
+  let m = setBriefFact(gold(), { fact: 'doneToday', value: 'yes' }).model;
+  m = setBriefFact(m, { fact: 'documents', value: ['brd', 'frd'] }).model;
+  const p = deliveryPlan(m, assessProcess(m));
+  const planned = p.docs.filter(d => d.planned);
+  assert.deepEqual(planned.map(d => d.doc), ['brd', 'frd']);
+  for (const d of planned) assert.doesNotMatch(d.reason, /one click away/i, d.doc);
+  assert.match(planned[0].reason, /^Wanted \(confirmed by a person\)\. What the business needs/);
+  assert.deepEqual(p.docs.filter(d => !d.planned).map(d => d.doc), ['pdd', 'sdd'], 'the table\'s own documents stay one click away');
+  assert.deepEqual(p.ruleWouldPlan, ['pdd', 'sdd']);
+});

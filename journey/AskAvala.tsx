@@ -18,7 +18,7 @@ import type { Suggestion } from '../domain/assistant/suggest.ts';
 import { useProcessChanged } from './processChanged.ts';
 import { questionPlan, useSourceLook } from './process/sourceLook.ts';
 import { SidePanel } from './process/widgets.tsx';
-import { AskAvalaButton, ErrorNote, messageOf, Spinner } from './ui.tsx';
+import { AskAvalaButton, AvalaSpark, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
 interface LoadedProcess { process: ProcessRow; model: ProcessModel | null; sources: SourceRow[]; working: { id: string; seq: number } | null }
 
@@ -31,6 +31,9 @@ async function loadProcess(store: JourneyStore, processId: string): Promise<Load
   const draft = revisions.find(r => r.state === 'working');
   return { process, model: current ? await store.getModel(current.id) : null, sources, working: draft ? { id: draft.id, seq: draft.seq } : null };
 }
+
+/** Ask Avala's mark in the panel's head: the button's amber, so the open panel is plainly Ask Avala. */
+const ASK_MARK = <span aria-hidden="true" className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#E69F00] text-[#002C4B] shadow-sm"><AvalaSpark /></span>;
 
 export function AskAvala({ store, nav, workspace }: { store: JourneyStore; nav: Nav; workspace: Workspace }) {
   const stages = stagesFor(workspace.modules);
@@ -112,8 +115,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   // A process open on a page but not of this workspace (opened by a link) is still offered.
   const processOptions = processes && loaded && loaded !== 'missing' && !processes.some(p => p.id === loaded.process.id) ? [...processes, loaded.process] : processes ?? [];
   const about = (
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
-      <label htmlFor="ask-about" className="text-sm text-slate-600">Asking about</label>
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 ring-2 ring-inset ring-[#E69F00]/60" data-testid="ask-about">
+      <label htmlFor="ask-about" className="text-sm font-semibold text-[#002C4B]">Asking about</label>
       <select id="ask-about" value={pickOf(scope)} onChange={e => setPicked(e.target.value || null)} disabled={!processes || !projects}
         className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-900 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20">
         {!pickOf(scope) && <option value="">Choose a board</option>}
@@ -144,7 +147,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   );
   if (proc && view === 'interview') {
     return (
-      <SidePanel title="Ask Avala" onClose={onClose} wide>
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={ASK_MARK}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={`${proc.process.id}:${start?.itemKey ?? ''}`}>
@@ -162,7 +165,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
       nav.go({ page: 'process', processId: proc.process.id, stage: stages.includes(sg.target.stage) ? sg.target.stage : 'process' });
     };
     return (
-      <SidePanel title="Ask Avala" onClose={onClose} wide>
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={ASK_MARK}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={proc.process.id}>
@@ -181,7 +184,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   }
   const lists = Boolean(processes && projects);
   return (
-    <SidePanel title="Ask Avala" onClose={onClose} wide>
+    <SidePanel title="Ask Avala" onClose={onClose} wide brand={ASK_MARK}>
       <div data-testid="ask-panel">
         {about}
         <ErrorNote message={error} />

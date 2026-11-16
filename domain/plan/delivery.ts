@@ -132,6 +132,15 @@ const REASON: Record<Track, Partial<Record<PlannedDoc, string>>> = {
   new: { brd: 'What the business needs from the new work, with its goals.', frd: 'What the solution must do, requirement by requirement.', sdd: 'How the solution is built.', pdd: 'Describes work as it is done; nothing is done today.', agent: 'An agent was in mind: what it may do alone, what needs a person.' },
 };
 
+/** What each document holds, for a document a person chose that the table would not plan. */
+const DOC_WHAT: Record<PlannedDoc, string> = {
+  brd: 'What the business needs, with its goals and measures.', frd: 'What the solution must do, requirement by requirement.',
+  pdd: 'How the work runs today and how it will run, step by step.', sdd: 'How the solution is built.',
+  agent: 'What the AI may do alone, what needs a person, its access, and how it is tested.',
+};
+/** A planned document's reason never says it is one click away (found on the owner's process, 16 November 2026). */
+const plannedReason = (track: Track, doc: PlannedDoc) => (RULE_DOCS[track].includes(doc) ? REASON[track][doc] ?? DOC_WHAT[doc] : DOC_WHAT[doc]);
+
 /** The delivery plan for a process, by the table, with what it rests on. */
 export function deliveryPlan(m: ProcessModel, a: ProcessAssessment | null): DeliveryPlan {
   const b = m.meta.brief ?? {};
@@ -149,8 +158,8 @@ export function deliveryPlan(m: ProcessModel, a: ProcessAssessment | null): Deli
   const offered = [...ORDER.filter(d => d !== 'agent'), 'agent' as PlannedDoc].filter(d => !planned.has(d) && (d !== 'agent' || inMind.includes('agent') || track === 'ai' || aiSteps > 0));
   const docs: DocLine[] = [...ORDER.filter(d => planned.has(d)), ...offered].map(doc => ({
     doc, label: DOC_LABEL[doc], planned: planned.has(doc), available: BUILT_DOCS.includes(doc),
-    reason: chosen && planned.has(doc) ? `Wanted (${from(b.documents)}). ${REASON[track][doc] ?? ''}`.trim()
-      : asked.includes(doc) && !rule.includes(doc) ? `Asked for in the sources; confirm or change it in the brief. ${REASON[track][doc] ?? ''}`.trim()
+    reason: chosen && planned.has(doc) ? `Wanted (${from(b.documents)}). ${plannedReason(track, doc)}`.trim()
+      : asked.includes(doc) && !rule.includes(doc) ? `Asked for in the sources; confirm or change it in the brief. ${plannedReason(track, doc)}`.trim()
       : REASON[track][doc] ?? (planned.has(doc) ? '' : 'One click away.'),
   }));
   const same = chosen && chosen.length === rule.length && chosen.every(d => rule.includes(d));

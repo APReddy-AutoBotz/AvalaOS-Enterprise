@@ -38,8 +38,12 @@ export function buildAgent(input: DocInput): DocTree {
 
   // ---- 1 Purpose and scope
   b.section('1', 'Purpose and scope', 1);
+  // Only AI-assisted steps: no agent acts alone here, and the document says so (owner's process, 16 November 2026).
+  const assistOnly = ours.length > 0 && ours.every(a => a.approach === 'ai_assist');
   b.paragraph(ours.length
-    ? `This document sets out what an AI agent would do in "${m.meta.name}": the ${ours.length} of ${steps.length} steps it takes on, where a person stays, what it may use, and how its work is checked. These are the steps rated AI-assisted or agentic in the assessment${ours.some(a => a.byPerson) ? ', or set so by a person' : ''}. The ${words.intended ? 'intended process' : 'process'} as a whole is in the PDD; how the solution is built is in the SDD.`
+    ? assistOnly
+      ? `This document sets out what AI would do in "${m.meta.name}": the ${ours.length} of ${steps.length} ${ours.length === 1 ? 'step' : 'steps'} rated AI-assisted in the assessment${ours.some(a => a.byPerson) ? ', or set so by a person' : ''}, where it reads or drafts and a person checks the result. No step is agentic, so nothing here acts on its own; "the agent" below means this AI assistance. It also sets out where a person stays, what the AI may use, and how its work is checked. The ${words.intended ? 'intended process' : 'process'} as a whole is in the PDD; how the solution is built is in the SDD.`
+      : `This document sets out what an AI agent would do in "${m.meta.name}": the ${ours.length} of ${steps.length} steps it takes on, where a person stays, what it may use, and how its work is checked. These are the steps rated AI-assisted or agentic in the assessment${ours.some(a => a.byPerson) ? ', or set so by a person' : ''}. The ${words.intended ? 'intended process' : 'process'} as a whole is in the PDD; how the solution is built is in the SDD.`
     : `This document sets out what an AI agent would do in "${m.meta.name}". On what is known, no step is rated AI-assisted or agentic, so the agent has no steps yet. They appear here when the assessment rates a step for AI, or a person sets one so.`);
   const objective = known(m.meta.objective);
   const brief = m.meta.brief;
