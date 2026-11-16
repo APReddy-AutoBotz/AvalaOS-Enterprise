@@ -70,6 +70,9 @@ const CSS = `
 @keyframes tour-fill{to{transform:scaleX(1)}}
 [data-paused="true"] *{animation-play-state:paused !important}
 .shot-frame{border-radius:14px;overflow:hidden;background:#fff;box-shadow:0 0 0 1px rgba(15,23,42,.08),0 30px 60px -20px rgba(0,27,47,.35)}
+@media (min-width: 1280px){
+  .hero-shot{margin-right:calc(-1 * clamp(0px, (100vw - 80rem) / 2 - 1rem, 10rem))}
+}
 @media (max-width: 640px){
   .tour-shot{transform:scale(1.7)}
   @keyframes tour-zoom{from{transform:scale(1.7)}to{transform:scale(1.9)}}
@@ -295,7 +298,7 @@ export default function HomePage() {
           <SiteNav go={go} />
         </header>
 
-        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-10 lg:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] lg:pb-28 lg:pt-16">
+        <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-20 pt-10 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-28 lg:pt-16 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
           <div>
             <h1 className="font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
             <p className="mt-7 border-l-4 border-[#E69F00] pl-4 font-display text-2xl font-semibold leading-8 tracking-tight text-white sm:text-3xl">Not every process needs AI.</p>
@@ -315,9 +318,10 @@ export default function HomePage() {
             </ul>
             {!signedIn && <p className="mt-6 text-sm leading-6 text-slate-300">Already have an invitation? <a href="/signin" className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>Sign in</a>. Evaluating Avala OS for your team? Request a pilot and we will set up a workspace for you.</p>}
           </div>
-          <div className="lg:-mr-56 xl:-mr-40">
+          {/* The opening picture is always whole (owner, 16 November 2026): it grows past the text column only as far as the window has room. */}
+          <div className="hero-shot">
             <div className="shot-frame">
-              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-[170%] max-w-none sm:w-full" alt="The Avala OS assessment of a vendor invoice process: RPA-led automation recommended, 80% of steps fit automation, 1 step of 20 needs AI" />
+              <img src={shot('assessment')} width={2000} height={1250} className="block h-auto w-full" alt="The Avala OS assessment of a vendor invoice process: RPA-led automation recommended, 80% of steps fit automation, 1 step of 20 needs AI" />
             </div>
           </div>
         </section>
