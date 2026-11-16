@@ -16,7 +16,7 @@ import { InterviewPanel } from './process/InterviewPanel.tsx';
 import { SuggestionsPanel } from './process/SuggestionsPanel.tsx';
 import type { Suggestion } from '../domain/assistant/suggest.ts';
 import { useProcessChanged } from './processChanged.ts';
-import { questionPlan, useSourceLook } from './process/sourceLook.ts';
+import { questionPlan, useSharedLook, useSourceLook } from './process/sourceLook.ts';
 import { SidePanel } from './process/widgets.tsx';
 import { AskAvalaButton, AskMark, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
@@ -126,6 +126,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
 
   // The interview's tab, with how many questions need people now (the first list, and answers found to confirm), on a process that has steps.
   const proc = processId && loaded && loaded !== 'missing' && askable(loaded.model) ? loaded : null;
+  // The shared look, read from the server when the panel opens on a process (package 4 of docs/next-plan.md).
+  useSharedLook(store, proc ? proc.process : null, false);
   const { look, dismissed } = useSourceLook(proc?.process.id ?? '');
   const openCount = React.useMemo(() => {
     if (!proc) return 0;

@@ -1,7 +1,7 @@
 // The portfolio: every assessed process in a workspace side by side, in the order to take them.
 import { durationText, effortOf, effortTotals, NOT_RECORDED, readyDocuments, type EffortTotals } from '../../domain/work/effort.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
-import { questionPlan } from '../process/sourceLook.ts';
+import { questionPlan, sharedLookOf } from '../process/sourceLook.ts';
 import React from 'react';
 import type { JourneyStore, ProcessRow } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -71,7 +71,8 @@ export function Portfolio({ store, nav, processes, workspaceId }: { store: Journ
       const assessment = assessProcess(model, { settings: rec.settings, decisions });
       // Effort so far (part H), from what is recorded for the process.
       const [history, sources] = await Promise.all([store.history(p.id).catch(() => ({ revisions: [], edits: [] })), store.listSources(p.id).catch(() => [])]);
-      const qp = model.steps.length ? questionPlan(p.id, model).plan : null;
+      const shared = await sharedLookOf(store, p.id);
+      const qp = model.steps.length ? questionPlan(p.id, model, undefined, shared.look, shared.dismissed).plan : null;
       const effort = effortOf({
         sources: sources.map(s => ({ key: s.key, createdAt: s.createdAt })), edits: history.edits, firstRevisionAt: history.revisions.map(r => r.createdAt).sort()[0] ?? null, model,
         plan: qp ? { now: qp.now.length, found: qp.found.length, wait: qp.wait.length, deferred: qp.deferred.length } : undefined, documents: readyDocuments(deliveryPlan(model, assessment).docs),

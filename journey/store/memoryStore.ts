@@ -15,6 +15,7 @@ import { validateModel, errorsOf } from '../../domain/processModel/validate.ts';
 import { StoreError, type WorkspaceAi, type Draft, type EditRow, type JourneyStore, type Me, type Person, type Invite, type RoleChoice, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { emptyDecisions, type Decisions } from '../../domain/assess/decisions.ts';
+import type { StoredLook } from '../../domain/assistant/sharedLook.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
@@ -52,6 +53,8 @@ interface State {
   itemEvents?: ItemEvent[];
   sprints?: Sprint[];
   applications?: (Application & { workspaceId: string })[];
+  /** What was looked up in each process's sources (the server's process_source_looks). */
+  looks?: Record<string, StoredLook>;
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -742,6 +745,24 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       for (const r of rows) { const i = list.findIndex(x => x.code === r.code); if (i >= 0) list[i] = structuredClone(r); else list.push(structuredClone(r)); }
       state.requirements[processId] = list;
       save();
+    },
+    async getSourceLook(processId) {
+      requireMe();
+      workspaceOf(processId);
+      // A fresh page reads what other pages saved (the server's copy, here the browser's storage).
+      if (!demo) state = { ...state, looks: load().looks ?? state.looks };
+      const row = state.looks?.[processId];
+      return row ? structuredClone(row) : null;
+    },
+    async saveSourceLook(processId, _workspaceId, next, version) {
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Looking in the sources needs the editor or admin role.');
+      if (!demo) state = { ...state, looks: load().looks ?? state.looks };
+      const row = state.looks?.[processId] ?? null;
+      if ((row?.version ?? null) !== version) return null;
+      state.looks = { ...(state.looks ?? {}), [processId]: { ...structuredClone(next), version: (row?.version ?? 0) + 1 } };
+      save();
+      return state.looks[processId].version;
     },
     async getAssessmentDecisions(processId) {
       requireMe();
