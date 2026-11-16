@@ -71,7 +71,7 @@ export function toLookUp(t: Triage, look: SourceLook | null, sources: string, li
   const repeats = limit.repeats ?? AUTO_LOOK.repeats;
   const givenUp = (key: string) => !manual && same && (look!.sent?.[key]?.times ?? 0) > repeats;
   // A question about the shape of the flow is fixed in the Process stage; no passage answers it.
-  const open = t.items.filter(i => !i.deferred && !looked.has(i.key) && !givenUp(i.key) && i.target.kind !== 'gateway');
+  const open = t.items.filter(i => !i.deferred && !looked.has(i.key) && !givenUp(i.key) && i.target.kind !== 'gateway' && i.kind !== 'choice');
   const asIs = { asIs: t.purpose === 'as_is' };
   const first = open.filter(i => decisive(i, asIs)).map((i, n) => ({ i, n })).sort((a, b) => weightFor(b.i, asIs) - weightFor(a.i, asIs) || a.n - b.n).map(x => x.i);
   const order = [...first, ...open.filter(i => !decisive(i, asIs))].slice(0, limit.perBatch * limit.batches);

@@ -51,6 +51,8 @@ test('decided as RPA: no Assessment page, the line at the top of Documents, only
   await expect(line).toContainText('"The client runs one RPA platform for every process"');
   await expect(line).toContainText(/It can do \d+ steps?\./);
   await expect(line).toContainText(/stays? with people because it cannot do/);
+  // The facts that settle a step not known yet lead the first list.
+  await expect(page.getByTestId('gaps-banner')).toContainText(/\d+ things? only your people can tell us/);
   await page.getByRole('button', { name: 'Which steps, and why' }).click();
   const cannot = page.getByTestId('decided-cannot');
   await expect(cannot).toContainText('Robots are not allowed on the screens of SAP');

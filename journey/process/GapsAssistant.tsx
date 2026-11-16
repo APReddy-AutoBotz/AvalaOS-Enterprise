@@ -199,6 +199,12 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
 
       {canEdit && mode === 'answer' && (
         <div className="mt-5 space-y-3">
+          {item.kind === 'choice' && (
+            <select aria-label="Answer" value={pick} onChange={e => setPick(e.target.value)} className={input}>
+              <option value="">Choose the answer</option>
+              {(item.choices ?? []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          )}
           {(item.kind === 'role' || item.kind === 'system') && (
             <select aria-label="Answer" value={pick} onChange={e => setPick(e.target.value)} className={input}>
               <option value="">{item.kind === 'role' ? 'Choose the role' : 'Choose the system'}</option>

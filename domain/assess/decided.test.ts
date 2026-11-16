@@ -162,3 +162,20 @@ test('Ask Avala on a decided process: the approach and what it can do, no score 
   assert.ok(facts.some(f => f.id === 'h:step-by-step' && /The brief/.test(f.text)));
   assert.ok(!facts.some(f => /no single setting/.test(f.text)));
 });
+
+test('a step fact that settles the decided approach leads the first list, and its answer there settles the step', async () => {
+  const { buildAnswer } = await import('../questions/answer.ts');
+  const { firstListCounts } = await import('../questions/counts.ts');
+  const m = decide(gold(), 'rpa');
+  const a = assessProcess(m);
+  const unknownSteps = decidedSummary(m, a)!.unknown.length;
+  assert.ok(unknownSteps > 0);
+  const plan = planQuestions(triage(m, a), m);
+  const lead = plan.now.find(i => i.kind === 'choice');
+  assert.ok(lead, 'a step fact is in the first list');
+  assert.match(lead!.affects[0]!, /^Settles whether Rule-based RPA can do/);
+  assert.equal(firstListCounts(m)!.now, plan.now.length, 'the email counts what the screens count');
+  const yes = lead!.choices!.find(c => ['true', 'structured'].includes(c[0]))![0];
+  const answered = buildAnswer(lead!, m, { pick: lead!.target.field === 'traits.judgment' || lead!.target.field === 'traits.physical' ? 'false' : yes })!.op(m).model;
+  assert.ok(!planQuestions(triage(answered, assessProcess(answered)), answered).now.some(i => i.key === lead!.key));
+});

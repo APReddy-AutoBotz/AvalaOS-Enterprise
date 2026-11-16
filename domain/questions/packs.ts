@@ -23,6 +23,7 @@ export function howToAnswer(item: TriageItem, m: ProcessModel): string {
     case 'access': return `For each, say whether it can be used, exists but is not confirmed, or is not available: ${(item.interfaces ?? []).map(x => x.label).join('; ')}.`;
     case 'text': return 'In your own words.';
     case 'free': return 'In your own words; say who confirmed it if it was not you.';
+    case 'choice': return `One of: ${(item.choices ?? []).map(c => c[1]).join(', ')}.`;
   }
 }
 

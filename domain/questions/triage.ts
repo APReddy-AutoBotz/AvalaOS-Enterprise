@@ -7,10 +7,11 @@ import type { ProcessAssessment } from '../assess/process.ts';
 import { buildingSystem } from '../plan/intended.ts';
 import { asksQuestion, purposeOf, type PurposeValue } from '../plan/purpose.ts';
 import { APPROACH_LABEL } from '../assess/scoring.ts';
+import { choicesFor } from './answer.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
-export type AnswerKind = 'role' | 'system' | 'number' | 'text' | 'access' | 'free';
+export type AnswerKind = 'role' | 'system' | 'number' | 'text' | 'access' | 'free' | 'choice';
 
 export const GROUP_LABEL: Record<QGroup, string> = { decides: 'Changes the recommendation', signoff: 'Needed for sign-off', detail: 'Detail' };
 /** An item's group in words: for an approach decided for the process, what leads settles that approach. */
@@ -31,6 +32,8 @@ export interface TriageItem {
   kind: AnswerKind;
   /** For merged interface questions: the interfaces to settle, by their index in the system's access list. */
   interfaces?: { index: number; label: string; access: AccessStatus }[];
+  /** For a fact of a step or an application that settles a decided approach (package 9): the answers to choose from. */
+  choices?: [string, string][];
   /** A person it is assigned to, when deferred. */
   assignedTo: string | null;
   deferred: boolean;
@@ -196,6 +199,19 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
       return i.group === 'decides' ? { ...i, group: 'signoff' as const, affects: i.affects.filter(x => !x.startsWith('Assessment')) } : i;
     })
     : items;
+  // The facts of a step or of an application's screens that settle a step not known yet lead too, answered by a choice.
+  if (purpose === 'decided') {
+    const seen = new Set<string>();
+    for (const s of a.steps) for (const q of s.decided?.status === 'unknown' ? s.decided.questions : []) {
+      if (q.target.kind === 'api' || seen.has(q.key)) continue;
+      seen.add(q.key);
+      const target: ElementTarget = q.target.kind === 'trait' ? { kind: 'step', id: q.target.stepId, field: `traits.${q.target.trait}` } : { kind: 'system', id: q.target.systemId, field: 'uiStable' };
+      const n = a.steps.filter(x => x.decided?.status === 'unknown' && x.decided.questions.some(y => y.key === q.key)).length;
+      asked.push({ key: `decided:${q.key}`, question: q.question, target, questionIds: [], kind: 'choice', choices: choicesFor(q.target.kind === 'trait' ? q.target.trait : 'uiStable'),
+        assignedTo: null, deferred: false, group: 'decides', owner: q.target.kind === 'screens' ? 'it' : 'business', uses: n,
+        affects: [`Settles whether ${label} can do ${n} ${n === 1 ? 'step' : 'steps'}`] });
+    }
+  }
   asked.sort((x, y) => Number(x.deferred) - Number(y.deferred) || ORDER[x.group] - ORDER[y.group] || x.owner.localeCompare(y.owner));
   const gapCount = gaps(m).length + m.exceptions.filter(x => !x.routedToRoleId).length;
   return { items: asked, alreadyKnown, raw: stored.length + gapCount, ...(purpose !== 'assess' ? { purpose } : {}) };
