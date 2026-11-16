@@ -109,3 +109,87 @@ test('new assignments ride along with process needs; a long list is cut with a c
   assert.ok(!later.email!.text.includes('New:'));
   assert.match(later.email!.text, /- 3 open questions to answer/);
 });
+
+// ---- Package 5 of docs/next-plan.md: the count My work shows, and review comments --------------------
+
+import { readFileSync } from 'node:fs';
+import type { ProcessModel } from '../processModel/types.ts';
+import { assessProcess } from '../assess/process.ts';
+import { triage } from '../questions/triage.ts';
+import { planQuestions } from '../questions/firstList.ts';
+import { foundFor, foundKeys } from '../assistant/sourceLook.ts';
+import { commentKey, commentLines, COMMENTS_SHOWN, digestFacts, type CommentLine } from './digest.ts';
+import { commentNeeds, needsFor, type OpenComment } from './home.ts';
+
+const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
+const servicenow = 'system:sys-servicenow';
+const found = {
+  key: `answer:${servicenow}:Its REST API can be used`, kind: 'answer' as const, title: 't', why: 'w', quote: { text: 'q', source: 's' }, willDo: 'd', needs: 'edit_process' as const,
+  target: { kind: 'answer' as const, itemKey: servicenow, source: 's', proposal: { itemKey: servicenow, question: 'q', display: 'Its REST API can be used', quote: 'q', certainty: 'stated' as const, answer: { statuses: { 0: 'confirmed' as const } } } },
+};
+const look = { sources: 'a', looked: [servicenow], found: [found], questions: 1, passages: 1, tokens: 1, calls: 1 };
+
+test('the email counts the questions as My work does: the first list, from the same model and the same look', () => {
+  const m = gold();
+  // What My work counts (journey/processFacts.ts, through the shared look).
+  const t = triage(m, assessProcess(m));
+  const plan = planQuestions(t, m, { found: foundKeys(foundFor(look, t, [])) });
+  const screen = { now: plan.now.length, found: plan.found.length, wait: plan.wait.length };
+  assert.deepEqual(screen, { now: 2, found: 1, wait: 9 });
+  // What the email works out on the server from needs_digest_input().
+  const row = { ...proc('p1', { openQuestions: m.openQuestions.filter(q => q.status === 'open').length }), model: m, look, dismissed: [] };
+  const facts = digestFacts(row);
+  assert.deepEqual(facts.questions, screen);
+  assert.ok(!('model' in facts) && !('look' in facts), 'the model and the look are not kept');
+  const lines = namedNeeds(ana, [facts]).map(n => n.text);
+  assert.deepEqual(lines, ['2 questions only your people can answer', '1 answer found in the sources to confirm']);
+  assert.deepEqual(lines, needsFor(ana, [{ ...proc('p1'), questions: screen }]).map(n => n.text));
+  // "Not right" on the answer, shared: the question goes back to the people, as on the screen.
+  assert.deepEqual(digestFacts({ ...row, dismissed: [found.key] }).questions, { now: 3, found: 0, wait: 9 });
+  // Only "can wait" questions: not a need, as on My work.
+  assert.deepEqual(namedNeeds(ana, [{ ...proc('p2'), questions: { now: 0, found: 0, wait: 4 } }]), []);
+  // A process with no steps, or a model that cannot be read, keeps the stored count.
+  assert.equal(digestFacts({ ...proc('p3', { openQuestions: 2 }), model: null }).questions, undefined);
+  assert.equal(digestFacts({ ...proc('p3', { openQuestions: 2 }), model: { steps: 'broken' } as never }).questions, undefined);
+});
+
+const comment = (id: string, over: Partial<OpenComment & { processId: string }> = {}): OpenComment & { processId: string } => ({
+  id, processId: 'p1', docType: 'pdd', sectionKey: 's-2-4', sectionTitle: 'Detailed As-Is steps', authorId: 'u-ben', author: 'Ben Iyer', createdAt: `2026-11-16T0${id.length}:00:00Z`, ...over,
+});
+
+test('a review comment reaches the people named on the process, never its author, once, with the document, section, who and a link', () => {
+  const processes = [proc('p1', { architectId: 'u-cy' }), proc('p2', { analystId: 'u-other' })];
+  const comments = [comment('c1'), comment('c2', { authorId: ME, author: 'Ana' }), comment('c3', { processId: 'p2' })];
+  // Ana is named on p1 only; her own comment is not hers to read.
+  const mine = commentLines(ME, processes, comments);
+  assert.deepEqual(mine.map(c => c.id), ['c1']);
+  // Cy, the architect, gets Ana's and Ben's.
+  assert.deepEqual(commentLines('u-cy', processes, comments).map(c => c.id), ['c1', 'c2']);
+  // An email can go for comments alone.
+  const d = needsDigest(base({ comments: mine }));
+  assert.equal(d.email?.subject, 'Ben Iyer commented on the PDD of Process p1');
+  assert.match(d.email!.text, /New review comments\n- PDD of Process p1, "Detailed As-Is steps", from Ben Iyer\n {2}https:\/\/avalaos\.com\/process\/p1\/documents\?doc=pdd#s-2-4/);
+  assert.match(d.email!.html, /href="https:\/\/avalaos\.com\/process\/p1\/documents\?doc=pdd#s-2-4"/);
+  assert.doesNotMatch(d.email!.text.split('Stop these emails')[0]!, /@/, 'no email address in the body');
+  assert.deepEqual(d.keys, [commentKey({ id: 'c1' })]);
+  // Seen in that email: not listed again, and no email for it alone.
+  assert.equal(needsDigest(base({ comments: mine, seen: d.keys })).email, null);
+  // Resolved: the server no longer lists it, so it is not in the email and drops out of what was seen.
+  const after = needsDigest(base({ comments: [], seen: d.keys }));
+  assert.equal(after.email, null);
+  assert.deepEqual(after.keys, []);
+});
+
+test('new comments ride along with process needs; a long list is cut with a count; My work shows the same people the same comments', () => {
+  const many: CommentLine[] = Array.from({ length: COMMENTS_SHOWN + 3 }, (_, i) => ({ ...comment(`c${i}`), processName: 'Process p1' }));
+  const needs = namedNeeds(ana, [proc('p1', { openQuestions: 2 })]);
+  const d = needsDigest(base({ needs, comments: many }));
+  assert.equal(d.email?.subject, `Something needs you in Finance · ${COMMENTS_SHOWN + 3} new comments`);
+  assert.equal((d.email!.text.match(/^- PDD of Process p1/gm) ?? []).length, COMMENTS_SHOWN);
+  assert.match(d.email!.text, /- and 3 more on My work/);
+  // My work: one line per process for the people named on it, never for the author, opening the documents.
+  const facts = [proc('p1', { comments: [comment('c1'), comment('c2', { authorId: ME })] }), proc('p2', { analystId: 'u-other', comments: [comment('c3', { processId: 'p2' })] }), proc('p3', { comments: [comment('c4', { authorId: ME })] })];
+  const lines = commentNeeds(ana, facts);
+  assert.deepEqual(lines.map(n => [n.processId, n.text, n.stage, n.kind]), [['p1', '1 open review comment on the documents', 'documents', 'comments']]);
+  assert.deepEqual(commentLines(ME, facts, facts.flatMap(p => (p.comments ?? []).map(c => ({ ...c, processId: p.id })))).map(c => c.id), ['c1']);
+});

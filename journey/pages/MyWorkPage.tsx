@@ -12,7 +12,7 @@ import type { Nav } from '../JourneyApp.tsx';
 import type { WorkItem, WorkStatus } from '../../domain/workitems/board.ts';
 import { STATUS_LABEL } from '../../domain/workitems/board.ts';
 import { roleOf } from '../../domain/people/roles.ts';
-import { homeSummary, itemsFor, needsByProcess, needsFor, openOn, processesFor, type Need, type Person } from '../../domain/work/home.ts';
+import { commentNeeds, homeSummary, itemsFor, needsByProcess, needsFor, openOn, processesFor, type Need, type Person } from '../../domain/work/home.ts';
 import { cardTotals } from '../../domain/assess/portfolio.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, CARD, cx, EmptyState, ErrorNote, messageOf, PageHead, Spinner, Tag, TypeGlyph } from '../ui.tsx';
@@ -67,7 +67,8 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
   if (!data) return <div><p className="text-[13px] font-medium text-slate-500">{eyebrow}</p><Spinner /></div>;
 
   const person: Person = { userId, access: workspace.role, canApprove: workspace.canApprove, job: workspace.job ?? null };
-  const needs = needsFor(person, data.facts);
+  // Work of the person's duties, then open review comments on processes they are named on (as the weekday email lists them).
+  const needs = [...needsFor(person, data.facts), ...commentNeeds(person, data.facts)];
   const groups = needsByProcess(needs);
   const mine = itemsFor(userId, data.items, today());
   const { mine: myProcesses, unassigned } = processesFor<LoadedFacts>(person, data.facts);
@@ -244,7 +245,7 @@ function NeedsYou({ needs, groups, nav }: { needs: Need[]; groups: ReturnType<ty
 
   if (needs.length === 1) {
     const n = needs[0]!;
-    const action = ACTION[n.stage] ?? 'Open';
+    const action = n.kind === 'comments' ? 'Read them' : ACTION[n.stage] ?? 'Open';
     return (
       <section aria-labelledby="needs-you" className={cx(frame, 'flex flex-wrap items-center gap-x-6 gap-y-4 px-6 py-6')} data-testid="needs-you">
         <NeedMark />
