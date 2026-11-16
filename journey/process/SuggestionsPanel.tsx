@@ -3,6 +3,7 @@
 // "Dismiss". Nothing is applied here. The rule-based ones (work no proposal plans, application facts to
 // bring in) show at once; answers the sources state are looked for on their own when the process opens,
 // within a limit (part D of the effort-first plan, journey/process/sourceLook.ts), and again on request. Rules: domain/assistant/suggest.ts.
+import { whatFollows } from '../../domain/plan/purpose.ts';
 import React from 'react';
 import type { JourneyStore, ProcessRow, Workspace } from '../store/types.ts';
 import { StoreError } from '../store/types.ts';
@@ -37,7 +38,8 @@ export function SuggestionsPanel({ store, process, workspace, model, onReview }:
       store.getDocumentSettings(process.workspaceId).catch(() => DEFAULT_DOCUMENT_SETTINGS), store.listApplications(process.workspaceId).catch(() => []),
     ]).then(([decisions, reqs, docs, apps]) => {
       if (!live) return;
-      const work = decisions ? workItemSuggestions(planWork(model, decisions, reqs, docs.layouts).cov.notPlanned) : [];
+      // Documented as it is, no work is planned, so none is suggested (domain/plan/purpose.ts).
+      const work = decisions && whatFollows(model).plansWork ? workItemSuggestions(planWork(model, decisions, reqs, docs.layouts).cov.notPlanned) : [];
       setRuled([...work, ...applicationSuggestions(model, apps)]);
     }).catch(e => { if (live) setError(messageOf(e)); });
     return () => { live = false; };

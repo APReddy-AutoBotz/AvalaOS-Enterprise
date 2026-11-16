@@ -9,6 +9,7 @@ import type { ProcessModel } from '../domain/processModel/types.ts';
 import type { Target } from '../domain/assistant/ask.ts';
 import { askable, askScope, pickOf } from '../domain/assistant/scope.ts';
 import { navFor, stagesFor } from '../domain/workspace/modules.ts';
+import { stagesForProcess } from '../domain/plan/purpose.ts';
 import type { Nav } from './JourneyApp.tsx';
 import { AskPanel } from './process/AskPanel.tsx';
 import { boardSubject, processSubject, workspaceSubject } from './process/askSubjects.ts';
@@ -95,6 +96,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     return null;
   }, [store, workspace.id, workspace.name, whole, stages.length, boards, project, processId, loaded]);
 
+  // The stages of the process asked about follow what is wanted from it (domain/plan/purpose.ts): never a hidden page.
+  const procStages = loaded && loaded !== 'missing' ? stagesForProcess(workspace.modules, loaded.model) : stages;
   // A citation leads to where its fact lives; the panel closes so the page is in view.
   const onOpen = (t: Target, inProcess: string | null = processId) => {
     onClose();
@@ -105,8 +108,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     else if (t.kind === 'item') nav.go({ page: 'board', projectId: t.projectId, itemId: t.itemId });
     else if (t.kind === 'board') nav.go({ page: 'board', projectId: t.projectId });
     else if (!inProcess) { if (t.kind === 'platform' && projectId) nav.go({ page: 'board', projectId }); }
-    else if (t.kind === 'platform') nav.go({ page: 'process', processId: inProcess, stage: stages.includes(t.stage) ? t.stage : 'process' });
-    else nav.go({ page: 'process', processId: inProcess, stage: t.kind === 'assessment' ? 'assessment' : t.kind === 'requirement' && stages.includes('documents') ? 'documents' : 'process' });
+    else if (t.kind === 'platform') nav.go({ page: 'process', processId: inProcess, stage: procStages.includes(t.stage) ? t.stage : 'process' });
+    else nav.go({ page: 'process', processId: inProcess, stage: t.kind === 'assessment' && procStages.includes('assessment') ? 'assessment' : t.kind === 'requirement' && procStages.includes('documents') ? 'documents' : 'process' });
   };
 
   // A process open on a page but not of this workspace (opened by a link) is still offered.
@@ -161,7 +164,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     const review = (sg: Suggestion) => {
       if (sg.target.kind === 'answer') { setStart(sg.target); setView('interview'); return; }
       onClose();
-      nav.go({ page: 'process', processId: proc.process.id, stage: stages.includes(sg.target.stage) ? sg.target.stage : 'process' });
+      nav.go({ page: 'process', processId: proc.process.id, stage: procStages.includes(sg.target.stage) ? sg.target.stage : 'process' });
     };
     return (
       <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
@@ -177,7 +180,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   if (subject) {
     return (
       <React.Fragment key={pickOf(scope)}>
-        <AskPanel store={store} workspaceId={subject.workspaceId} subject={subject.subject} about={<>{about}{tabs}</>} stages={stages} onOpen={onOpen} onClose={onClose} />
+        <AskPanel store={store} workspaceId={subject.workspaceId} subject={subject.subject} about={<>{about}{tabs}</>} stages={scope.kind === 'process' ? procStages : stages} onOpen={onOpen} onClose={onClose} />
       </React.Fragment>
     );
   }

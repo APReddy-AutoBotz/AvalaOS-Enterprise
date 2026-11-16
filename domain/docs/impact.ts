@@ -17,6 +17,7 @@ import { buildPdd } from './pdd.ts';
 import { buildFrd } from './frd.ts';
 import { buildSdd } from './sdd.ts';
 import { changedSections } from './changes.ts';
+import { whatFollows } from '../plan/purpose.ts';
 
 export interface ImpactContext {
   decisions: Decisions;
@@ -60,6 +61,12 @@ const draftText = (d: ProposalDraft) => JSON.stringify([draftHash(d), d.parentKe
 
 /** The impact of going from `before` to `after`. */
 export function changeImpact(before: ProcessModel, after: ProcessModel, ctx: ImpactContext): Impact {
+  // Documented as it is (domain/plan/purpose.ts): the process document is all there is to change.
+  if (!whatFollows(after).future) {
+    const doc = (m: ProcessModel) => buildPdd({ model: m, assessment: assessProcess(m), decisions: ctx.decisions, sources: [], revision: { label: '', state: 'working', date: '' } });
+    const sections = changedSections(doc(before), doc(after)).map(c => c.title);
+    return { verdict: null, steps: [], documents: sections.length ? [{ type: 'pdd', name: DOC_NAMES.pdd, sections }] : [], requirements: [], workItems: [] };
+  }
   const b = build(before, ctx, ctx.requirements);
   // The register after the edit continues from the one before it, as the Documents stage would save it.
   const a = build(after, ctx, b.register.map(persisted));

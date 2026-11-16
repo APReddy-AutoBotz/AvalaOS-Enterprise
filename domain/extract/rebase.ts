@@ -244,6 +244,8 @@ export function applyChanges(current: ProcessModel, extracted: ProcessModel, sel
   if (p.first) {
     const next = clone(extracted);
     next.meta.name = current.meta.name;
+    // What a person wants from the process is theirs, given before the first reading: it stays.
+    if (current.meta.purpose) next.meta.purpose = clone(current.meta.purpose);
     return checked(next);
   }
   let next = clone(current);

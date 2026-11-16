@@ -5,6 +5,7 @@
 // applications list, the people and their access (names, never email addresses), and each board in short.
 // Totals are worked out here and given as facts. A process's own record (its steps, sources and so on) is
 // added only when the question names that process (`namedProcess`), so sources stay with their process.
+import { followsFrom, NOT_ASSESSED, type PurposeValue } from '../plan/purpose.ts';
 import type { TaskDefinition } from '../ai/gateway.ts';
 import type { ProcessCard, Portfolio } from '../assess/portfolio.ts';
 import { QUADRANT } from '../assess/priority.ts';
@@ -23,8 +24,10 @@ export interface WorkspaceProcess {
   openQuestions: number; proposalsWaiting: number;
   /** Who is named on it, by name; null where nobody is. */
   named: { analyst: string | null; architect: string | null; approver: string | null };
-  /** The assessment in short, people's choices included; null until it has a step. */
+  /** The assessment in short, people's choices included; null until it has a step, and for a process documented as it is. */
   card: ProcessCard | null;
+  /** What a person wants from the process (domain/plan/purpose.ts), when it is not the default. */
+  purpose?: PurposeValue;
   /** The applications its process model names. */
   systems: string[];
 }
@@ -109,7 +112,7 @@ export function workspaceFacts(question: string, ctx: WorkspaceContext, named?: 
       const missing = none(role);
       if (ps.length) add(`no-${role}`, missing.length ? `Processes with no ${role} named: ${list(missing)}.` : `Every process has an ${role} named.`, portfolio);
     }
-    const open = ps.filter(p => p.openQuestions > 0), waiting = ps.filter(p => p.proposalsWaiting > 0);
+    const open = ps.filter(p => p.openQuestions > 0), waiting = ps.filter(p => p.proposalsWaiting > 0 && followsFrom(p.purpose).plansWork);
     add('open', open.length ? `${plural(open.reduce((t, p) => t + p.openQuestions, 0), 'open question')} across ${plural(open.length, 'process', 'processes')}: ${open.map(p => `"${p.name}" ${p.openQuestions}`).join(', ')}.` : 'No process has an open question.', portfolio);
     add('proposals', waiting.length ? `Work-item proposals waiting for review: ${waiting.map(p => `"${p.name}" ${p.proposalsWaiting}`).join(', ')}.` : 'No process has work-item proposals waiting for review.', portfolio);
     for (const p of mostAsked(question, ps, WORKSPACE_LIMITS.processes)) {
@@ -119,10 +122,11 @@ export function workspaceFacts(question: string, ctx: WorkspaceContext, named?: 
       const parts = [
         `where it stands: ${p.status}`, people,
         plural(p.openQuestions, 'open question'),
-        p.proposalsWaiting ? `${plural(p.proposalsWaiting, 'work-item proposal')} waiting for review` : '',
-        c ? `${c.lead ? `${APPROACH_LABEL[c.lead]} leads` : 'no step recommended for automation'}; of ${plural(c.steps, 'step')} people do today, ${c.split.rules} by rules (RPA or an API), ${c.split.ai} with AI, ${c.split.people} stay with people` : 'no steps to assess yet',
-        c?.hours ? `automation could take up to ${Math.round(c.hours).toLocaleString('en')} hours a year` : '',
-        row ? `in the portfolio ${row.rank} of ${ctx.portfolio!.rows.length}${row.quadrant ? `, ${QUADRANT[row.quadrant].label.toLowerCase()}` : ', not placed yet'}` : '',
+        p.proposalsWaiting && followsFrom(p.purpose).plansWork ? `${plural(p.proposalsWaiting, 'work-item proposal')} waiting for review` : '',
+        // Documented as it is: no score, recommendation or place in the portfolio is said, because there is none.
+        !followsFrom(p.purpose).assessed ? NOT_ASSESSED.toLowerCase() : c ? `${c.lead ? `${APPROACH_LABEL[c.lead]} leads` : 'no step recommended for automation'}; of ${plural(c.steps, 'step')} people do today, ${c.split.rules} by rules (RPA or an API), ${c.split.ai} with AI, ${c.split.people} stay with people` : 'no steps to assess yet',
+        c?.hours && followsFrom(p.purpose).assessed ? `automation could take up to ${Math.round(c.hours).toLocaleString('en')} hours a year` : '',
+        row && followsFrom(p.purpose).assessed ? `in the portfolio ${row.rank} of ${ctx.portfolio!.rows.length}${row.quadrant ? `, ${QUADRANT[row.quadrant].label.toLowerCase()}` : ', not placed yet'}` : '',
         p.systems.length ? `applications: ${p.systems.join(', ')}` : '',
       ].filter(Boolean);
       add(`p:${p.id}`, `Process "${p.name}": ${parts.join('; ')}.`, { kind: 'open-process', processId: p.id }, `Process: ${p.name}`);

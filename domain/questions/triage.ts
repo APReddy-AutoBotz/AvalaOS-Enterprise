@@ -5,6 +5,7 @@ import type { AccessStatus, ElementTarget, OpenQuestion, ProcessModel } from '..
 import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { buildingSystem } from '../plan/intended.ts';
+import { asksQuestion, purposeOf, type PurposeValue } from '../plan/purpose.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
@@ -42,6 +43,8 @@ export interface Triage {
   alreadyKnown: { questionId: string; question: string; why: string }[];
   /** Raw count before merging, for "50 raised, 20 to answer". */
   raw: number;
+  /** What the person wants from the process; "as_is": no question exists to choose an approach or size a saving. */
+  purpose?: PurposeValue;
 }
 
 const IT = /\b(api|apis|sap|system|integration|interface|enable|it|access|fiori|servicenow|landscape|expos\w*|gateway|ocr|tool)\b/i;
@@ -171,7 +174,13 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
     items.push({ key: `gap:route:${e.id}`, question: `Who handles the exception "${e.name}"?`, target, questionIds: [], kind: 'role', assignedTo: null, deferred: false, ...classify(m, target, '', openSteps) });
   }
 
-  items.sort((x, y) => Number(x.deferred) - Number(y.deferred) || ORDER[x.group] - ORDER[y.group] || x.owner.localeCompare(y.owner));
+  // Documented as it is (domain/plan/purpose.ts): what only serves an assessment is not asked, and
+  // nothing left can change a recommendation, because there is none. The questions stay on the record.
+  const purpose = purposeOf(m);
+  const asked = purpose === 'as_is'
+    ? items.filter(i => asksQuestion(m, i)).map(i => (i.group === 'decides' ? { ...i, group: 'signoff' as const, affects: i.affects.filter(x => !x.startsWith('Assessment')) } : i))
+    : items;
+  asked.sort((x, y) => Number(x.deferred) - Number(y.deferred) || ORDER[x.group] - ORDER[y.group] || x.owner.localeCompare(y.owner));
   const gapCount = gaps(m).length + m.exceptions.filter(x => !x.routedToRoleId).length;
-  return { items, alreadyKnown, raw: stored.length + gapCount };
+  return { items: asked, alreadyKnown, raw: stored.length + gapCount, ...(purpose === 'as_is' ? { purpose } : {}) };
 }

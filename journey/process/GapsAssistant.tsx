@@ -2,6 +2,7 @@
 // for each. Every answer is written to the process model, so the assessment and the documents
 // update at once. Nothing is written without the person pressing save.
 import React from 'react';
+import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
 import { closeQuestions, deferQuestion, reopenQuestions } from '../../domain/processModel/patch.ts';
 import { ACCESS, all, buildAnswer, record, type Op } from '../../domain/questions/answer.ts';
@@ -49,7 +50,7 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           <div>
             <p className="text-xs font-semibold text-[#FFBC03]">Close the gaps</p>
             <h3 className="mt-1.5 font-display text-2xl font-semibold" data-testid="gaps-count">{nowHeading(plan)}</h3>
-            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} Each answer updates the model, the assessment and the documents at once.</p>
+            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} {whatFollows(model).assessed ? 'Each answer updates the model, the assessment and the documents at once.' : 'Each answer updates the process and its document at once.'}</p>
             {lookLine && <p className="mt-1 text-xs text-slate-300" role="status" data-testid="source-look">{lookLine}</p>}
           </div>
           {onClose && <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/10">Back to the document</button>}

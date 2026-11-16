@@ -1,4 +1,5 @@
 // Read-only views of a Process Model used by the assessment, documents, flows and the review UI.
+import { asksQuestion } from '../plan/purpose.ts';
 import type { Fact, Metric, MetricKind, ElementTarget, Flow, ProcessModel, Step, TypicalTraits } from './types.ts';
 
 export const outgoing = (m: ProcessModel, id: string): Flow[] => m.flows.filter(f => f.from === id);
@@ -114,11 +115,14 @@ const sameTarget = (a: ElementTarget, b: ElementTarget) => a.kind === b.kind && 
 /** Gaps that no open question already covers. */
 export function untrackedGaps(m: ProcessModel): Gap[] {
   const open = m.openQuestions.filter(q => q.status === 'open');
-  return gaps(m).filter(g => !open.some(q => sameTarget(q.target, g.target)));
+  return gaps(m).filter(g => !open.some(q => sameTarget(q.target, g.target)) && asksQuestion(m, { target: g.target, question: g.label }));
 }
 
+/** The open questions asked of this process: for one documented as it is, not those that serve an assessment (they stay on the record). */
+export const askedOpenQuestions = (m: ProcessModel) => m.openQuestions.filter(q => q.status === 'open' && asksQuestion(m, q));
+
 /** Open questions plus untracked gaps: what is still unknown. */
-export const openItemCount = (m: ProcessModel): number => m.openQuestions.filter(q => q.status === 'open').length + untrackedGaps(m).length;
+export const openItemCount = (m: ProcessModel): number => askedOpenQuestions(m).length + untrackedGaps(m).length;
 
 // ---------------------------------------------------------------- whole-process numbers
 

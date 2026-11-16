@@ -10,6 +10,7 @@ import { adoptBrief } from '../../domain/processModel/patch.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
+import { offersPurpose, purposeOffMessage, stagesForProcess, whatFollows } from '../../domain/plan/purpose.ts';
 import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
@@ -112,7 +113,9 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   const current = working ?? approved;
   const canEdit = workspace !== null && workspace.role !== 'viewer';
   // Only the stages of the parts the organisation uses; a stage that is off says so (nothing is deleted).
-  const shownStages = stagesFor(workspace?.modules);
+  // And of those, the stages what the person wants from this process includes (domain/plan/purpose.ts).
+  const shownStages = stagesForProcess(workspace?.modules, model);
+  const purposeOff = stagesFor(workspace?.modules).includes(stage) ? purposeOffMessage(stage, model) : null;
   const stageOff = !shownStages.includes(stage);
   const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
   const hasSteps = Boolean(model && model.steps.length > 0);
@@ -183,10 +186,11 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
 
       <ErrorNote message={error} />
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
-        {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
+        {stageOff && purposeOff ? <EmptyState title="Documented as it is" action={<Button variant="secondary" onClick={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}>Open the brief</Button>}><span data-testid="purpose-off">{purposeOff}</span></EmptyState> :
+         stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
-          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} asksInMind={whatFollows(model).asksInMind} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
               revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
@@ -198,7 +202,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           : stage === 'flows' && model && model.steps.length > 0
           ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} revisionId={current?.id ?? ''} canEdit={canEdit} me={me} onSaved={load} />
           : stage === 'process' && model
-          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} />
+          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} askPurpose={offersPurpose(workspace?.modules)} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
         </SourceContext.Provider>}
       </section>
@@ -208,12 +212,21 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   );
 }
 
-function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved, processName }: {
+function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved, processName, askPurpose }: {
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void; processName: string;
+  /** Whether to ask what is wanted from the process: only an organisation that uses the documents is asked. */
+  askPurpose: boolean;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
   const impact = useImpactContext(store, processId, workspaceId);
+  // Who answered what is wanted from the process is shown by name, never by email address.
+  const [people, setPeople] = React.useState<{ meId: string | null; names: Record<string, string> }>({ meId: null, names: {} });
+  React.useEffect(() => {
+    if (!askPurpose) return;
+    Promise.all([store.currentUser().catch(() => null), store.listMembers(workspaceId).catch(() => [])])
+      .then(([u, mem]) => setPeople({ meId: u?.id ?? null, names: Object.fromEntries(mem.map(x => [x.userId, x.name])) }));
+  }, [store, workspaceId, askPurpose]);
   const [apps, setApps] = React.useState<Application[] | null>(null);
   React.useEffect(() => { store.listApplications(workspaceId).then(setApps).catch(() => setApps(null)); }, [store, workspaceId]);
   const appList = React.useMemo<AppList | null>(() => (apps ? {
@@ -238,7 +251,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   return (
     <>
       <ErrorNote message={readError} />
-      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
+      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} purpose={askPurpose ? people : undefined} />
       <TypicalPanel editor={editor} canEdit={canEdit} />
       <ProcessEditor processId={processId} editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>

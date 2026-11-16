@@ -20,6 +20,7 @@ import { GapsAssistant } from './GapsAssistant.tsx';
 import { useQuestionPlan } from './sourceLook.ts';
 import { nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
+import { documentsNote, offersDocument, PURPOSE_LABEL, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
 import { useModelEditor } from './useModelEditor.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
@@ -143,7 +144,10 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const sddReady = approvedRevision !== null || previewSdd;
   // A link from the weekday email opens the document it names (?doc=pdd) at the section it names (#s-2-4).
   const asked = React.useRef(typeof location !== 'undefined' ? new URLSearchParams(location.search).get('doc') : null);
-  const [type, setType] = React.useState<DocType>(() => (asked.current && ['brd', 'pdd', 'frd', 'sdd', 'agent', 'tests'].includes(asked.current) ? asked.current as DocType : 'pdd'));
+  // What the person wants from the process decides which documents there are (domain/plan/purpose.ts).
+  const follows = whatFollows(model);
+  const [type, setType] = React.useState<DocType>(() => (asked.current && ['brd', 'pdd', 'frd', 'sdd', 'agent', 'tests'].includes(asked.current) && offersDocument(model, asked.current as DocType) ? asked.current as DocType : 'pdd'));
+  React.useEffect(() => { if (!offersDocument(model, type)) setType('pdd'); }, [model, type]);
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
@@ -185,20 +189,22 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
 
   const assessment = React.useMemo(() => (decisions ? assessProcess(model, { rate: decisions.rate, settings, decisions }) : null), [model, decisions, settings]);
   // The delivery plan (part B): its documents come first and the first of them opens, unless the person chose a tab.
-  const delivery = React.useMemo(() => (assessment ? deliveryPlan(model, assessment) : null), [model, assessment]);
-  const planned = React.useMemo(() => new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)), [delivery]);
+  // Documented as it is, there is no delivery to plan: the process document is the one document.
+  const delivery = React.useMemo(() => (assessment && follows.future ? deliveryPlan(model, assessment) : null), [model, assessment, follows.future]);
+  const planned = React.useMemo(() => (follows.future ? new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)) : new Set<DocType>(['pdd'])), [delivery, follows.future]);
   // The agent document is a tab only when the delivery plan lists it, planned or one click away (part E).
-  const types = React.useMemo(() => TYPES.filter(t => t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent')), [delivery]);
+  const types = React.useMemo(() => TYPES.filter(t => offersDocument(model, t.id) && (t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent'))), [delivery, model]);
   const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
   const typeChosen = React.useRef(Boolean(asked.current));
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
-  const plannedLine = delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.doc === 'agent' ? 'the agent document' : d.doc.toUpperCase())).join(', ')}.` : '';
+  const plannedLine = !follows.future ? 'Planned for this process: the process document.' : delivery ? `Planned for this process: ${delivery.docs.filter(d => d.planned).map(d => (d.doc === 'agent' ? 'the agent document' : d.doc.toUpperCase())).join(', ')}.` : '';
   // The requirements register follows the model: new IDs for new sources, edits kept, removed sources marked.
   const register = React.useMemo(() => (assessment && stored ? reconcile(deriveRequirements(model, assessment), stored) : null), [model, assessment, stored]);
   React.useEffect(() => {
-    if (!register?.changed.length || !canEdit) return;
+    // Documented as it is there are no requirements: the register is left exactly as it is, so nothing is marked removed.
+    if (!register?.changed.length || !canEdit || !follows.future) return;
     store.saveRequirements(processId, register.changed).then(() => setStored(register.requirements)).catch(e => setError(messageOf(e)));
-  }, [register, canEdit, store, processId]);
+  }, [register, canEdit, store, processId, follows.future]);
   const saveRequirement = async (r: StoredRequirement) => {
     await store.saveRequirements(processId, [r]);
     setStored(cur => (cur ?? []).some(x => x.code === r.code) ? (cur ?? []).map(x => (x.code === r.code ? r : x)) : [...(cur ?? []), r]);
@@ -240,8 +246,11 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   // The same document built from the approved revision's model: what changed since approval.
   const [approvedModel, setApprovedModel] = React.useState<ProcessModel | null>(null);
   React.useEffect(() => { setApprovedModel(null); if (approvedRevisionId) store.getModel(approvedRevisionId).then(setApprovedModel).catch(() => setApprovedModel(null)); }, [store, approvedRevisionId]);
+  // An approved revision's documents follow the answer it was approved with: when the draft's answer
+  // differs, the two are different documents, and that is said once instead of marking every section.
+  const answerChanged = Boolean(approvedModel && purposeOf(approvedModel) !== purposeOf(model));
   const sinceApproved = React.useMemo<SectionChange[]>(() => {
-    if (!approvedModel || !doc || !decisions || !stored || type === 'evidence') return [];
+    if (!approvedModel || !doc || !decisions || !stored || type === 'evidence' || purposeOf(approvedModel) !== purposeOf(model)) return [];
     const a = assessProcess(approvedModel, { rate: decisions.rate, settings, decisions });
     // Both sides are drawn in the shape the maps are in now, so the shape alone never marks a section changed.
     const input = { model: approvedModel, assessment: a, decisions, mapShape: shapeInEffect(model, decisions).shape, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: reconcile(deriveRequirements(approvedModel, a), stored).requirements };
@@ -253,10 +262,10 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const all = React.useMemo(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions, sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements };
-    const raw = [buildBrd(input), buildPdd(input), buildFrd(input), buildSdd(input)];
+    const raw = follows.future ? [buildBrd(input), buildPdd(input), buildFrd(input), buildSdd(input)] : [buildPdd(input)];
     const docsWithEdits = raw.map(d => applyEdits(d, edits).doc);
     return { known: generatedText(raw), checks: handoffChecklist(model, docsWithEdits), overlap: overlaps(docsWithEdits, model) };
-  }, [model, decisions, assessment, sources, revision, register, edits]);
+  }, [model, decisions, assessment, sources, revision, register, edits, follows.future]);
   const [showChecks, setShowChecks] = React.useState(false);
   const failing = all ? all.checks.filter(c => !c.ok).length + (all.overlap.length ? 1 : 0) : 0;
   const checkText = (html: string) => groundingIssues(html, model, all?.known ?? '');
@@ -328,6 +337,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           <Button onClick={() => setAnswering(true)}>{toAnswer.now.length || toAnswer.found.length ? 'Answer them' : 'See what can wait'}</Button>
         </div>
       )}
+      {documentsNote(model) && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="documents-note">{documentsNote(model)}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* The delivery plan's documents first (part B), marked with an amber dot; the others stay one click away. */}
@@ -358,7 +368,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           <section aria-label="Hand-over checklist" className="rounded-xl border border-slate-200 bg-white p-5" data-testid="handoff-checklist">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h3 className="font-display text-base font-semibold text-slate-900">Ready to hand over?</h3>
-              <p className="text-xs text-slate-500">Checks on the process and all four documents before they go to the delivery team.</p>
+              <p className="text-xs text-slate-500">{follows.future ? 'Checks on the process and all four documents before they go to the delivery team.' : 'Checks on the process and its document before it is handed over.'}</p>
             </div>
             <ul className="mt-3 space-y-2">
               {all.checks.map(c => (
@@ -373,6 +383,11 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               </li>
             </ul>
           </section>
+        )}
+        {answerChanged && approvedModel && (
+          <p className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="answer-changed">
+            <span className="font-semibold">Approved revision {approvedRevision} was approved as "{PURPOSE_LABEL[purposeOf(approvedModel)]}"</span>; this draft is "{PURPOSE_LABEL[purposeOf(model)]}". The approved documents are unchanged and follow the answer they were approved with; approve this draft to make these the approved version.
+          </p>
         )}
         {sinceApproved.length > 0 && (
           <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="since-approved">

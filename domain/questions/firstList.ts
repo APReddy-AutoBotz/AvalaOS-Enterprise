@@ -16,8 +16,8 @@ export type Hold =
   | { kind: 'covered'; by: string; byQuestion: string }
   /** Close in wording to a question already in the first list, so it is asked once that one is answered. */
   | { kind: 'near'; to: string; toQuestion: string }
-  /** It could change the recommendation, but the first list is full. */
-  | { kind: 'full' }
+  /** It could change the recommendation (documented as it is: the document needs it), but the first list is full. */
+  | { kind: 'full'; forDocument?: true }
   /** Its answer completes the documents but changes neither the recommendation nor whether a document can be written. */
   | { kind: 'later' };
 
@@ -39,8 +39,11 @@ export interface QuestionPlan {
 /** A document cannot be written without it: the process's objective and owner open the BRD and the PDD. */
 export const blocksDocument = (i: TriageItem) => i.target.kind === 'meta' && (i.target.field === 'objective' || i.target.field === 'owner');
 
-/** Whether a question may be in the first list at all. */
-export const decisive = (i: TriageItem) => !i.deferred && (i.group === 'decides' || blocksDocument(i));
+/**
+ * Whether a question may be in the first list at all. For a process documented as it is there is no
+ * recommendation to change, and the documents are the whole point: what sign-off needs comes first.
+ */
+export const decisive = (i: TriageItem, opts?: { asIs?: boolean }) => !i.deferred && (i.group === (opts?.asIs ? 'signoff' : 'decides') || blocksDocument(i));
 
 /**
  * How strongly the answer weighs, for the order of the first list. A missing objective or owner first;
@@ -48,8 +51,12 @@ export const decisive = (i: TriageItem) => !i.deferred && (i.group === 'decides'
  * value rests on; then other questions that change the recommendation, a little higher for each other
  * wording merged into them (asked several times in the sources).
  */
-export function weightOf(i: TriageItem): number {
+export const weightOf = (i: TriageItem): number => weightFor(i);
+
+/** The same weight, for a process documented as it is when `asIs` holds: what sign-off needs comes first. */
+export function weightFor(i: TriageItem, opts?: { asIs?: boolean }): number {
   if (blocksDocument(i)) return 1000;
+  if (opts?.asIs) return i.group === 'signoff' ? 100 + 5 * (i.also?.length ?? 0) : 0;
   if (i.group !== 'decides') return 0;
   if (i.target.kind === 'system') return 200 + 10 * (i.uses ?? 0);
   if (i.target.kind === 'metric') return 150;
@@ -115,14 +122,15 @@ export function planQuestions(t: Triage, m: ProcessModel, opts: { found?: Readon
   const foundItems = open.filter(i => found.has(i.key));
   const rest = open.filter(i => !found.has(i.key));
 
-  const pool = rest.filter(decisive).map((i, n) => ({ i, n, w: weightOf(i) })).sort((a, b) => b.w - a.w || a.n - b.n).map(x => x.i);
+  const asIs = { asIs: t.purpose === 'as_is' };
+  const pool = rest.filter(i => decisive(i, asIs)).map((i, n) => ({ i, n, w: weightFor(i, asIs) })).sort((a, b) => b.w - a.w || a.n - b.n).map(x => x.i);
   const now: TriageItem[] = [];
   for (const i of pool) {
     const cover = coveredBy(i, t.items, m);
     if (cover) { held[i.key] = { kind: 'covered', by: cover.key, byQuestion: cover.question }; continue; }
     const near = isFree(i) ? now.find(x => isFree(x) && wordOverlap(x.question, i.question) >= NEAR) : undefined;
     if (near) { held[i.key] = { kind: 'near', to: near.key, toQuestion: near.question }; continue; }
-    if (now.length >= cap) { held[i.key] = { kind: 'full' }; continue; }
+    if (now.length >= cap) { held[i.key] = asIs.asIs ? { kind: 'full', forDocument: true } : { kind: 'full' }; continue; }
     now.push(i);
   }
   const inNow = new Set(now.map(i => i.key));
@@ -163,7 +171,7 @@ export function holdReason(h: Hold | undefined): string {
   switch (h?.kind) {
     case 'covered': return `Asked by another question first: "${h.byQuestion}"`;
     case 'near': return `Close to a question already asked: "${h.toQuestion}"`;
-    case 'full': return 'Could change the recommendation; asked once the first list is answered.';
+    case 'full': return h.forDocument ? 'The document needs it; asked once the first list is answered.' : 'Could change the recommendation; asked once the first list is answered.';
     case 'later': return 'Completes the documents; needed before sign-off.';
     default: return '';
   }

@@ -19,6 +19,7 @@ import type { StageId } from '../workspace/route.ts';
 import type { ProcessModel } from '../processModel/types.ts';
 import type { SourceLook } from '../assistant/sourceLook.ts';
 import { firstListCounts } from '../questions/counts.ts';
+import { purposeOf } from '../plan/purpose.ts';
 
 /** A need's identity across runs: the process and the kind of work (each kind has its own stage). */
 export const needKey = (n: Pick<Need, 'processId' | 'duty' | 'stage'>) => `${n.processId}:${n.duty}:${n.stage}`;
@@ -47,7 +48,10 @@ export function digestFacts(row: DigestProcessRow): ProcessFacts {
   const { model, look, dismissed, ...facts } = row;
   let questions: ProcessFacts['questions'];
   try { questions = firstListCounts(model, look && typeof look.sources === 'string' ? look : null, Array.isArray(dismissed) ? dismissed : []); } catch { questions = undefined; }
-  return questions ? { ...facts, questions } : facts;
+  let purpose: ProcessFacts['purpose'];
+  try { purpose = model && typeof model === 'object' ? purposeOf(model) : undefined; } catch { purpose = undefined; }
+  const out = questions ? { ...facts, questions } : facts;
+  return purpose && purpose !== 'assess' ? { ...out, purpose } : out;
 }
 
 /** The open comments for one person on the processes of a workspace: named on the process, not the author, oldest first. */

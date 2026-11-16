@@ -1,6 +1,7 @@
 // Flows: the As-Is and To-Be maps drawn from the model, and the As-Is flow as an editable BPMN
 // diagram. A saved drawing is read back and its changes are listed in words; nothing reaches the
 // model until the person applies them, as one edit.
+import { whatFollows } from '../../domain/plan/purpose.ts';
 import React from 'react';
 import { processWords } from '../../domain/plan/intended.ts';
 import type { JourneyStore } from '../store/types.ts';
@@ -52,7 +53,10 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
   const model = editor.model;
   // Work not done today (part C) has one map: the intended process, coloured by how each step would be done.
   const words = processWords(loaded);
-  const [view, setView] = React.useState<View>(words.intended ? 'tobe' : 'asis');
+  // Documented as it is (domain/plan/purpose.ts): the one map of the process, never a To-Be map.
+  const future = whatFollows(loaded).future;
+  const [view, setView] = React.useState<View>(words.intended && future ? 'tobe' : 'asis');
+  React.useEffect(() => { if (!future && view === 'tobe') setView('asis'); }, [future, view]);
   const [full, setFull] = React.useState(false);
   const api = React.useRef<CanvasApi | null>(null);
   const [dirty, setDirty] = React.useState(false);
@@ -91,7 +95,7 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
     const modes = new Map(a.steps.map(s => [s.stepId, modeFromScore(s.winner, s.alreadyAutomated, s.human)]));
     const intended = processWords(model).intended;
     const layout = { shape: shape.shape, across: runsAcross };
-    return { asis: flowPicture(model, { ...layout, title: `As-Is map of ${model.meta.name}` }), tobe: flowPicture(model, { ...layout, modes, title: `${intended ? 'Intended process map' : 'To-Be map'} of ${model.meta.name}` }) };
+    return { asis: flowPicture(model, { ...layout, title: `${intended ? 'Intended process map' : 'As-Is map'} of ${model.meta.name}` }), tobe: flowPicture(model, { ...layout, modes, title: `${intended ? 'Intended process map' : 'To-Be map'} of ${model.meta.name}` }) };
   }, [model, decisions, shape.shape, runsAcross]);
   const shapeLine = visit && visit !== (decisions?.map?.shape ?? shape.suggested)
     ? 'Shown as you chose, for this visit only: editors choose the shape for everyone.'
@@ -131,7 +135,9 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
     <div className="space-y-4" data-testid="flows-stage">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div role="tablist" aria-label="Flow view" className="inline-flex rounded-lg bg-slate-200/70 p-0.5">
-          {words.intended
+          {!future
+            ? <>{tab('asis', words.intended ? 'Intended process' : 'As-Is map')}{canEdit && tab('edit', words.edit)}</>
+            : words.intended
             ? <>{tab('tobe', 'Intended process')}{canEdit && tab('edit', 'Edit the intended flow')}</>
             : <>{tab('asis', 'As-Is map')}{tab('tobe', 'To-Be map')}{canEdit && tab('edit', 'Edit the As-Is flow')}</>}
         </div>
@@ -157,14 +163,16 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
           </p>
         </div>
         <figure className="rounded-xl border border-slate-200 bg-white p-4" data-testid="flow-map" data-shape={shape.shape}>
-          <figcaption className="mb-2 text-sm text-slate-600">{words.intended ? 'The intended process: nothing of it is done today. Each step is coloured by how it would be done, from the assessment; change the flow itself under Edit the intended flow.' : view === 'tobe' ? 'Each step coloured by how it will be done, from the assessment. Change the flow itself on the As-Is map.' : `How the work flows today, ${shape.shape === 'simple' ? 'each step with its role' : 'one column per role'}. Drawn from the process model.`}</figcaption>
+          <figcaption className="mb-2 text-sm text-slate-600">{!future ? `How the work ${words.intended ? 'is meant to go' : 'flows today'}, ${shape.shape === 'simple' ? 'each step with its role' : 'one column per role'}. Drawn from the process model.` : words.intended ? 'The intended process: nothing of it is done today. Each step is coloured by how it would be done, from the assessment; change the flow itself under Edit the intended flow.' : view === 'tobe' ? 'Each step coloured by how it will be done, from the assessment. Change the flow itself on the As-Is map.' : `How the work flows today, ${shape.shape === 'simple' ? 'each step with its role' : 'one column per role'}. Drawn from the process model.`}</figcaption>
           <div className={cx(runsAcross ? 'overflow-x-auto' : full ? 'max-h-[75vh] overflow-auto' : '[&_svg]:h-auto [&_svg]:max-w-full')} dangerouslySetInnerHTML={{ __html: pic.svg }} />
         </figure>
         </>
       ) : (
         <div className="space-y-3">
           <div className="rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200">
-            {words.intended
+            {!future
+              ? <p><strong>You are editing the {words.intended ? 'intended' : 'As-Is'} flow</strong>: how the work {words.intended ? 'is meant to go' : 'is done today'}, one column per role. The map and the process document follow it.</p>
+              : words.intended
               ? <p><strong>You are editing the intended flow</strong>: how the work is meant to go, one column per role. How each step would be done is worked out from this flow and the assessment; to change that, change its facts in Assessment.</p>
               : <p><strong>You are editing the As-Is flow</strong>: how the work is done today, one column per role. The To-Be map is worked out from this flow and the assessment, so it follows on its own; to change how a step will be done, change its facts in Assessment.</p>}
             {shape.shape === 'simple' && <p className="mt-1 text-slate-600">The editor always shows one column per role, because a step's role is set by the column it sits in. The maps keep the simple flow.</p>}
