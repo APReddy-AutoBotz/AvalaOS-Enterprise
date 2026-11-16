@@ -14,6 +14,8 @@ Releases: 4 production deploys are left until 22 November 2026. Bundle work; one
 
 **Update, 16 November 2026 (afternoon):** section 3 is built and merged into `next` (pull requests #162, #163, #164), with no server function or database change. The open pull request `next` → `main` is the preview for the review; nothing is released until the owner says "release". What was built, and where it differs from the plan, is at the start of section 3.
 
+**Update, 16 November 2026 (evening):** section 3b is built and merged into `next` too (pull requests #168, #169, #170). Its two database changes were applied on the owner's yes after rolled-back trials, at 09:53 and 09:54 UTC (`process_source_looks`, `digest_counts_and_comments`); the email server function `journey-notify` changes with the release and was not deployed by hand. One release carries sections 3 and 3b. What was built, and where it differs from the plan, is at the start of section 3b.
+
 ## 2. Everything still open
 
 ### Small faults, no server or database change
@@ -24,18 +26,18 @@ The map's single shape, the repeated look in the sources and the other small fau
 
 ### Small faults that need a change to the live server or database (ask first, one by one)
 
-- The weekday "Needs you" email counts every open question, not the first list (the count is made in SQL, `needs_digest_input`).
-- Review comments notify nobody and are not in the weekday email.
-- Answers found in the sources are kept per browser, so two people can see different "found" and "only people can answer" counts. Sharing them needs a table.
 - A failed extraction keeps no detail of what it had read.
 - Errors in the server functions are only in the Supabase logs, not in the error monitor.
+- A person's choice of approach (and of the maps' shape, and a resolved conflict) is stored with the email address of who made it, so the evidence pack says "Not recorded" for who. Recording the person's name, or their id, from now on is a small change to what is stored (found while building package 6).
+
+The weekday email's count, review comments in it and on My work, and the look in the sources shared by everyone are built (section 3b), in review.
 
 ### Features agreed or proposed, not built
 
 | Feature | State |
 | --- | --- |
 | Push to Jira and Azure DevOps, with status coming back | Not built. The owner has not decided. Today: CSV export for both, CSV import from Jira. |
-| Evidence pack for regulated clients | Not built. One download: requirements, where each came from, who approved, test cases and their links. |
+| Evidence pack for regulated clients | Built (section 3b, package 6), in review. |
 | More typical processes to start from | One only (supplier invoice processing), as a trial. More only after a real person has used the trial. |
 | Other AI providers offered to workspaces | Built for Anthropic, Amazon Bedrock, Mistral AI and a company's own endpoint, but offered only to the platform owner until the extraction check has been run on each. OpenAI and Azure OpenAI are offered. |
 | Ask Avala: drafts of document sections as suggestions | Not built. Depends on the decision below about a company's own sections. |
@@ -137,6 +139,12 @@ Done on 16 November 2026: the notes are brought up to date here, in `AGENTS.md` 
 
 ## 3b. The second bundle, built before the same release (owner, 16 November 2026)
 
+**Built (16 November 2026), in review.** Each package's "Done when" is met with the tests it names; the details are in `AGENTS.md` (Progress). Where the build differs from the text below, and why:
+
+- Package 4: two pages writing at once are kept apart by a write counter on the row (the database counts each write; a write from an older copy is refused, and the page adds its step to the newer copy), so no database function was needed. A page about to send questions also gives up when the newer copy shows another page has just sent some, which closes the gap between deciding and noting. My work, the Processes list and the Portfolio read the server's copy as well, so they count what the email will.
+- Package 5: My work shows the comments as one line per process ("2 open review comments on the documents"), opening Documents; the email lists each new comment. Its link opens the document and the section (`?doc=…#section`), which Documents now honours.
+- Package 6: read-only, with no Comment, because the database takes comments only on the six existing documents. On the demo's sample the pack lists 31 functional requirements, not 25: the demo carries the walk-through's inputs; the bare sample has 25. Who made a choice of approach is stored as an email address, so the pack says "Not recorded" there (section 2 above).
+
 The owner holds the release until more is built; one release then carries section 3 and this section. Three packages. Two of them change the live database and what a server function does, which the preview cannot show, so these rules hold for both:
 
 - **Only additive changes.** A new table, or new keys in what a database function returns. Each migration is applied before the release, so the released site and the released server functions must keep working unchanged once it is applied.
@@ -197,6 +205,7 @@ A name or a time the record does not hold says "Not recorded". People are named,
 ### After the second bundle
 
 - Run the Ask Avala measure once (the workflow "Ask Avala measure"): a line about map shapes was added to what Ask Avala knows in package 1 and the measure has not run since. Report the result.
+  Done on 16 November 2026 on `next` with every package merged: every target met, 88 of 88 questions (33 the record answers, 8 in part, 16 it does not hold, 11 on how the platform works, 6 asking to change a score, 6 with an instruction in a passage, 8 about another workspace or the outside world), no name or number in an answer that is in no fact; about 18,400 tokens a question on a process, 8,900 on a board, 6,900 on the workspace; 1.39 million tokens in all, counted against the workspace "Avala check".
 - Bring the notes up to date as before. The preview stays the open pull request `next` → `main`; do not merge it.
 - The report says, apart from the usual: which migrations were applied and when, which server functions change with the release, and what could not be tried before it.
 
@@ -207,8 +216,8 @@ A name or a time the record does not hold says "Not recorded". People are named,
 The owner chooses; this is the advice and the reason for each place.
 
 1. **Three more real processes, of different kinds.** This is still the largest risk and the cheapest way to find faults: one with a flowchart picture or a draw.io file, one long call with several speakers, one existing process with volumes and times (so value and payback are exercised). The owner tests, the review chat repeats the test read-only and lists findings, a builder chat fixes. Runs alongside everything else.
-2. **The weekday email and comments** (now package 5 in section 3b). The email counts what the screens count, and a comment on a document reaches the people named on the process. One change to the live database and one server function; a rolled-back trial first, then the owner's yes.
-3. **The evidence pack** (now package 6 in section 3b). Everything in it already exists on the record; it is assembling and a download. Useful to show a regulated client.
+2. **The weekday email and comments** (built as package 5 in section 3b). The email counts what the screens count, and a comment on a document reaches the people named on the process. One change to the live database and one server function; a rolled-back trial first, then the owner's yes.
+3. **The evidence pack** (built as package 6 in section 3b). Everything in it already exists on the record; it is assembling and a download. Useful to show a regulated client.
 4. **The other AI providers.** Run the extraction check on each (the owner types each key into Settings → AI provider himself), then offer those that pass. The homepage follows on its own.
 5. **Push to Jira.** The largest item here. Advice: wait for a pilot client that asks for it, since the CSV export already gets work into Jira; then Jira first and one way first (send items, with requirement links), status coming back second. It needs a place for the client's Jira token on the server (encrypted, as AI keys are), a server function and a table for the links: all asked for first.
 6. **More typical processes**, once a real person has started from the supplier invoice one.
