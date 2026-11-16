@@ -3,10 +3,14 @@
 // Word download. What each section holds is tested in domain/docs/evidence.test.ts.
 import { test, expect } from '@playwright/test';
 
-test('the evidence pack opens on the sample, lists its 25 functional requirements, and downloads as Word', async ({ page }) => {
+test('the evidence pack opens on the sample, lists every functional requirement, and downloads as Word', async ({ page }) => {
   await page.goto('/demo/processes');
   await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
   await page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name: 'Documents' }).click();
+  // How many functional requirements the sample has, as its test pack counts them.
+  await page.getByRole('tab', { name: /^Tests/ }).click();
+  const frCount = Number(await page.getByTestId('document').locator('tr', { has: page.locator('th', { hasText: /^Functional requirements$/ }) }).locator('td').innerText());
+  expect(frCount).toBeGreaterThan(20);
   const tab = page.getByRole('tab', { name: /Evidence pack/ });
   await expect(tab).toBeVisible();
   // Never one of the planned documents.
@@ -18,7 +22,7 @@ test('the evidence pack opens on the sample, lists its 25 functional requirement
   await expect(doc.getByRole('heading', { name: /What is not evidenced/ })).toBeVisible();
   // Section 4: one row per functional requirement of the sample.
   const chain = doc.locator('[data-testid="doc-table"][data-caption="Requirement to work to test"] tbody tr');
-  await expect(chain).toHaveCount(25);
+  await expect(chain).toHaveCount(frCount);
   await expect(chain.first()).toContainText(/^FR-\d{3}/);
   // Read-only: no Edit and no Comment in the pack.
   await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
