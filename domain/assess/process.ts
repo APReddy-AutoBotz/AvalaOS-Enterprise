@@ -11,6 +11,7 @@ import type { ProcessModel } from '../processModel/types.ts';
 import { periodOf, processMetric, stepTrait } from '../processModel/selectors.ts';
 export { periodOf };
 import { prioritise, type Priority } from './priority.ts';
+import { notDoneToday, processWords } from '../plan/intended.ts';
 import { DEFAULT_SETTINGS, type AssessmentSettings } from './settings.ts';
 import type { Decisions } from './decisions.ts';
 import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
@@ -63,8 +64,10 @@ export interface KeyQuestion { key: string; question: string; steps: number }
 
 export interface ProcessAssessment {
   steps: StepScore[];
-  /** Steps people do today (already-automated steps are not scored). */
+  /** Steps people do today (already-automated steps are not scored); for work not done today, the intended steps. */
   assessed: number;
+  /** The steps describe work not done today (part C): no hours today, value only by hand. */
+  intended: boolean;
   /** Of those, the steps that do not need a person's judgment or hands: what the ranking is averaged over. */
   candidates: number;
   alreadyAutomated: number;
@@ -201,7 +204,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     ...(counts.human ? [`${counts.human} ${counts.human === 1 ? 'stays' : 'stay'} with people`] : []),
   ];
   const already = steps.length - n;
-  const split = n === 0 ? 'There are no steps to assess yet.' : `Of ${plural(n, 'step')} people do today: ${splitParts.join(', ')}.${already ? ` ${plural(already, 'step')} ${already === 1 ? 'is' : 'are'} already done by a system.` : ''}`;
+  const split = n === 0 ? 'There are no steps to assess yet.' : `Of ${plural(n, processWords(model).intended ? 'intended step' : 'step')}${processWords(model).intended ? '' : ' people do today'}: ${splitParts.join(', ')}.${already ? ` ${plural(already, 'step')} ${already === 1 ? 'is' : 'are'} already done by a system.` : ''}`;
   const verdict = n === 0 ? 'Nothing to assess yet' : lead ? LEAD_TITLE[lead] : 'Keep the process with people for now';
 
   // ---- confidence and the questions that matter
@@ -288,7 +291,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   const priority = prioritise(model, { scored, cautions, volume: yearlyVolume(model), automationShare: s => AUTOMATION_SHARE[s.winner], apiSwitch: { systems: systemsToConfirm, steps: apiIfConfirmed }, keyQuestions, settings: options.settings ?? DEFAULT_SETTINGS });
   return {
     priority,
-    steps, assessed: n, candidates: open.length, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,
+    steps, assessed: n, intended: notDoneToday(model), candidates: open.length, alreadyAutomated: already, counts, ranking, lead, verdict, split, narrative,
     takeaway, drivers, apiSwitch: { systems: systemsToConfirm, steps: apiIfConfirmed },
     aiStepIds: scored.filter(x => x.aiNeeded).map(x => x.stepId), mustStayStepIds: scored.filter(x => x.winner === 'human' && !x.forNow).map(x => x.stepId),
     forNowStepIds: scored.filter(x => x.forNow).map(x => x.stepId), approvalStepIds: scored.filter(x => x.winner !== 'human' && x.human === 'approve').map(x => x.stepId),
@@ -321,6 +324,8 @@ function potentialOf(model: ProcessModel, scored: StepScore[]): Computed<Range> 
 }
 
 function hoursOf(model: ProcessModel, scored: StepScore[]): Computed<{ today: Range; automatable: Range }> {
+  // Work not done today has no hours today to take off people (part C); its value is what it would take by hand (priority.ts).
+  if (notDoneToday(model)) return { computable: false, reason: 'Nothing of this work is done today, so there are no hours today to take off people.' };
   const vol = yearlyVolume(model);
   if (!vol.computable) return { computable: false, reason: vol.reason ?? '' };
   const rows = effortOf(model).filter(r => scored.some(s => s.stepId === r.id));

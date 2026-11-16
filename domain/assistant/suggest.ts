@@ -18,7 +18,7 @@ import type { StageId } from '../workspace/route.ts';
 import { can, type Action, type MemberFacts } from '../people/roles.ts';
 import { notesSegments, proposalsFrom, type NoteFinding, type Proposal } from '../questions/notes.ts';
 import { saysNotKnown } from '../questions/interview.ts';
-import type { TriageItem } from '../questions/triage.ts';
+import { contentWords, type TriageItem } from '../questions/triage.ts';
 import type { NotPlanned } from '../workitems/derive.ts';
 import { applicationOffer, matchApplication, type Application } from '../workspace/applications.ts';
 import { relevantPassages, type Passage } from './ask.ts';
@@ -70,11 +70,41 @@ export function sourceSegments(model: ProcessModel, items: TriageItem[], passage
   return { segments: [...segments.filter(s => s.id.startsWith('q:')), ...notes], ids, passageOf };
 }
 
-/** Answers the sources state outright, one per question, with the passage; never an inferred one. */
+// A passage that says the matter is still open, at any length: "the access request needs to be reviewed",
+// "will be assessed once these details are established", "needs further analysis", "no walkthrough was
+// given". Found on the owner's first real documents (15 November 2026), where meeting summaries state
+// next steps far more often than decisions.
+const NOT_SETTLED = new RegExp([
+  String.raw`\b(?:still |also |first )?needs? to be (?:reviewed|aligned|agreed|confirmed|decided|checked|assessed|analy[sz]ed|defined|clarified|discussed|established|determined|validated|finali[sz]ed|investigated|explored)\b`,
+  String.raw`\b(?:will|would|is to|are to|shall) be (?:assessed|decided|confirmed|defined|reviewed|agreed|determined|clarified|analy[sz]ed|discussed|established|finali[sz]ed) (?:once|later|after|when|in the next|at a later)\b`,
+  String.raw`\bneeds? (?:further|more) (?:analysis|discussion|review|clarification|work|investigation)\b`,
+  String.raw`\b(?:before being|yet to be|remains? (?:open|to be)|is (?:still )?(?:open|unclear|unknown|pending)|are (?:still )?(?:open|unclear|unknown|pending))\b`,
+  String.raw`\bno (?:walkthrough|explanation|details?|information|decision|agreement) (?:of|on|about|was|were|has|have|yet)\b`,
+  String.raw`\bnot (?:yet )?(?:provided|defined|clear|known|decided|agreed|confirmed|finali[sz]ed|determined|established)\b`,
+].join('|'), 'i');
+export const saysNotSettled = (text: string) => NOT_SETTLED.test(text);
+
+/**
+ * Whether a proposal read from a source really answers its question. Free-text and text answers must
+ * not say the matter is still open, and must add something to the question: "Relevant functional
+ * owners should validate the answers" does not answer "Which functional owners should validate the
+ * answers?". A question about the shape of the flow (a decision with one outcome) is fixed in the
+ * Process stage, never answered from a passage. Choices (a role, a system, a number, interface
+ * statuses) are checked by `proposalsFrom` already.
+ */
+export function answersIt(p: Proposal, item: TriageItem): boolean {
+  if (saysNotKnown(p.quote) || saysNotKnown(p.display)) return false;
+  if (item.target.kind === 'gateway') return false;
+  if (item.kind !== 'free' && item.kind !== 'text') return true;
+  if (saysNotSettled(p.display) || saysNotSettled(p.quote)) return false;
+  const asked = contentWords(item.question);
+  return [...contentWords(p.display)].filter(w => !asked.has(w)).length >= 2;
+}
+
+/** Answers the sources state outright, one per question, with the passage; never an inferred one, never one that leaves the matter open. */
 export function answerSuggestions(model: ProcessModel, items: TriageItem[], ids: Map<string, string>, findings: NoteFinding[], passageOf: Map<string, Passage>): Suggestion[] {
   const stated = findings.filter(f => f.certainty === 'stated' && passageOf.has(f.segmentId));
-  // A passage that says it is not decided yet ("still being discussed; nothing is agreed") answers nothing.
-  return proposalsFrom(model, items, ids, stated).filter(p => !saysNotKnown(p.quote) && !saysNotKnown(p.display)).map(p => {
+  return proposalsFrom(model, items, ids, stated).filter(p => answersIt(p, items.find(i => i.key === p.itemKey)!)).map(p => {
     const f = stated.find(x => ids.get(x.questionId.replace(/^q:/, '')) === p.itemKey)!;
     const source = where(passageOf.get(f.segmentId)!);
     return {

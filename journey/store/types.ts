@@ -9,6 +9,8 @@ import type { StoredFormat } from '../../domain/workspace/sources.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
+import type { SectionComment } from '../../domain/docs/review.ts';
+import type { TestCaseEdit } from '../../domain/docs/testEdits.ts';
 import type { Proposal } from '../../domain/workitems/register.ts';
 import type { Project, validateNewItem, WorkItem, WorkItemEdit } from '../../domain/workitems/board.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
@@ -199,7 +201,7 @@ export interface JourneyStore {
   latestExtraction(processId: string): Promise<ExtractionRow | null>;
   /** Runs a registered AI task on segments; quotes in the result are already checked against them. */
   /** `recorded`: the demo's recorded reply on the sample case, not a live answer (domain/assistant/recorded.ts). */
-  runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown; recorded?: boolean }>;
+  runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown; recorded?: boolean; /** Tokens the call used, as the server reports them. */ usage?: { input: number; output: number } }>;
 
   /** Overrides and the cost rate for a process's assessment (the latest saved). */
   getAssessmentDecisions(processId: string): Promise<Decisions>;
@@ -217,6 +219,23 @@ export interface JourneyStore {
   saveDocumentEdit(processId: string, edit: SectionEdit): Promise<void>;
   /** Removes an edit, so the section shows the generated text again ("take update"). */
   removeDocumentEdit(processId: string, docType: SectionEdit['docType'], sectionKey: string): Promise<void>;
+
+  /** Review comments on the process's document sections, oldest first. Every member reads and adds them. */
+  listSectionComments(processId: string): Promise<SectionComment[]>;
+  addSectionComment(processId: string, c: Pick<SectionComment, 'docType' | 'sectionKey' | 'sectionTitle' | 'body'>): Promise<SectionComment>;
+  /** The author changes the text. */
+  editSectionComment(id: string, body: string): Promise<SectionComment>;
+  /** The author or an editor resolves a comment, or reopens it. */
+  resolveSectionComment(id: string, resolved: boolean): Promise<SectionComment>;
+  /** The author or an admin deletes it. */
+  deleteSectionComment(id: string): Promise<void>;
+
+  /** Testers' edits to the process's test pack. */
+  listTestEdits(processId: string): Promise<TestCaseEdit[]>;
+  /** Saves a tester's edit (one per case); editors and admins only. */
+  saveTestEdit(processId: string, edit: TestCaseEdit): Promise<void>;
+  /** Removes a tester's edit, so the case is the derived one again ("take update"), or an added case goes. */
+  removeTestEdit(processId: string, caseCode: string): Promise<void>;
 
   /** The process's work proposals, every one ever derived (by derivation key). */
   listProposals(processId: string): Promise<Proposal[]>;

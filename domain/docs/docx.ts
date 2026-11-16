@@ -6,7 +6,7 @@ import {
   AlignmentType, BorderStyle, Document, Footer, Header, HeadingLevel, ImageRun, LevelFormat, PageBreak, PageNumber, Packer, Paragraph,
   ShadingType, Table, TableCell, TableOfContents, TableRow, TextRun, WidthType, type IStylesOptions,
 } from 'docx';
-import type { Block, Cell, DocTree } from './tree.ts';
+import { docShort, type Block, type Cell, type DocTree } from './tree.ts';
 import { imageSize } from './branding.ts';
 import { richParas } from './edits.ts';
 
@@ -41,7 +41,7 @@ export const DEFAULT_DOCX_STYLE: DocxStyle = { font: 'Calibri', accent: '002C4B'
 const PT = (n: number) => n * 2; // docx sizes are half-points
 const AMBER = 'B45309';
 const GREY = '64748B';
-const STATUS_NOTE: Record<string, string> = { inferred: 'inferred', assumed: 'assumed', unknown: 'unknown' };
+const STATUS_NOTE: Record<string, string> = { inferred: 'inferred', assumed: 'assumed', typical: 'typical, not confirmed', unknown: 'unknown' };
 
 function cellRuns(c: Cell, size: number, bold = false, color?: string): TextRun[] {
   if (c.missing) return [new TextRun({ text: c.text, italics: true, color: AMBER, size })];
@@ -105,7 +105,7 @@ function block(b: Block, s: DocxStyle): (Paragraph | Table)[] {
 
 export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxStyle }): Document {
   const s = opts.style ?? DEFAULT_DOCX_STYLE;
-  const kind = doc.type.toUpperCase();
+  const kind = docShort(doc.type);
   const styles: IStylesOptions = {
     default: { document: { run: { font: s.font, size: PT(10) }, paragraph: { spacing: { line: 276 } } } },
     paragraphStyles: [

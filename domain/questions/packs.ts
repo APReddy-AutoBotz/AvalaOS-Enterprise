@@ -5,12 +5,13 @@
 import type { ProcessModel } from '../processModel/types.ts';
 import { DocBuilder, type DocTree } from '../docs/tree.ts';
 import { GROUP_LABEL, OWNER_LABEL, type QOwner, type Triage, type TriageItem } from './triage.ts';
+import type { QuestionPlan } from './firstList.ts';
 
 export const PACK_PREFIX: Record<QOwner, string> = { business: 'B', it: 'T', finance: 'F' };
 const OWNERS: QOwner[] = ['business', 'it', 'finance'];
 const GROUP_ORDER = { decides: 0, signoff: 1, detail: 2 } as const;
 
-export interface PackItem { ref: string; item: TriageItem; how: string }
+export interface PackItem { ref: string; item: TriageItem; how: string; /** In the first list: only these people can tell us, and it is asked now. */ first?: boolean }
 export interface QuestionPack { owner: QOwner; label: string; items: PackItem[] }
 
 /** What a good answer looks like, in the owner's terms. */
@@ -25,11 +26,17 @@ export function howToAnswer(item: TriageItem, m: ProcessModel): string {
   }
 }
 
-/** One pack per owner that has questions, most decisive first. Deferred questions are included: a pack is how they get answered. */
-export function buildPacks(t: Triage, m: ProcessModel): QuestionPack[] {
+/**
+ * One pack per owner that has questions, most decisive first. With the plan of questions, the first
+ * list leads each pack, marked "Answer first", in its order; the rest follow. Deferred questions are
+ * included: a pack is how they get answered.
+ */
+export function buildPacks(t: Triage, m: ProcessModel, plan?: QuestionPlan): QuestionPack[] {
+  const first = new Map((plan?.now ?? []).map((i, n) => [i.key, n]));
+  const rank = (i: TriageItem) => first.get(i.key) ?? Infinity;
   return OWNERS.map(owner => {
-    const items = t.items.filter(i => i.owner === owner).sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group]);
-    return { owner, label: OWNER_LABEL[owner], items: items.map((item, n) => ({ ref: `${PACK_PREFIX[owner]}${n + 1}`, item, how: howToAnswer(item, m) })) };
+    const items = t.items.filter(i => i.owner === owner).sort((a, b) => (first.has(a.key) || first.has(b.key) ? rank(a) - rank(b) : 0) || GROUP_ORDER[a.group] - GROUP_ORDER[b.group]);
+    return { owner, label: OWNER_LABEL[owner], items: items.map((item, n) => ({ ref: `${PACK_PREFIX[owner]}${n + 1}`, item, how: howToAnswer(item, m), first: first.has(item.key) })) };
   }).filter(p => p.items.length);
 }
 
@@ -40,8 +47,10 @@ export function packDocument(pack: QuestionPack, processName: string, date: stri
   b.paragraph(`These questions about ${processName} are for the ${pack.label.charAt(0).toLowerCase()}${pack.label.slice(1)}. Write each answer in the last column of the table and send the file back. Leave a row empty if you do not know; say who would.`);
   b.paragraph('Your answers are read back into the process model and checked by the analyst before anything changes.');
   b.section('2', 'Questions', 1);
+  const firsts = pack.items.filter(p => p.first).length;
+  if (firsts) b.paragraph(`Please answer the ${firsts === 1 ? 'question' : `${firsts} questions`} marked "Answer first" before the others: ${firsts === 1 ? 'it is' : 'they are'} what only you can tell us and what the recommendation depends on. The others can wait until sign-off.`);
   b.table('Questions', ['Ref', 'Question', 'Why it matters', 'How to answer', 'Your answer'],
-    pack.items.map(p => [p.ref, p.item.question, GROUP_LABEL[p.item.group], p.how, '']), 'No questions.');
+    pack.items.map(p => [p.ref, p.item.question, p.first ? `Answer first. ${GROUP_LABEL[p.item.group]}` : GROUP_LABEL[p.item.group], p.how, '']), 'No questions.');
   return {
     type: 'questions', title: 'Questions to answer', subtitle: `${processName}: ${pack.label}`,
     control: [['Process', processName], ['For', pack.label], ['Questions', String(pack.items.length)], ['Date', date]].map(([key, value]) => ({ key, value })),

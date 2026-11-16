@@ -32,6 +32,7 @@ export const WORK_OF_TASK: Record<string, string> = {
   readFlowchart: 'Reading flowchart pictures',
   stepTraits: 'Finding facts for the assessment', profileFacts: 'Finding facts for the assessment',
   answerFromNotes: 'Answers from notes',
+  readBrief: 'Reading the brief',
   transcribe: 'Turning speech into text',
   draftNarrative: 'Drafting document text',
   askProcess: 'Ask Avala',

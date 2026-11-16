@@ -5,16 +5,21 @@ import { applyChanges, proposeChanges, type ChangeSet, type ProposedChange } fro
 import { deepEqual, type JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
+import { assessProcess } from '../../domain/assess/process.ts';
+import { triage } from '../../domain/questions/triage.ts';
+import { planQuestions } from '../../domain/questions/firstList.ts';
 import { FORMAT_LABEL } from '../../domain/workspace/sources.ts';
 import type { ExtractionRow, JourneyStore, SourceRow } from '../store/types.ts';
 import { StoreError } from '../store/types.ts';
 import { ago, Button, cx, EmptyState, ErrorNote, messageOf, Tag, when } from '../ui.tsx';
 import { ACCEPT, ingestFile } from './ingestFile.ts';
 import { InlineText } from './widgets.tsx';
+import { StartInOwnWords } from './StartInOwnWords.tsx';
+import { StartFromTypical } from './StartFromTypical.tsx';
 
 const STATUS_TEXT: Record<ExtractionRow['status'], string> = {
   queued: 'Starting…', running: 'Reading each source…', merging: 'Combining what the sources say…', reviewing: 'Checking the flow…',
-  assembling: 'Building the model…', done: 'Done', failed: 'Failed',
+  assembling: 'Putting the process together…', done: 'Done', failed: 'Failed',
 };
 
 /** One replace per top-level part that changed: small enough to store, exact enough to replay. */
@@ -26,9 +31,11 @@ export function coarsePatch(before: ProcessModel, after: ProcessModel): JsonPatc
   return ops;
 }
 
-export function SourcesStage({ store, processId, workspaceId, canEdit, onModelChanged, onSourcesChanged, goToProcess }: {
+export function SourcesStage({ store, processId, workspaceId, canEdit, onModelChanged, onSourcesChanged, goToProcess, me = '', processName = '', hasSteps = false }: {
   store: JourneyStore; processId: string; workspaceId: string; canEdit: boolean;
-  onModelChanged: () => void; onSourcesChanged: () => void; goToProcess: () => void;
+  onModelChanged: () => void; onSourcesChanged: () => void; goToProcess: () => void; me?: string;
+  /** For the typical process the name suggests (part I); offered only while the process has no steps. */
+  processName?: string; hasSteps?: boolean;
 }) {
   const [sources, setSources] = React.useState<SourceRow[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -137,12 +144,16 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
       )}
 
       {sources.length === 0 ? (
-        <EmptyState title="No sources yet">Every extracted fact keeps a link back to the passage it came from in these files.</EmptyState>
+        <>
+          <EmptyState title="No sources yet">Every extracted fact keeps a link back to the passage it came from in these files.</EmptyState>
+          {canEdit && <StartInOwnWords store={store} processId={processId} workspaceId={workspaceId} me={me} onSaved={() => { load(); onSourcesChanged(); onModelChanged(); }} />}
+          {canEdit && !hasSteps && <StartFromTypical store={store} processId={processId} onStarted={() => { onModelChanged(); goToProcess(); }} />}
+        </>
       ) : (
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-2.5 text-xs font-semibold text-slate-500">
             <span className="flex-1">{active.length} {active.length === 1 ? 'source' : 'sources'}{canEdit ? `, ${chosen.size} ticked for extraction` : ''}</span>
-            <span className="hidden w-24 text-right sm:block" aria-hidden>Passages</span>
+            <span className="hidden w-28 text-right sm:block" aria-hidden>Passages</span>
             <span className="hidden w-28 text-right sm:block" aria-hidden>Added</span>
             {canEdit && <span className="hidden w-16 sm:block" aria-hidden />}
           </div>
@@ -162,7 +173,7 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
                   {s.inferred && <p className="mt-1 text-xs text-slate-600">Everything this source supports is marked Inferred until a person confirms it.</p>}
                   {s.warnings.length > 0 && <ul className="mt-1 list-disc pl-4 text-xs text-amber-800">{s.warnings.slice(0, 5).map((w, i) => <li key={i}>{w}</li>)}</ul>}
                 </div>
-                <span className="hidden w-24 text-right text-sm tabular-nums text-slate-700 sm:block">{s.segmentCount} passages</span>
+                <span className="hidden w-28 whitespace-nowrap text-right text-sm tabular-nums text-slate-700 sm:block">{s.segmentCount} passages</span>
                 <span className="hidden w-28 text-right text-xs text-slate-500 sm:block" title={when(s.createdAt)}>{ago(s.createdAt)}</span>
                 {canEdit && <span className="w-16 text-right">{!s.archived && (
                   <button type="button" className="text-xs font-medium text-slate-500 hover:text-slate-900 hover:underline" onClick={async () => { try { await store.archiveSource(s.id); await load(); onSourcesChanged(); } catch (e) { setError(messageOf(e)); } }}>Archive</button>
@@ -189,10 +200,10 @@ function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onAppl
     <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-5" aria-label="Extraction">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-900">Extract the process model</h3>
+          <h3 className="text-sm font-semibold text-slate-900">Read the process from your sources</h3>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
             The AI reads the ticked sources and proposes steps, roles, systems, rules, exceptions, figures and open questions, each with its quote.
-            You review the changes before they reach the model; what you have confirmed is never overwritten.
+            Nothing is added to the process until you bring it in; what you have confirmed is never overwritten.
           </p>
         </div>
         <Button onClick={onExtract} disabled={!store.aiAvailable || !chosenCount || Boolean(running)}>
@@ -234,7 +245,7 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
 
   if (error && !set) return <ErrorNote message={error} />;
   if (!set || !current) return <p className="text-sm text-slate-500">Comparing with the current model…</p>;
-  if (!set.changes.length) return <p className="text-sm text-emerald-800" data-testid="no-changes">The extraction of {when(finishedAt)} matches the current model.</p>;
+  if (!set.changes.length) return <p className="text-sm text-emerald-800" data-testid="no-changes">The extraction of {when(finishedAt)} matches the process as it stands.</p>;
 
   const apply = async () => {
     setBusy(true);
@@ -254,6 +265,12 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
     }
   };
 
+  // Part D: of the questions the sources raise, say how few people will be asked first.
+  const firstListLine = (m: ProcessModel) => {
+    if (!m.steps.length) return `It raised ${m.openQuestions.length} open ${m.openQuestions.length === 1 ? 'question' : 'questions'}.`;
+    const p = planQuestions(triage(m, assessProcess(m)), m);
+    return `Of the ${m.openQuestions.length} questions it raised, ${p.now.length} ${p.now.length === 1 ? 'needs' : 'need'} your people first. Avala OS then looks in your sources for answers; the rest can wait until sign-off.`;
+  };
   const groups = new Map<string, ProposedChange[]>();
   for (const c of set.changes) groups.set(c.element, [...(groups.get(c.element) ?? []), c]);
   const toggle = (id: string, on: boolean) => { const n = new Set(picked); if (on) n.add(id); else n.delete(id); setPicked(n); };
@@ -262,7 +279,7 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
     <div className="space-y-3" data-testid="change-review">
       <p className="text-sm text-slate-700">
         {set.first
-          ? `The extraction of ${when(finishedAt)} found ${extracted.steps.length} steps, ${extracted.roles.length} roles, ${extracted.systems.length} systems and ${extracted.openQuestions.length} open questions.`
+          ? `The extraction of ${when(finishedAt)} found ${extracted.steps.length} steps, ${extracted.roles.length} roles and ${extracted.systems.length} systems. ${firstListLine(extracted)}`
           : `The extraction of ${when(finishedAt)} differs from the current model in ${set.changes.length} place${set.changes.length === 1 ? '' : 's'}. Choose what to take.`}
       </p>
       {!set.first && (
@@ -289,7 +306,8 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
         </div>
       )}
       <ErrorNote message={error} />
-      <Button onClick={apply} disabled={busy || (!set.first && picked.size === 0)}>{set.first ? 'Use this model' : `Apply ${picked.size} change${picked.size === 1 ? '' : 's'}`}</Button>
+      <Button onClick={apply} disabled={busy || (!set.first && picked.size === 0)}>{set.first ? 'Start the process from this' : `Apply ${picked.size} change${picked.size === 1 ? '' : 's'}`}</Button>
+      {set.first && <p className="text-xs text-slate-500">It becomes a working draft you can edit. Nothing is approved yet.</p>}
     </div>
   );
 }

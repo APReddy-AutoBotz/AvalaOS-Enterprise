@@ -3,6 +3,7 @@
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { Triage, TriageItem } from '../../domain/questions/triage.ts';
+import type { QuestionPlan } from '../../domain/questions/firstList.ts';
 import { buildPacks, packDocument, packItems, replyNotes, type QuestionPack } from '../../domain/questions/packs.ts';
 import { toMarkdown } from '../../domain/docs/markdown.ts';
 import type { Branding } from '../../domain/docs/branding.ts';
@@ -18,8 +19,8 @@ const save = (blob: Blob, name: string) => {
 };
 const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
-export function QuestionPacks({ model, t, branding, onImported, canImport }: { model: ProcessModel; t: Triage; branding?: Branding; onImported: (r: ImportedReply) => void; canImport: boolean }) {
-  const packs = React.useMemo(() => buildPacks(t, model), [t, model]);
+export function QuestionPacks({ model, t, plan, branding, onImported, canImport }: { model: ProcessModel; t: Triage; plan?: QuestionPlan; branding?: Branding; onImported: (r: ImportedReply) => void; canImport: boolean }) {
+  const packs = React.useMemo(() => buildPacks(t, model, plan), [t, model, plan]);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   if (!packs.length) return null;
@@ -61,7 +62,7 @@ export function QuestionPacks({ model, t, branding, onImported, canImport }: { m
         {packs.map(p => (
           <li key={p.owner} className="rounded-xl bg-slate-50 p-4 ring-1 ring-inset ring-slate-200" data-testid="question-pack">
             <p className="text-sm font-semibold text-slate-900">{p.label}</p>
-            <p className="text-xs text-slate-600">{p.items.length} {p.items.length === 1 ? 'question' : 'questions'}</p>
+            <p className="text-xs text-slate-600">{p.items.length} {p.items.length === 1 ? 'question' : 'questions'}{p.items.some(x => x.first) ? `, ${p.items.filter(x => x.first).length} to answer first` : ''}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <button type="button" disabled={busy === p.owner} onClick={() => word(p)} aria-label={`Word pack for ${p.label}`} className="rounded-lg bg-[#002C4B] px-3 py-1.5 font-semibold text-white hover:bg-[#073B60] disabled:opacity-60">{busy === p.owner ? 'Working…' : 'Word'}</button>
               <button type="button" onClick={() => markdown(p)} aria-label={`Markdown pack for ${p.label}`} className="rounded-lg px-3 py-1.5 font-semibold text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-white">Markdown</button>

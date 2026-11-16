@@ -3,9 +3,10 @@
 // Model and the assessment; nothing is drafted here and nothing is assumed.
 import { gaps, orderedSteps } from '../processModel/selectors.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
+import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { robotsBlocked } from '../assess/scoring.ts';
 import { flowMermaid, flowPicture, modeFromScore } from '../flowchart/svg.ts';
-import { ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
+import { controlOf, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
 
@@ -19,7 +20,11 @@ export function buildPdd(input: DocInput): DocTree {
   // ---- 1 Introduction
   b.section('1', 'Introduction', 1);
   b.section('1.1', 'Purpose of this document');
-  b.paragraph(`This document describes how "${m.meta.name}" is done today, step by step, and how it will be done once automated. It is the reference for the requirements (FRD) and the solution design (SDD).`);
+  const words = processWords(m);
+  const building = buildingSystem(m);
+  b.paragraph(words.intended
+    ? `This document describes how "${m.meta.name}" is intended to work, step by step, and how each step would be done. Nothing of it is done today, so it describes no current process. It is the reference for the requirements (FRD) and the solution design (SDD).`
+    : `This document describes how "${m.meta.name}" is done today, step by step, and how it will be done once automated. It is the reference for the requirements (FRD) and the solution design (SDD).`);
   b.section('1.2', 'Objectives of the process');
   const objective = known(m.meta.objective);
   if (objective) b.paragraph(objective); else b.open('The objective of the process is not stated.', { kind: 'meta', field: 'objective' });
@@ -31,15 +36,17 @@ export function buildPdd(input: DocInput): DocTree {
   ], 'No roles are recorded yet.');
   if (!owner) b.open('The process owner is not named.', { kind: 'meta', field: 'owner' });
   b.section('1.4', 'Minimum prerequisites for automation');
-  const access = m.systems.filter(s => s.inScope && (s.access.length === 0 || s.access.every(x => x.access === 'unknown')));
+  // The application being built is not one the automation needs access to (part C).
+  const used = existingSystems(m);
+  const access = used.filter(s => s.inScope && (s.access.length === 0 || s.access.every(x => x.access === 'unknown')));
   b.list([
-    ...m.systems.filter(s => s.inScope).map(s => `Access to ${s.name} for the automation (${accessSummary(s)}).`),
+    ...used.filter(s => s.inScope).map(s => `Access to ${s.name} for the automation (${accessSummary(s)}).`),
     ...(known(m.meta.profile?.processChange) === null ? ['Confirmation that the process will not change materially in the next six months.'] : []),
   ]);
   for (const s of access) b.note(`How can ${s.name} be accessed (API, UI, file)?`, { kind: 'system', id: s.id, field: 'access' });
 
-  // ---- 2 As-Is
-  b.section('2', 'As-Is process', 1);
+  // ---- 2 As-Is (the intended process when nothing is done today)
+  b.section('2', words.process, 1);
   b.section('2.1', 'Process overview');
   b.keyValue('Process overview', [
     ['Process name', m.meta.name],
@@ -61,23 +68,24 @@ export function buildPdd(input: DocInput): DocTree {
     const ban = s.access.find(a => a.method === 'ui' && a.access === 'confirmed_absent' && robotsBlocked({ ...s, access: [a] }));
     return ban ? { text: `No (${ban.name}: not available)`, status: ban.status } : missing();
   };
+  if (building) b.callout(`${building.name} is what is being built, so it is not listed as an application the process uses.`);
   b.table('Applications used', ['Application', 'Kind', 'Version', 'Access', 'Robots allowed on screens', 'Screens stable', 'Remote desktop'],
-    m.systems.map(s => [s.name, s.kind.replace('_', ' '), s.version ?? missing(), accessSummary(s), robots(s), factCell(s.uiStable, v => (v ? 'Yes' : 'No')), factCell(s.remote, v => (v ? 'Yes' : 'No'))]),
+    used.map(s => [s.name, s.kind.replace('_', ' '), s.version ?? missing(), accessSummary(s), robots(s), factCell(s.uiStable, v => (v ? 'Yes' : 'No')), factCell(s.remote, v => (v ? 'Yes' : 'No'))]),
     'No applications are recorded yet.');
   const ifaces = m.systems.flatMap(s => s.access.map(a => ({ s, a })));
   if (ifaces.length > m.systems.length) {
     b.table('Interfaces and transactions', ['Application', 'Method', 'Interface or transaction', 'Used for', 'Status', 'Source'],
       ifaces.map(({ s, a }) => [s.name, a.method.toUpperCase(), a.name ?? '', a.operations.join(', '), { text: ACCESS_TEXT[a.access], status: a.status }, sourceList(a.sources)]), '');
   }
-  b.section('2.3', 'As-Is process map');
+  b.section('2.3', words.intended ? words.map : 'As-Is process map');
   {
-    const f = flowPicture(m, { title: `As-Is map of ${m.meta.name}` });
-    if (m.steps.length) b.figure('As-Is process map', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m) });
+    const f = flowPicture(m, { title: `${words.map} of ${m.meta.name}` });
+    if (m.steps.length) b.figure(words.intended ? words.map : 'As-Is process map', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m) });
     else b.callout('No steps are recorded, so there is no map yet.');
     if (m.steps.length && !m.flows.length) b.open('How do the steps connect: which step follows which, and where does the process branch?');
   }
-  b.section('2.4', 'Detailed As-Is steps');
-  b.table('Detailed As-Is steps', ['#', 'Step', 'Description', 'Role', 'Application', 'Input', 'Output', 'Rules', 'Exceptions', 'Time per case', 'Source'],
+  b.section('2.4', words.steps);
+  b.table(words.steps, ['#', 'Step', 'Description', 'Role', 'Application', 'Input', 'Output', 'Rules', 'Exceptions', 'Time per case', 'Source'],
     steps.map(s => [
       String(no(s.id)), { text: s.name, status: s.status }, s.description || '', s.roleIds.length ? names(s.roleIds, m.roles) : missing(),
       s.systemIds.length ? names(s.systemIds, m.systems) : s.taskType === 'manual' ? 'None (manual)' : missing(),
@@ -150,7 +158,7 @@ export function buildPdd(input: DocInput): DocTree {
 
   return {
     type: 'pdd', title: 'Process Definition Document', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }

@@ -13,6 +13,7 @@ const STATUS: Record<FactStatus, { label: string; tone: string; title: string }>
   inferred: { label: 'Inferred', tone: 'bg-violet-100 text-violet-900', title: 'Read from the sources but not said outright; check it' },
   'user-confirmed': { label: 'Confirmed', tone: 'bg-emerald-100 text-emerald-900', title: 'Set or confirmed by a person' },
   assumed: { label: 'Assumption', tone: 'bg-amber-100 text-amber-900', title: 'A working assumption to confirm' },
+  typical: { label: 'Typical, not confirmed', tone: 'bg-orange-100 text-orange-900', title: 'From a typical process Avala OS offers as a start; not a fact until your people confirm it' },
   unknown: { label: 'Unknown', tone: 'bg-slate-200/70 text-slate-700', title: 'Known to be missing' },
 };
 
@@ -152,7 +153,11 @@ export function SourcesButton({ count, onClick, what }: { count: number; onClick
 }
 
 /** A side panel for details and sources. */
-export function SidePanel({ title, onClose, children, wide }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean }) {
+/**
+ * A panel from the right. `brand` marks it as Ask Avala's (owner, 16 November 2026: the open panel read as
+ * plain text and was easy to lose): the amber mark beside the title and an amber line under the head.
+ */
+export function SidePanel({ title, onClose, children, wide, brand }: { title: string; onClose: () => void; children: React.ReactNode; wide?: boolean; brand?: React.ReactNode }) {
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     addEventListener('keydown', onKey);
@@ -161,8 +166,8 @@ export function SidePanel({ title, onClose, children, wide }: { title: string; o
   return (
     <div className="fixed inset-0 z-40 flex justify-end bg-slate-900/25" onClick={onClose}>
       <aside role="dialog" aria-label={title} className={cx('flex h-full w-full flex-col bg-white shadow-[-28px_0_56px_-28px_rgba(15,23,42,0.35)]', wide ? 'max-w-2xl' : 'max-w-md')} onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-3">
-          <h2 className="min-w-0 font-display text-base font-semibold text-slate-900">{title}</h2>
+        <div className={cx('flex items-center justify-between gap-3 px-5 py-3', brand ? 'border-b-2 border-[#E69F00] bg-[#FFF8E6]' : 'border-b border-slate-100')}>
+          <h2 className={cx('flex min-w-0 items-center gap-2.5 font-display font-semibold', brand ? 'text-lg text-[#002C4B]' : 'text-base text-slate-900')}>{brand}{title}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="-mr-2 shrink-0 rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900">
             <svg viewBox="0 0 12 12" className="h-3.5 w-3.5" aria-hidden><path d="m2.5 2.5 7 7m0-7-7 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" /></svg>
           </button>

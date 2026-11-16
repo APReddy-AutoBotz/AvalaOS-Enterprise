@@ -209,14 +209,21 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
   const metricOfCandidate = new Map<string, string>();
   for (const g of facts.metrics) {
     const ms = membersOf(g.members, ['metric']);
-    const chosen = ms.find(c => c.id === g.chosen) ?? ms[0];
-    if (!chosen) { dropped.push(`metric "${g.label}": no candidates`); continue; }
+    if (!ms.length) { dropped.push(`metric "${g.label}": no candidates`); continue; }
+    const rangeOf = (c: Candidate): [number, number] | undefined => (c.data.low !== null && c.data.high !== null && c.data.low <= c.data.high ? [c.data.low, c.data.high] : undefined);
+    const hasNumber = (c: Candidate) => c.data.value !== null || !!rangeOf(c);
+    // The candidate the merge chose, when it gives a number; else the first that does (a figure said
+    // only in words by one source and as a number by another keeps the number). Decided before the
+    // metric takes an id: a metric left out must leave nothing pointing at it.
+    const preferred = ms.find(c => c.id === g.chosen) ?? ms[0];
+    const chosen = hasNumber(preferred) ? preferred : ms.find(hasNumber);
+    if (!chosen) { dropped.push(`metric "${g.label}": no number`); continue; }
     const d = chosen.data;
+    const range = rangeOf(chosen);
     const id = nextId('m');
     ms.forEach(c => metricOfCandidate.set(c.id, id));
     const m: Metric = { id, kind: d.kind, label: g.label || d.label, value: d.value, unit: d.unit || '', status: 'stated', sources: refs(ms) };
-    if (d.low !== null && d.high !== null && d.low <= d.high) m.range = [d.low, d.high];
-    if (m.value === null && !m.range) { dropped.push(`metric "${g.label}": no number`); continue; }
+    if (range) m.range = range;
     if (d.period) m.period = d.period;
     if (d.appliesTo) m.appliesTo = d.appliesTo;
     metrics.push(m);
@@ -238,8 +245,9 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
     let target: ElementTarget = { kind: 'meta' };
     const ruleId = ms.map(c => ruleOfCandidate.get(c.id)).find(Boolean);
     const metricId = ms.map(c => metricOfCandidate.get(c.id)).find(Boolean);
-    if (k.about === 'rule' && ruleId) target = { kind: 'rule', id: ruleId, field: 'condition' };
-    else if (k.about === 'metric' && metricId) target = { kind: 'metric', id: metricId, field: 'value' };
+    // Only an element that is in the model can be pointed at.
+    if (k.about === 'rule' && ruleId && rules.some(r => r.id === ruleId)) target = { kind: 'rule', id: ruleId, field: 'condition' };
+    else if (k.about === 'metric' && metricId && metrics.some(m => m.id === metricId)) target = { kind: 'metric', id: metricId, field: 'value' };
     conflicts.push({ id: nextId('k'), target, summary: k.summary, values: [...values].map(([value, sources]) => ({ value, sources: dedupeRefs(sources) })), resolution: null });
   }
 

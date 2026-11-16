@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import AxeBuilder from '@axe-core/playwright';
 import { INTERNAL, openSettings, primaryText, shot, signInAndCreateProcess } from './helpers.ts';
 
 const saved = (page: Page) => expect(page.getByTestId('save-state').first()).not.toHaveText('Saving…');
@@ -300,34 +301,43 @@ test('the documents follow the model: PDD with one row per step, BRD, open items
   expect(sdd.suggestedFilename()).toMatch(/SDD\.docx$/);
 });
 
-test('closing the gaps: answers in a guided session update the model and the documents', async ({ page }) => {
+test('closing the gaps: the first list is asked first, answers update the model and the documents, and the rest can wait', async ({ page }) => {
   await buildProcess(page);
   await stage(page, 'Documents');
   await expect(page.getByTestId('gaps-banner')).toBeVisible();
+  await expect(page.getByTestId('gaps-banner')).toContainText('only your people can tell us');
   await page.getByRole('button', { name: 'Answer them' }).click();
   const assistant = page.getByTestId('gaps-assistant');
-  const before = Number((await assistant.getByTestId('gaps-count').textContent())!.match(/\d+/)![0]);
+  // At most seven at first (docs/effort-first-plan.md, part D); the rest is one click away.
+  const before = Number((await assistant.getByTestId('gaps-count').textContent())!.match(/^\d+/)![0]);
+  expect(before).toBeLessThanOrEqual(7);
+  await expect(assistant.getByTestId('gaps-summary')).toContainText('can wait until sign-off');
   await shot(page, '40-gaps-assistant');
+  const list = assistant.getByRole('list', { name: 'Questions' });
 
-  // Who does the step: a role picker; the answer writes the step's role.
-  const roleQ = assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /Who does "Check invoice totals"/ });
-  if (await roleQ.count()) {
-    await roleQ.click();
-    await expect(assistant.getByTestId('gap-question')).toContainText('Who does "Check invoice totals"');
-  }
-  // The objective: free text written to the process.
-  await assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /objective/i }).click();
+  // The objective opens the documents, so it is asked first: free text written to the process.
+  await list.getByRole('button', { name: /objective/i }).click();
   await assistant.getByLabel('Answer', { exact: true }).fill('Post supplier invoices correctly within five working days.');
   await assistant.getByRole('button', { name: 'Save answer' }).click();
   await saved(page);
-  await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 1} `));
+  await expect(list.getByRole('button', { name: /objective/i })).toHaveCount(0);
 
-  // Set one aside for someone else.
+  // Set one aside for someone else: it leaves the list.
+  const asked = (await assistant.getByTestId('gap-question').getByRole('heading').textContent())!;
   await assistant.getByRole('button', { name: 'Ask someone later' }).click();
   await assistant.getByLabel('Who should answer it').fill('AP Team Lead');
   await assistant.getByRole('button', { name: 'Set aside' }).click();
   await saved(page);
-  await expect(assistant.getByTestId('gaps-count')).toHaveText(new RegExp(`^${before - 2} `));
+  await expect(list.getByRole('button').filter({ hasText: asked })).toHaveCount(0);
+
+  // What can wait is still there, each with why it waits; who does a step is answered with a role picker.
+  await assistant.getByTestId('gaps-view-wait').click();
+  await expect(assistant.getByTestId('gap-waits')).toBeVisible();
+  const roleQ = list.getByRole('button', { name: /Who does "Check invoice totals"/ });
+  if (await roleQ.count()) {
+    await roleQ.click();
+    await expect(assistant.getByTestId('gap-question')).toContainText('Who does "Check invoice totals"');
+  }
 
   await assistant.getByRole('button', { name: 'Back to the document' }).click();
   await expect(page.getByTestId('document')).toContainText('Post supplier invoices correctly within five working days.');
@@ -830,4 +840,73 @@ test('hand-over checklist, and the editor flags names and numbers that are not i
   await expect(doc.getByTestId('edited-text')).toHaveCount(0);
   await doc.getByRole('button', { name: 'Save anyway' }).click();
   await expect(doc.getByTestId('edited-text').first()).toContainText('Oracle Fusion');
+});
+
+// Part E of docs/effort-first-plan.md: the agent document follows the approach in effect, a person's choice included.
+test('a step set to agentic AI gets the agent document: planned, its steps and applications, its open questions, read-only', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Assessment');
+  const panel = await openStep(page, 'Post invoice in SAP');
+  await panel.getByLabel('Override recommendation').selectOption({ label: 'Agentic AI' });
+  await panel.getByLabel('Rationale').fill('Invoices vary too much for fixed rules.');
+  await panel.getByRole('button', { name: 'Override' }).click();
+  await expect(panel.getByTestId('override-note')).toContainText('Overridden by');
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('delivery-plan').getByTestId('planned-doc')).toHaveText([/Process definition \(PDD\)/, /Agent definition document/, /Solution design \(SDD\)/]);
+
+  await stage(page, 'Documents');
+  const tab = page.getByRole('tablist', { name: 'Documents' }).getByRole('tab', { name: /^Agent/ });
+  await expect(tab).toHaveAttribute('data-planned', 'yes');
+  await expect(page.getByTestId('planned-docs')).toContainText('the agent document');
+  await tab.click();
+  const doc = page.getByTestId('document');
+  await expect(doc).toContainText('Agent Definition Document');
+  await expect(doc.getByRole('heading', { name: /What the agent does/ })).toBeVisible();
+  await expect(doc).toContainText('Post invoice in SAP');
+  await expect(doc).toContainText('set so by a person');
+  await expect(doc).toContainText('With which account does the agent work in SAP S/4HANA');
+  await expect(doc).toContainText('What must the agent never do in this process?');
+  // Section edits on the agent document, like the other four (migration review_comments_and_test_edits).
+  await expect(doc.getByRole('button', { name: 'Edit section 1', exact: true })).toBeVisible();
+
+  // A review comment on a section: added, counted, resolved.
+  await doc.getByRole('button', { name: 'Comment on section 1', exact: true }).click();
+  const thread = doc.getByTestId('section-comments').first();
+  await thread.getByLabel('Comment on Purpose and scope').fill('Name the limit before sign-off.');
+  await thread.getByRole('button', { name: 'Add comment' }).click();
+  await expect(thread.getByTestId('section-comment')).toHaveText(/You.*Name the limit before sign-off\./);
+  await expect(page.getByTestId('open-comments')).toHaveText('1 open comment');
+  const axeComments = await new AxeBuilder({ page }).include('[data-testid="section-comments"]').withTags(['wcag2a', 'wcag2aa']).analyze();
+  expect(axeComments.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => v.id)).toEqual([]);
+  await thread.getByRole('button', { name: 'Resolve' }).click();
+  // A resolved comment folds away and can be shown again.
+  await expect(thread.getByTestId('section-comment')).toHaveCount(0);
+  await thread.getByRole('button', { name: 'Show 1 resolved' }).click();
+  await expect(thread.getByTestId('section-comment')).toHaveAttribute('data-resolved', 'yes');
+  await expect(page.getByTestId('open-comments')).toHaveCount(0);
+  await shot(page, '73-agent-document');
+
+  // Part F: the test pack, one case per criterion (or one with no expected result yet), the agent's cases marked.
+  await page.getByRole('tablist', { name: 'Documents' }).getByRole('tab', { name: /^Tests/ }).click();
+  await expect(doc).toContainText('Test Pack');
+  await expect(page.getByTestId('tests-note')).toContainText('nothing is tested that no requirement states');
+  await expect(doc.getByRole('heading', { name: /Cases at the AI steps/ })).toBeVisible();
+  await expect(doc).toContainText('Post invoice in SAP');
+  await expect(doc.getByRole('button', { name: /^Edit section/ })).toHaveCount(0);
+  // A tester's edit: change the data of a case; the document follows, and the case is marked edited.
+  const cases = page.getByTestId('test-cases-panel');
+  await cases.getByRole('button', { name: 'Edit cases' }).click();
+  const firstRow = cases.getByTestId('case-row').first();
+  const code = (await firstRow.locator('span.tabular-nums').first().textContent())!.trim();
+  await firstRow.getByRole('button', { name: `Edit case ${code}` }).click();
+  await cases.getByLabel(`Data of ${code}`).fill('Invoice 4711 with a missing PO number');
+  await cases.getByTestId('case-editor').getByRole('button', { name: 'Save' }).click();
+  await expect(cases.getByTestId('case-row').first()).toHaveAttribute('data-state', 'edited');
+  await expect(doc).toContainText('Invoice 4711 with a missing PO number');
+  await cases.getByTestId('case-row').first().getByRole('button', { name: `Set aside case ${code}` }).click();
+  await expect(cases.getByTestId('case-row').first()).toHaveAttribute('data-state', 'set_aside');
+  const csvFile = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download for Excel' }).click();
+  expect((await csvFile).suggestedFilename()).toMatch(/Test pack\.csv$/);
+  await shot(page, '74-test-pack');
 });

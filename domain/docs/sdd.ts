@@ -7,7 +7,7 @@ import { orderedSteps } from '../processModel/selectors.ts';
 import { APPROACH_LABEL, type Approach } from '../assess/scoring.ts';
 import { criterionText } from '../requirements/register.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
-import { ACCESS_TEXT, modeOf, sourceList, type DocInput } from './common.ts';
+import { controlOf, ACCESS_TEXT, modeOf, sourceList, type DocInput } from './common.ts';
 
 export interface AutomationUnit { id: string; approach: Approach; systemIds: string[]; steps: Step[] }
 
@@ -147,7 +147,7 @@ export function buildSdd(input: DocInput): DocTree {
 
   return {
     type: 'sdd', title: 'Solution Design Document', subtitle: m.meta.name,
-    control: [['Process', m.meta.name], ['Revision', input.revision.label], ['Status', input.revision.state === 'approved' ? 'Approved' : 'Working draft'], ['Date', input.revision.date]].map(([key, value]) => ({ key, value })),
+    control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
 }

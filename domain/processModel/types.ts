@@ -15,6 +15,7 @@ export type FactStatus =
   | 'inferred' // derived from sources, not said outright
   | 'user-confirmed' // set or confirmed by a person in the product
   | 'assumed' // a working assumption someone recorded; must be confirmed later
+  | 'typical' // from a typical process Avala OS offers as a start (part I); never a fact until a person confirms it
   | 'unknown'; // known to be missing
 
 /** Where in a source a fact was found. Only the fields that apply to the source type are set. */
@@ -95,6 +96,32 @@ export interface ProcessProfile {
   systemChange?: Fact<ChangeLevel>;
 }
 
+/** Whether the work is done today, by people or systems (docs/effort-first-plan.md, part A). */
+export type DoneToday = 'yes' | 'partly' | 'no';
+/** What kind of thing the process is. */
+export type WorkKind = 'existing_process' | 'new_process' | 'tool' | 'agent';
+/** What the team has in mind. An expectation, never the decision: the assessment decides. */
+export type InMind = 'rpa' | 'api' | 'ai' | 'agent' | 'open';
+/** A document a process can be given: the four built ones and the agent document (part E). */
+export type PlannedDoc = 'brd' | 'pdd' | 'frd' | 'sdd' | 'agent';
+
+/**
+ * The brief (part A): the few facts that decide how a process is handled, each read from the sources
+ * with its passage or given by a person. Absent means not read and not given; unknown means the
+ * sources do not say. The applications it touches are the model's systems, not repeated here.
+ */
+export interface ProcessBrief {
+  /** What this is, in two lines. */
+  summary?: Fact<string>;
+  doneToday?: Fact<DoneToday>;
+  kind?: Fact<WorkKind>;
+  inMind?: Fact<InMind[]>;
+  /** The application being built (a system id), when this is a tool or an agent to be built (part C). It is not an application the process uses. */
+  building?: Fact<string>;
+  /** The documents wanted. Unset: the delivery plan's rule decides (domain/plan/delivery.ts). */
+  documents?: Fact<PlannedDoc[]>;
+}
+
 export interface ProcessMeta {
   name: string;
   objective: Fact<string>;
@@ -103,6 +130,9 @@ export interface ProcessMeta {
   scopeOut: ScopeItem[];
   metrics: Metric[];
   profile?: ProcessProfile;
+  brief?: ProcessBrief;
+  /** The typical process this one was started from (domain/reference), if any; part I. */
+  startedFrom?: string;
 }
 
 export type RoleKind = 'person_role' | 'team' | 'external' | 'system_actor';

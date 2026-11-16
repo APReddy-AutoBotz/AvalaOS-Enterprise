@@ -1,6 +1,12 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
 import { useProcessChanged } from '../processChanged.ts';
+import { useAutoLook } from '../process/sourceLook.ts';
+import { BriefPanel } from '../process/BriefPanel.tsx';
+import { TypicalPanel } from '../process/TypicalPanel.tsx';
+import { typicalCounts } from '../../domain/reference/typical.ts';
+import { briefFromFindings, briefSegments, readBrief, type BriefFinding } from '../../domain/plan/readBrief.ts';
+import { adoptBrief } from '../../domain/processModel/patch.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
@@ -74,6 +80,9 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   React.useEffect(() => { load(); }, [load]);
   // Answers recorded from the Ask Avala panel show here at once.
   useProcessChanged(processId, load);
+  // Before its questions are put to people, the sources are looked in for their answers (part D).
+  const shown = data && data !== 'missing' ? data : null;
+  useAutoLook(store, shown?.process ?? null, shown?.model ?? null, Boolean(shown?.workspace && shown.workspace.role !== 'viewer'));
   // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
   const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
   React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);
@@ -121,8 +130,16 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
         </div>
         <div className="flex items-center gap-2">
+          {canApprove && working && model && typicalCounts(model).total > 0 && (
+            <Tag tone="warn" data-testid="typical-unconfirmed" title="Approving keeps them marked Typical, not confirmed, in the approved documents">{typicalCounts(model).total} typical {typicalCounts(model).total === 1 ? 'item' : 'items'} not confirmed</Tag>
+          )}
           {canApprove && working && (
-            <Button variant="secondary" disabled={busy} onClick={() => act(() => store.approve(working.id, working.seq))}>Approve</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => {
+              // An approved revision is never changed, so approving what nobody has confirmed is asked about first.
+              const n = model ? typicalCounts(model).total : 0;
+              if (n > 0 && !window.confirm(`${n} typical ${n === 1 ? 'item has' : 'items have'} not been confirmed by your people. Approving keeps ${n === 1 ? 'it' : 'them'} marked "Typical, not confirmed" in the approved documents, and an approved revision cannot be changed. Approve anyway?`)) return;
+              act(() => store.approve(working.id, working.seq));
+            }}>Approve</Button>
           )}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
@@ -167,7 +184,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
-          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
               revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
@@ -179,7 +196,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           : stage === 'flows' && model && model.steps.length > 0
           ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} onSaved={load} />
           : stage === 'process' && model
-          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} />
+          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
         </SourceContext.Provider>}
       </section>
@@ -189,8 +206,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   );
 }
 
-function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved }: {
-  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void;
+function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved, processName }: {
+  store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void; processName: string;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
@@ -201,8 +218,28 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
     apps,
     add: async input => { const saved = await store.saveApplication(workspaceId, input); setApps(cur => [...(cur ?? []), saved]); },
   } : null), [apps, store, workspaceId]);
+  // The brief, read from the sources on request (part A): the reading task in journey-ai, then by rule.
+  const [reading, setReading] = React.useState(false);
+  const [readError, setReadError] = React.useState<string | null>(null);
+  const readBriefNow = async () => {
+    setReading(true); setReadError(null);
+    try {
+      const rows = (await store.listSources(processId)).filter(s => !s.archived);
+      const sources = await Promise.all(rows.map(async s => ({ key: s.key, title: s.title, segments: await store.getSourceSegments(s.id).catch(() => []) })));
+      const { segments, ingest } = briefSegments(editor.model, sources);
+      if (!segments.length) { setReadError('There are no sources to read the brief from yet.'); return; }
+      const r = await store.runAiTask(workspaceId, readBrief.id, segments as never);
+      const read = briefFromFindings(((r.data as { findings?: BriefFinding[] } | null)?.findings ?? []), ingest, editor.model);
+      await editor.apply(m => adoptBrief(m, read), 'Brief read from the sources');
+    } catch (e) { setReadError(messageOf(e)); } finally { setReading(false); }
+  };
   return (
-    <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
+    <>
+      <ErrorNote message={readError} />
+      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
+      <TypicalPanel editor={editor} canEdit={canEdit} />
+      <ProcessEditor editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
+    </>
   );
 }
 

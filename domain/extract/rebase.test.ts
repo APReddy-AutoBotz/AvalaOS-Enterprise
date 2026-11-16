@@ -100,5 +100,30 @@ test('a changed access route is described in words, never as raw data', () => {
   const c = proposeChanges(g, changed).changes.find(x => x.element === 'system' && x.currentId === 'sys-tracker')!;
   assert.ok(c, 'the tracker change is proposed');
   assert.doesNotMatch(c.detail, /object Object|\{/);
-  assert.match(c.detail, /access: file: reported, not confirmed → file: reported, not confirmed; API Graph: confirmed available/);
+  // Only what changed: the new way in, not the whole list before and after.
+  assert.equal(c.detail, 'access: added API Graph: confirmed available');
+});
+
+test('a new reading never removes what a person said about an application\'s ways in, and says only what changed', async () => {
+  const { setSystemApi } = await import('../processModel/patch.ts');
+  // A person answers "no API" for an application the sources only described (found on the owner's documents, 16 November 2026).
+  const g = gold();
+  const sys = g.systems.find(s => s.status !== 'user-confirmed' && s.access.some(a => a.method !== 'api'))!;
+  let m = setSystemApi(g, { systemId: sys.id, access: 'confirmed_absent' }).model;
+  const mine = m.systems.find(s => s.id === sys.id)!.access.filter(a => a.status === 'user-confirmed');
+  assert.ok(mine.length > 0);
+  // The sources say nothing of an API now, and one way in changed.
+  const reread = gold();
+  const rs = reread.systems.find(s => s.id === sys.id)!;
+  rs.access = rs.access.filter(a => a.method !== 'api').map((a, i) => (i === 0 ? { ...a, access: a.access === 'confirmed' ? 'reported' : 'confirmed' } : a));
+  const cs = proposeChanges(m, reread);
+  const change = cs.changes.find(c => c.currentId === sys.id);
+  if (change) {
+    assert.doesNotMatch(change.detail, /API[^;]*not available →|no longer API/, 'the person\'s API answer is not offered for removal');
+    assert.match(change.detail, /^access: (added|no longer)/, 'only what changed, not the whole list twice');
+  }
+  m = applyChanges(m, reread, defaults(cs));
+  const after = m.systems.find(s => s.id === sys.id)!;
+  for (const a of mine) assert.ok(after.access.some(x => x.method === a.method && x.access === a.access && x.status === 'user-confirmed'), 'kept as the person said');
+  assert.ok(validateModel(m).valid);
 });

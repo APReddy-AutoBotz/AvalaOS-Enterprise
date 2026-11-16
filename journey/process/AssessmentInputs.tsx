@@ -1,6 +1,7 @@
 // The inputs of the assessment in one place: the process profile, the applications and the facts
 // of each step. Everything here is a fact in the Process Model: read from the sources where they
 // say it, entered or corrected by a person where they do not. The result recalculates on each edit.
+import { alreadyDone } from '../../domain/assess/scoring.ts';
 import React from 'react';
 import type { AccessStatus, ChangeLevel, Fact, FactStatus, Metric, ProcessModel, Step, SystemRef, TypicalTraits } from '../../domain/processModel/types.ts';
 import { PERIODS, addStep, adoptProcessMetric, assumeEvenEffort, setSystemUiAllowed, setTypicalTrait, setProcessMetric, setProfileFact, setStepTrait, setSystemApi, setSystemRemote, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
@@ -263,7 +264,7 @@ export function AssessmentInputs({ model, result, editor, canEdit, aiAvailable, 
                   <td className="px-1.5 py-2" /><td className="px-1.5 py-2" />
                 </tr>
                 {steps.map((s, i) => {
-                  const automated = s.taskType === 'service';
+                  const automated = alreadyDone(model, s);
                   const set = (trait: TraitName, value: unknown) => editor.apply(m => setStepTrait(m, { stepId: s.id, trait, value }), `Assessment fact of "${s.name}"`);
                   const effort = known(s.traits?.effortMinutes), share = known(s.traits?.sharePercent);
                   return (

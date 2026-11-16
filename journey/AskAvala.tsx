@@ -16,11 +16,9 @@ import { InterviewPanel } from './process/InterviewPanel.tsx';
 import { SuggestionsPanel } from './process/SuggestionsPanel.tsx';
 import type { Suggestion } from '../domain/assistant/suggest.ts';
 import { useProcessChanged } from './processChanged.ts';
-import { assessProcess } from '../domain/assess/process.ts';
-import { triage } from '../domain/questions/triage.ts';
-import { interviewQueue } from '../domain/questions/interview.ts';
+import { questionPlan, useSourceLook } from './process/sourceLook.ts';
 import { SidePanel } from './process/widgets.tsx';
-import { AskAvalaButton, ErrorNote, messageOf, Spinner } from './ui.tsx';
+import { AskAvalaButton, AskMark, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
 interface LoadedProcess { process: ProcessRow; model: ProcessModel | null; sources: SourceRow[]; working: { id: string; seq: number } | null }
 
@@ -114,8 +112,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   // A process open on a page but not of this workspace (opened by a link) is still offered.
   const processOptions = processes && loaded && loaded !== 'missing' && !processes.some(p => p.id === loaded.process.id) ? [...processes, loaded.process] : processes ?? [];
   const about = (
-    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-inset ring-slate-200">
-      <label htmlFor="ask-about" className="text-sm text-slate-600">Asking about</label>
+    <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2 ring-2 ring-inset ring-[#E69F00]/60" data-testid="ask-about">
+      <label htmlFor="ask-about" className="text-sm font-semibold text-[#002C4B]">Asking about</label>
       <select id="ask-about" value={pickOf(scope)} onChange={e => setPicked(e.target.value || null)} disabled={!processes || !projects}
         className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm font-medium text-slate-900 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20">
         {!pickOf(scope) && <option value="">Choose a board</option>}
@@ -126,22 +124,27 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     </div>
   );
 
-  // The interview's tab, with how many open questions wait, on a process that has steps.
+  // The interview's tab, with how many questions need people now (the first list, and answers found to confirm), on a process that has steps.
   const proc = processId && loaded && loaded !== 'missing' && askable(loaded.model) ? loaded : null;
-  const openCount = proc ? interviewQueue(triage(proc.model!, assessProcess(proc.model!))).length : 0;
+  const { look, dismissed } = useSourceLook(proc?.process.id ?? '');
+  const openCount = React.useMemo(() => {
+    if (!proc) return 0;
+    const { plan } = questionPlan(proc.process.id, proc.model!, undefined, look, dismissed);
+    return plan.now.length + plan.found.length;
+  }, [proc, look, dismissed]);
   const tabs = proc && (
     <div role="tablist" aria-label="Ask Avala" className="mb-4 flex gap-1 border-b border-slate-200">
       {(['ask', 'interview', 'suggestions'] as const).map(v => (
         <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => { setStart(null); setView(v); }}
           className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${view === v ? 'border-[#E69F00] text-[#002C4B]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
-          {v === 'ask' ? 'Ask' : v === 'interview' ? `Open questions${openCount ? ` (${openCount})` : ''}` : 'Suggestions'}
+          {v === 'ask' ? 'Ask' : v === 'interview' ? `Questions${openCount ? ` (${openCount})` : ''}` : 'Suggestions'}
         </button>
       ))}
     </div>
   );
   if (proc && view === 'interview') {
     return (
-      <SidePanel title="Ask Avala" onClose={onClose} wide>
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={`${proc.process.id}:${start?.itemKey ?? ''}`}>
@@ -159,7 +162,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
       nav.go({ page: 'process', processId: proc.process.id, stage: stages.includes(sg.target.stage) ? sg.target.stage : 'process' });
     };
     return (
-      <SidePanel title="Ask Avala" onClose={onClose} wide>
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={proc.process.id}>
@@ -178,7 +181,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   }
   const lists = Boolean(processes && projects);
   return (
-    <SidePanel title="Ask Avala" onClose={onClose} wide>
+    <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
       <div data-testid="ask-panel">
         {about}
         <ErrorNote message={error} />

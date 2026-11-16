@@ -7,7 +7,12 @@
 // - new elements are added, and updated elements take the extraction's values and sources;
 // - an element the extraction no longer finds is offered for removal, unselected, and only if no
 //   person confirmed it;
-// - into a model with nothing in it yet, the extraction is taken as it is.
+// - into a model with nothing in it yet, the extraction is taken as it is;
+// - an answer a person gave about one way into an application (for example "no API", set in the
+//   assessment's inputs) is kept even when the application itself was only read from the sources:
+//   a new reading changes the other ways in, never that one (found on the owner's documents,
+//   16 November 2026, where a re-reading would have removed every API answer).
+
 import type { Conflict, ElementTarget, Flow, ProcessModel, SourceRef } from '../processModel/types.ts';
 import { newId, removeElement, removeStep } from '../processModel/patch.ts';
 import { errorsOf, validateModel } from '../processModel/validate.ts';
@@ -126,6 +131,50 @@ function showItem(v: unknown): string {
 }
 const show = (v: unknown) => (Array.isArray(v) ? v.map(showItem).join('; ') || 'none' : showItem(v));
 
+/** One way into an application, by its method and name, for matching across readings. */
+const accessKey = (a: Any) => `${a.method}|${norm(String(a.name ?? ''))}`;
+/** Ways in a person stated or recorded as an assumption: never replaced by a reading. */
+const keptAccess = (a: Any) => a.status === 'user-confirmed' || a.status === 'assumed';
+/**
+ * The extracted element as it would land on the current one: for an application, the ways in a person
+ * gave stay as they are and the reading's same ways in are left out. Other kinds are unchanged.
+ */
+function landing(element: ElementKind, current: Any, extracted: Any): Any {
+  if (element !== 'system' || !Array.isArray(current.access)) return extracted;
+  const kept = (current.access as Any[]).filter(keptAccess);
+  if (!kept.length) return extracted;
+  const keys = new Set(kept.map(accessKey));
+  // A person's answer about the API covers every API way in (setSystemApi sets them all), named or not.
+  const apiKept = kept.some(a => a.method === 'api');
+  const fresh = ((extracted.access ?? []) as Any[]).filter(a => !keys.has(accessKey(a)) && !(apiKept && a.method === 'api'));
+  // In the current order: a kept way in stays where it is, a read one takes the place of its match, new ones go last.
+  const used = new Set<Any>();
+  const access: Any[] = [];
+  for (const a of current.access as Any[]) {
+    if (keptAccess(a)) { access.push(a); continue; }
+    const same = fresh.find(x => !used.has(x) && accessKey(x) === accessKey(a));
+    if (same) { used.add(same); access.push(same); }
+  }
+  access.push(...fresh.filter(x => !used.has(x)));
+  return { ...extracted, access };
+}
+
+/**
+ * What changed in one field, in words. For a list, only what was added and what went, never the whole
+ * list twice (the owner's re-reading printed seventeen ways into SAP before and after).
+ */
+function changeText(f: string, before: unknown, after: unknown, showField: (f: string, v: unknown) => string): string {
+  const label = f.replace(/Ids$/, 's');
+  if (Array.isArray(before) && Array.isArray(after)) {
+    const words = (v: unknown[]) => (/Ids$/.test(f) ? showField(f, v).split(', ').filter(x => x && x !== 'none') : v.map(showItem));
+    const was = words(before), now = words(after);
+    const added = now.filter(x => !was.includes(x)), gone = was.filter(x => !now.includes(x));
+    if (!added.length && !gone.length) return `${label}: reordered`;
+    return [`${label}:`, added.length ? `added ${added.join('; ')}` : '', gone.length ? `${added.length ? '; ' : ''}no longer ${gone.join('; ')}` : ''].join(' ').replace(/\s+/g, ' ').trim();
+  }
+  return `${label}: ${showField(f, before)} → ${showField(f, after)}`;
+}
+
 function plan(current: ProcessModel, extracted: ProcessModel): Plan {
   if (isEmpty(current)) {
     const changes: ProposedChange[] = KINDS.flatMap(k => k.list(extracted).map(x => ({ id: `add:${k.element}:${x.id}`, kind: 'add' as const, element: k.element, extractedId: x.id, label: k.name(x), detail: '', defaultSelected: true })));
@@ -150,10 +199,10 @@ function plan(current: ProcessModel, extracted: ProcessModel): Plan {
       if (!cid) { changes.push({ id: `add:${k.element}:${e.id}`, kind: 'add', element: k.element, extractedId: e.id, label: k.name(e), detail: 'New in the sources', defaultSelected: true }); continue; }
       matched.add(cid);
       const c = cur.get(cid)!;
-      const mapped = mapRefs(e, map);
+      const mapped = landing(k.element, c, mapRefs(e, map));
       const diffs = k.fields.filter(f => JSON.stringify(c[f] ?? null) !== JSON.stringify(mapped[f] ?? null) && !(f === 'description' && !mapped[f]));
       if (!diffs.length) { unchanged++; continue; }
-      const detail = diffs.map(f => `${f.replace(/Ids$/, 's')}: ${showField(f, c[f])} → ${showField(f, mapped[f])}`).join('; ');
+      const detail = diffs.map(f => changeText(f, c[f], mapped[f], showField)).join('; ');
       if (c.status === 'user-confirmed') {
         changes.push({ id: `conflict:${k.element}:${cid}`, kind: 'conflict', element: k.element, currentId: cid, extractedId: e.id, label: k.name(c), detail: `You confirmed this; the sources now say otherwise. ${detail}`, defaultSelected: true });
       } else {
@@ -226,7 +275,7 @@ export function applyChanges(current: ProcessModel, extracted: ProcessModel, sel
     const k = kindOf(c.element);
     const list = k.list(next) as Any[];
     const i = list.findIndex(x => x.id === c.currentId);
-    const e = mapRefs(ex(k, c.extractedId!), map);
+    const e = landing(k.element, list[i], mapRefs(ex(k, c.extractedId!), map));
     if (c.kind === 'update') {
       const merged: Any = { ...list[i] };
       for (const f of k.fields) { if (e[f] === undefined) delete merged[f]; else merged[f] = e[f]; }

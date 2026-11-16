@@ -53,7 +53,7 @@ export function processSubject(store: JourneyStore, p: { processId: string; work
 export function boardSubject(store: JourneyStore, b: { workspaceId: string; project: { id: string; name: string } }): AskSubject {
   return {
     kind: 'board', noun: 'this board', task: askBoard,
-    intro: 'Ask about this Delivery board. Answers come only from its items, owners, statuses, dates and sprints, with the counts worked out exactly, and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
+    intro: 'Ask about this Delivery board. Answers come only from its items, owners, statuses, dates and sprints, with the counts worked out exactly, from what the process behind its work is for (its brief, objective and owner), and from how Avala OS itself works. For the process\'s steps, assessment or documents, choose the process under Asking about. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
     placeholder: 'Ask about items, owners, statuses, dates or sprints…',
     suggested: [...STARTERS.board],
     load: async (): Promise<BoardContext> => {
@@ -61,7 +61,18 @@ export function boardSubject(store: JourneyStore, b: { workspaceId: string; proj
         store.listWorkItems(b.project.id), store.listSprints(b.project.id).catch(() => []),
         store.listMembers(b.workspaceId).catch(() => []), store.listProcesses(b.workspaceId).catch(() => []),
       ]);
-      return { project: b.project, items, sprints, members: members.map(m => ({ userId: m.userId, name: m.name })), processes: processes.map(p => ({ id: p.id, name: p.name })), today: new Date().toISOString().slice(0, 10) };
+      // What the work is for: each process the board's items came from, from its latest revision.
+      const ids = [...new Set(items.map(i => i.processId).filter((x): x is string => Boolean(x)))].slice(0, 5);
+      const about = (await Promise.all(ids.map(async id => {
+        const name = processes.find(p => p.id === id)?.name;
+        const rev = name ? (await store.listRevisions(id).catch(() => []))[0] : undefined;
+        const model = rev ? await store.getModel(rev.id).catch(() => null) : null;
+        if (!name || !model) return null;
+        const known = (f: { value: unknown; status: string } | undefined): string | null => (f && f.status !== 'unknown' && typeof f.value === 'string' ? f.value : null);
+        const brief = model.meta.brief ?? {};
+        return { id, name: String(name), summary: known(brief.summary), objective: known(model.meta.objective), owner: known(model.meta.owner), doneToday: known(brief.doneToday), kind: known(brief.kind) };
+      }))).filter((x): x is NonNullable<typeof x> => x !== null);
+      return { project: b.project, items, sprints, members: members.map(m => ({ userId: m.userId, name: m.name })), processes: processes.map(p => ({ id: p.id, name: p.name })), today: new Date().toISOString().slice(0, 10), about };
     },
     facts: (q, r) => boardFacts(q, r as BoardContext),
     assessment: () => null,

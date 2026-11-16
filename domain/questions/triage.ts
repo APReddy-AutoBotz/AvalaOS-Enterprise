@@ -4,6 +4,7 @@
 import type { AccessStatus, ElementTarget, OpenQuestion, ProcessModel } from '../processModel/types.ts';
 import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
+import { buildingSystem } from '../plan/intended.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
@@ -29,6 +30,10 @@ export interface TriageItem {
   /** A person it is assigned to, when deferred. */
   assignedTo: string | null;
   deferred: boolean;
+  /** Other wordings of the same question, merged into this one (an answer closes them all). */
+  also?: string[];
+  /** For a question about an application: how many steps still to decide use it. */
+  uses?: number;
 }
 
 export interface Triage {
@@ -42,6 +47,29 @@ export interface Triage {
 const IT = /\b(api|apis|sap|system|integration|interface|enable|it|access|fiori|servicenow|landscape|expos\w*|gateway|ocr|tool)\b/i;
 const FINANCE = /\b(tolerance|threshold|approv\w*|policy|doa|controller|gl account|lakh|audit|tax|gst|payment terms?)\b/i;
 const ORDER: Record<QGroup, number> = { decides: 0, signoff: 1, detail: 2 };
+
+// Two wordings of one question (a merge across sources often keeps both): the same words that carry
+// meaning, the same numbers, and no "not" or "non" on one side only. Stricter than "about the same
+// topic", because answering the merged question closes both: "volume of PO invoices" and "volume of
+// non-PO invoices" stay two questions.
+const STOP = new Set('a an and any are as at be been by can could do does for from has have how if in into is it its of on or should that the their them there these this those to was were what when where which who whom why will with would'.split(' '));
+const NEGATION = new Set(['no', 'non', 'not', 'never', 'without', 'except', 'unless']);
+/** The words of a question that carry its meaning, lower case, without common words. */
+export const contentWords = (s: string) => new Set(s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length > 1 && !STOP.has(w)));
+/** Shared content words, from 0 (none) to 1 (the same words). */
+export function wordOverlap(a: string, b: string): number {
+  const x = contentWords(a), y = contentWords(b);
+  if (!x.size || !y.size) return 0;
+  let common = 0;
+  for (const w of x) if (y.has(w)) common++;
+  return (2 * common) / (x.size + y.size);
+}
+export function sameQuestion(a: string, b: string): boolean {
+  if (wordOverlap(a, b) < 0.85) return false;
+  const x = contentWords(a), y = contentWords(b);
+  const only = [...x].filter(w => !y.has(w)).concat([...y].filter(w => !x.has(w)));
+  return !only.some(w => NEGATION.has(w) || /\d/.test(w));
+}
 const VALUE_METRICS = new Set(['volume', 'handling_time', 'exception_rate', 'fte']);
 
 function kindOf(t: ElementTarget): AnswerKind {
@@ -67,11 +95,11 @@ function answeredBy(m: ProcessModel, q: OpenQuestion): string | null {
   return null;
 }
 
-function classify(m: ProcessModel, t: ElementTarget, text: string, open: Set<string>): { group: QGroup; owner: QOwner; affects: string[] } {
+function classify(m: ProcessModel, t: ElementTarget, text: string, open: Set<string>): { group: QGroup; owner: QOwner; affects: string[]; uses?: number } {
   switch (t.kind) {
     case 'system': {
       const used = stepsForSystem(m, t.id!).filter(s => open.has(s.id)).length;
-      return { group: used ? 'decides' : 'detail', owner: 'it', affects: [`Assessment: ${used} ${used === 1 ? 'step uses' : 'steps use'} it`, 'PDD 2.2 Applications'] };
+      return { group: used ? 'decides' : 'detail', owner: 'it', affects: [`Assessment: ${used} ${used === 1 ? 'step uses' : 'steps use'} it`, 'PDD 2.2 Applications'], uses: used };
     }
     case 'step': return { group: 'signoff', owner: 'business', affects: ['PDD 2.4 Detailed steps', 'BRD stakeholders'] };
     case 'exception': return { group: 'signoff', owner: 'business', affects: ['PDD 3.6 Exception handling'] };
@@ -97,18 +125,26 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   const items: TriageItem[] = [];
   const bySystem = new Map<string, OpenQuestion[]>();
 
+  // The application being built (part C) is not one the automation reaches: how it is reached is part of its own design.
+  const building = buildingSystem(m);
+  const designOwn = (q: OpenQuestion) => building && q.target.kind === 'system' && q.target.id === building.id
+    ? `${building.name} is what is being built; how it is reached is part of its own design.` : null;
   for (const q of stored) {
-    const why = q.status === 'open' ? answeredBy(m, q) : null;
+    const why = q.status === 'open' ? answeredBy(m, q) ?? designOwn(q) : null;
     if (why) { alreadyKnown.push({ questionId: q.id, question: q.question, why }); continue; }
     if (q.target.kind === 'system' && q.target.field === 'access' && q.target.id) {
       bySystem.set(q.target.id, [...(bySystem.get(q.target.id) ?? []), q]);
       continue;
     }
+    // A second wording of a question already listed on the same target joins it.
+    const twin = items.find(i => i.questionIds.length && i.target.kind === q.target.kind && i.target.id === q.target.id && i.target.field === q.target.field
+      && i.deferred === (q.status === 'deferred') && sameQuestion(i.question, q.question));
+    if (twin) { twin.questionIds.push(q.id); twin.also = [...(twin.also ?? []), q.question]; continue; }
     items.push({ key: q.id, question: q.question, target: q.target, questionIds: [q.id], kind: kindOf(q.target), assignedTo: q.owner, deferred: q.status === 'deferred', ...classify(m, q.target, q.question, openSteps) });
   }
 
   // One question per system about its interfaces, however many were raised.
-  const systemIds = new Set([...bySystem.keys(), ...gaps(m).filter(g => g.kind === 'system_access_unknown').map(g => g.target.id!)]);
+  const systemIds = new Set([...bySystem.keys(), ...gaps(m).filter(g => g.kind === 'system_access_unknown').map(g => g.target.id!)].filter(id => id !== building?.id));
   for (const id of systemIds) {
     const sys = m.systems.find(s => s.id === id);
     if (!sys) continue;
@@ -125,6 +161,7 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   const covered = (g: Gap) => stored.some(q => q.target.kind === g.target.kind && q.target.id === g.target.id && q.target.field === g.target.field);
   for (const g of gaps(m)) {
     if (g.kind === 'system_access_unknown' || covered(g)) continue;
+    if (building && g.target.kind === 'system' && g.target.id === building.id) continue;
     if (g.kind === 'unsourced_assumption') continue; // confirmed in the Process stage, not by a question
     items.push({ key: `gap:${g.kind}:${g.target.kind}:${g.target.id ?? ''}:${g.target.field ?? ''}`, question: g.label, target: g.target, questionIds: [], kind: kindOf(g.target), assignedTo: null, deferred: false, ...classify(m, g.target, g.label, openSteps) });
   }

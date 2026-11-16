@@ -40,6 +40,7 @@ test('Ask Avala is in the top bar: away from a process it asks about the workspa
   panel = page.getByTestId('ask-panel');
   await expect(panel.getByLabel('Asking about').locator('option:checked')).toHaveText('Vendor invoice processing');
   await expect(panel).toContainText('it changes nothing');
+  await expect(page.getByRole('dialog', { name: 'Ask Avala' }).locator('h2 span[aria-hidden="true"]')).toHaveClass(/bg-\[#E69F00\]/);
   // One click widens to the whole workspace, and back.
   await panel.getByLabel('Asking about').selectOption('w');
   await expect(page.getByTestId('ask-panel')).toContainText('Ask about this workspace');
@@ -75,6 +76,8 @@ test('on the Delivery board Ask Avala asks about that board, and a board can be 
   let panel = page.getByTestId('ask-panel');
   await expect(panel.getByLabel('Asking about').locator('option:checked')).toHaveText('Invoice automation');
   await expect(panel).toContainText('Ask about this Delivery board');
+  // The open panel is plainly Ask Avala's: the amber head, and "Asking about" outlined (owner, 16 November 2026).
+  await expect(page.getByRole('dialog', { name: 'Ask Avala' }).locator('h2 span[aria-hidden="true"]')).toHaveClass(/bg-\[#E69F00\]/);
   const start = panel.getByRole('group', { name: 'Questions to start with' });
   await expect(start.getByRole('button')).toHaveCount(3);
   const result = await new AxeBuilder({ page }).include('[data-testid="ask-panel"]').withTags(['wcag2a', 'wcag2aa']).analyze();
@@ -95,17 +98,21 @@ test('on the Delivery board Ask Avala asks about that board, and a board can be 
   await expect(panel).toContainText('Ask about this Delivery board');
 });
 
-test('on a process, Ask Avala goes through the open questions one at a time, most decisive first', async ({ page }) => {
+test('on a process, Ask Avala asks only the first list of questions, one at a time, most decisive first; the rest can wait', async ({ page }) => {
   await page.goto('/demo/processes');
   await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
   await ask(page).click();
   const panel = page.getByTestId('ask-panel');
-  const tab = panel.getByRole('tab', { name: /^Open questions \(\d+\)$/ });
+  const tab = panel.getByRole('tab', { name: /^Questions \(\d+\)$/ });
   await expect(tab).toBeVisible();
   const count = Number((await tab.textContent())!.match(/\((\d+)\)/)![1]);
+  // At most seven at first (docs/effort-first-plan.md, part D).
   expect(count).toBeGreaterThan(1);
+  expect(count).toBeLessThanOrEqual(7);
   await tab.click();
   const interview = panel.getByTestId('interview');
+  await expect(interview.getByTestId('interview-plan-heading')).toHaveText(`${count} things only your people can tell us`);
+  await expect(interview.getByTestId('interview-plan')).toContainText('can wait until sign-off');
   await expect(interview).toContainText(`Question 1 of ${count} · Changes the recommendation`);
   await expect(interview).toContainText('The answer can change the recommended approach.');
   const first = await interview.getByTestId('interview-question').textContent();

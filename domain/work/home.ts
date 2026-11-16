@@ -12,6 +12,12 @@ export interface ProcessFacts {
   approverId: string | null;
   status: 'none' | 'draft' | 'approved' | 'changed';
   openQuestions: number;
+  /**
+   * The first list of questions (docs/effort-first-plan.md, part D), when the page worked it out: those
+   * only people can answer now, answers found in the sources to confirm, and those that can wait until
+   * sign-off. Absent where only the stored count is known (the weekday email, computed on the server).
+   */
+  questions?: { now: number; found: number; wait: number };
   /** Proposed work items not yet confirmed to the board or rejected. */
   proposalsWaiting: number;
 }
@@ -42,7 +48,11 @@ export function needsFor(me: Person, processes: ProcessFacts[]): Need[] {
       if (d) out.push({ processId: p.id, processName: p.name, duty, text, stage, unassigned: d === 'unassigned' });
     };
     if (p.status === 'none') add('analyst', 'Add sources and start the process model', 'sources');
-    if (p.openQuestions > 0) add('analyst', `${plural(p.openQuestions, 'open question', 'open questions')} to answer`, 'documents');
+    // What can wait until sign-off is not a need: only the first list and answers to confirm are.
+    if (p.questions) {
+      if (p.questions.now > 0) add('analyst', `${plural(p.questions.now, 'question', 'questions')} only your people can answer`, 'documents');
+      if (p.questions.found > 0) add('analyst', `${plural(p.questions.found, 'answer', 'answers')} found in the sources to confirm`, 'documents');
+    } else if (p.openQuestions > 0) add('analyst', `${plural(p.openQuestions, 'open question', 'open questions')} to answer`, 'documents');
     if (p.proposalsWaiting > 0) add('architect', `${plural(p.proposalsWaiting, 'work item', 'work items')} waiting to be confirmed to the board`, 'work-items');
     if (p.status === 'draft' || p.status === 'changed') add('approver', p.status === 'changed' ? 'Changes since the approved revision are waiting for approval' : 'A revision is waiting for approval', 'process');
   }
@@ -98,10 +108,15 @@ export function homeSummary(needs: Need[], items: { overdue: boolean }[]): strin
 }
 
 /** What is open on a process, for its row in the list: counted facts only, in the order the work is done. */
-export function openOn(p: Pick<ProcessFacts, 'status' | 'openQuestions' | 'proposalsWaiting'>): string[] {
+export function openOn(p: Pick<ProcessFacts, 'status' | 'openQuestions' | 'proposalsWaiting' | 'questions'>): string[] {
   const out: string[] = [];
   if (p.status === 'none') out.push('No sources yet');
-  if (p.openQuestions > 0) out.push(plural(p.openQuestions, 'open question', 'open questions'));
+  if (p.questions) {
+    const q = p.questions;
+    if (q.now > 0) out.push(`${plural(q.now, 'question', 'questions')} to answer now`);
+    if (q.found > 0) out.push(`${plural(q.found, 'answer', 'answers')} to confirm`);
+    if (q.wait > 0) out.push(`${q.wait} can wait until sign-off`);
+  } else if (p.openQuestions > 0) out.push(plural(p.openQuestions, 'open question', 'open questions'));
   if (p.proposalsWaiting > 0) out.push(`${plural(p.proposalsWaiting, 'work item', 'work items')} to confirm`);
   return out;
 }

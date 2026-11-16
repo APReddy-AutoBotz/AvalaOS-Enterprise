@@ -5,6 +5,7 @@ import { readFlowchart } from '../flowchart/vision.ts';
 import { stepTraits } from '../assess/traits.ts';
 import { profileFacts } from '../assess/profileFacts.ts';
 import { answerFromNotes } from '../questions/notes.ts';
+import { readBrief } from '../plan/readBrief.ts';
 import { draftNarrative } from '../docs/narrative.ts';
 import { askProcess } from '../assistant/ask.ts';
 import { askBoard } from '../assistant/board.ts';
@@ -54,6 +55,7 @@ export const TASKS: Record<string, TaskDefinition> = {
   [stepTraits.id]: stepTraits,
   [profileFacts.id]: profileFacts,
   [answerFromNotes.id]: answerFromNotes,
+  [readBrief.id]: readBrief,
   [draftNarrative.id]: draftNarrative,
   [askProcess.id]: askProcess,
   [askBoard.id]: askBoard,

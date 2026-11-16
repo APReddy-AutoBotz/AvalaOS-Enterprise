@@ -23,6 +23,31 @@ export interface BoardContext {
   processes: { id: string; name: string }[];
   /** Today, as YYYY-MM-DD, for what is overdue. */
   today: string;
+  /**
+   * What the board's work is for: the brief, objective and owner of each process its items came from
+   * (owner, 16 November 2026: asked on a board, "What is the objective of this tool?" had no answer).
+   */
+  about?: BoardProcess[];
+}
+
+/** One process a board's items came from, as its record says (only what is stated or confirmed). */
+export interface BoardProcess { id: string; name: string; summary?: string | null; objective?: string | null; owner?: string | null; doneToday?: string | null; kind?: string | null }
+
+const DONE_TODAY_WORDS: Record<string, string> = { yes: 'the work is done today', partly: 'the work is partly done today', no: 'the work is not done today' };
+const KIND_WORDS: Record<string, string> = { existing_process: 'an existing process', new_process: 'a new process', tool: 'a tool to be built', agent: 'an agent to be built' };
+
+/** The facts about the processes a board's work came from, each leading to its process. */
+export function boardProcessFacts(about: BoardProcess[] | undefined, project: { name: string }): Fact[] {
+  return (about ?? []).map(p => {
+    const parts = [
+      p.summary ? `what it is: ${p.summary.trim().replace(/[.\s]+$/, '')}` : '',
+      p.objective ? `its objective: ${p.objective.trim().replace(/[.\s]+$/, '')}` : 'its objective is not stated yet',
+      p.owner ? `process owner: ${p.owner}` : '',
+      p.kind && KIND_WORDS[p.kind] ? `it is ${KIND_WORDS[p.kind]}` : '',
+      p.doneToday && DONE_TODAY_WORDS[p.doneToday] ? DONE_TODAY_WORDS[p.doneToday] : '',
+    ].filter(Boolean);
+    return { id: `bp:${p.id}`, text: `Work on the board "${project.name}" comes from the process "${p.name}"; ${parts.join('; ')}.`, label: `Process: ${p.name}`, target: { kind: 'open-process' as const, processId: p.id } };
+  });
 }
 
 const OPEN = (i: WorkItem) => i.status !== 'done';
@@ -73,6 +98,9 @@ export function boardFacts(question: string, ctx: BoardContext): Fact[] {
   const closed = sprints.filter(s => s.state === 'closed').length;
   if (closed) summary('sprints-closed', `${plural(closed, 'sprint has', 'sprints have')} been completed.`);
   if (sprints.length) summary('backlog', `${plural(items.filter(i => !i.sprintId && i.type !== 'epic' && OPEN(i)).length, 'open item is', 'open items are')} in the backlog, in no sprint.`);
+
+  // ---- what the work is for: the processes it came from
+  out.push(...boardProcessFacts(ctx.about, project));
 
   // ---- the items: what needs attention first, then what the question names, then the rest
   const q = words(question);
