@@ -26,7 +26,7 @@ test('the map shape: the switch changes the maps on Flows and in the PDD, is kep
   await page.reload();
 
   // An approved revision, then a working draft with the same content (a name changed and changed back).
-  await page.getByRole('button', { name: 'Approve' }).click();
+  await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(page.getByTestId('revision-status')).toHaveText('Approved revision 1');
   await page.getByRole('tab', { name: /^Steps/ }).click();
   const name = page.getByLabel('Name of step 1', { exact: true });
