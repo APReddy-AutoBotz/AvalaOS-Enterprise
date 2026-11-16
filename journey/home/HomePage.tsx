@@ -388,7 +388,7 @@ export default function HomePage() {
               ))}
             </dl>
             <figure className="lg:col-span-2">
-              <div className="shot-frame"><img src={shot('effort-strip')} width={1800} height={316} loading="lazy" className="block h-auto w-full" alt="The Documents screen of the sample: 2 things only your people can tell us, 10 can wait until sign-off; the documents planned for this process are the PDD and the SDD, with the others one click away" /></div>
+              <div className="shot-frame"><img src={shot('effort-strip')} width={1800} height={316} loading="lazy" className="block h-auto w-[230%] max-w-none sm:w-full" alt="The Documents screen of the sample: 2 things only your people can tell us, 10 can wait until sign-off; the documents planned for this process are the PDD and the SDD, with the others one click away" /></div>
               <figcaption className="mt-3 text-sm text-slate-300">The sample case after its five files were read: two questions for people, and the two documents this process needs.</figcaption>
             </figure>
           </div>
