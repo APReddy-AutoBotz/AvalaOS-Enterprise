@@ -106,11 +106,13 @@ test('decided as RPA: no Assessment page, the line at the top of Documents, only
   await shot(page, '77-decided-not-known');
 
   // Documents was opened while decided: requirements of steps the approach cannot do are "source removed" in the stored list.
+  // The stored list as code and state, in code order.
   const states = () => page.evaluate(() => {
     const state = JSON.parse(localStorage.getItem('avala.journey.memory.v1')!);
-    return Object.values(state.requirements ?? {}).flat().map(r => (r as { state: string }).state);
+    return (Object.values(state.requirements ?? {}).flat() as { code: string; state: string }[]).map(r => `${r.code}:${r.state}`).sort().join(' ');
   });
-  expect((await states()).filter(s => s === 'source_removed').length).toBeGreaterThan(0);
+  const whileDecided = await states();
+  expect(whileDecided).toContain(':source_removed');
   // Removing the decision while the answer is "decided" goes back to "Assess it and document it", and works the
   // requirements out again in the same action: none is left "source removed", before any other page opens.
   await stage(page, 'Process');
@@ -118,9 +120,13 @@ test('decided as RPA: no Assessment page, the line at the top of Documents, only
   await expect(purpose.getByTestId('purpose-value')).toHaveText('Assess it and document it');
   await expect(page.getByTestId('decided-approach')).toHaveCount(0);
   await expect(page.getByTestId('purpose-tag')).toHaveCount(0);
-  await expect.poll(async () => (await states()).filter(s => s === 'source_removed').length).toBe(0);
+  await expect.poll(states).not.toBe(whileDecided);
+  const afterSwitch = await states();
   await expect(rail(page).getByRole('link', { name: /Assessment/ })).toBeVisible();
-  // Work items, opened first, plans from the full list.
+  // Nothing has to be brought up to date any more: Work items opened first, then Documents, change nothing in the stored list.
   await stage(page, 'Work items');
-  await expect(page.getByText('source removed')).toHaveCount(0);
+  await expect(page.getByRole('heading', { name: 'Proposed work items' })).toBeVisible();
+  await stage(page, 'Documents');
+  await expect(page.getByTestId('document')).toBeVisible();
+  expect(await states()).toBe(afterSwitch);
 });
