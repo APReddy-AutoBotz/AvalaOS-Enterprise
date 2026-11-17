@@ -20,6 +20,7 @@ export const SETTINGS = [
   { id: 'ai', label: 'AI' },
   { id: 'documents', label: 'Documents' },
   { id: 'parts', label: 'Parts of Avala OS' },
+  { id: 'requests', label: 'Walkthrough requests' },
 ] as const;
 export type SettingsSection = (typeof SETTINGS)[number]['id'];
 

@@ -69,7 +69,7 @@ The weekday email's count, review comments in it and on My work, and the look in
 - An employment lawyer's reading of the contract's clauses on outside business and intellectual property.
 - The database's plan: the Free plan keeps no backups of its own (a nightly encrypted copy with a restore check stands in). Decide whether to move to a paid plan.
 - Payment. Organisations are switched on by the owner by hand; nothing takes money.
-- "Book a walkthrough" (before 16 November: "Request a pilot") is an email link until a form exists.
+- "Book a walkthrough" (before 16 November: "Request a pilot") opens the request window from the release that carries package 11 (section 3d).
 - Installation in a company's own cloud is offered on the homepage and has never been done.
 - Two-step sign-in on Sentry, and "Allow join requests" off there. Leftover `claude/` branches can be deleted.
 - Google and Microsoft sign-in are switched on (both buttons show on the sign-in page, seen 16 November 2026).
@@ -309,7 +309,7 @@ The promise stays narrow, on the owner's word ("let's not bloat the application"
 
 ## 3d. The fourth bundle: tidy-up and an inquiry form (owner's go, 17 November 2026)
 
-**Package 10 built (17 November 2026, #190), merged into `next`; package 11 waits for the owner's go on its plan.** The review chat reviews each plan and the result on the preview before any release. Waiting in `next` for the same release: headings that wrap balanced (#184).
+**Package 10 built (17 November 2026, #190), merged into `next`; package 11 built (17 November 2026), its migration applied on the owner's yes at 11:42 UTC; its server function goes live with the release.** The review chat reviews each plan and the result on the preview before any release. Waiting in `next` for the same release: headings that wrap balanced (#184).
 
 Package 10, where the build differs from the text below or adds to it (owner's additions of 17 November 2026 included):
 
@@ -318,6 +318,14 @@ Package 10, where the build differs from the text below or adds to it (owner's a
 - Item 5: on a phone the homepage's logo is a little smaller and the bar's side padding 16 instead of 24, so the button fits at 360 wide on one line.
 - Item 6: a work proposal keeps its requirement only when a person edited, selected, rejected, merged or split it, or it is on the board (owner). Retired requirements are listed under "Retired" with their reason; no line on the History page (owner). Deciding the same approach again brings a retired requirement back, with its code and without the reason. Also when one person's choice for a step is changed to another approach.
 - Item 7 (owner's yes): the name is stored in place of the email address, beside the id. Where the id matches no profile, the stored name shows; "Not recorded" only for an email address or nothing (owner). Until the release, the live site writes choices back without the id when it saves them; such an entry then shows its stored name. The PDD's delivery model used to print the email address of who set a step; it now names the person, or says "set by a person".
+
+Package 11, where the build differs from the text below (owner's changes of 17 November 2026):
+
+- The notice email carries no details of the visitor and no reply-to: it says a request is waiting, with a link to Settings → Walkthrough requests. Each request there has "Reply by email" (opens the owner's email program addressed to the visitor) and a status; either counts as contact. The privacy notice says the details are kept in our database only; Resend's line is unchanged.
+- Limits: 3 an hour per address (capital letters and spaces around it ignored), 20 an hour, 50 in any 24 hours; notices: at most 10 in any 24 hours, then one email saying more are waiting, then none until the next day. Resend's own daily allowance is not in the code or the notes (the free plan was 100 a day): the owner checks it in Resend.
+- What a visitor typed loses line breaks and control characters in one-line fields, and everything is shown as plain text. Send is off while a request goes. The wait of three seconds is elapsed time measured in the browser.
+- No phone number. Deleted twelve months after the last contact by a daily job of the existing scheduler; removal on request with Delete in Settings.
+- The early deploy of `journey-inquiry` from `next`: not yet. The owner asks again after the review chat has read the function.
 
 Two packages. Package 10 first, as its own pull request; package 11 starts when package 10 is merged. The rules of section 3b hold for anything that touches the live database or a server function: additive only, its test in `supabase/tests/`, a rolled-back trial reported in plain words, the owner's clear yes, and a function's change goes live with the release unless the owner says otherwise.
 

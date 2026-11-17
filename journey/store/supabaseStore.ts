@@ -37,6 +37,7 @@ import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
 import type { Module } from '../../domain/workspace/modules.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
+import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
@@ -150,6 +151,26 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.rpc('can_create_organization');
       if (error) fail(error);
       return data === true;
+    },
+    // Once an owner is listed (as on the live project) this is exactly the platform owner; on a new deployment
+    // with none listed the section shows and the database still refuses to list anything.
+    async isPlatformOwner() { return this.canCreateOrganization(); },
+    async listWalkthroughRequests() {
+      const { data, error } = await db.rpc('list_walkthrough_requests');
+      if (error) fail(error);
+      return (data ?? []) as WalkthroughRequest[];
+    },
+    async setWalkthroughRequestStatus(id, status) {
+      const { error } = await db.rpc('set_walkthrough_request_status', { target: id, new_status: status });
+      if (error) fail(error);
+    },
+    async noteWalkthroughReply(id) {
+      const { error } = await db.rpc('note_walkthrough_reply', { target: id });
+      if (error) fail(error);
+    },
+    async deleteWalkthroughRequest(id) {
+      const { error } = await db.rpc('delete_walkthrough_request', { target: id });
+      if (error) fail(error);
     },
     async createOrganization(organizationName, workspaceName) {
       const { data, error } = await db.rpc('create_organization', { organization_name: organizationName, workspace_name: workspaceName });

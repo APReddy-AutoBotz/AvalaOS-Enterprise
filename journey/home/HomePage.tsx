@@ -8,6 +8,7 @@
 // The page is kept short on purpose (owner, 16 November 2026: about seven screens on a laptop): each
 // section says its point in a sentence or two, and the longer explanation sits behind "Read more".
 import React from 'react';
+import { InquiryDialog } from './InquiryDialog.tsx';
 import { SiteFooter, focus, useGo } from './site.tsx';
 import { PLANS } from '../../domain/workspace/modules.ts';
 import { AI_PROVIDERS, type AiProvider } from '../../domain/ai/providers.ts';
@@ -279,8 +280,9 @@ const ASK_POINTS: [string, string][] = [
   ['It asks the open questions', 'One at a time, the most decisive first, and nothing is written until you press Save.'],
   ['It suggests, a person confirms', 'It reads only what the signed-in person can see, and never changes a score or an approved revision.'],
 ];
-// The first step a buyer is asked for is a walkthrough, not a pilot (owner, 16 November 2026): an email
-// link to CONTACT_EMAIL until a form exists, with the address also shown as text at the close.
+// The first step a buyer is asked for is a walkthrough, not a pilot (owner, 16 November 2026). The button opens
+// the request window (InquiryDialog, package 11); with JavaScript off it is still this email link, and the
+// close shows the address as text.
 const WALK = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('A walkthrough of Avala OS')}&body=${encodeURIComponent('Company:\nA process you would like to see assessed (optional):\n')}`;
 const WALK_LABEL = 'Book a walkthrough';
 const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#trust', 'Trust'], ['/demo', 'Live demo']];
@@ -330,7 +332,7 @@ function Reasons() {
 }
 
 /** The page's links: in the bar on a wide screen, behind Menu on a narrow one. */
-function SiteNav({ go }: { go: { href: string; label: string } }) {
+function SiteNav({ go, onWalk }: { go: { href: string; label: string }; onWalk: (e: React.MouseEvent<HTMLAnchorElement>) => void }) {
   const [open, setOpen] = React.useState(false);
   const signedIn = go.href === '/work';
   React.useEffect(() => {
@@ -347,29 +349,46 @@ function SiteNav({ go }: { go: { href: string; label: string } }) {
       {open && (
         <ul id="site-menu" className="absolute right-0 top-full z-30 mt-2 w-56 rounded-xl bg-[#002C4B] p-2 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.6)] ring-1 ring-white/15 lg:hidden">
           {NAV.map(([href, label]) => <li key={href}><a href={href} onClick={() => setOpen(false)} className={`block ${link}`}>{label}</a></li>)}
-          {!signedIn && <li className="sm:hidden"><a href={WALK} onClick={() => setOpen(false)} className={`block ${link}`}>{WALK_LABEL}</a></li>}
+          {!signedIn && <li className="sm:hidden"><a href={WALK} onClick={e => { setOpen(false); onWalk(e); }} className={`block ${link}`}>{WALK_LABEL}</a></li>}
         </ul>
       )}
       <a href={go.href} data-testid="site-go" className={`ml-1 whitespace-nowrap rounded-lg border border-white/30 px-3 py-2 sm:px-4 text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>{go.label}</a>
-      {!signedIn && <a href={WALK} className={`ml-1 hidden whitespace-nowrap rounded-lg bg-[#E69F00] px-4 py-2 text-[#001B2F] hover:bg-[#F2B21E] sm:block ${focus} focus-visible:outline-white`}>{WALK_LABEL}</a>}
+      {!signedIn && <a href={WALK} onClick={onWalk} className={`ml-1 hidden whitespace-nowrap rounded-lg bg-[#E69F00] px-4 py-2 text-[#001B2F] hover:bg-[#F2B21E] sm:block ${focus} focus-visible:outline-white`}>{WALK_LABEL}</a>}
     </nav>
   );
 }
 
 export default function HomePage() {
   const go = useGo();
+  // The request window, and the button that opened it, which gets focus back when it closes.
+  const [asking, setAsking] = React.useState(false);
+  const opener = React.useRef<HTMLElement | null>(null);
+  const onWalk = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    // A click with a modifier key opens the email link as it would anywhere else.
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    opener.current = e.currentTarget;
+    setAsking(true);
+  };
+  const closeAsking = () => {
+    setAsking(false);
+    // The bar's menu item goes with the menu; focus then goes to the bar's own button.
+    const back = opener.current?.isConnected ? opener.current : document.querySelector<HTMLElement>('[data-walk]');
+    back?.focus();
+  };
   const signedIn = go.href === '/work';
   const cta = `rounded-lg bg-[#E69F00] px-5 py-3 text-sm font-semibold text-[#001B2F] hover:bg-[#F2B21E] ${focus} focus-visible:outline-white`;
   const second = `rounded-lg border border-white/30 px-4 py-3 text-sm font-semibold text-white hover:bg-white/10 ${focus} focus-visible:outline-white`;
   return (
     <div className="min-h-screen bg-white text-slate-900">
       <style>{CSS}</style>
+      {asking && <InquiryDialog onClose={closeAsking} />}
 
       <div className="overflow-hidden bg-[#001B2F] text-white">
         {/* On a phone the logo is a little smaller and the bar's buttons a little narrower, so "Open my work" stays on one line at 360 wide. */}
         <header className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6">
           <a href="/" className={`shrink-0 rounded ${focus} focus-visible:outline-white`}><img src="/brand/avala-os-logo-light.svg" alt="Avala OS, home" className="h-7 w-auto sm:h-10" /></a>
-          <SiteNav go={go} />
+          <SiteNav go={go} onWalk={onWalk} />
         </header>
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-14 pt-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-16 lg:pt-10 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
           <div>
@@ -378,7 +397,7 @@ export default function HomePage() {
             <p className="text-balance mt-6 border-l-4 border-[#E69F00] pl-4 font-display text-2xl font-semibold leading-8 tracking-tight text-white sm:text-3xl">Not every process needs AI.</p>
             <p className="mt-4 text-lg leading-8 text-slate-300">Decide where RPA, an API, AI or a person fits each step, from the documents you already have. You get a recommendation with its reasons, documents your reviewers can check, and a plan your team can deliver.</p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} className={cta}>{WALK_LABEL}</a>}
+              {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} onClick={onWalk} data-walk className={cta}>{WALK_LABEL}</a>}
               <a href="/demo" className={second}>Try the live demo</a>
             </div>
             <ul aria-label="In short" className="mt-6 space-y-2 text-sm font-semibold text-slate-100">
@@ -573,7 +592,7 @@ export default function HomePage() {
               <h2 id="close-h" className="mt-3 font-display text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">Start with one process. Decide with evidence.</h2>
               <p className="mt-5 max-w-2xl text-lg leading-8 text-slate-200">In a walkthrough we take one process through Avala OS with you: the recommendation, the evidence behind it, and the documents and plan that come out. A pilot on a process of your own follows from there.</p>
               <div className="mt-8 flex flex-wrap items-center gap-3">
-                {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} className={cta}>{WALK_LABEL}</a>}
+                {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} onClick={onWalk} data-walk className={cta}>{WALK_LABEL}</a>}
                 <a href="/demo" className={second}>Try the live demo</a>
               </div>
               {!signedIn && <p className="mt-5 text-base text-slate-300">Or write to <a href={`mailto:${CONTACT_EMAIL}`} className={`rounded font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>{CONTACT_EMAIL}</a>.</p>}

@@ -20,7 +20,7 @@ on:
       function:
         description: Which function to deploy
         type: choice
-        options: [all, journey-ai, journey-extract, journey-invite, journey-notify]
+        options: [all, journey-ai, journey-extract, journey-invite, journey-notify, journey-inquiry]
         default: all
 
 concurrency:
@@ -50,7 +50,7 @@ jobs:
             exit 0
           fi
           only="${{ github.event.inputs.function }}"
-          fns="journey-ai journey-extract journey-invite journey-notify"
+          fns="journey-ai journey-extract journey-invite journey-notify journey-inquiry"
           if [ -n "$only" ] && [ "$only" != "all" ]; then fns="$only"; fi
           echo "Deploying: $fns (from ${GITHUB_REF_NAME} at ${GITHUB_SHA::7})"
           for fn in $fns; do

@@ -47,11 +47,13 @@ export function navFor(workspace: { modules?: readonly string[] } | null): { pro
 }
 
 /** The Settings sections shown with these parts: People and the parts themselves always; the rest belong to the assessment or the documents. */
-export function settingsFor(modules: readonly string[] | undefined): SettingsSection[] {
+export function settingsFor(modules: readonly string[] | undefined, opts: { platformOwner?: boolean } = {}): SettingsSection[] {
   const out: SettingsSection[] = ['people'];
   if (has(modules, 'assess')) out.push('applications', 'assessment', 'ai');
   if (has(modules, 'documents')) out.push('documents');
   out.push('parts');
+  // Walkthrough requests from the homepage are the platform owner's alone, in whichever workspace they are.
+  if (opts.platformOwner) out.push('requests');
   return out;
 }
 
