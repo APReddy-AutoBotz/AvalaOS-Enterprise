@@ -69,15 +69,28 @@ say(`Built files: ${before.size} before, ${after.size} after. ${sameBytes.length
 const cssBefore = cssPairs.map(([fb]) => fb), cssAfter = cssPairs.map(([, fa]) => fa);
 
 // 2. The stylesheet, declaration by declaration, each with the rules and at-rules it sits in.
+// The minifier joins rules with the same declarations into one rule with a selector list (".a,.b{color:…}"),
+// so when ".b" goes, ".a" stands alone: each selector of a list is read as an entry of its own.
+const splitList = sel => { const out = []; let depth = 0, cur = '';
+  for (let i = 0; i < sel.length; i++) { const c = sel[i];
+    if (c === '\\') { cur += c + sel[++i]; continue; }
+    if (c === '(' || c === '[') depth++; else if (c === ')' || c === ']') depth--;
+    if (c === ',' && depth === 0) { out.push(cur.trim()); cur = ''; } else cur += c; }
+  out.push(cur.trim()); return out; };
 function entries(file) {
   const list = [];
-  const where = n => { const p = []; for (let x = n.parent; x && x.type !== 'root'; x = x.parent) p.unshift(x.type === 'rule' ? x.selector : `@${x.name} ${x.params}`); return p.join(' ⟩ '); };
+  const paths = n => { let ps = ['']; const chain = []; for (let x = n.parent; x && x.type !== 'root'; x = x.parent) chain.unshift(x);
+    for (const x of chain) { const parts = x.type === 'rule' ? splitList(x.selector) : [`@${x.name} ${x.params}`]; ps = ps.flatMap(p => parts.map(q => p ? `${p} ⟩ ${q}` : q)); }
+    return ps; };
+  const add = (n, text) => { for (const where of paths(n)) list.push({ where, text, key: `${where} ⟩ ${text}` }); };
   postcss.parse(fs.readFileSync(file, 'utf8')).walk(n => {
-    if (n.type === 'decl') list.push({ where: where(n), text: `${n.prop}:${n.value}${n.important ? '!important' : ''}`, node: n });
-    else if (n.type === 'atrule' && !n.nodes) list.push({ where: where(n), text: `@${n.name} ${n.params};`, node: n });
-    else if ((n.type === 'rule' || n.type === 'atrule') && n.nodes && n.nodes.length === 0) list.push({ where: where(n), text: `${n.type === 'rule' ? n.selector : `@${n.name} ${n.params}`} {}`, node: n });
+    if (n.type === 'decl') add(n, `${n.prop}:${n.value}${n.important ? '!important' : ''}`);
+    else if (n.type === 'atrule' && !n.nodes) add(n, `@${n.name} ${n.params};`);
+    else if ((n.type === 'rule' || n.type === 'atrule') && n.nodes && n.nodes.length === 0) add(n, `${n.type === 'rule' ? n.selector : `@${n.name} ${n.params}`} {}`);
   });
-  return list.map(e => ({ ...e, key: `${e.where} ⟩ ${e.text}` }));
+  // Within one rule, every declaration of its first selector, then of its second, and so on.
+  const rank = new Map(); list.forEach((e, i) => rank.set(e, i));
+  return list;
 }
 const eb = [], ea = [], removed = [];
 for (let n = 0; n < cssBefore.length; n++) {
@@ -127,14 +140,15 @@ const texts = files.map(f => [f, fs.readFileSync(path.join(afterTree, f), 'utf8'
 say(`Searched: ${texts.length} files of the tree after (everything tracked but pictures, documents and the lockfile).`);
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const CLASS_CHAR = 'A-Za-z0-9_:\\[\\]\\-/.%#!()\'"=,&*>+~';
-const found = [];
+const found = [], ownRules = [];
 for (const name of lostClasses) {
   // A class name as Tailwind reads it from source: not part of a longer candidate.
   const re = new RegExp(`(?<![${CLASS_CHAR.replace(/'|"/g, '')}])${esc(name)}(?![A-Za-z0-9_\\-/\\[\\]])`);
-  for (const [f, t] of texts) if (re.test(t)) found.push(`class ${name} in ${f}`);
+  for (const [f, t] of texts) if (re.test(t)) (f === 'index.css' ? ownRules : found).push(`class ${name} in ${f}: ${t.split('\n').filter(l => re.test(l)).map(l => l.trim()).join(' | ')}`);
 }
 for (const v of lostVars) for (const [f, t] of texts) if (new RegExp(`${esc(v)}(?![A-Za-z0-9_-])`).test(t)) found.push(`variable ${v} in ${f}`);
-fs.writeFileSync(path.join(out, 'names-found.txt'), found.join('\n') + '\n');
+fs.writeFileSync(path.join(out, 'names-found.txt'), [...found, '--- named only in index.css\'s own rules (a selector that matches an element carrying the class; checked by hand in the report):', ...ownRules].join('\n') + '\n');
+if (ownRules.length) say(`Named only inside index.css's own rules, as part of another selector: ${ownRules.map(l => l.split(':')[0]).join('; ')}.`);
 if (found.length) fail(`${found.length} removed names appear in the tree after (names-found.txt)`);
 else say('Each removed name appears nowhere in the tree after, domain/ included.');
 
@@ -142,7 +156,8 @@ else say('Each removed name appears nowhere in the tree after, domain/ included.
 // is followed by an interpolation or joined with "+" anywhere in the tree after.
 const parts = [];
 for (const name of lostClasses) {
-  const cuts = [...name.matchAll(/[-:]/g)].map(m => name.slice(0, m.index + 1));
+  // Prefixes that a template could end with: at least two letters before the cut ("bg-", "text-amber-").
+  const cuts = [...name.matchAll(/[-:]/g)].map(m => name.slice(0, m.index + 1)).filter(p => /[A-Za-z]{2}[^]*[-:]$/.test(p.replace(/^-/, '')));
   for (const p of new Set(cuts)) {
     const re = new RegExp(`(?<![A-Za-z0-9_-])${esc(p)}(?:\\$\\{|['"\`]\\s*\\+)`);
     for (const [f, t] of texts) if (re.test(t)) parts.push(`${name}: "${p}" is built on in ${f}`);
