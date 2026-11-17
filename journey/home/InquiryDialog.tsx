@@ -41,7 +41,7 @@ export function InquiryDialog({ onClose }: { onClose: () => void }) {
     if (state.kind === 'sending') return;
     // What the visitor can fix is said beside the form before anything is sent.
     const local = checkInquiry(fields, { requireTiming: false });
-    if (!local.ok && local.reason !== 'trap') { setProblem({ field: local.field, message: local.message }); return; }
+    if (!local.ok && local.reason !== 'trap') { setProblem({ field: local.field, message: local.message ?? '' }); return; }
     setState({ kind: 'sending' });
     try {
       const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY) as string | undefined;

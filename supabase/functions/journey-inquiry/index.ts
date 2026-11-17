@@ -58,10 +58,10 @@ Deno.serve(async req => {
   const checked = checkInquiry(body);
   if (!checked.ok) {
     // What to fix is said for a field a person can fix; the hidden field and the wait are not explained.
-    const said = checked.reason === 'trap' || checked.reason === 'too_fast' ? 'Refused.' : checked.message;
+    const said = checked.reason === 'trap' || checked.reason === 'too_fast' ? 'Refused.' : checked.message ?? 'Refused.';
     return fail(400, checked.reason === 'trap' || checked.reason === 'too_fast' ? 'REFUSED' : 'INVALID', said);
   }
-  const v = checked.value;
+  const v = checked.value!;
 
   const stored = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_walkthrough_request`, {
     method: 'POST', headers: serviceHeaders(),

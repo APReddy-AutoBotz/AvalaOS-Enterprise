@@ -28,7 +28,10 @@ export interface InquiryInput { name?: unknown; email?: unknown; company?: unkno
 export interface Inquiry { name: string; email: string; company: string; process: string | null; people: PeopleChoice | null }
 
 export type Refusal = 'missing' | 'malformed' | 'too_long' | 'trap' | 'too_fast' | 'too_many';
-export type InquiryCheck = { ok: true; value: Inquiry } | { ok: false; reason: Refusal; field?: keyof Inquiry; message: string };
+// Every member names every key, so a caller can read `reason` or `value` without narrowing first.
+export type InquiryCheck =
+  | { ok: true; value: Inquiry; reason?: undefined; field?: undefined; message?: undefined }
+  | { ok: false; value?: undefined; reason: Refusal; field?: keyof Inquiry; message: string };
 
 // Control characters (C0 and C1, DEL), and line and paragraph separators, which some mail software treats as breaks.
 const CONTROL = new RegExp('[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\u007F-\\u009F\\u2028\\u2029]', 'g');
