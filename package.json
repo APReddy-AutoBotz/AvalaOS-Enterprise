@@ -11,10 +11,10 @@
     "test:e2e": "playwright test",
     "typecheck": "tsc --noEmit",
     "typecheck:edge": "tsc -p tsconfig.edge.json",
-    "test:unit": "node scripts/run-unit-tests.mjs",
     "test:new": "node --test \"domain/**/*.test.ts\" \"eval/**/*.test.ts\"",
     "eval": "node eval/run.ts",
     "test:secret-hygiene": "node scripts/check-secret-hygiene.mjs",
+    "in-use": "node scripts/in-use.mjs",
     "test": "npm run typecheck && npm run typecheck:edge && npm run test:new"
   },
   "dependencies": {
