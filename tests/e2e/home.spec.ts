@@ -56,7 +56,9 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   await expect(initials).toHaveText(['A', 'V', 'A', 'L', 'A']);
   for (let i = 0; i < 5; i++) await expect(initials.nth(i)).toHaveCSS('color', 'rgb(242, 178, 30)');
   await expect(page.locator('#tour [data-initial]')).toHaveCount(5);
-  await expect(page.getByRole('list', { name: 'The five stages' }).getByRole('button', { name: /^Assemble/ })).toBeVisible();
+  // A stage's name is said whole to a screen reader, though its first letter is coloured on its own.
+  await expect(page.getByRole('list', { name: 'The five stages' }).getByRole('button').nth(2)).toHaveAccessibleName(/^Assemble\. \S/);
+  await expect(page.getByRole('list', { name: 'The five stages' }).getByRole('button').nth(3)).toHaveAccessibleName(/^Launch\. \S/);
   const stages = page.getByRole('list', { name: 'The five stages' }).getByRole('button');
   await expect(stages).toHaveCount(5);
   await expect(stages.first()).toHaveAttribute('aria-current', 'step');
