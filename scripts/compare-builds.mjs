@@ -85,6 +85,19 @@ for (let n = 0; n < cssBefore.length; n++) {
   const gone = [];
   let j = 0;
   for (const e of xb) { if (j < xa.length && xa[j].key === e.key) j++; else gone.push(e); }
+  if (j !== xa.length) {
+    // Where the order differs: every entry after that is not in its place, with where it stood before.
+    const posB = new Map(); xb.forEach((e, i) => { if (!posB.has(e.key)) posB.set(e.key, []); posB.get(e.key).push(i); });
+    const lines = [];
+    let last = -1;
+    xa.forEach((e, i) => {
+      const at = (posB.get(e.key) ?? []).find(p => p > last);
+      if (at === undefined) lines.push(`after #${i}: ${e.key}  ← ${posB.has(e.key) ? `before only at #${posB.get(e.key).join(', #')}, earlier than the entry above` : 'not in the stylesheet before'}`);
+      else last = at;
+    });
+    fs.writeFileSync(path.join(out, `order-${n}.txt`), lines.join('\n') + '\n');
+    for (const l of lines.slice(0, 40)) say(`  ${l}`);
+  }
   if (j !== xa.length) fail(`${cssAfter[n]} is not ${cssBefore[n]} with removals only: entry ${j + 1} of ${xa.length} after ("${xa[j].key}") is not found in order`);
   else say(`${cssBefore[n]} → ${cssAfter[n]}: ${xb.length} declarations before, ${xa.length} after; every one after is unchanged and in the same order; ${gone.length} removed, none added or changed.`);
   eb.push(...xb); ea.push(...xa); removed.push(...gone);
