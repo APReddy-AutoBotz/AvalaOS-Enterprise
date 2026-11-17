@@ -317,6 +317,8 @@ Package 10, where the build differs from the text below or adds to it (owner's a
 - Item 3: one rule (`domain/questions/matter.ts`) for documents, question lists and counts. A free-word question is the same matter only when it asks for the objective alone, or the owner alone, in a known form.
 - Item 5: on a phone the homepage's logo is a little smaller and the bar's side padding 16 instead of 24, so the button fits at 360 wide on one line.
 - Item 6: a work proposal keeps its requirement only when a person edited, selected, rejected, merged or split it, or it is on the board (owner). Retired requirements are listed under "Retired" with their reason; no line on the History page (owner). Deciding the same approach again brings a retired requirement back, with its code and without the reason. Also when one person's choice for a step is changed to another approach.
+- Item 7 (owner's yes): the name is stored in place of the email address, beside the id. Where the id matches no profile, the stored name shows; "Not recorded" only for an email address or nothing (owner). Until the release, the live site writes choices back without the id when it saves them; such an entry then shows its stored name. The PDD's delivery model used to print the email address of who set a step; it now names the person, or says "set by a person".
+
 Package 11, where the build differs from the text below (owner's changes of 17 November 2026):
 
 - The notice email carries no details of the visitor and no reply-to: it says a request is waiting, with a link to Settings → Walkthrough requests. Each request there has "Reply by email" (opens the owner's email program addressed to the visitor) and a status; either counts as contact. The privacy notice says the details are kept in our database only; Resend's line is unchanged.
@@ -324,8 +326,6 @@ Package 11, where the build differs from the text below (owner's changes of 17 N
 - What a visitor typed loses line breaks and control characters in one-line fields, and everything is shown as plain text. Send is off while a request goes. The wait of three seconds is elapsed time measured in the browser.
 - No phone number. Deleted twelve months after the last contact by a daily job of the existing scheduler; removal on request with Delete in Settings.
 - The early deploy of `journey-inquiry` from `next`: not yet. The owner asks again after the review chat has read the function.
-
-- Item 7 (owner's yes): the name is stored in place of the email address, beside the id. Where the id matches no profile, the stored name shows; "Not recorded" only for an email address or nothing (owner). Until the release, the live site writes choices back without the id when it saves them; such an entry then shows its stored name. The PDD's delivery model used to print the email address of who set a step; it now names the person, or says "set by a person".
 
 Two packages. Package 10 first, as its own pull request; package 11 starts when package 10 is merged. The rules of section 3b hold for anything that touches the live database or a server function: additive only, its test in `supabase/tests/`, a rolled-back trial reported in plain words, the owner's clear yes, and a function's change goes live with the release unless the owner says otherwise.
 
