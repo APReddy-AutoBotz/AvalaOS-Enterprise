@@ -31,9 +31,8 @@ Releases (owner, 17 November 2026): 65 Netlify credits are left, about 15 a prod
 ### Small faults, no server or database change
 
 - A typical-process comparison a person asked for, and "Skip for now", are forgotten when the page is left (left as they are on purpose: light conveniences).
-- In the demo, a link to a process carries an address outside the demo, so opening it in a new tab lands on sign-in (review of 17 November 2026).
-- A process card on the Processes page said "Changed 4 days ago" minutes after an edit (review of 17 November 2026).
-- "Process objective is unknown" is listed beside "The objective of the process is not stated": the same gap twice (review of 17 November 2026).
+
+The demo's links, "Changed … ago" and the objective asked twice are fixed in package 10 of section 3d (#190), in `next`.
 
 The map's single shape, the repeated look in the sources and the other small faults of the owner's test of 16 November are built (section 3), in review.
 
@@ -41,7 +40,6 @@ The map's single shape, the repeated look in the sources and the other small fau
 
 - A failed extraction keeps no detail of what it had read.
 - Errors in the server functions are only in the Supabase logs, not in the error monitor.
-- A person's choice of approach (and of the maps' shape, and a resolved conflict) is stored with the email address of who made it, so the evidence pack says "Not recorded" for who. Recording the person's name, or their id, from now on is a small change to what is stored (found while building package 6).
 
 The weekday email's count, review comments in it and on My work, and the look in the sources shared by everyone are built (section 3b), in review.
 
@@ -311,7 +309,15 @@ The promise stays narrow, on the owner's word ("let's not bloat the application"
 
 ## 3d. The fourth bundle: tidy-up and an inquiry form (owner's go, 17 November 2026)
 
-**Not built. For a builder chat; the review chat reviews each plan and the result on the preview before any release.** Waiting in `next` for the same release: headings that wrap balanced (#184).
+**Package 10 built (17 November 2026, #190), merged into `next`; package 11 waits for the owner's go on its plan.** The review chat reviews each plan and the result on the preview before any release. Waiting in `next` for the same release: headings that wrap balanced (#184).
+
+Package 10, where the build differs from the text below or adds to it (owner's additions of 17 November 2026 included):
+
+- Item 2 needed no database change: the database already keeps when a working draft was last saved; the page now reads it.
+- Item 3: one rule (`domain/questions/matter.ts`) for documents, question lists and counts. A free-word question is the same matter only when it asks for the objective alone, or the owner alone, in a known form.
+- Item 5: on a phone the homepage's logo is a little smaller and the bar's side padding 16 instead of 24, so the button fits at 360 wide on one line.
+- Item 6: a work proposal keeps its requirement only when a person edited, selected, rejected, merged or split it, or it is on the board (owner). Retired requirements are listed under "Retired" with their reason; no line on the History page (owner). Deciding the same approach again brings a retired requirement back, with its code and without the reason. Also when one person's choice for a step is changed to another approach.
+- Item 7 (owner's yes): the name is stored in place of the email address, beside the id. Where the id matches no profile, the stored name shows; "Not recorded" only for an email address or nothing (owner). Until the release, the live site writes choices back without the id when it saves them; such an entry then shows its stored name. The PDD's delivery model used to print the email address of who set a step; it now names the person, or says "set by a person".
 
 Two packages. Package 10 first, as its own pull request; package 11 starts when package 10 is merged. The rules of section 3b hold for anything that touches the live database or a server function: additive only, its test in `supabase/tests/`, a rolled-back trial reported in plain words, the owner's clear yes, and a function's change goes live with the release unless the owner says otherwise.
 
