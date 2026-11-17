@@ -209,6 +209,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     if (!register?.changed.length || !canEdit || !follows.future) return;
     store.saveRequirements(processId, register.changed).then(() => setStored(register.requirements)).catch(e => setError(messageOf(e)));
   }, [register, canEdit, store, processId, follows.future]);
+  // A person's choice saved from the line at the top: the stored requirements already follow it
+  // (requirementsFollow.ts), so they are read again with the choices, never re-derived from the list before.
+  const onDecisions = async (d: Decisions) => {
+    const r = await store.listRequirements(processId).catch(() => null);
+    if (r) setStored(r);
+    setDecisions(d);
+  };
   const saveRequirement = async (r: StoredRequirement) => {
     await store.saveRequirements(processId, [r]);
     setStored(cur => (cur ?? []).some(x => x.code === r.code) ? (cur ?? []).map(x => (x.code === r.code ? r : x)) : [...(cur ?? []), r]);
@@ -344,7 +351,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
       {/* An approach decided for the whole process (package 9): what it can do, step by step, and why. */}
       {assessment && decisions && model.meta.decidedApproach && (
         <DecidedPanel model={model} assessment={assessment} names={nameById} meId={myId} canEdit={canEdit} editor={editor} store={store} processId={processId}
-          revisionId={working?.id ?? currentRevisionId} decisions={decisions} onDecisions={setDecisions} onAnswerQuestions={() => setAnswering(true)} />
+          revisionId={working?.id ?? currentRevisionId} decisions={decisions} onDecisions={onDecisions} onAnswerQuestions={() => setAnswering(true)} />
       )}
       {documentsNote(model) && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="documents-note">{documentsNote(model)}</p>}
       <div className="flex flex-wrap items-center justify-between gap-3">

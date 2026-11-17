@@ -53,6 +53,9 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
   const [editing, setEditing] = React.useState<string | null>(null);
   const [kind, setKind] = React.useState<ReqKind>('FR');
   const shown = requirements.filter(r => r.kind === kind && r.state !== 'retired');
+  // Retired requirements keep their codes and are listed with why: on their own (left behind by a decided
+  // approach or a withdrawn choice for a step, domain/requirements/retire.ts) or by a person.
+  const retired = requirements.filter(r => r.kind === kind && r.state === 'retired');
   const count = (k: ReqKind) => requirements.filter(r => r.kind === k && r.state === 'active').length;
   const removed = requirements.filter(r => r.state === 'source_removed').length;
   const review = requirements.filter(r => r.needsReview).length;
@@ -105,6 +108,20 @@ export function RequirementsPanel({ model, requirements, canEdit, onSave }: { mo
             ))}
             {!shown.length && <li className="py-6 text-center text-sm text-slate-500">None yet.</li>}
           </ul>
+          {retired.length > 0 && (
+            <div className="mt-3 border-t border-slate-100 pt-3" data-testid="requirements-retired">
+              <h3 className="text-sm font-semibold text-slate-700">Retired ({retired.length})</h3>
+              <ul className="mt-1 space-y-1.5">
+                {retired.map(r => (
+                  <li key={r.code} className="flex flex-wrap items-baseline gap-x-2 text-sm text-slate-600" data-testid="retired-requirement">
+                    <span className="font-mono text-xs font-semibold text-slate-500">{r.code}</span>
+                    <span className="text-slate-700">{r.title}</span>
+                    <span className="text-xs text-slate-500">{r.retiredReason ?? 'Retired by a person'}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
     </section>

@@ -22,6 +22,7 @@ import { assessmentResult } from '../../domain/assess/record.ts';
 import { hashModel } from '../../domain/processModel/hash.ts';
 import { MODEL_VERSION } from '../../domain/assess/scoring.ts';
 import { readAcross, setVisitShape, visitShape, writeAcross } from './mapShape.ts';
+import { ChooserContext, chosenBy } from './widgets.tsx';
 
 const BpmnCanvas = React.lazy(() => import('./BpmnCanvas.tsx'));
 type View = 'asis' | 'tobe' | 'edit';
@@ -50,6 +51,7 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; revisionId: string; canEdit: boolean; me: string; onSaved: () => void;
 }) {
   const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
+  const chooser = React.useContext(ChooserContext);
   const model = editor.model;
   // Work not done today (part C) has one map: the intended process, coloured by how each step would be done.
   const words = processWords(loaded);
@@ -81,7 +83,7 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
     if (!canEdit) { const v = next === shape.suggested && !decisions?.map ? null : next; setVisit(v); setVisitShape(processId, v); return; }
     if (!decisions) return;
     const prev = decisions;
-    const nextDecisions = withMapShape(decisions, { shape: next, suggested: shape.suggested, by: me || 'you' });
+    const nextDecisions = withMapShape(decisions, { shape: next, suggested: shape.suggested, ...chosenBy(chooser) });
     setDecisions(nextDecisions);
     setShapeBusy(true);
     try {

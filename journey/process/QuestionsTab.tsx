@@ -7,7 +7,7 @@ import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { Conflict, ElementTarget, OpenQuestion, ProcessModel } from '../../domain/processModel/types.ts';
 import { Button, EmptyState } from '../ui.tsx';
 import type { TabContext } from './ProcessEditor.tsx';
-import { Select, SourceList } from './widgets.tsx';
+import { ChooserContext, chosenBy, Select, SourceList } from './widgets.tsx';
 
 /** What a question is about, in words. */
 export function targetLabel(m: ProcessModel, t: ElementTarget): string {
@@ -119,12 +119,14 @@ function QuestionCard({ q, model, canEdit, onAnswer }: { q: OpenQuestion; model:
   );
 }
 
-export function ConflictsTab({ model, editor, canEdit, me, sourceTitle }: TabContext) {
+export function ConflictsTab({ model, editor, canEdit, sourceTitle }: TabContext) {
+  // Who chose is kept by id and name, never an email address (package 10, item 7).
+  const chooser = React.useContext(ChooserContext);
   if (model.conflicts.length === 0) return <EmptyState title="No conflicts">When two sources give different values for the same thing, both are shown here for you to choose.</EmptyState>;
   return (
     <ul className="space-y-4">
       {model.conflicts.map(c => <React.Fragment key={c.id}><ConflictCard c={c} model={model} canEdit={canEdit} sourceTitle={sourceTitle}
-        onChoose={(chosen, reason) => editor.apply(m => resolveConflict(m, { conflictId: c.id, chosen, by: me, reason, ...conflictValue(m, c, chosen) }), `Resolved: ${c.summary}`)} /></React.Fragment>)}
+        onChoose={(chosen, reason) => editor.apply(m => resolveConflict(m, { conflictId: c.id, chosen, ...chosenBy(chooser), reason, ...conflictValue(m, c, chosen) }), `Resolved: ${c.summary}`)} /></React.Fragment>)}
     </ul>
   );
 }

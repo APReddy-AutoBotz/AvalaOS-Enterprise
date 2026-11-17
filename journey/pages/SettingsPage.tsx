@@ -36,7 +36,7 @@ export function SettingsPage({ store, nav, workspace, section, base = '' }: { st
           <ul className="flex gap-1 overflow-x-auto lg:flex-col">
             {sections.map(s => (
               <li key={s.id}>
-                <a href={`${base}/settings/${s.id}`} aria-current={s.id === section ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: s.id }); }}
+                <a href={nav.href({ page: 'settings', section: s.id })} aria-current={s.id === section ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: s.id }); }}
                   className={cx('flex min-h-11 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#002C4B]', s.id === section ? 'bg-[#EEF2F6] font-semibold text-[#002C4B]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900')}>
                   <svg aria-hidden viewBox="0 0 20 20" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{ICON[s.id]}</svg>
                   {s.label}

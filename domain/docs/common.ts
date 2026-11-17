@@ -1,7 +1,7 @@
 // What every document builder reads, and small helpers shared by them.
 import type { Fact, Metric, ProcessModel, Step, SystemRef } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
-import { effectiveApproach, type Decisions } from '../assess/decisions.ts';
+import { effectiveApproach, whoChose, type Decisions } from '../assess/decisions.ts';
 import { APPROACH_LABEL, type Approach, type StepScore } from '../assess/scoring.ts';
 import { orderedSteps, processMetric } from '../processModel/selectors.ts';
 import { missing, NOT_PROVIDED, type Cell } from './tree.ts';
@@ -96,5 +96,5 @@ export function modeOf(input: DocInput, step: Step): { score: StepScore | undefi
   const score = input.assessment.steps.find(s => s.stepId === step.id);
   if (!score || score.alreadyAutomated) return { score, approach: null, overridden: false, by: null, why: score?.reason ?? '' };
   const eff = effectiveApproach(score, input.decisions);
-  return { score, approach: eff.approach, overridden: Boolean(eff.override), by: eff.override?.by ?? null, why: eff.override ? `Overridden: ${eff.override.rationale}` : score.reason };
+  return { score, approach: eff.approach, overridden: Boolean(eff.override), by: eff.override ? whoChose(eff.override, input.names) : null, why: eff.override ? `Overridden: ${eff.override.rationale}` : score.reason };
 }

@@ -31,13 +31,17 @@ test('PDD: one row per step in 2.4 and in the delivery model, in process order',
   assert.ok(d.sections.length >= 25);
 });
 
-test('PDD: an override shows in the delivery model with who set it', () => {
+test('PDD: an override shows in the delivery model with who set it, by name, never an email address', () => {
   const i = input(gold);
   const s = i.assessment.steps.find(x => !x.alreadyAutomated && x.winner !== 'human')!;
-  const d = buildPdd({ ...i, decisions: withOverride(emptyDecisions(), s, { approach: 'human', rationale: 'Audit requires it.', by: 'lead@example.test' }) });
-  const row = table(d, '3.2', 'Delivery model').rows.find(r => r[1].text === gold.steps.find(x => x.id === s.stepId)!.name)!;
-  assert.match(row[3].text, /Keep with a person \(set by lead@example.test\)/);
-  assert.match(row[5].text, /Overridden: Audit requires it./);
+  const row = (d: ReturnType<typeof buildPdd>) => table(d, '3.2', 'Delivery model').rows.find(r => r[1].text === gold.steps.find(x => x.id === s.stepId)!.name)!;
+  const named = buildPdd({ ...i, names: { 'u-lead': 'Lena Ortiz' }, decisions: withOverride(emptyDecisions(), s, { approach: 'human', rationale: 'Audit requires it.', by: 'Lena O.', byId: 'u-lead' }) });
+  assert.match(row(named)[3].text, /Keep with a person \(set by Lena Ortiz\)/);
+  assert.match(row(named)[5].text, /Overridden: Audit requires it./);
+  // An entry made before names were kept holds an email address: it is never printed (package 10, item 7).
+  const older = buildPdd({ ...i, decisions: withOverride(emptyDecisions(), s, { approach: 'human', rationale: 'Audit requires it.', by: 'lead@example.test' }) });
+  assert.match(row(older)[3].text, /Keep with a person \(set by a person\)/);
+  assert.doesNotMatch(JSON.stringify(older), /lead@example\.test/);
 });
 
 test('an empty model renders "Not provided" and open items, never filler', () => {

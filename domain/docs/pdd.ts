@@ -11,6 +11,7 @@ import { shapeInEffect } from '../flowchart/shape.ts';
 import { controlOf, decidedIn, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, metricText, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
 import { asksQuestion, whatFollows } from '../plan/purpose.ts';
 import { decidedSentence } from '../assess/decided.ts';
+import { NOT_RECORDED_WHO } from '../assess/decisions.ts';
 import { processMetric } from '../processModel/selectors.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
@@ -131,7 +132,7 @@ export function buildPdd(input: DocInput): DocTree {
   b.table('Delivery model', ['#', 'Step', 'Today', 'Future mode', 'Person in the loop', 'Reason'],
     steps.map(s => {
       const md = modeOf(input, s);
-      return [String(no(s.id)), s.name, TASK[s.taskType], md.approach ? `${MODE_LABEL[md.approach]}${md.overridden ? ` (set by ${md.by})` : ''}` : 'Already automated',
+      return [String(no(s.id)), s.name, TASK[s.taskType], md.approach ? `${MODE_LABEL[md.approach]}${md.overridden ? ` (set by ${md.by && md.by !== NOT_RECORDED_WHO ? md.by : 'a person'})` : ''}` : 'Already automated',
         md.score && !md.score.alreadyAutomated ? HUMAN_POINT[md.overridden && md.approach === 'human' ? 'does_it' : md.score.human] : '', md.why];
     }), 'No steps to assess yet.');
   b.section('3.3', 'Detailed To-Be steps');

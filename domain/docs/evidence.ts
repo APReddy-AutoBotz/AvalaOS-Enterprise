@@ -17,6 +17,27 @@ import { testPack } from './tests.ts';
 import { applyTestEdits, packAsRun, CASE_STATE_LABEL, type TestCaseEdit } from './testEdits.ts';
 import { asksQuestion, whatFollows } from '../plan/purpose.ts';
 import { decidedSummary } from '../assess/decided.ts';
+import { triage } from '../questions/triage.ts';
+import { NOT_RECORDED_WHO, whoChose } from '../assess/decisions.ts';
+import type { ProcessAssessment } from '../assess/process.ts';
+
+/**
+ * The sentence under the pack's count of open questions (review of 16 November 2026: the pack said 44 where
+ * the screens said 43). The pack lists every open question as recorded; the screens show the questions as
+ * triage groups them: two wordings of the same question once, and none the record already answers.
+ */
+export function openCountNote(m: ProcessModel, assessment: ProcessAssessment, recorded: readonly { id: string }[]): string {
+  const ids = new Set(recorded.map(q => q.id));
+  const t = triage(m, assessment);
+  const onScreens = t.items.filter(i => i.questionIds.some(id => ids.has(id))).length;
+  const known = t.alreadyKnown.filter(k => ids.has(k.questionId)).length;
+  const n = recorded.length;
+  const every = `This is every open question as recorded${n ? `, ${n} in all` : ''}.`;
+  if (onScreens === n) return every;
+  const merged = n - known - onScreens;
+  const why = [merged > 0 ? 'show repeated wordings of a question once' : '', known > 0 ? `leave out ${known} the record already answers` : ''].filter(Boolean);
+  return `${every} The screens show ${onScreens}${why.length ? `: they ${why.join(' and ')}` : ''}.`;
+}
 
 export const NOT_RECORDED = 'Not recorded';
 
@@ -165,7 +186,7 @@ export function buildEvidence(input: EvidenceInput): DocTree {
       const i = order.findIndex(s => s.id === o.stepId);
       const score = input.assessment.steps.find(s => s.stepId === o.stepId);
       const rec = score ? (score.recommended ?? score.winner) : null;
-      return [i >= 0 ? `${i + 1}. ${order[i]!.name}` : 'A step no longer in the process', APPROACH_LABEL[o.approach], rec ? APPROACH_LABEL[rec] : notRecorded(), o.rationale, personCell(input.names[o.by] ?? o.by), date(o.at)];
+      return [i >= 0 ? `${i + 1}. ${order[i]!.name}` : 'A step no longer in the process', APPROACH_LABEL[o.approach], rec ? APPROACH_LABEL[rec] : notRecorded(), o.rationale, (whoChose(o, input.names) === NOT_RECORDED_WHO ? notRecorded() : personCell(whoChose(o, input.names))), date(o.at)];
     }), dec ? 'Nobody set a step themselves.' : 'Nobody has chosen another approach than the scoring recommends.');
 
   // ---- 7 Review comments
@@ -193,6 +214,7 @@ export function buildEvidence(input: EvidenceInput): DocTree {
     ['Functional requirements with no test case', String(noTest.length)],
     ['Test cases with no expected result', String(noExpected.length)],
   ]);
+  b.paragraph(openCountNote(m, input.assessment, openQs));
   const list = (title: string, items: string[]) => { if (items.length) { b.paragraph(`${title}:`); b.list(items); } };
   list('Open questions', openQs.map(q => q.question));
   list('Requirements with no source passage', noSource.map(r => `${r.code}: ${r.title}`));
@@ -270,6 +292,7 @@ function buildEvidenceAsIs(input: EvidenceInput): DocTree {
     ['Typical items not confirmed', String(typical)],
     ['Parts of the process with no source passage and not confirmed by a person', String(noSource.length)],
   ]);
+  b.paragraph(openCountNote(m, input.assessment, openQs));
   const list = (title: string, items: string[]) => { if (items.length) { b.paragraph(`${title}:`); b.list(items); } };
   list('Open questions', openQs.map(q => q.question));
   list('Parts with no source passage', noSource.map(p => `${p.kind}: ${p.name}`));
