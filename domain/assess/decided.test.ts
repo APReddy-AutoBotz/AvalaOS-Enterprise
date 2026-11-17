@@ -179,3 +179,16 @@ test('a step fact that settles the decided approach leads the first list, and it
   const answered = buildAnswer(lead!, m, { pick: lead!.target.field === 'traits.judgment' || lead!.target.field === 'traits.physical' ? 'false' : yes })!.op(m).model;
   assert.ok(!planQuestions(triage(answered, assessProcess(answered)), answered).now.some(i => i.key === lead!.key));
 });
+
+test('the line is amber when the decided approach can do fewer than half the steps; the label beside the name', async () => {
+  const { decidedFallsShort, purposeTag } = await import('./decided.ts');
+  const m = decide(gold(), 'rpa');
+  const s = decidedSummary(m, assessProcess(m))!;
+  assert.equal(decidedFallsShort(s), s.can.length * 2 < s.can.length + s.unknown.length + s.cannot.length + s.person.length);
+  assert.equal(decidedFallsShort({ ...s, can: s.can.slice(0, 1), unknown: [], cannot: s.can.slice(1, 3), person: [] }), true);
+  assert.equal(decidedFallsShort({ ...s, can: s.can.slice(0, 2), unknown: [], cannot: s.can.slice(2, 4), person: [] }), false, 'exactly half is not short');
+  assert.equal(decidedFallsShort({ ...s, can: [], unknown: [], cannot: [], person: [] }), false);
+  assert.equal(purposeTag('as_is', null), 'Documented as it is');
+  assert.equal(purposeTag('decided', { approach: 'rpa' }), 'Approach decided: Rule-based RPA');
+  assert.equal(purposeTag('assess', { approach: 'rpa' }), null);
+});

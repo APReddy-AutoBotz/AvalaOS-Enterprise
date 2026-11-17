@@ -277,3 +277,25 @@ test('Ask Avala on the workspace: a process documented as it is is summed up wit
   assert.match(p.text, /documented as it is, not assessed/);
   assert.doesNotMatch(p.text, /proposal|leads|portfolio|hours/);
 });
+
+test('documented as it is: a question in free words about automation is not asked, counted or printed; it stays on the record', async () => {
+  const { aboutAutomation } = await import('./purpose.ts');
+  const { addQuestion } = await import('../processModel/patch.ts');
+  // Whole words only, and when unsure the question is kept.
+  for (const t of ['Where should automation be applied, if at all?', 'Can a bot read the invoices?', 'Is RPA allowed on SAP?', 'Should an AI agent route the exceptions?', 'Will the supplier API be exposed for the integration?']) assert.equal(aboutAutomation(t), true, t);
+  for (const t of ['Are both teams involved in the approval?', 'What can SAP and IT enable for the process?', 'Which API does the portal use today?', 'Who runs the robotics lab?']) assert.equal(aboutAutomation(t), false, t);
+  let m = gold();
+  for (const question of ['Where should automation be applied, if at all?', 'Are both teams involved in the approval?', 'What can SAP and IT enable for the process?']) m = addQuestion(m, { target: { kind: 'meta' }, question }).model;
+  const asked = asIs(m);
+  const items = triage(asked, assessProcess(asked)).items.map(i => i.question);
+  assert.ok(!items.includes('Where should automation be applied, if at all?'));
+  assert.ok(items.includes('Are both teams involved in the approval?') && items.includes('What can SAP and IT enable for the process?'));
+  const open = buildPdd(input(asked)).openItems.map(o => o.text);
+  assert.ok(!open.includes('Where should automation be applied, if at all?'));
+  assert.ok(open.includes('Are both teams involved in the approval?'));
+  // Kept on the record, and asked again once the process is assessed.
+  assert.ok(asked.openQuestions.some(q => q.question === 'Where should automation be applied, if at all?' && q.status === 'open'));
+  assert.ok(triage(m, assessProcess(m)).items.some(i => i.question === 'Where should automation be applied, if at all?'));
+  // A question tied to a fact is never touched by the words.
+  assert.equal(asksQuestion(asked, { target: { kind: 'step', id: asked.steps[0]!.id, field: 'roleIds' }, question: 'Who does "Automate the posting"?' }), true);
+});

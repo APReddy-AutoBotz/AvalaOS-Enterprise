@@ -31,6 +31,8 @@ test('documented as it is: no assessment, one map, two documents; switched back,
   await expect(page).toHaveURL(/\/process\/[0-9a-f-]{36}\/sources$/);
   const processUrl = page.url().replace(/\/sources$/, '');
 
+  // The label beside the name says why, on every page of the process.
+  await expect(page.getByTestId('purpose-tag')).toHaveText('Documented as it is');
   // No Assessment and no Work items, from the start.
   await expect(rail(page).getByRole('link')).toHaveText(['Sources', 'Process', 'Documents', 'Flows'].map(s => new RegExp(s)));
   // The start with no documents does not ask what the team has in mind.
@@ -85,12 +87,17 @@ test('documented as it is: no assessment, one map, two documents; switched back,
   await expect(doc).toContainText('The process and where each part came from');
   await expect(doc).not.toContainText('Requirement to work to test');
 
-  // Switched to "Assess it and document it": everything is back.
+  // Switched to "Assess it and document it": everything is back. Switching from "Document it as it is"
+  // leaves the stored requirements exactly as they are.
+  const stored = () => page.evaluate(() => JSON.stringify(JSON.parse(localStorage.getItem('avala.journey.memory.v1')!).requirements ?? {}));
+  const before = await stored();
   await stage(page, 'Process');
   await purpose.getByRole('button', { name: 'Change' }).click();
   await purpose.getByLabel(/Assess it and document it/).check();
   await purpose.getByRole('button', { name: 'Save' }).click();
   await expect(purpose.getByTestId('purpose-value')).toHaveText('Assess it and document it');
+  await expect(page.getByTestId('purpose-tag')).toHaveCount(0);
+  expect(await stored()).toBe(before);
   await expect(rail(page).getByRole('link')).toHaveText(['Sources', 'Process', 'Assessment', 'Documents', 'Flows', 'Work items'].map(s => new RegExp(s)));
   await expect(page.getByTestId('brief-inMind')).toHaveCount(1);
   await stage(page, 'Flows');
