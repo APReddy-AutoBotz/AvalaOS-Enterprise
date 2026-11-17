@@ -251,11 +251,11 @@ export function answerQuestion(model: ProcessModel, args: { questionId: string; 
 }
 
 /** Records which conflicting value is correct, who chose it and why. With `value`, it is written to the target field. */
-export function resolveConflict(model: ProcessModel, args: { conflictId: string; chosen: string; by: string; reason: string; value?: unknown }): OpResult {
+export function resolveConflict(model: ProcessModel, args: { conflictId: string; chosen: string; by: string; byId?: string | null; reason: string; value?: unknown }): OpResult {
   return commit(model, m => {
     const c = m.conflicts.find(x => x.id === args.conflictId);
     if (!c) throw new ModelOpError('NOT_FOUND', `No conflict with id ${args.conflictId}.`);
-    c.resolution = { chosen: args.chosen, by: args.by, reason: args.reason };
+    c.resolution = { chosen: args.chosen, by: args.by, ...(args.byId ? { byId: args.byId } : {}), reason: args.reason };
     if (args.value !== undefined) setField(m, c.target, args.value);
   });
 }

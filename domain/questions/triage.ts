@@ -1,6 +1,7 @@
 // Turning the raw list of open questions and gaps into the questions that matter, by fixed rules:
 // duplicates merged, questions the model already answers set aside, each one grouped by what it
 // changes and given a likely owner. Nothing here is decided by AI.
+import { asksOnlyFor } from './matter.ts';
 import type { AccessStatus, ElementTarget, OpenQuestion, ProcessModel } from '../processModel/types.ts';
 import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
@@ -178,6 +179,18 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
     const target: ElementTarget = { kind: 'exception', id: e.id, field: 'routedToRoleId' };
     if (stored.some(q => q.target.kind === 'exception' && q.target.id === e.id)) continue;
     items.push({ key: `gap:route:${e.id}`, question: `Who handles the exception "${e.name}"?`, target, questionIds: [], kind: 'role', assignedTo: null, deferred: false, ...classify(m, target, '', openSteps) });
+  }
+
+  // A question in free words that asks only for the objective, or only for the owner, is the same question as
+  // the structured one (questions/matter.ts): it joins it, so it is listed once, counted once, closed together.
+  for (const free of [...items]) {
+    if (free.target.kind !== 'meta' || free.target.field) continue;
+    const matter = asksOnlyFor(free.question);
+    const main = matter ? items.find(x => x !== free && x.target.kind === 'meta' && x.target.field === matter && x.deferred === free.deferred) : undefined;
+    if (!main) continue;
+    main.questionIds = [...main.questionIds, ...free.questionIds];
+    main.also = [...(main.also ?? []), free.question, ...(free.also ?? [])];
+    items.splice(items.indexOf(free), 1);
   }
 
   // Documented as it is (domain/plan/purpose.ts): what only serves an assessment is not asked, and

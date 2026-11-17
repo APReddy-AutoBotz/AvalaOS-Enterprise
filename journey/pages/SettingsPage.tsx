@@ -14,6 +14,7 @@ import { AiProviderSettings } from './AiProviderSettings.tsx';
 import { AiUsagePanel } from './AiUsage.tsx';
 import { DocumentBranding } from './DocumentBranding.tsx';
 import { OrganizationParts } from './OrganizationParts.tsx';
+import { WalkthroughRequests } from './WalkthroughRequests.tsx';
 
 // One mark per section, drawn in the current colour, so the menu can be scanned without reading it.
 const ICON: Record<SettingsSection, React.ReactNode> = {
@@ -22,11 +23,15 @@ const ICON: Record<SettingsSection, React.ReactNode> = {
   assessment: <><path d="M3.5 16.5h13" /><path d="M5.5 16.5V11M10 16.5V4.5M14.5 16.5V8" /></>,
   ai: <><path d="M8 3c.4 2.9 1.6 4.9 5 5.5-3.4.6-4.6 2.6-5 5.5-.4-2.9-1.6-4.9-5-5.5 3.4-.6 4.6-2.6 5-5.5Z" /><path d="M15 12c.2 1.5.8 2.3 2.2 2.6-1.4.3-2 1.1-2.2 2.6-.2-1.5-.8-2.3-2.2-2.6 1.4-.3 2-1.1 2.2-2.6Z" /></>,
   documents: <><path d="M5.5 2.8h6L15 6.3v10.9H5.5z" /><path d="M11.5 2.8v3.5H15M8 10.5h4.5M8 13.5h4.5" /></>,
+  requests: <><path d="M3 5.5h14v9H3z" /><path d="m3.5 6 6.5 5 6.5-5" /></>,
   parts: <><rect x="2.5" y="4" width="15" height="5" rx="2.5" /><circle cx="14.8" cy="6.5" r="1.2" /><rect x="2.5" y="11" width="15" height="5" rx="2.5" /><circle cx="5.2" cy="13.5" r="1.2" /></>,
 };
 
 export function SettingsPage({ store, nav, workspace, section, base = '' }: { store: JourneyStore; nav: Nav; workspace: Workspace; section: SettingsSection; base?: string }) {
-  const shown = settingsFor(workspace.modules);
+  // The platform owner alone sees the walkthrough requests; the database refuses anyone else in any case.
+  const [owner, setOwner] = React.useState(false);
+  React.useEffect(() => { store.isPlatformOwner().then(setOwner).catch(() => setOwner(false)); }, [store]);
+  const shown = settingsFor(workspace.modules, { platformOwner: owner });
   const sections = SETTINGS.filter(s => shown.includes(s.id));
   return (
     <div data-testid="settings">
@@ -36,7 +41,7 @@ export function SettingsPage({ store, nav, workspace, section, base = '' }: { st
           <ul className="flex gap-1 overflow-x-auto lg:flex-col">
             {sections.map(s => (
               <li key={s.id}>
-                <a href={`${base}/settings/${s.id}`} aria-current={s.id === section ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: s.id }); }}
+                <a href={nav.href({ page: 'settings', section: s.id })} aria-current={s.id === section ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: s.id }); }}
                   className={cx('flex min-h-11 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2 text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#002C4B]', s.id === section ? 'bg-[#EEF2F6] font-semibold text-[#002C4B]' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900')}>
                   <svg aria-hidden viewBox="0 0 20 20" className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">{ICON[s.id]}</svg>
                   {s.label}
@@ -52,6 +57,7 @@ export function SettingsPage({ store, nav, workspace, section, base = '' }: { st
             : section === 'assessment' ? <AssessmentSettingsPanel store={store} workspace={workspace} />
             : section === 'ai' ? <><AiProviderSettings store={store} workspace={workspace} /><AiUsagePanel store={store} workspace={workspace} /></>
             : section === 'documents' ? <DocumentBranding store={store} workspace={workspace} />
+            : section === 'requests' ? <WalkthroughRequests store={store} />
             : <OrganizationParts store={store} workspace={workspace} />}
         </div>
       </div>

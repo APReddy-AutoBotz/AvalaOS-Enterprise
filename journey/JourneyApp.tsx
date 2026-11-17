@@ -31,6 +31,8 @@ const getStore = () => (appStore === undefined ? (appStore = createJourneyStore(
 export interface Nav {
   route: JourneyRoute;
   go(route: JourneyRoute, opts?: { replace?: boolean }): void;
+  /** The address of a route under the prefix the journey runs under, for a link's href (so "open in a new tab" stays in the demo). */
+  href(route: JourneyRoute): string;
 }
 
 /** The route from the address; `base` is a prefix the journey runs under (the demo's /demo). */
@@ -48,7 +50,8 @@ function useRoute(base: string): Nav {
     setRoute(next);
     scrollTo(0, 0);
   }, [base]);
-  return { route, go };
+  const href = React.useCallback((r: JourneyRoute) => base + journeyPath(r), [base]);
+  return { route, go, href };
 }
 
 export default function JourneyApp() {
@@ -134,7 +137,7 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
       <header className="border-b border-slate-200 bg-white">
         {/* On a phone: the mark and the controls on the first row, the main menu in one row under them. */}
         <div className={`mx-auto flex min-h-14 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 sm:px-6 ${wide ? 'max-w-[120rem]' : 'max-w-7xl'}`}>
-          <a href={`${base}/work`} onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex shrink-0 items-center gap-2.5">
+          <a href={nav.href({ page: 'work' })} onClick={e => { e.preventDefault(); if (me) nav.go({ page: 'work' }); }} className="flex shrink-0 items-center gap-2.5">
             <img src="/brand/avala-os-logo.svg" alt="Avala OS" className="hidden h-8 w-auto sm:block" />
             <img src="/brand/avala-os-mark.svg" alt="Avala OS" className="h-8 w-auto sm:hidden" />
           </a>
@@ -143,7 +146,7 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
               {([['work', 'My work'], ['processes', 'Processes'], ['board', 'Delivery board']] as const).filter(([page]) => page === 'work' || parts[page]).map(([page, label]) => {
                 const here = nav.route.page === page || (page === 'processes' && nav.route.page === 'process');
                 return (
-                  <a key={page} href={`${base}/${page}`} aria-label={label} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
+                  <a key={page} href={nav.href({ page })} aria-label={label} aria-current={here ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page }); }} className={navItem(here)}>
                     <svg viewBox="0 0 20 20" className={`h-[18px] w-[18px] shrink-0 ${here ? 'text-[#002C4B]' : 'text-slate-400 group-hover:text-slate-600'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">{NAV_ICON[page]}</svg>
                     <span className="whitespace-nowrap">{page === 'board' ? <><span className="hidden sm:inline">Delivery </span><span className="inline-block first-letter:uppercase sm:first-letter:normal-case">board</span></> : label}</span>
                   </a>
@@ -157,7 +160,7 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
               {ws && <React.Fragment key={ws.current.id}><AskAvala store={store} nav={nav} workspace={ws.current} /></React.Fragment>}
               {ws && <WorkspaceSwitcher store={store} ws={ws} />}
               {ws && (
-                <a href={`${base}/settings`} aria-label="Settings" aria-current={nav.route.page === 'settings' ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: 'people' }); }}
+                <a href={nav.href({ page: 'settings', section: 'people' })} aria-label="Settings" aria-current={nav.route.page === 'settings' ? 'page' : undefined} onClick={e => { e.preventDefault(); nav.go({ page: 'settings', section: 'people' }); }}
                   className={`self-stretch ${navItem(nav.route.page === 'settings')}`}>
                   <svg viewBox="0 0 20 20" className={`h-[18px] w-[18px] shrink-0 ${nav.route.page === 'settings' ? 'text-[#002C4B]' : 'text-slate-400 group-hover:text-slate-600'}`} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 5.5h7.2M14.8 5.5H17M3 10h2.2M8.8 10H17M3 14.5h8.2M15.8 14.5H17" />

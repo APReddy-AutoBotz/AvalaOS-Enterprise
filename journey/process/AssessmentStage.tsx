@@ -17,7 +17,8 @@ import { deliveryPlan } from '../../domain/plan/delivery.ts';
 import { provisionalNote } from '../../domain/reference/typical.ts';
 import { useQuestionPlan } from './sourceLook.ts';
 import { assessmentResult } from '../../domain/assess/record.ts';
-import { DecisionError, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
+import { followChoices } from './requirementsFollow.ts';
+import { DecisionError, whoChose, effectiveApproach, emptyDecisions, withCosts, withOverride, withoutOverride, withRate, type Decisions } from '../../domain/assess/decisions.ts';
 import { PAYBACK_YEARS, paybackOf } from '../../domain/assess/payback.ts';
 import { applyTraitFindings, batches, stepTraits, traitSegments, type TraitFinding } from '../../domain/assess/traits.ts';
 import { applyProfileFindings, profileFacts, profileSegments, type ProfileFinding } from '../../domain/assess/profileFacts.ts';
@@ -25,7 +26,7 @@ import type { JourneyStore, SourceRow } from '../store/types.ts';
 import { Button, cx, ErrorNote, messageOf } from '../ui.tsx';
 import { useModelEditor, type ModelEditor } from './useModelEditor.ts';
 import { coarsePatch } from './SourcesStage.tsx';
-import { Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
+import { ChooserContext, chosenBy, Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
 import { AssessmentReport } from './AssessmentReport.tsx';
 import { AssessmentWhy } from './AssessmentWhy.tsx';
 import { AssessmentInputs } from './AssessmentInputs.tsx';
@@ -63,6 +64,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
 
   const result = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings, scoringAlone: true }), [editor.model, decisions?.rate, settings]);
   const d = decisions ?? emptyDecisions();
+  const chooser = React.useContext(ChooserContext);
   const questionPlanNow = useQuestionPlan(processId, editor.model).plan;
   const firstQuestions = questionPlanNow.now.length;
   // The same assessment with people's choices of approach: what the documents, flows and work items follow.
@@ -81,6 +83,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
         revisionId: working?.id ?? revisionId, modelHash: hashModel(editor.model), rulesVersion: MODEL_VERSION, decisions: next,
         result: assessmentResult(result, next),
       });
+      // A person's choice for a step withdrawn or changed: the requirements follow at once (requirementsFollow.ts).
+      if (prev) await followChoices(store, processId, editor.model, prev, next);
     } catch (e) { setDecisions(prev); setError(messageOf(e)); }
   };
 
@@ -215,7 +219,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
                     </td>
                     <td className="px-4 py-3">
                       <ApproachChip approach={eff.approach} label={stepLabel(r, eff.approach)} />
-                      {eff.override && <p className="mt-1 text-[11px] text-slate-500" data-testid="overridden">Overridden by {eff.override.by}</p>}
+                      {eff.override && <p className="mt-1 text-[11px] text-slate-500" data-testid="overridden">Overridden by {whoChose(eff.override, chooser.names)}</p>}
                     </td>
                     <td className="w-28 px-4 py-3">
                       {top ? <><span className="text-sm font-semibold tabular-nums text-slate-900">{top.score}</span><span className="text-xs text-slate-500"> / 100</span><ScoreBar score={top.score} approach={top.approach} className="mt-1.5" /></> : <span className="text-xs text-slate-500">Not scored</span>}
@@ -235,7 +239,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       {current && (
         <SidePanel wide title={steps.find(s => s.id === current.stepId)?.name ?? ''} onClose={() => setOpen(null)}>
           <StepDetail model={editor.model} result={current} decisions={d} canEdit={canEdit} editor={editor}
-            onOverride={(approach, rationale) => { try { save(withOverride(d, current, { approach, rationale, by: me || 'you' })); return true; } catch (e) { return e instanceof DecisionError ? e.message : false; } }}
+            onOverride={(approach, rationale) => { try { save(withOverride(d, current, { approach, rationale, ...chosenBy(chooser) })); return true; } catch (e) { return e instanceof DecisionError ? e.message : false; } }}
             onClearOverride={() => save(withoutOverride(d, current.stepId))} />
         </SidePanel>
       )}
@@ -405,6 +409,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
   model: ProcessModel; result: StepScore; decisions: Decisions; canEdit: boolean; editor: ModelEditor;
   onOverride: (a: Approach, rationale: string) => true | string | false; onClearOverride: () => void;
 }) {
+  const chooser = React.useContext(ChooserContext);
   const step = model.steps.find(s => s.id === result.stepId)!;
   const override = decisions.overrides[result.stepId];
   const [approach, setApproach] = React.useState<Approach | ''>('');
@@ -431,7 +436,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
 
       {override && (
         <div className="rounded-xl border border-slate-300 bg-white p-4 text-sm" data-testid="override-note">
-          <p><span className="font-semibold">Overridden by {override.by}:</span> {APPROACH_LABEL[override.approach]}. {override.rationale}</p>
+          <p><span className="font-semibold">Overridden by {whoChose(override, chooser.names)}:</span> {APPROACH_LABEL[override.approach]}. {override.rationale}</p>
           <p className="mt-1 text-xs text-slate-500">The scoring recommends {stepLabel(result)}.</p>
           {canEdit && <Button variant="ghost" className="mt-1 px-2 py-1 text-xs" onClick={onClearOverride}>Remove override</Button>}
         </div>

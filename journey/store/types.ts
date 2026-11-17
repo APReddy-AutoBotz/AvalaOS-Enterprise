@@ -24,6 +24,7 @@ import type { ProviderId } from '../../domain/auth/providers.ts';
 import type { AiProvider } from '../../domain/ai/providers.ts';
 import type { Allowance, UsageRow } from '../../domain/ai/usage.ts';
 import type { Application, ApplicationInput } from '../../domain/workspace/applications.ts';
+import type { InquiryStatus, WalkthroughRequest } from '../../domain/site/inquiry.ts';
 
 export interface Me { id: string; email: string }
 /** A workspace's own AI provider. The key is never here: only its last four characters. */
@@ -65,6 +66,8 @@ export interface RevisionRow {
   modelHash: string | null;
   basedOn: string | null;
   createdAt: string;
+  /** When it was last saved (an edit to a working draft); absent when the store does not say. */
+  updatedAt?: string | null;
   approvedAt: string | null;
   /** Who approved it (a user id); null when not approved or not recorded. */
   approvedBy?: string | null;
@@ -156,6 +159,16 @@ export interface JourneyStore {
   auditLog(workspaceId: string): Promise<AuditEntry[]>;
   /** Whether the signed-in person may create an organization (only the platform owner, once one is listed). */
   canCreateOrganization(): Promise<boolean>;
+  /** Whether Settings shows the walkthrough requests (the platform owner). The database itself refuses anyone else. */
+  isPlatformOwner(): Promise<boolean>;
+  /** The platform owner only: walkthrough requests from the homepage, newest first (package 11). */
+  listWalkthroughRequests(): Promise<WalkthroughRequest[]>;
+  /** The platform owner only. Setting a status counts as contact. */
+  setWalkthroughRequestStatus(id: string, status: InquiryStatus): Promise<void>;
+  /** The platform owner only: "Reply by email" was used, which counts as contact. */
+  noteWalkthroughReply(id: string): Promise<void>;
+  /** The platform owner only: removal on request. */
+  deleteWalkthroughRequest(id: string): Promise<void>;
   createOrganization(organizationName: string, workspaceName: string): Promise<{ workspaceId: string }>;
   /** The organisation's creator adds a workspace and becomes its admin. Returns its id. */
   createWorkspace(organizationId: string, name: string): Promise<string>;

@@ -168,7 +168,7 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
             {canEdit && adding && <div className={cx(CARD, 'p-5')}>{addForm}</div>}
             {view === 'cards' ? (
               <ul className="grid gap-6 lg:grid-cols-2" data-testid="process-cards">
-                {processes.map(p => <li key={p.id} className="min-w-0"><ProcessCardView p={p} f={facts[p.id]} nameOf={nameOf} open={open} /></li>)}
+                {processes.map(p => <li key={p.id} className="min-w-0"><ProcessCardView p={p} f={facts[p.id]} nameOf={nameOf} open={open} href={nav.href({ page: 'process', processId: p.id, stage: 'sources' })} /></li>)}
                 {/* With an odd number of cards the last place is free: it invites the next process. */}
                 {canEdit && !adding && count % 2 === 1 && (
                   <li className="min-w-0">
@@ -193,7 +193,7 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
                     const openNow = f ? openOn(f) : [];
                     return (
                       <li key={p.id} data-testid="process-row">
-                        <a href={`/process/${p.id}/sources`} onClick={e => { e.preventDefault(); open(p.id); }} className={cx('group flex flex-col gap-2 px-6 py-4 hover:bg-slate-50', ROW)}>
+                        <a href={nav.href({ page: 'process', processId: p.id, stage: 'sources' })} onClick={e => { e.preventDefault(); open(p.id); }} className={cx('group flex flex-col gap-2 px-6 py-4 hover:bg-slate-50', ROW)}>
                           <span className="min-w-0">
                             <span className="block truncate text-[15px] font-semibold text-slate-900 group-hover:text-[#002C4B]">{p.name}</span>
                             {p.description && <span className="mt-0.5 block truncate text-sm text-slate-500">{p.description}</span>}
@@ -208,7 +208,7 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
                           </span>
                           <span className="min-w-0 text-sm text-slate-700">{f && (openNow.length ? openNow.join(' · ') : <span className="text-slate-500">Nothing open</span>)}</span>
                           <span>{f && <Tag tone={STATUS_TONE[f.statusTone]} className="px-2 py-1 text-xs">{f.statusLabel}</Tag>}</span>
-                          <span className="text-xs text-slate-500 md:text-right" title={when(p.updatedAt)}>{ago(p.updatedAt)}</span>
+                          <span className="text-xs text-slate-500 md:text-right" title={when(f?.changedAt ?? p.updatedAt)}>{ago(f?.changedAt ?? p.updatedAt)}</span>
                         </a>
                       </li>
                     );
@@ -228,16 +228,17 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
  * would be done, who is named on it and what is open. The whole card opens the process. A process with
  * nothing to assess yet says so instead of showing empty figures.
  */
-function ProcessCardView({ p, f, nameOf, open }: { p: ProcessRow; f: LoadedFacts | undefined; nameOf: (id: string) => string; open: (id: string) => void }) {
+function ProcessCardView({ p, f, nameOf, open, href }: { p: ProcessRow; f: LoadedFacts | undefined; nameOf: (id: string) => string; open: (id: string) => void; href: string }) {
   const openNow = f ? openOn(f) : [];
+  const changed = f?.changedAt ?? p.updatedAt;
   return (
     <article data-testid="process-card" className={cx(CARD, 'relative flex h-full flex-col p-6 transition hover:border-slate-300 hover:shadow-elev2')}>
       <div className="flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1 basis-60">
           <h2 className="font-display text-xl font-semibold leading-tight text-slate-900">
-            <a href={`/process/${p.id}/sources`} onClick={e => { e.preventDefault(); open(p.id); }} className="rounded after:absolute after:inset-0 after:rounded-2xl hover:text-[#002C4B] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[#002C4B]">{p.name}</a>
+            <a href={href} onClick={e => { e.preventDefault(); open(p.id); }} className="rounded after:absolute after:inset-0 after:rounded-2xl hover:text-[#002C4B] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-[#002C4B]">{p.name}</a>
           </h2>
-          <p className="mt-1.5 text-[13px] text-slate-500" title={when(p.updatedAt)}>Changed {ago(p.updatedAt)}</p>
+          <p data-testid="changed" className="mt-1.5 text-[13px] text-slate-500" title={when(changed)}>Changed {ago(changed)}</p>
         </div>
         {f && <StatusPill facts={f} />}
       </div>

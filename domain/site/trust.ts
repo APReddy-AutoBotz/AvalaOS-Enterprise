@@ -7,7 +7,7 @@ import type { TrustPageId } from './pages.ts';
 
 export const OPERATOR = 'AP Reddy';
 export const CONTACT_EMAIL = 'hello@avalaos.com';
-export const UPDATED = '15 November 2026';
+export const UPDATED = '17 November 2026';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
 /** Further days until the rolling database backups that still hold the data have expired. */
@@ -49,6 +49,7 @@ const privacy: TrustPage = {
             'Account details: your email address, your display name, your password if you set one (kept by our sign-in provider as a one-way hash, never as text), the workspaces you belong to and your role in each.',
             'If you sign in with Google or Microsoft: your name, your email address and whether that provider has verified it. We never see your Google or Microsoft password, and we ask for nothing else from those accounts.',
             'Invitations: the email address and role an admin enters to invite someone.',
+            'Walkthrough requests: the name, work email and company you send us from our homepage, and, if you give them, the process you have in mind and how many people work on it. They are kept in our database only, and read only by us.',
             'Workspace content: the text read from the files you add as sources, with each file\'s name and size; process models, assessments, requirements, documents and your edits to them; flows; work items and the Delivery board; document branding, including any logo you upload; and answers you give to open questions. Files are read in your browser, and only the text read from them is stored, not the file itself.',
             'Voice answers: when you answer by speaking, the recording is sent to be turned into text. Only the text is kept.',
             'Records of activity: who edited, approved or confirmed what and when, and changes to membership and roles.',
@@ -74,6 +75,7 @@ const privacy: TrustPage = {
             'To read sources and draft wording with AI when you ask for it (see the next section).',
             'To keep the service secure, prevent abuse and measure and limit each workspace\'s AI use.',
             'To send the emails the service needs, such as confirming an email address when you create an account.',
+            'To arrange a walkthrough you ask for, and to reply to you about it.',
           ],
         },
         'We do not sell personal data, use it for advertising, or use workspace content to train AI models.',
@@ -110,6 +112,7 @@ const privacy: TrustPage = {
         'We keep a workspace and its content for as long as the customer uses Avala OS. Within the product, a source taken out of a process is archived rather than deleted, so the record of how each document was produced stays complete.',
         `A customer's admin can ask us to delete a workspace, and anyone can ask us to delete their account, by writing to ${mail}. We confirm the request with the workspace admin or the account holder, then delete the data from our live systems within ${DELETE_DAYS} days. Copies in database backups expire on a rolling cycle within a further ${BACKUP_DAYS} days.`,
         `When a customer stops using Avala OS, it has ${EXPORT_DAYS} days to export its documents and work items, after which we delete its workspaces in the same way. We keep something longer only where the law requires it, and then only that.`,
+        `A walkthrough request is deleted twelve months after we last write to each other about it. To have it deleted sooner, write to ${mail}.`,
       ],
     },
     {

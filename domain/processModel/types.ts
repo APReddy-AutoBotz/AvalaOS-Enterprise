@@ -344,7 +344,8 @@ export interface Conflict {
   target: ElementTarget;
   summary: string;
   values: { value: string; sources: SourceRef[] }[];
-  resolution: { chosen: string; by: string; reason: string } | null;
+  /** `by` is who chose, by name (an email address before 17 November 2026); `byId` their id, from then. */
+  resolution: { chosen: string; by: string; byId?: string; reason: string } | null;
 }
 
 export interface ProcessModel {

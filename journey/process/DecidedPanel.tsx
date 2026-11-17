@@ -8,6 +8,7 @@ import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { APPROACH_LABEL, MODEL_VERSION, type Approach, type DecidedQuestion } from '../../domain/assess/scoring.ts';
 import { decidedFallsShort, decidedLine, decidedSummary, type DecidedStep } from '../../domain/assess/decided.ts';
 import { withoutOverride, type Decisions } from '../../domain/assess/decisions.ts';
+import { followChoices } from './requirementsFollow.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { assessmentResult } from '../../domain/assess/record.ts';
 import { hashModel } from '../../domain/processModel/hash.ts';
@@ -16,6 +17,7 @@ import type { JourneyStore } from '../store/types.ts';
 import type { ModelEditor } from './useModelEditor.ts';
 import { API_CHOICES, parseTrait, STEP_COLUMNS, YES_NO } from './AssessmentInputs.tsx';
 import { Button, cx, messageOf } from '../ui.tsx';
+import { ChooserContext, chosenBy } from './widgets.tsx';
 
 const input = 'rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 const CHOICES: Approach[] = ['rpa', 'api', 'ai_assist', 'agent'];
@@ -29,6 +31,7 @@ export function DecidedPanel({ model, assessment, names, meId, canEdit, editor, 
   onAnswerQuestions?: () => void;
 }) {
   const summary = React.useMemo(() => decidedSummary(model, assessment), [model, assessment]);
+  const chooser = React.useContext(ChooserContext);
   const [open, setOpen] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   if (!summary) return null;
@@ -38,6 +41,7 @@ export function DecidedPanel({ model, assessment, names, meId, canEdit, editor, 
     try {
       const result = assessProcess(model, { rate: next.rate, decisions: next });
       await store.saveAssessment(processId, { revisionId, modelHash: hashModel(model), rulesVersion: MODEL_VERSION, decisions: next, result: assessmentResult(result, next) });
+      await followChoices(store, processId, model, decisions, next);
       onDecisions(next);
     } catch (e) { setError(messageOf(e)); }
   };
@@ -81,7 +85,7 @@ export function DecidedPanel({ model, assessment, names, meId, canEdit, editor, 
           )}
           {summary.cannot.length > 0 && (
             <Group title={`Stays with people: ${summary.cannot.length}`} note={`${summary.label} cannot do these on what is known. ${canEdit ? 'You can set a step yourself, with a reason; your choice comes first.' : 'Someone who can edit the process can set a step themselves, with a reason.'}`} testId="decided-cannot">
-              {summary.cannot.map(s => <React.Fragment key={s.stepId}><PeopleStep s={s} canEdit={canEdit} onSet={(approach, rationale) => saveDecisions({ ...decisions, overrides: { ...decisions.overrides, [s.stepId]: { stepId: s.stepId, approach, rationale, by: meId, at: new Date().toISOString() } } })} /></React.Fragment>)}
+              {summary.cannot.map(s => <React.Fragment key={s.stepId}><PeopleStep s={s} canEdit={canEdit} onSet={(approach, rationale) => saveDecisions({ ...decisions, overrides: { ...decisions.overrides, [s.stepId]: { stepId: s.stepId, approach, rationale, ...chosenBy(chooser), at: new Date().toISOString() } } })} /></React.Fragment>)}
             </Group>
           )}
           {summary.person.length > 0 && (

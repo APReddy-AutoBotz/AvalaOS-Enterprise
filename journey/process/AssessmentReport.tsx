@@ -5,7 +5,8 @@ import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, CAPS, COMPLEXITY_PENALTY, FIT, HUMAN_FLOOR, WEIGHTS, type Approach, type StepScore } from '../../domain/assess/scoring.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
-import { effectiveApproach, type Decisions } from '../../domain/assess/decisions.ts';
+import { effectiveApproach, whoChose, type Decisions } from '../../domain/assess/decisions.ts';
+import { ChooserContext } from './widgets.tsx';
 import { paybackOf } from '../../domain/assess/payback.ts';
 import { Button, cx } from '../ui.tsx';
 import { EASE_BANDS, EASE_WEIGHTS, QUADRANT } from '../../domain/assess/priority.ts';
@@ -37,6 +38,7 @@ const td = 'border-b border-slate-100 px-3 py-2 align-top text-sm text-slate-800
 
 /** `result` is the assessment with people's choices of approach; `scoring` the scoring alone, named when they differ. */
 export function AssessmentReport({ model, result, scoring, decisions, onBack }: { model: ProcessModel; result: ProcessAssessment; scoring?: ProcessAssessment; decisions: Decisions; onBack: () => void }) {
+  const chooser = React.useContext(ChooserContext);
   const steps = orderedSteps(model);
   const byStep = new Map<string, StepScore>(result.steps.map(s => [s.stepId, s] as [string, StepScore]));
   const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -136,7 +138,7 @@ export function AssessmentReport({ model, result, scoring, decisions, onBack }: 
                     <td className={cx(td, 'tabular-nums')}>{top ? top.score : ''}</td>
                     <td className={cx(td, 'text-xs text-slate-600')}>{next && !r.alreadyAutomated ? `${APPROACH_LABEL[next.approach]} ${next.score}` : ''}</td>
                     <td className={cx(td, 'text-xs')}>{r.alreadyAutomated ? '' : HUMAN_LABEL[eff.override && eff.approach === 'human' ? 'does_it' : r.human]}</td>
-                    <td className={cx(td, 'text-xs leading-5 text-slate-600')}>{eff.override ? `${eff.override.rationale} (${eff.override.by})` : r.reason}</td>
+                    <td className={cx(td, 'text-xs leading-5 text-slate-600')}>{eff.override ? `${eff.override.rationale} (${whoChose(eff.override, chooser.names)})` : r.reason}</td>
                   </tr>
                 );
               })}

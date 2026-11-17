@@ -6,6 +6,15 @@ import type { QuoteInContext } from '../../domain/workspace/sources.ts';
 /** Finds a quote in its stored source; provided by the page that knows the sources. */
 export type ContextLoader = (ref: SourceRef) => Promise<QuoteInContext | null>;
 export const SourceContext = React.createContext<{ title(id: string): string; load?: ContextLoader }>({ title: id => id });
+
+/**
+ * Who is making a choice on this process (package 10, item 7): stored with a choice as the person's id and
+ * their name, never an email address; `names` shows who made earlier choices (whoChose in domain/assess/decisions.ts).
+ */
+export interface Chooser { id: string | null; name: string; names: Record<string, string> }
+export const ChooserContext = React.createContext<Chooser>({ id: null, name: '', names: {} });
+/** What a choice stores about who made it: `by` the name ("Not recorded" when the profile has none), `byId` the id. */
+export const chosenBy = (c: Chooser) => ({ by: c.name || 'Not recorded', ...(c.id ? { byId: c.id } : {}) });
 import { cx } from '../ui.tsx';
 
 const STATUS: Record<FactStatus, { label: string; tone: string; title: string }> = {

@@ -123,3 +123,22 @@ test('section 8 counts what is not evidenced from the record', () => {
   const noWork = f.requirements!.filter(r => r.state === 'active' && r.kind === 'FR' && !f.proposals.some(p => p.requirements.includes(r.code)));
   assert.equal(k['Functional requirements with no work item'], String(noWork.length));
 });
+
+test('the pack says what its count of open questions is: every one as recorded, and what the screens show when they differ', async () => {
+  const { openCountNote } = await import('./evidence.ts');
+  const open = (m: ProcessModel) => m.openQuestions.filter(q => q.status === 'open');
+  // One question each: the pack and the screens agree, and the sentence says only what the count is.
+  const one = structuredClone(gold);
+  const first = open(one).find(q => q.target.kind === 'metric')!;
+  one.openQuestions = [first];
+  assert.equal(openCountNote(one, assessProcess(one), open(one)), 'This is every open question as recorded, 1 in all.');
+  // A second wording of the same question: the pack counts both, the screens show it once.
+  one.openQuestions.push({ ...first, id: 'q-again', question: `${first.question.replace(/\?$/, '')}?` });
+  assert.equal(openCountNote(one, assessProcess(one), open(one)), 'This is every open question as recorded, 2 in all. The screens show 1: they show repeated wordings of a question once.');
+  // The sample: several questions about one application's access are one question on the screens, and one the record already answers is left out.
+  const note = openCountNote(gold, assessProcess(gold), open(gold));
+  assert.equal(note, `This is every open question as recorded, ${open(gold).length} in all. The screens show 7: they show repeated wordings of a question once and leave out 1 the record already answers.`);
+  // And the sentence is under the count in the pack.
+  const pack = buildEvidence(fixture());
+  assert.ok(JSON.stringify(pack.sections.find(s => s.title === 'What is not evidenced')).includes(openCountNote(gold, fixture().assessment, open(gold))));
+});

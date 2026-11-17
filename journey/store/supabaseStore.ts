@@ -37,6 +37,7 @@ import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
 import type { Module } from '../../domain/workspace/modules.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
+import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
@@ -54,7 +55,7 @@ function fail(error: { message: string; code?: string; status?: number } | null,
 
 const toRevision = (r: Record<string, any>): RevisionRow => ({
   id: r.id, revNo: r.rev_no ?? r.revNo, state: r.state, seq: Number(r.edit_seq ?? r.seq ?? 0), modelHash: r.model_hash ?? r.modelHash ?? null,
-  basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, approvedAt: r.approved_at ?? r.approvedAt ?? null, approvedBy: r.approved_by ?? r.approvedBy ?? null,
+  basedOn: r.based_on ?? r.basedOn ?? null, createdAt: r.created_at ?? r.createdAt, updatedAt: r.updated_at ?? r.updatedAt ?? null, approvedAt: r.approved_at ?? r.approvedAt ?? null, approvedBy: r.approved_by ?? r.approvedBy ?? null,
 });
 const toProcess = (p: Record<string, any>): ProcessRow => ({ id: p.id, workspaceId: p.workspace_id, name: p.name, description: p.description ?? '', updatedAt: p.updated_at, analystId: p.analyst_id ?? null, architectId: p.architect_id ?? null, approverId: p.approver_id ?? null });
 const toSource = (r: Record<string, any>): SourceRow => ({
@@ -151,6 +152,26 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return data === true;
     },
+    // Once an owner is listed (as on the live project) this is exactly the platform owner; on a new deployment
+    // with none listed the section shows and the database still refuses to list anything.
+    async isPlatformOwner() { return this.canCreateOrganization(); },
+    async listWalkthroughRequests() {
+      const { data, error } = await db.rpc('list_walkthrough_requests');
+      if (error) fail(error);
+      return (data ?? []) as WalkthroughRequest[];
+    },
+    async setWalkthroughRequestStatus(id, status) {
+      const { error } = await db.rpc('set_walkthrough_request_status', { target: id, new_status: status });
+      if (error) fail(error);
+    },
+    async noteWalkthroughReply(id) {
+      const { error } = await db.rpc('note_walkthrough_reply', { target: id });
+      if (error) fail(error);
+    },
+    async deleteWalkthroughRequest(id) {
+      const { error } = await db.rpc('delete_walkthrough_request', { target: id });
+      if (error) fail(error);
+    },
     async createOrganization(organizationName, workspaceName) {
       const { data, error } = await db.rpc('create_organization', { organization_name: organizationName, workspace_name: workspaceName });
       if (error) fail(error);
@@ -206,7 +227,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
 
     async listRevisions(processId) {
       const { data, error } = await db.from('process_model_revisions')
-        .select('id, rev_no, state, edit_seq, model_hash, based_on, created_at, approved_at, approved_by')
+        .select('id, rev_no, state, edit_seq, model_hash, based_on, created_at, updated_at, approved_at, approved_by')
         .eq('process_id', processId).order('rev_no', { ascending: false });
       if (error) fail(error);
       return (data ?? []).map(toRevision);
@@ -316,7 +337,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return (data ?? []).map((r: any): StoredRequirement => {
         const l = r.links ?? {};
-        return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order, baseHash: l.baseHash ?? null };
+        return { code: r.code, kind: REQ_KIND[r.requirement_type as keyof typeof REQ_KIND], key: r.derivation_key, category: l.category ?? 'user', title: l.title ?? r.code, statement: r.statement, rationale: r.rationale, priority: r.priority, acceptance: r.acceptance_criteria ?? [], stepIds: l.stepIds ?? [], ruleIds: l.ruleIds ?? [], exceptionIds: l.exceptionIds ?? [], traces: l.traces ?? [], gaps: l.gaps ?? [], origin: r.origin, edited: r.user_edited, state: r.state, order: r.sort_order, baseHash: l.baseHash ?? null, ...(typeof l.retiredReason === 'string' ? { retiredReason: l.retiredReason } : {}) };
       });
     },
     async listProjects(workspaceId) {
@@ -674,7 +695,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (!process) throw new StoreError(404, 'Process not found.');
       const { error } = await db.from('requirements').upsert(rows.map(r => ({
         workspace_id: process.workspaceId, process_id: processId, code: r.code, requirement_type: REQ_TYPE[r.kind], statement: r.statement, rationale: r.rationale,
-        priority: r.priority, acceptance_criteria: r.acceptance, links: { title: r.title, category: r.category, stepIds: r.stepIds, ruleIds: r.ruleIds, exceptionIds: r.exceptionIds, traces: r.traces, gaps: r.gaps, baseHash: r.baseHash ?? null },
+        priority: r.priority, acceptance_criteria: r.acceptance, links: { title: r.title, category: r.category, stepIds: r.stepIds, ruleIds: r.ruleIds, exceptionIds: r.exceptionIds, traces: r.traces, gaps: r.gaps, baseHash: r.baseHash ?? null, ...(r.retiredReason ? { retiredReason: r.retiredReason } : {}) },
         origin: r.origin, derivation_key: r.key, state: r.state, user_edited: r.edited, sort_order: r.order,
       })), { onConflict: 'process_id,code' });
       if (error) fail(error);
