@@ -325,7 +325,7 @@ The owner chooses; this is the advice and the reason for each place.
 | Left to right in the same package | Yes, on screen only, and dropped if it does not look right |
 | What Avala OS promises to document | Process documentation for any team, not documentation in general (owner, 16 November 2026) |
 | A person says what they want from a process; Avala OS never works it out | Yes (section 3c) |
-| The line above the homepage headline names analysis and delivery teams too | Asked, not yet answered |
+| The line above the homepage headline names analysis and delivery teams too | Yes (owner, 17 November 2026); in `next` for the next release |
 | Push to Jira and Azure DevOps | Wait for a pilot that asks |
 | The interview replaces "Closing the gaps" | Not yet |
 | A company's own document section may have text per process | Yes, when Ask Avala's section drafts are built |

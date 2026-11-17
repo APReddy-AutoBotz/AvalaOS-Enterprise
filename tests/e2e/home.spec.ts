@@ -12,7 +12,7 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   // A buyer has one thing to ask for, a walkthrough, in the bar and in the opening, beside the demo; who the
   // page is for is said first, and the opening no longer explains invitations (owner, 16 November 2026).
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Book a walkthrough' })).toHaveAttribute('href', /^mailto:.*walkthrough/i);
-  await expect(page.getByText('For automation teams and consulting partners')).toBeVisible();
+  await expect(page.getByText('For automation, analysis and delivery teams, and their consulting partners')).toBeVisible();
   await expect(page.getByText('Already have an invitation?')).toHaveCount(0);
   await expect(page.getByRole('link', { name: /pilot/i })).toHaveCount(0);
   // The first screen says what a buyer asks first, and each line leads to where the page shows it.
