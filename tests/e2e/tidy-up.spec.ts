@@ -79,6 +79,9 @@ test('decided as API integration, Documents opened, the decision removed: what i
   expect((await rows()).filter(r => r.state !== 'active')).toEqual([]);
 
   // No application's API turns out to be confirmed, and a person edited one requirement of an API step.
+  // (Made on the Process stage: Documents, opened again, would bring the list up to date with the change itself.)
+  await stage(page, 'Process');
+  await expect(page.getByTestId('decided-approach')).toBeVisible();
   await page.evaluate(KEY => {
     const state = JSON.parse(localStorage.getItem(KEY)!);
     const draft = state.revisions.find((r: { state: string }) => r.state === 'working');
@@ -91,7 +94,6 @@ test('decided as API integration, Documents opened, the decision removed: what i
   await page.reload();
 
   // Removed from the brief, before Documents opens again.
-  await stage(page, 'Process');
   await page.getByTestId('decided-approach').getByRole('button', { name: 'Remove the decided approach' }).click();
   await expect(page.getByTestId('brief-purpose').getByTestId('purpose-value')).toHaveText('Assess it and document it');
   await expect.poll(async () => (await rows()).filter(r => r.state === 'retired').length).toBeGreaterThan(0);
