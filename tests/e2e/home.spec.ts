@@ -173,6 +173,51 @@ test('homepage on a phone: the links are behind Menu', async ({ page }) => {
   await expect(main.getByRole('button', { name: 'Menu' })).toHaveAttribute('aria-expanded', 'false');
 });
 
+test('homepage: no heading leaves one word alone on its last line', async ({ page }) => {
+  // Found by the owner on his laptop (17 November 2026): "…and their consulting / partners", "AI is not the
+  // answer to every / step". Headings and the line above the headline wrap balanced; the opening headline
+  // keeps its own breaks.
+  for (const width of [1536, 1366, 1280, 1024, 768, 390]) {
+    await page.setViewportSize({ width, height: 864 });
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'What comes out' })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const found = await page.evaluate(() => {
+      const linesOf = (el: Element) => {
+        const boxes: DOMRect[] = [];
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+        for (let n = walker.nextNode() as Text | null; n; n = walker.nextNode() as Text | null) {
+          const re = /\S+/g;
+          for (let m = re.exec(n.data); m; m = re.exec(n.data)) {
+            const r = document.createRange();
+            r.setStart(n, m.index);
+            r.setEnd(n, m.index + m[0].length);
+            const b = r.getClientRects()[0];
+            if (b && b.width) boxes.push(b);
+          }
+        }
+        const lines: DOMRect[][] = [];
+        for (const b of boxes) {
+          const last = lines[lines.length - 1];
+          if (!last || b.left < last[last.length - 1].right - 1) lines.push([b]);
+          else last.push(b);
+        }
+        return { words: boxes.length, lines: lines.length, last: lines.length ? lines[lines.length - 1].length : 0 };
+      };
+      const wrap = (el: Element) => { const cs = getComputedStyle(el) as CSSStyleDeclaration & { textWrapStyle?: string; textWrap?: string }; return cs.textWrapStyle || cs.textWrap || ''; };
+      const checked = [...document.querySelectorAll('main h2, main [data-balanced]')];
+      return {
+        count: checked.length,
+        notBalanced: [...checked, ...document.querySelectorAll('main h3')].filter(el => !wrap(el).includes('balance')).map(el => el.textContent!.slice(0, 40)),
+        alone: checked.map(el => ({ text: el.textContent!.slice(0, 60), ...linesOf(el) })).filter(x => x.words >= 4 && x.lines >= 2 && x.last === 1).map(x => x.text),
+      };
+    });
+    expect(found.count, `headings checked at ${width}`).toBeGreaterThanOrEqual(10);
+    expect(found.notBalanced, `not wrapped balanced at ${width}`).toEqual([]);
+    expect(found.alone, `a word alone on the last line at ${width}`).toEqual([]);
+  }
+});
+
 test('homepage: it stays short, under eight screens on a laptop and about 1,000 words before "Read more"', async ({ page }) => {
   // The owner's laptop (15.6 inch): the page had grown to 11 screens and 1,440 words (16 November 2026).
   await page.setViewportSize({ width: 1536, height: 864 });
