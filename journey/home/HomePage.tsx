@@ -372,9 +372,9 @@ export default function HomePage() {
         </header>
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-14 pt-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-16 lg:pt-10 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
           <div>
-            <p className="text-sm font-semibold text-[#F2B21E]">For automation, analysis and delivery teams, and their consulting partners</p>
-            <h1 className="mt-3 font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
-            <p className="mt-6 border-l-4 border-[#E69F00] pl-4 font-display text-2xl font-semibold leading-8 tracking-tight text-white sm:text-3xl">Not every process needs AI.</p>
+            <p data-balanced className="text-balance text-sm font-semibold text-[#F2B21E]">For automation, analysis and delivery teams, and their consulting partners</p>
+            <h1 className="text-wrap mt-3 font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
+            <p className="text-balance mt-6 border-l-4 border-[#E69F00] pl-4 font-display text-2xl font-semibold leading-8 tracking-tight text-white sm:text-3xl">Not every process needs AI.</p>
             <p className="mt-4 text-lg leading-8 text-slate-300">Decide where RPA, an API, AI or a person fits each step, from the documents you already have. You get a recommendation with its reasons, documents your reviewers can check, and a plan your team can deliver.</p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               {signedIn ? <a href={go.href} className={cta}>{go.label}</a> : <a href={WALK} className={cta}>{WALK_LABEL}</a>}
