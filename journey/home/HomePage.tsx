@@ -154,7 +154,7 @@ function Tour() {
             const here = i === stage;
             return (
               <li key={s.id}>
-                <button type="button" aria-current={here ? 'step' : undefined} onClick={() => { setStage(i); setMode('held'); }}
+                <button type="button" aria-label={`${s.name}. ${s.line}`} aria-current={here ? 'step' : undefined} onClick={() => { setStage(i); setMode('held'); }}
                   className={`w-full rounded-lg px-2 py-2 text-center transition-colors lg:px-3 lg:py-2.5 lg:text-left ${focus} focus-visible:outline-white ${here ? 'bg-white/10 ring-1 ring-white/25' : 'hover:bg-white/5'}`}>
                   <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-white' : 'text-slate-300'}`}><span data-initial className="text-[#F2B21E]">{s.name[0]}</span>{s.name.slice(1)}</span>
                   <span className="hidden text-sm text-slate-300 lg:block">{s.line}</span>
