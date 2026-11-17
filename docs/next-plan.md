@@ -14,6 +14,8 @@ Releases (owner, 17 November 2026): 65 Netlify credits are left, about 15 a prod
 
 **Update, 16 November 2026 (late evening): the sixth release.** Sections 3 and 3b and the homepage package (package 7) are live (merge commit `218943a` on `main`, on the owner's word), reviewed first (`claude/review-sixth-release-16-nov.md` and `claude/review-second-bundle-16-nov.md` in the project). Where a section below says "in review", read "released". The server functions were redeployed from `main` (the first run failed on GitHub's rate limit before deploying anything; the second succeeded). Still to be seen: the first weekday email with the new count and comments, compared with My work. What comes next is section 4, with three additions from the reviews: an inquiry form on the homepage (today "Book a walkthrough" opens an email; it needs a server function, a place to keep requests, spam control and a line in the privacy notice: ask first); the evidence pack saying that its count of open questions is every item as recorded (the screens merge repeats); and recording who made a choice of approach by name or id.
 
+**Update, 17 November 2026 (late night): section 3f comes first.** An outside review of the repository was checked finding by finding (`claude/repo-review-analysis.md` in the project). The owner decided: package 15 (only the code in use, with proof), package 13 (soundness fixes), then package 12 (section 3e), one release; package 14 (an approved document is final, a change makes a new version) as the release after. The repository is private since that evening. With the owner: confirm two old keys in the history are deleted at their provider; a monthly spend limit at OpenAI; the rule on `main` in GitHub (the review chat's access cannot set it).
+
 **Update, 17 November 2026 (night): the next work is section 3e**, on the owner's go: counting visits to the public pages (package 12), before marketing starts. A marketing chat works from `claude/marketing-brief.md` in the project; what it needs from the product comes to the development chat as requests.
 
 **Update, 17 November 2026 (evening): the eighth release.** Section 3d (package 10, the tidy-up, #190; package 11, the walkthrough request form, #191), headings that wrap balanced (#184) and the amber first letters in the tour's list of stages (#188, #189) are live (merge commit `bab6440` on `main`, on the owner's word). Where a section below says "in `next`" or "in review", read "released". Reviewed first: the database change read and inspected live, the new function read, both packages tried on the preview, and one real request sent from the preview after the owner agreed to deploy `journey-inquiry` ahead of the release (17:44 India time): it was thanked, stored, and listed in Settings. All five server functions were redeployed from `main` on the first run. Seen on the live site after the release: "Book a walkthrough" opens the request window, the five amber letters, balanced headings. About 35 Netlify credits are left (about 2 deploys) until 1,000 are added on 22 November 2026. Still with the owner: the notice email at hello@avalaos.com was not confirmed, and the test request "Review test (please delete)" is in Settings to delete. Small things found in the review, not fixed: a decided approach can say "80 questions settle them" (true, but alarming: say it per step or soften it); walkthrough requests show their time as "Nov 17, 2026, 5:50 PM" where the product writes "17 November 2026"; the privacy, terms and security pages share one "last updated" date. What the review advises next: run the other AI providers through their check (each needs the owner's key), and an option to hide names and account numbers before text goes to an AI provider.
@@ -399,6 +401,81 @@ Seven small things, each with its test. One of them changes what is stored and i
 **Done when.** Unit tests: what is sent for a page (the address cleaned as above), for each event, and that nothing is sent when signed in, on a preview, with a privacy signal, or on a page outside the list. Browser tests, with the service's address stood in for: a visit to the homepage sends one count; opening and sending the walkthrough window sends its two events with no typed text in them; a signed-in visit sends nothing; the page works with the address blocked; the homepage's length test and the accessibility scan pass untouched. The review will open the live site after the release, signed out, and see its own visit and one test event arrive in the owner's dashboard.
 
 **Not in this package.** Counting inside the product (what signed-in people use): a different question, with its own privacy weight; not now. A/B tests. Any advertising or social network's tracker.
+
+## 3f. After the outside review of the repository: packages 13, 14 and 15 (owner's decisions, 17 November 2026)
+
+**Not built. For a builder chat; the review chat reviews each plan and each result before any release.**
+
+An outside reviewer went through the whole repository at the eighth release. A separate chat checked every finding against the code and the live database; its table, with evidence, is `claude/repo-review-analysis.md` in the project (the F-numbers below are its). The outside report is right on the facts and wrong on urgency: nothing in it can be used against the live site today, where both accounts are the owner's. The owner made the repository private the same evening; notes that say "the repository is public" are out of date and are corrected with this work (backups stay encrypted and logs stay free of data all the same).
+
+**The owner's decisions.** The small, honest form of each fix, not the heavy one. An approved document is final: a change after approval makes a new version, with the reason, what changed and who (package 14). Code the live product does not use leaves the repository, with proof that nothing in use is lost (package 15). `main` changes only through a pull request whose checks pass (a GitHub rule the owner sets himself). Order: 15, 13, then 12 (section 3e), one release; package 14 follows as the next release.
+
+### Package 15: only the code in use, and proof that nothing is lost
+
+**Why.** The repository still holds what is left of the earlier application: 23 files under `components/`, 132 under `services/`, 32 server functions that were never deployed to this project, the earlier 256-table schema under `supabase/legacy/`. The owner wants the code that is usable now, as something he can download, without losing "even a single minute thing" of the running application.
+
+**Nothing is lost by this, by construction.** Git keeps every earlier state. Before anything is removed, the last commit that holds everything is given the tag `before-cleanup-2026-11` so it can always be found again.
+
+**Steps.**
+
+1. **Find what is in use, by the tools, not by eye.** Everything the site's build reaches from its entry page; everything each of the five live server functions (`journey-ai`, `journey-extract`, `journey-inquiry`, `journey-invite`, `journey-notify`) imports; every test, script and workflow that is run; every migration and database test (all of them: they are the live database's history); the eval; the public files the pages use; the configuration. A small script under `scripts/` makes the list, so it can be run again.
+2. **Show the owner the two lists before deleting anything:** what stays and what goes, by folder, in plain words, with anything doubtful named. `services/assessV2/` holds data shapes the Process Model still uses: what is used there stays.
+3. **Remove what is not in use, in one pull request,** with the tests that belonged only to it and their entries in the test runners.
+4. **Prove nothing changed.** The built site is the same file for file before and after (compare the name and fingerprint of every file the build writes; if the build is not repeatable byte for byte, say so and compare what can be compared). Each server function's bundle, or the list of files it loads with their fingerprints, is the same. No migration is touched. Typecheck, the unit tests, the build and every browser test pass.
+5. **Write down what is not in the code,** names only and never a value, so the product could be rebuilt from the code, a database backup and this list: Netlify's settings and environment names; the server functions' secrets; the secrets kept in the database's vault; the scheduler's jobs; sign-in providers and addresses; the GitHub workflows' secrets; DNS and mail records; the outside services (Resend, Sentry, and the visit counter once package 12 is in). It goes in `AGENTS.md`, replacing what is scattered there.
+
+**The download.** Once merged and released, the review chat makes one archive of `main` (the code only, no history) and sends it to the owner; GitHub's own "Download ZIP" gives the same. A new repository without the old history is not advised: the history is private now and loses nothing by staying.
+
+**Done when.** The two lists were shown and agreed; the proof of step 4 is in the report with its numbers; the tag exists; `AGENTS.md` describes the repository as it then is.
+
+### Package 13: soundness fixes from the review
+
+One bundle in three parts, each its own pull request. Every item has its test. Where an item changes what a server function runs, the report names the function; it goes live with the release.
+
+**A. Screens and settings only.**
+
+- **The microphone works (F12).** The site's own settings forbid it today, so "speak your answer" fails for everyone. Allow it for the site itself; check the message a person sees when they refuse it in the browser.
+- **The README says what the product is** (it says "Nothing here is production-ready").
+- **What approval covers is said truthfully (F07, wording only; the real fix is package 14).** Until package 14 is live, the Documents page must not say "The approved document is unchanged" when later edits, choices or settings can change what is shown.
+- **What was found in the sources is cleared from the browser at sign-out (F10).**
+- **"AI use this month" is never cut short without saying so (F11):** read it in pages, or say when the list is partial.
+- **The privacy notice names the AI providers a workspace may connect,** not only the platform's.
+- **The secret scanner looks at the folders that exist** (`journey/`, `domain/`), after package 15.
+
+**B. Rules that the server functions carry.**
+
+- **An API covers a step only when that is certain (F09).** Today one shared word, or a five-letter stem, is enough: "Read supplier" counts as able to do "Update supplier", and the step's reason then states "has a confirmed API covering this work", which no source said. When the match is not certain, the step is scored as "not known to be covered", the reason says so, and the question is asked, as already happens for an unrelated operation. A person's own confirmation of an API without listed operations still covers the process (decided). **Before and after, report the sample's figures** (the split of its steps, "what would change the ranking", the portfolio) and those of the owner's two test processes; if the sample's change, the demo's data, its recorded Ask Avala answers and the homepage's pictures and wording are brought in step in the same release. Run the Ask Avala measure afterwards.
+- **A workspace's own AI key that has gone missing stops the work with a clear message (F05).** It never falls back to the platform's key: that is our written rule and the homepage's promise.
+- **The allowance (F03, the small parts):** it is checked before "Test this key", which records its use; every attempt of a call is counted, not only the last.
+- **Reading sources on a workspace's own key does not need the platform's key to exist (F04).**
+- **A reply that lacks a list its task requires is refused (F16); a task name must be one of ours (F17).**
+
+**C. The walls between workspaces (the database: additive, its tests, a rolled-back trial, the owner's yes).**
+
+- **A board item can only point at work, a parent and a process of its own workspace (F01),** and confirming proposals refuses an item of another workspace.
+- **A workspace cannot be moved to another organisation (F02).**
+
+**Not in package 13, and why.** Two people saving at once (F15) and the database tests in CI (F14): real, medium, their own package once a second person edits. The backup's restore check (F06): the owner decides on the database's paid plan first, whose own backups replace it; until then one small step is welcome, making the check fail when a sign-up trigger or a function did not come back. The heavy forms the report asks for (a token ledger, a staging project, recovery drills, single sign-on): not for one person.
+
+### Package 14: an approved document is final; a change makes a new version
+
+**The owner's words.** "The draft version can have many versions. But the approved one is final and if it has to be changed, a new version with the reason, and what changed, who changed has to be recorded."
+
+**What is true today (F07).** Approval freezes the process record. The documents are rebuilt each time they are opened, from today's section edits, people's choices, requirement wording, company layout and settings, and from Avala OS's own wording as last released. So an "approved" document can change with no mark.
+
+**What a person sees.**
+
+- **Approving keeps the documents exactly as they read at that moment:** every document offered for the process, its text, tables and maps, with who approved and when. Nothing changes them afterwards: not an edit, a choice, a setting, a company layout, nor a later release of Avala OS.
+- **Anything changed after approval lives in the working draft,** and the process says "Approved version N · unapproved changes", for a section edit and a person's choice as much as for a change to the process itself.
+- **Approving again makes version N+1.** The approver gives the reason for the new version (required from the second version on) and sees what changed since the last approved one, section by section, before confirming. Who and when are recorded.
+- **A list of versions on Documents:** number, date, who approved, the reason, what changed. Any version opens as it was and downloads as it was (Word and Markdown).
+- **The draft may change as often as needed.** Each saved change is on record with who made it and when; say in the plan what the record holds today for section edits, choices and requirement wording, and the smallest addition that closes a gap.
+- **The evidence pack** lists the versions with their reasons, and a pack made from an approved version is kept with it.
+- **Versions approved before this existed** have no kept copy. They are labelled so ("approved before copies were kept: shown as built today"), and an approver can keep one as it reads now, with that fact recorded. Nothing is made up after the fact.
+
+**Underneath.** The baseline has a table `document_revisions` with no rows; say in the plan whether it fits. A database change is expected: additive, its test, a rolled-back trial, the owner's yes. What is kept is the built document, not only what it was built from, so a release cannot change it.
+
+**Done when.** Unit tests: an approved version is unchanged by each kind of later change; the reason is required; what changed lists exactly the sections that differ. A database test for who may write and that a kept version cannot be altered. Browser tests on the sample: approve, edit a section, see "unapproved changes", approve with a reason, open version 1 and download it as it was. The homepage's line "An approved revision is never changed" is then true of the documents as well.
 
 ## 4. After that release: the order advised
 
