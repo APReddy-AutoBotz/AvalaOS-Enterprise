@@ -138,6 +138,12 @@ export interface StepScore {
    * the scoring's own recommendation. `winner` is then the approach in effect; the scores are unchanged.
    */
   recommended?: Approach;
+  /**
+   * Set by assessProcess when a person decided one approach for the whole process (package 9): whether
+   * that approach can do this step, and if not yet known, the questions that would settle it. `person`:
+   * a person chose this step's approach themselves, which comes first.
+   */
+  decided?: DecidedFit & { approach: Exclude<Approach, 'human'>; person?: true };
 }
 
 // ---------------------------------------------------------------- reading the facts
@@ -471,3 +477,72 @@ export function scoreSteps(model: ProcessModel): StepScore[] {
 }
 
 export const scoreOf = (s: StepScore, a: Approach): number => s.scores.find(x => x.approach === a)?.score ?? 0;
+
+// ---------------------------------------------------------------- one approach decided for the process
+
+/** A fact a decided approach's score rests on that nobody has given yet, with where it is answered. */
+export interface DecidedQuestion {
+  key: string;
+  question: string;
+  /** Where the answer is recorded: a step's fact, an application's API, or the stability of its screens. */
+  target: { kind: 'trait'; stepId: string; trait: string } | { kind: 'api'; systemId: string } | { kind: 'screens'; systemId: string };
+}
+/**
+ * Whether one approach, decided for the whole process by a person, can do a step (docs/next-plan.md,
+ * package 9). "can": it reaches the lowest score at which an approach is recommended on what is known.
+ * "unknown": it does not yet, but would with the facts still unknown at their most favourable, so it is
+ * not settled and the questions say what would settle it. "cannot": it does not even then; `reason` is
+ * what holds it back, in the ranking's own words. A step already done by a system is not scored.
+ */
+export interface DecidedFit { status: 'can' | 'unknown' | 'cannot' | 'already'; score: number; reason: string; questions: DecidedQuestion[] }
+
+export function decidedFit(model: ProcessModel, step: Step, approach: Exclude<Approach, 'human'>, common = commonWords(model)): DecidedFit {
+  if (alreadyDone(model, step)) return { status: 'already', score: 0, reason: 'A system already does this step on its own.', questions: [] };
+  const f = readFacts(model, step, common);
+  const now = scoreApproaches(f, false)[approach];
+  if (now.score >= FIT.possible) return { status: 'can', score: now.score, reason: '', questions: [] };
+  // The same step with every fact still unknown at its most favourable for this approach.
+  const ai = approach === 'ai_assist';
+  const questions: DecidedQuestion[] = [];
+  const trait = <S extends string>(r: Read<S>, best: S): Read<S> => {
+    if (r.fact || r.state === best) return r;
+    questions.push({ key: `trait:${r.key}:${step.id}`, question: r.question, target: { kind: 'trait', stepId: step.id, trait: r.key } });
+    return { ...r, state: best };
+  };
+  const g: StepFacts = {
+    ...f,
+    rules: trait(f.rules, ai ? 'incomplete' : 'complete'),
+    input: trait(f.input, ai ? 'unstructured' : 'structured'),
+    judgment: trait(f.judgment, 'no'),
+    physical: trait(f.physical, 'no'),
+    ...(ai ? { language: trait(f.language, 'yes'), write: trait(f.write, 'none') } : {}),
+    ...(approach === 'agent' ? { agent: Object.fromEntries(Object.entries(f.agent).map(([k, r]) => [k, trait(r, 'yes')])) as StepFacts['agent'] } : {}),
+  };
+  if (approach === 'rpa' && f.screens === 'unknown') {
+    g.screens = 'stable';
+    for (const s of f.systems.filter(x => !known(x.uiStable as Fact<unknown> | undefined))) questions.push({ key: `screens:${s.id}`, question: `Are the screens of ${s.name} stable enough to automate?`, target: { kind: 'screens', systemId: s.id } });
+  }
+  const openApis = approach === 'api' ? f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent') : [];
+  for (const a of openApis) questions.push({ key: `api:${a.system.id}`, question: `Does ${a.system.name} have an API that covers "${step.name}"?`, target: { kind: 'api', systemId: a.system.id } });
+  const best = scoreApproaches(g, openApis.length > 0)[approach];
+  if (best.score < FIT.possible || !questions.length) return { status: 'cannot', score: now.score, reason: limiter(now), questions: [] };
+  // Only the facts that move this approach's score are named: each one, given alone at its most favourable.
+  const alone = (q: DecidedQuestion): number => {
+    const h: StepFacts = { ...f };
+    if (q.target.kind === 'trait') {
+      const k = (Object.keys(f) as (keyof StepFacts)[]).find(x => (f[x] as Read<string>)?.key === (q.target as { trait: string }).trait);
+      if (k) (h as unknown as Record<string, unknown>)[k] = (g as unknown as Record<string, unknown>)[k];
+      else if (q.target.trait.startsWith('agent.')) { const a = q.target.trait.slice(6) as keyof StepFacts['agent']; h.agent = { ...f.agent, [a]: g.agent[a] }; }
+    } else if (q.target.kind === 'screens') h.screens = 'stable';
+    return scoreApproaches(h, q.target.kind === 'api')[approach].score;
+  };
+  const moving = questions.filter(q => alone(q) > now.score);
+  return { status: 'unknown', score: now.score, reason: limiter(now), questions: moving.length ? moving : questions };
+  return { status: 'cannot', score: now.score, reason: limiter(now), questions: [] };
+}
+
+/** `decidedFit` for every step, sharing the work of reading the process once. */
+export function decidedFits(model: ProcessModel, approach: Exclude<Approach, 'human'>): Map<string, DecidedFit> {
+  const common = commonWords(model);
+  return new Map(model.steps.map(s => [s.id, decidedFit(model, s, approach, common)]));
+}

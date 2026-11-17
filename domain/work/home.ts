@@ -3,6 +3,7 @@
 import type { MemberFacts } from '../people/roles.ts';
 import type { StageId } from '../workspace/route.ts';
 import type { WorkItem } from '../workitems/board.ts';
+import { followsFrom, type PurposeValue } from '../plan/purpose.ts';
 
 export interface ProcessFacts {
   id: string;
@@ -22,6 +23,8 @@ export interface ProcessFacts {
   proposalsWaiting: number;
   /** Open review comments on the process's documents (package 5 of docs/next-plan.md), when they were read. */
   comments?: OpenComment[];
+  /** What a person wants from the process (domain/plan/purpose.ts), when it is not the default. */
+  purpose?: PurposeValue;
 }
 
 /** An open review comment on a document section: who wrote it by id and name, never an email address. */
@@ -58,7 +61,8 @@ export function needsFor(me: Person, processes: ProcessFacts[]): Need[] {
       if (p.questions.now > 0) add('analyst', `${plural(p.questions.now, 'question', 'questions')} only your people can answer`, 'documents');
       if (p.questions.found > 0) add('analyst', `${plural(p.questions.found, 'answer', 'answers')} found in the sources to confirm`, 'documents');
     } else if (p.openQuestions > 0) add('analyst', `${plural(p.openQuestions, 'open question', 'open questions')} to answer`, 'documents');
-    if (p.proposalsWaiting > 0) add('architect', `${plural(p.proposalsWaiting, 'work item', 'work items')} waiting to be confirmed to the board`, 'work-items');
+    // A process documented as it is plans no work: proposals kept from before are not a need (domain/plan/purpose.ts).
+    if (p.proposalsWaiting > 0 && followsFrom(p.purpose).plansWork) add('architect', `${plural(p.proposalsWaiting, 'work item', 'work items')} waiting to be confirmed to the board`, 'work-items');
     if (p.status === 'draft' || p.status === 'changed') add('approver', p.status === 'changed' ? 'Changes since the approved revision are waiting for approval' : 'A revision is waiting for approval', 'process');
   }
   return out;
@@ -134,7 +138,7 @@ export function homeSummary(needs: Need[], items: { overdue: boolean }[]): strin
 }
 
 /** What is open on a process, for its row in the list: counted facts only, in the order the work is done. */
-export function openOn(p: Pick<ProcessFacts, 'status' | 'openQuestions' | 'proposalsWaiting' | 'questions'>): string[] {
+export function openOn(p: Pick<ProcessFacts, 'status' | 'openQuestions' | 'proposalsWaiting' | 'questions' | 'purpose'>): string[] {
   const out: string[] = [];
   if (p.status === 'none') out.push('No sources yet');
   if (p.questions) {
@@ -143,7 +147,7 @@ export function openOn(p: Pick<ProcessFacts, 'status' | 'openQuestions' | 'propo
     if (q.found > 0) out.push(`${plural(q.found, 'answer', 'answers')} to confirm`);
     if (q.wait > 0) out.push(`${q.wait} can wait until sign-off`);
   } else if (p.openQuestions > 0) out.push(plural(p.openQuestions, 'open question', 'open questions'));
-  if (p.proposalsWaiting > 0) out.push(`${plural(p.proposalsWaiting, 'work item', 'work items')} to confirm`);
+  if (p.proposalsWaiting > 0 && followsFrom(p.purpose).plansWork) out.push(`${plural(p.proposalsWaiting, 'work item', 'work items')} to confirm`);
   return out;
 }
 

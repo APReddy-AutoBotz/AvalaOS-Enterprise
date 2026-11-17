@@ -133,6 +133,31 @@ export interface ProcessMeta {
   brief?: ProcessBrief;
   /** The typical process this one was started from (domain/reference), if any; part I. */
   startedFrom?: string;
+  /**
+   * What a person wants from this process (domain/plan/purpose.ts). Unset: assess it and document it.
+   * Kept here, beside the brief, because the released site ignores a new entry of `meta`.
+   */
+  purpose?: ProcessPurpose;
+  /**
+   * One approach a person decided for the whole process, with the reason (package 9). Kept apart from
+   * `purpose`, so it stays in effect when the answer goes back to "assess" until a person removes it.
+   */
+  decidedApproach?: DecidedApproach;
+}
+
+/** An approach decided for the whole process: who decided (the person's id, never an email address), when and why. */
+export interface DecidedApproach {
+  approach: 'rpa' | 'api' | 'ai_assist' | 'agent';
+  reason: string;
+  by: string | null;
+  at: string;
+}
+
+/** What a person wants from a process, who said so (the person's id, never an email address) and when. */
+export interface ProcessPurpose {
+  value: 'assess' | 'as_is' | 'decided';
+  by: string | null;
+  at: string;
 }
 
 export type RoleKind = 'person_role' | 'team' | 'external' | 'system_actor';

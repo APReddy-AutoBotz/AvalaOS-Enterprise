@@ -372,7 +372,7 @@ export default function HomePage() {
         </header>
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-14 pt-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-16 lg:pt-10 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">
           <div>
-            <p className="text-sm font-semibold text-[#F2B21E]">For automation teams and consulting partners</p>
+            <p className="text-sm font-semibold text-[#F2B21E]">For automation, analysis and delivery teams, and their consulting partners</p>
             <h1 className="mt-3 font-display text-5xl font-semibold leading-[1.03] tracking-tight sm:text-6xl xl:text-7xl"><span className="text-[#F2B21E]">Evaluate</span> before you automate.</h1>
             <p className="mt-6 border-l-4 border-[#E69F00] pl-4 font-display text-2xl font-semibold leading-8 tracking-tight text-white sm:text-3xl">Not every process needs AI.</p>
             <p className="mt-4 text-lg leading-8 text-slate-300">Decide where RPA, an API, AI or a person fits each step, from the documents you already have. You get a recommendation with its reasons, documents your reviewers can check, and a plan your team can deliver.</p>
@@ -434,8 +434,8 @@ export default function HomePage() {
 
         <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-[#002C4B] text-white">
           <div className="mx-auto max-w-7xl px-6 py-12">
-            <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From five files to a Delivery board</h2>
-            <p className="mt-4 max-w-2xl text-lg text-slate-200">Avala is the five stages every process passes through. Watch the sample case go through them, or pick a stage to look at it.</p>
+            <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From your documents to a Delivery board</h2>
+            <p className="mt-4 max-w-2xl text-lg text-slate-200">Five stages take a process from its source files to the board: Assess, Validate, Assemble, Launch, Audit. Watch the sample case go through them, or pick a stage to look at it.</p>
             <Tour />
           </div>
         </section>
@@ -549,7 +549,7 @@ export default function HomePage() {
         <section id="start" aria-labelledby="start-h" className="scroll-mt-6 bg-slate-50">
           <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="start-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Start with one part, or use it all</h2>
-            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later; nothing is lost when a part is switched on or off.</p>
+            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later; nothing is lost. Not automating? Document a process as it is, with no assessment. Technology already chosen? The documents follow it.</p>
             <ul aria-label="Ways to start" className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {PLANS.map((p, i) => (
                 <li key={p.id} className={`flex flex-col rounded-2xl p-6 ring-1 ring-inset ${i === 0 ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white ring-slate-200'}`}>

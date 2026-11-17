@@ -2,10 +2,11 @@
 // for each. Every answer is written to the process model, so the assessment and the documents
 // update at once. Nothing is written without the person pressing save.
 import React from 'react';
+import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
 import { closeQuestions, deferQuestion, reopenQuestions } from '../../domain/processModel/patch.ts';
 import { ACCESS, all, buildAnswer, record, type Op } from '../../domain/questions/answer.ts';
-import { GROUP_LABEL, OWNER_LABEL, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
+import { groupLabel, OWNER_LABEL, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
 import { holdReason, nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { lookSummary } from '../../domain/assistant/sourceLook.ts';
 import { useQuestionPlan } from './sourceLook.ts';
@@ -49,7 +50,7 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           <div>
             <p className="text-xs font-semibold text-[#FFBC03]">Close the gaps</p>
             <h3 className="mt-1.5 font-display text-2xl font-semibold" data-testid="gaps-count">{nowHeading(plan)}</h3>
-            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} Each answer updates the model, the assessment and the documents at once.</p>
+            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} {whatFollows(model).assessed ? 'Each answer updates the model, the assessment and the documents at once.' : 'Each answer updates the process and its document at once.'}</p>
             {lookLine && <p className="mt-1 text-xs text-slate-300" role="status" data-testid="source-look">{lookLine}</p>}
           </div>
           {onClose && <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/10">Back to the document</button>}
@@ -188,7 +189,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
     <article data-testid="gap-question">
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-semibold tabular-nums text-slate-500">Question {position}</span>
-        <span className={cx('rounded-full px-2.5 py-0.5 font-semibold', GROUP_TONE[item.group])}>{GROUP_LABEL[item.group]}</span>
+        <span className={cx('rounded-full px-2.5 py-0.5 font-semibold', GROUP_TONE[item.group])}>{groupLabel(item)}</span>
         <span className="rounded-full bg-amber-50 px-2.5 py-0.5 font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">Ask: {item.assignedTo ?? OWNER_LABEL[item.owner]}</span>
       </div>
       <h4 className="mt-3 font-display text-lg font-semibold leading-snug text-slate-900">{item.question}</h4>
@@ -198,6 +199,12 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
 
       {canEdit && mode === 'answer' && (
         <div className="mt-5 space-y-3">
+          {item.kind === 'choice' && (
+            <select aria-label="Answer" value={pick} onChange={e => setPick(e.target.value)} className={input}>
+              <option value="">Choose the answer</option>
+              {(item.choices ?? []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+          )}
           {(item.kind === 'role' || item.kind === 'system') && (
             <select aria-label="Answer" value={pick} onChange={e => setPick(e.target.value)} className={input}>
               <option value="">{item.kind === 'role' ? 'Choose the role' : 'Choose the system'}</option>

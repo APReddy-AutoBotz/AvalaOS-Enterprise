@@ -12,7 +12,7 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   // A buyer has one thing to ask for, a walkthrough, in the bar and in the opening, beside the demo; who the
   // page is for is said first, and the opening no longer explains invitations (owner, 16 November 2026).
   await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Book a walkthrough' })).toHaveAttribute('href', /^mailto:.*walkthrough/i);
-  await expect(page.getByText('For automation teams and consulting partners')).toBeVisible();
+  await expect(page.getByText('For automation, analysis and delivery teams, and their consulting partners')).toBeVisible();
   await expect(page.getByText('Already have an invitation?')).toHaveCount(0);
   await expect(page.getByRole('link', { name: /pilot/i })).toHaveCount(0);
   // The first screen says what a buyer asks first, and each line leads to where the page shows it.
@@ -46,6 +46,9 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   await expect(page.getByText('What went in')).toBeVisible();
   await expect(page.getByText('One step: reading the invoice.')).toBeVisible();
 
+  // The heading is about any process's documents, not the sample's five files, which sat confusingly above "five stages" (owner, 16 November 2026).
+  await expect(page.getByRole('heading', { name: 'From your documents to a Delivery board' })).toBeVisible();
+  await expect(page.getByText(/From five files/)).toHaveCount(0);
   const stages = page.getByRole('list', { name: 'The five stages' }).getByRole('button');
   await expect(stages).toHaveCount(5);
   await expect(stages.first()).toHaveAttribute('aria-current', 'step');
@@ -123,6 +126,9 @@ test('homepage: the ways to start and the AI providers come from the product\'s 
   await expect(page).toHaveURL(/#trust$/);
   await expect(page.getByRole('heading', { name: 'What your security team will ask' })).toBeVisible();
   await expect(page.locator('#trust')).toContainText('Inside your own cloud, on request');
+  // Live with the seventh release (17 November 2026): a process can be documented without the assessment, or with the approach already decided.
+  await expect(page.locator('#start')).toContainText('Document a process as it is, with no assessment');
+  await expect(page.locator('#start')).toContainText('Technology already chosen? The documents follow it.');
   for (const name of ['Privacy', 'Terms', 'Security']) await expect(page.locator('#trust').getByRole('link', { name })).toHaveAttribute('href', `/${name.toLowerCase()}`);
   await expect(page.getByRole('list', { name: 'Ways to start' }).getByRole('heading')).toHaveText(['The full journey', 'Assess and Documents', 'Assess', 'The Delivery board on its own']);
   // The close asks for one thing, and shows the address for anyone whose mail program does not open.

@@ -31,8 +31,10 @@ export function coarsePatch(before: ProcessModel, after: ProcessModel): JsonPatc
   return ops;
 }
 
-export function SourcesStage({ store, processId, workspaceId, canEdit, onModelChanged, onSourcesChanged, goToProcess, me = '', processName = '', hasSteps = false }: {
+export function SourcesStage({ store, processId, workspaceId, canEdit, onModelChanged, onSourcesChanged, goToProcess, me = '', processName = '', hasSteps = false, asksInMind = true }: {
   store: JourneyStore; processId: string; workspaceId: string; canEdit: boolean;
+  /** Whether the start with no documents asks what the team has in mind (not for a process documented as it is). */
+  asksInMind?: boolean;
   onModelChanged: () => void; onSourcesChanged: () => void; goToProcess: () => void; me?: string;
   /** For the typical process the name suggests (part I); offered only while the process has no steps. */
   processName?: string; hasSteps?: boolean;
@@ -146,7 +148,7 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
       {sources.length === 0 ? (
         <>
           <EmptyState title="No sources yet">Every extracted fact keeps a link back to the passage it came from in these files.</EmptyState>
-          {canEdit && <StartInOwnWords store={store} processId={processId} workspaceId={workspaceId} me={me} onSaved={() => { load(); onSourcesChanged(); onModelChanged(); }} />}
+          {canEdit && <StartInOwnWords store={store} processId={processId} workspaceId={workspaceId} me={me} asksInMind={asksInMind} onSaved={() => { load(); onSourcesChanged(); onModelChanged(); }} />}
           {canEdit && !hasSteps && <StartFromTypical store={store} processId={processId} onStarted={() => { onModelChanged(); goToProcess(); }} />}
         </>
       ) : (

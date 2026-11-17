@@ -413,6 +413,41 @@ export function setProfileFact(model: ProcessModel, args: { fact: 'processChange
  * A person states (or clears, with null) one line of the brief (docs/effort-first-plan.md, part A).
  * The line becomes theirs: a later reading of the sources never overwrites it (`adoptBrief`).
  */
+/**
+ * A person says what they want from the process (domain/plan/purpose.ts). Only the answer changes:
+ * nothing else on the record is removed or rewritten, so switching there and back leaves it as it was.
+ */
+export function setPurpose(model: ProcessModel, args: { value: 'assess' | 'as_is'; by: string | null; at: string }): OpResult {
+  if (!['assess', 'as_is'].includes(args.value)) throw new ModelOpError('BAD_PURPOSE', 'Choose what is wanted from the process.');
+  return commit(model, m => { m.meta.purpose = { value: args.value, by: args.by, at: args.at }; });
+}
+
+/**
+ * How it will be built is already decided (package 9): one approach for the whole process, with the
+ * reason, which is required. The answer becomes "decided" in the same edit. `by` is the person's id.
+ */
+export function decideApproach(model: ProcessModel, args: { approach: 'rpa' | 'api' | 'ai_assist' | 'agent'; reason: string; by: string | null; at: string }): OpResult {
+  if (!['rpa', 'api', 'ai_assist', 'agent'].includes(args.approach)) throw new ModelOpError('BAD_APPROACH', 'Choose one approach: RPA, API integration, AI that assists people or an AI agent.');
+  const reason = args.reason.trim();
+  if (!reason) throw new ModelOpError('NO_REASON', 'Say why this approach was decided.');
+  return commit(model, m => {
+    m.meta.decidedApproach = { approach: args.approach, reason, by: args.by, at: args.at };
+    m.meta.purpose = { value: 'decided', by: args.by, at: args.at };
+  });
+}
+
+/**
+ * The decided approach is removed, so each step goes back to the scoring's answer (and a person's own
+ * choice for a step). While the answer is "decided", it goes back to "Assess it and document it" in the
+ * same edit: "decided" with no approach is refused by the record's check.
+ */
+export function removeDecidedApproach(model: ProcessModel, args: { by: string | null; at: string }): OpResult {
+  return commit(model, m => {
+    delete m.meta.decidedApproach;
+    if (m.meta.purpose?.value === 'decided') m.meta.purpose = { value: 'assess', by: args.by, at: args.at };
+  });
+}
+
 export function setBriefFact<K extends keyof ProcessBrief>(model: ProcessModel, args: { fact: K; value: NonNullable<ProcessBrief[K]>['value'] }): OpResult {
   return commit(model, m => {
     m.meta.brief = { ...(m.meta.brief ?? {}), [args.fact]: confirmed(args.value as never) };

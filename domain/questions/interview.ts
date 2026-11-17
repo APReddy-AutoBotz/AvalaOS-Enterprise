@@ -13,7 +13,7 @@
 import type { ProcessModel } from '../processModel/types.ts';
 import type { Segment } from '../ai/gateway.ts';
 import { notesSegments, proposalsFrom, type NoteFinding, type Proposal } from './notes.ts';
-import { GROUP_LABEL, OWNER_LABEL, type Triage, type TriageItem } from './triage.ts';
+import { groupLabel, OWNER_LABEL, type Triage, type TriageItem } from './triage.ts';
 import { buildAnswer, type Op } from './answer.ts';
 
 export const INTERVIEW_LIMITS = { answer: 2000 } as const;
@@ -115,4 +115,4 @@ export function interviewEdit(model: ProcessModel, item: TriageItem, p: Proposal
 }
 
 /** The heading over a question: its place and why it is asked first. */
-export const questionHeading = (item: TriageItem, position: number, of: number) => `Question ${position} of ${of} · ${GROUP_LABEL[item.group]}`;
+export const questionHeading = (item: TriageItem, position: number, of: number) => `Question ${position} of ${of} · ${groupLabel(item)}`;

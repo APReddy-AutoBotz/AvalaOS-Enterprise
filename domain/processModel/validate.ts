@@ -190,6 +190,19 @@ export function validateModel(model: ProcessModel): ValidationResult {
   if (model.meta.startedFrom !== undefined && (typeof model.meta.startedFrom !== 'string' || !model.meta.startedFrom.trim())) {
     err('BAD_STARTED_FROM', 'meta.startedFrom', 'meta.startedFrom must name a typical process.');
   }
+  if (model.meta.purpose !== undefined) {
+    const pu: any = model.meta.purpose;
+    if (!pu || typeof pu !== 'object' || !['assess', 'as_is', 'decided'].includes(pu.value)) err('PURPOSE', '/meta/purpose', 'purpose must say what is wanted from the process.');
+    else if (!(pu.by === null || typeof pu.by === 'string') || typeof pu.at !== 'string' || !pu.at) err('PURPOSE', '/meta/purpose', 'purpose records who answered and when.');
+    else if (pu.value === 'decided' && model.meta.decidedApproach === undefined) err('PURPOSE', '/meta/purpose', 'An approach decided for the process needs the approach and its reason.');
+  }
+  if (model.meta.decidedApproach !== undefined) {
+    const d: any = model.meta.decidedApproach;
+    if (!d || typeof d !== 'object' || !['rpa', 'api', 'ai_assist', 'agent'].includes(d.approach)) err('DECIDED', '/meta/decidedApproach', 'The decided approach must be RPA, API integration, AI that assists people or an AI agent.');
+    else if (typeof d.reason !== 'string' || !d.reason.trim()) err('DECIDED', '/meta/decidedApproach/reason', 'A decided approach needs its reason.');
+    else if (!(d.by === null || typeof d.by === 'string') || typeof d.at !== 'string' || !d.at) err('DECIDED', '/meta/decidedApproach', 'A decided approach records who decided and when.');
+    else if (typeof d.by === 'string' && d.by.includes('@')) err('DECIDED', '/meta/decidedApproach/by', 'Who decided is recorded by the person\'s id, never an email address.');
+  }
   if (model.meta.brief !== undefined) {
     const b: any = model.meta.brief;
     const one = (list: readonly string[]) => (v: unknown) => list.includes(v as string);

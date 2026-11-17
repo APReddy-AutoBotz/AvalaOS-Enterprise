@@ -1,5 +1,8 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
+import { requirementsOnSwitch } from '../../domain/requirements/switch.ts';
+import { purposeTag } from '../../domain/assess/decided.ts';
+import { emptyDecisions } from '../../domain/assess/decisions.ts';
 import { useProcessChanged } from '../processChanged.ts';
 import { useAutoLook, useSharedLook } from '../process/sourceLook.ts';
 import { BriefPanel } from '../process/BriefPanel.tsx';
@@ -10,6 +13,7 @@ import { adoptBrief } from '../../domain/processModel/patch.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
+import { offersPurpose, purposeOf, purposeOffMessage, stagesForProcess, whatFollows } from '../../domain/plan/purpose.ts';
 import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
@@ -112,7 +116,9 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   const current = working ?? approved;
   const canEdit = workspace !== null && workspace.role !== 'viewer';
   // Only the stages of the parts the organisation uses; a stage that is off says so (nothing is deleted).
-  const shownStages = stagesFor(workspace?.modules);
+  // And of those, the stages what the person wants from this process includes (domain/plan/purpose.ts).
+  const shownStages = stagesForProcess(workspace?.modules, model);
+  const purposeOff = stagesFor(workspace?.modules).includes(stage) ? purposeOffMessage(stage, model) : null;
   const stageOff = !shownStages.includes(stage);
   const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
   const hasSteps = Boolean(model && model.steps.length > 0);
@@ -130,6 +136,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className="min-w-0 break-words font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{process.name}</h1>
           <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
+          {/* What is wanted from the process, on every page of it, when it is not "Assess it and document it": it says why Assessment is missing. */}
+          {model && purposeTag(purposeOf(model), model.meta.decidedApproach) && <Tag tone="info" data-testid="purpose-tag" className="px-2 py-1 text-xs">{purposeTag(purposeOf(model), model.meta.decidedApproach)}</Tag>}
         </div>
         <div className="flex items-center gap-2">
           {canApprove && working && model && typicalCounts(model).total > 0 && (
@@ -183,22 +191,23 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
 
       <ErrorNote message={error} />
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
-        {stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
+        {stageOff && purposeOff ? <EmptyState title="Documented as it is" action={<Button variant="secondary" onClick={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}>Open the brief</Button>}><span data-testid="purpose-off">{purposeOff}</span></EmptyState> :
+         stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
         <SourceContext.Provider value={sourceCtx}>
         {stage === 'sources'
-          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
+          ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} asksInMind={whatFollows(model).asksInMind} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
               revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
           : stage === 'documents' && model && current && model.steps.length > 0
-          ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources} approvedRevision={approved ? approved.revNo : null} approvedRevisionId={approved && current.state === 'working' ? approved.id : null} onFix={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}
+          ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources} approvedRevision={approved ? approved.revNo : null} approvedRevisionId={approved && current.state === 'working' ? approved.id : null} currentRevisionId={current.id} onFix={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}
               revision={{ label: `Revision ${current.revNo}${current.state === 'working' ? ', working draft' : ''}`, state: current.state === 'approved' ? 'approved' : 'working', date: new Date(current.approvedAt ?? current.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }} />
           : stage === 'work-items' && model && model.steps.length > 0
           ? <WorkItemsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} canEdit={canEdit} onOpenBoard={id => nav.go({ page: 'board', projectId: id })} />
           : stage === 'flows' && model && model.steps.length > 0
           ? <FlowsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} revisionId={current?.id ?? ''} canEdit={canEdit} me={me} onSaved={load} />
           : stage === 'process' && model
-          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} />
+          ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} askPurpose={offersPurpose(workspace?.modules)} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
         </SourceContext.Provider>}
       </section>
@@ -208,12 +217,34 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   );
 }
 
-function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved, processName }: {
+function ProcessStage({ store, processId, workspaceId, model, working, canEdit, me, onSaved, processName, askPurpose }: {
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null; canEdit: boolean; me: string; onSaved: () => void; processName: string;
+  /** Whether to ask what is wanted from the process: only an organisation that uses the documents is asked. */
+  askPurpose: boolean;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const { title } = React.useContext(SourceContext);
   const impact = useImpactContext(store, processId, workspaceId);
+  // Who answered what is wanted from the process is shown by name, never by email address.
+  const [people, setPeople] = React.useState<{ meId: string | null; names: Record<string, string> }>({ meId: null, names: {} });
+  // A switch of the answer works the requirements out again and saves them at once, so nothing that reads
+  // the stored list sees one from the other answer (domain/requirements/switch.ts). If that cannot be saved
+  // now, the answer still stands and Documents brings them up to date when it opens; nothing is lost.
+  const onSwitched = React.useCallback(async (before: ProcessModel, after: ProcessModel): Promise<string | null> => {
+    try {
+      const [decisions, stored] = await Promise.all([store.getAssessmentDecisions(processId), store.listRequirements(processId)]);
+      const rows = requirementsOnSwitch(before, after, decisions ?? emptyDecisions(), stored);
+      if (rows?.length) await store.saveRequirements(processId, rows);
+      return null;
+    } catch {
+      return 'Your answer is saved. The requirements could not be brought up to date just now; they will be when Documents is opened.';
+    }
+  }, [store, processId]);
+  React.useEffect(() => {
+    if (!askPurpose) return;
+    Promise.all([store.currentUser().catch(() => null), store.listMembers(workspaceId).catch(() => [])])
+      .then(([u, mem]) => setPeople({ meId: u?.id ?? null, names: Object.fromEntries(mem.map(x => [x.userId, x.name])) }));
+  }, [store, workspaceId, askPurpose]);
   const [apps, setApps] = React.useState<Application[] | null>(null);
   React.useEffect(() => { store.listApplications(workspaceId).then(setApps).catch(() => setApps(null)); }, [store, workspaceId]);
   const appList = React.useMemo<AppList | null>(() => (apps ? {
@@ -238,7 +269,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   return (
     <>
       <ErrorNote message={readError} />
-      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} />
+      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} purpose={askPurpose ? { ...people, onSwitched } : undefined} />
       <TypicalPanel editor={editor} canEdit={canEdit} />
       <ProcessEditor processId={processId} editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>

@@ -2,16 +2,23 @@
 // follows the UiPath default PDD, plus the delivery model. Every table is derived from the Process
 // Model and the assessment; nothing is drafted here and nothing is assumed.
 import { gaps, orderedSteps } from '../processModel/selectors.ts';
-import { DocBuilder, missing, type DocTree } from './tree.ts';
+import { DocBuilder, missing, type CellInput, type DocTree } from './tree.ts';
+import type { MetricKind } from '../processModel/types.ts';
 import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
 import { robotsBlocked } from '../assess/scoring.ts';
 import { flowMermaid, flowPicture, modeFromScore } from '../flowchart/svg.ts';
 import { shapeInEffect } from '../flowchart/shape.ts';
-import { controlOf, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
+import { controlOf, decidedIn, ACCESS_TEXT, accessSummary, factCell, HUMAN_POINT, known, metricCell, metricText, MODE_LABEL, modeOf, names, sourceList, stepNumber, type DocInput } from './common.ts';
+import { asksQuestion, whatFollows } from '../plan/purpose.ts';
+import { decidedSentence } from '../assess/decided.ts';
+import { processMetric } from '../processModel/selectors.ts';
 
 const TASK: Record<string, string> = { user: 'Person using a system', manual: 'Manual', service: 'Done by a system', business_rule: 'Automatic check', send: 'Sends', receive: 'Receives' };
 
 export function buildPdd(input: DocInput): DocTree {
+  // A process documented as it is gets the document of how the work is done, and nothing about a change.
+  // The model the document is built from decides: an approved revision follows the answer it was approved with.
+  if (!whatFollows(input.model).future) return buildPddAsIs(input);
   const { model: m, assessment: a } = input;
   const b = new DocBuilder();
   const steps = orderedSteps(m);
@@ -118,7 +125,9 @@ export function buildPdd(input: DocInput): DocTree {
     else b.callout('No steps are recorded, so there is no map yet.');
   }
   b.section('3.2', 'Delivery model');
-  b.paragraph(`${a.verdict}. ${a.split}`);
+  // Decided for the whole process: who decided, when and why, in place of the scoring's verdict.
+  const dec = decidedIn(input);
+  b.paragraph(dec ? `${decidedSentence(dec, input.names)} ${a.split}` : `${a.verdict}. ${a.split}`);
   b.table('Delivery model', ['#', 'Step', 'Today', 'Future mode', 'Person in the loop', 'Reason'],
     steps.map(s => {
       const md = modeOf(input, s);
@@ -131,7 +140,7 @@ export function buildPdd(input: DocInput): DocTree {
       const md = modeOf(input, s);
       const via = md.approach === 'api' ? 'API' : md.approach === 'rpa' ? 'Screens (UI)' : md.approach === 'ai_assist' ? 'AI reads; a person reviews' : 'Agent within set limits';
       return [String(no(s.id)), s.name, MODE_LABEL[md.approach!], s.inputs.join(', '), s.outputs.join(', '), s.systemIds.length ? `${names(s.systemIds, m.systems)} via ${via}` : via];
-    }), 'No step is recommended for automation yet.');
+    }), dec ? `${dec.label}, the approach decided, can do no step yet.` : 'No step is recommended for automation yet.');
   b.section('3.4', 'In scope for automation');
   b.table('In scope for automation', ['#', 'Step', 'Mode', 'Reason'], steps.map(s => ({ s, md: modeOf(input, s) })).filter(x => x.md.approach && x.md.approach !== 'human').map(({ s, md }) => [String(no(s.id)), s.name, MODE_LABEL[md.approach!], md.why]), 'None yet.');
   b.section('3.5', 'Out of scope for automation');
@@ -164,4 +173,117 @@ export function buildPdd(input: DocInput): DocTree {
     control: controlOf(input),
     sections: b.sections, openItems: b.openItems,
   };
+}
+
+/**
+ * The process document for a process documented as it is (domain/plan/purpose.ts): what the process is
+ * for, who is involved, the applications, the map, the steps, decisions and rules, input data, pain
+ * points, exceptions as people handle them, reporting and audit, other observations, sources and open
+ * gaps. Nothing in it speaks of a change to the process or of how it could be done otherwise; section
+ * numbers run without gaps. Figures are shown when the record holds them and never asked for.
+ */
+function buildPddAsIs(input: DocInput): DocTree {
+  const m = input.model;
+  const b = new DocBuilder();
+  const steps = orderedSteps(m);
+  const no = stepNumber(m);
+  const roleName = (id: string) => m.roles.find(r => r.id === id)?.name ?? id;
+  const shape = input.mapShape ?? shapeInEffect(m, input.decisions).shape;
+  const words = processWords(m);
+  const building = buildingSystem(m);
+  let top = 0, sub = 0;
+  const chapter = (title: string) => { top += 1; sub = 0; b.section(String(top), title, 1); };
+  const section = (title: string) => { sub += 1; b.section(`${top}.${sub}`, title); };
+
+  chapter('Introduction');
+  section('Purpose of this document');
+  b.paragraph(words.intended
+    ? `This document describes how "${m.meta.name}" is intended to work, step by step: who does each step, with which application, and the rules and exceptions that apply. Nothing of it is done today, so it describes no current process.`
+    : `This document describes how "${m.meta.name}" is done today, step by step: who does each step, with which application, and the rules and exceptions that apply. It is the reference for how the work is done.`);
+  section('Objectives of the process');
+  const objective = known(m.meta.objective);
+  if (objective) b.paragraph(objective); else b.open('The objective of the process is not stated.', { kind: 'meta', field: 'objective' });
+  section('Key contacts');
+  const owner = known(m.meta.owner);
+  b.table('Key contacts', ['Role', 'Kind', 'Steps'], [
+    ...(owner ? [[`Process owner: ${owner}`, 'Owner', '']] : []),
+    ...m.roles.filter(r => r.inScope).map(r => [r.name, r.kind.replace('_', ' '), String(m.steps.filter(s => s.roleIds.includes(r.id)).length)]),
+  ], 'No roles are recorded yet.');
+  if (!owner) b.open('The process owner is not named.', { kind: 'meta', field: 'owner' });
+
+  chapter(words.process);
+  section('Process overview');
+  // A figure is shown with its source when the record holds it; one it does not hold is left out, not asked for.
+  const figure = (label: string, kind: MetricKind): [string, CellInput][] => {
+    const x = processMetric(m, kind);
+    return x && (x.value !== null || x.range) ? [[label, { text: `${metricText(x)}${x.sources.length ? ` (source: ${sourceList(x.sources)})` : ''}`, status: x.status }]] : [];
+  };
+  b.keyValue('Process overview', [
+    ['Process name', m.meta.name],
+    ['Description', objective ? objective : missing()],
+    ['Owner', factCell(m.meta.owner)],
+    ['Roles', names(m.roles.filter(r => r.inScope).map(r => r.id), m.roles) || missing()],
+    ...figure('Cases handled', 'volume'),
+    ...figure('Hands-on time per case', 'handling_time'),
+    ...figure('People doing the work', 'fte'),
+    ...figure('Cases that leave the standard path', 'exception_rate'),
+    ['Input data', m.dataObjects.length ? m.dataObjects.map(d => d.name).join(', ') : missing()],
+    ['Steps', String(steps.length)],
+  ]);
+  section('Applications used');
+  const used = existingSystems(m);
+  if (building) b.callout(`${building.name} is what is being built, so it is not listed as an application the process uses.`);
+  b.table('Applications used', ['Application', 'Kind', 'Version', 'Used in steps'],
+    used.map(s => [s.name, s.kind.replace('_', ' '), s.version ?? '', steps.filter(x => x.systemIds.includes(s.id)).map(x => String(no(x.id))).join(', ')]),
+    'No applications are recorded.');
+  section(words.intended ? words.map : 'As-Is process map');
+  {
+    const f = flowPicture(m, { shape, title: `${words.map} of ${m.meta.name}` });
+    if (m.steps.length) b.figure(words.intended ? words.map : 'As-Is process map', { svg: f.svg, width: f.width, height: f.height, mermaid: flowMermaid(m, undefined, shape) });
+    else b.callout('No steps are recorded, so there is no map yet.');
+    if (m.steps.length && !m.flows.length) b.open('How do the steps connect: which step follows which, and where does the process branch?');
+  }
+  section(words.steps);
+  const timed = steps.some(s => known(s.traits?.effortMinutes) !== null);
+  b.table(words.steps, ['#', 'Step', 'Description', 'Role', 'Application', 'Input', 'Output', 'Rules', 'Exceptions', ...(timed ? ['Time per case'] : []), 'Source'],
+    steps.map(s => [
+      String(no(s.id)), { text: s.name, status: s.status }, s.description || '', s.roleIds.length ? names(s.roleIds, m.roles) : missing(),
+      s.systemIds.length ? names(s.systemIds, m.systems) : s.taskType === 'manual' ? 'None (manual)' : missing(),
+      s.inputs.join(', '), s.outputs.join(', '), s.ruleIds.map(id => m.rules.find(r => r.id === id)?.name).filter(Boolean).join('; '),
+      s.exceptionIds.map(id => m.exceptions.find(e => e.id === id)?.name).filter(Boolean).join('; '),
+      ...(timed ? [known(s.traits?.effortMinutes) !== null ? factCell(s.traits?.effortMinutes, v => `${v} min`) : ''] : []), sourceList(s.sources),
+    ]), 'No steps are recorded yet.');
+  for (const s of steps) {
+    if (!s.roleIds.length) b.note(`Who does "${s.name}"?`, { kind: 'step', id: s.id, field: 'roleIds' });
+    if (!s.systemIds.length && s.taskType !== 'manual') b.note(`Which system is used for "${s.name}"?`, { kind: 'step', id: s.id, field: 'systemIds' });
+  }
+  section('Decision points and business rules');
+  b.table('Decision points', ['Decision', 'Kind', 'Outcomes'], m.gateways.map(g => [g.question, g.type, m.flows.filter(f => f.from === g.id).map(f => f.label || 'Unlabelled').join(' / ') || missing()]), 'No decision points are recorded.');
+  b.table('Business rules', ['Rule', 'Condition', 'Action', 'Source'], m.rules.map(r => [{ text: r.name, status: r.status }, r.condition, r.action, sourceList(r.sources)]), 'No business rules are recorded.');
+  section('Input data');
+  b.table('Input data', ['Input', 'Format', 'Structured', 'Classification'], m.dataObjects.map(d => [d.name, d.format, d.structured === null ? missing() : d.structured ? 'Yes' : 'No', d.classification ?? '']), 'No input data is recorded.');
+  section('Pain points and current-state gaps');
+  b.table('Pain points', ['Pain point', 'Steps', 'Source'], m.painPoints.map(p => [p.text, p.stepIds.map(id => `${no(id)}`).join(', '), sourceList(p.sources)]), 'No pain points are recorded.');
+  section('Business exception handling');
+  const exRows = (kind: 'business' | 'application', prefix: string) => m.exceptions.filter(e => e.kind === kind).map((e, i) => [
+    `${prefix}-${String(i + 1).padStart(2, '0')}`, { text: e.name, status: e.status }, e.trigger, e.stepIds.map(id => String(no(id))).join(', '), e.handling || missing(), e.routedToRoleId ? roleName(e.routedToRoleId) : missing(),
+  ]);
+  b.paragraph('The cases that leave the standard path, and how people handle them today.');
+  b.table('Business exceptions', ['ID', 'Exception', 'Trigger', 'Steps', 'Action', 'Handled by'], exRows('business', 'BE'), 'No business exceptions are recorded.');
+  if (m.exceptions.some(e => e.kind === 'application')) b.table('When an application fails', ['ID', 'Problem', 'Trigger', 'Steps', 'Action', 'Handled by'], exRows('application', 'AE'), '');
+  for (const e of m.exceptions.filter(x => !x.routedToRoleId)) b.note(`Who handles the exception "${e.name}"?`, { kind: 'exception', id: e.id, field: 'routedToRoleId' });
+  section('Reporting and audit');
+  b.table('Controls, reporting and audit', ['Control', 'Steps', 'Source'], m.controls.map(c => [c.text, c.stepIds.map(id => String(no(id))).join(', '), sourceList(c.sources)]), 'No controls or reporting needs are recorded.');
+
+  chapter('Other observations');
+  b.table('Risks noted in the sources', ['Risk', 'Steps', 'Source'], m.risks.map(r => [r.text, r.stepIds.map(id => String(no(id))).join(', '), sourceList(r.sources)]), 'None recorded.');
+  chapter('Sources');
+  b.table('Sources', ['Key', 'Title'], input.sources.map(s => [s.key, s.title]), 'No sources were used; the process was entered by hand.');
+  chapter('Open gaps and deferred items');
+  // Only what is asked of this process: a question that serves an assessment is not listed (it stays on the record).
+  for (const q of m.openQuestions.filter(q => q.status === 'open' && asksQuestion(m, q))) b.note(q.question, q.target);
+  for (const g of gaps(m)) if (asksQuestion(m, { target: g.target, question: g.label })) b.note(g.label, g.target);
+  b.table('Open gaps', ['#', 'Question', 'Raised in'], b.openItems.map((o, i) => [String(i + 1), o.text, o.section ?? '']), 'No open gaps.');
+
+  return { type: 'pdd', title: 'Process Definition Document', subtitle: m.meta.name, control: controlOf(input), sections: b.sections, openItems: b.openItems };
 }

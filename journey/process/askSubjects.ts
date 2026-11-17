@@ -1,5 +1,8 @@
 // What Ask Avala can be asked about, each with how its record is read and how its facts are built. The
 // panel (AskPanel.tsx) is the same for all of them: it asks the subject for its facts and its task.
+import { DECIDED_LIST_LINE, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
+import { APPROACH_LABEL } from '../../domain/assess/scoring.ts';
+import { askedOpenQuestions } from '../../domain/processModel/selectors.ts';
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
@@ -37,12 +40,18 @@ export const STARTERS = {
   workspace: ['Where does each process stand?', 'What is open across the workspace?', 'Who is named on each process?'],
 } as const;
 
+/** The starters for a process documented as it is: nothing about a recommendation, because there is none. */
+export const STARTERS_AS_IS = ['Who does each step, and with which application?', 'Which exceptions are there, and who handles them?', 'What is still unknown about this process?'] as const;
+
 export function processSubject(store: JourneyStore, p: { processId: string; workspaceId: string; model: ProcessModel; sources: SourceRow[] }): AskSubject {
+  const assessed = whatFollows(p.model).assessed;
   return {
     kind: 'process', noun: 'this process', task: askProcess,
-    intro: 'Ask about this process. Answers come only from its record (its steps, assessment, requirements, board items and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
-    placeholder: 'Ask about the steps, the assessment, requirements or sources…',
-    suggested: [...STARTERS.process],
+    intro: assessed
+      ? 'Ask about this process. Answers come only from its record (its steps, assessment, requirements, board items and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.'
+      : 'Ask about this process. It is documented as it is, not assessed: answers come only from its record (its steps, roles, applications, rules, exceptions and sources) and from how Avala OS itself works. Each sentence links to where it came from. Ask Avala explains; it changes nothing, and nothing here is saved.',
+    placeholder: assessed ? 'Ask about the steps, the assessment, requirements or sources…' : 'Ask about the steps, roles, applications, exceptions or sources…',
+    suggested: assessed ? [...STARTERS.process] : [...STARTERS_AS_IS],
     load: () => loadAskRecord(store, p),
     facts: (q, r) => askFacts(q, { model: p.model, ...(r as Omit<AskContext, 'model'>) }),
     assessment: r => (r as Omit<AskContext, 'model'>).assessment ?? null,
@@ -107,15 +116,18 @@ export function workspaceSubject(store: JourneyStore, w: { workspace: { id: stri
         const revisions = await store.listRevisions(p.id);
         const current = revisions.find(r => r.state === 'working') ?? revisions.find(r => r.state === 'approved');
         const [model, proposals, decisions] = await Promise.all([current ? store.getModel(current.id) : Promise.resolve(null), store.listProposals(p.id).catch(() => []), store.getAssessmentDecisions(p.id).catch(() => null)]);
-        const assessment = model ? assessProcess(model, { settings, decisions }) : null;
+        // Documented as it is (domain/plan/purpose.ts): no assessment is worked out or sent at all.
+        const assessment = model && whatFollows(model).assessed ? assessProcess(model, { settings, decisions }) : null;
         if (model && model.steps.length) models.set(p.id, { model, sources: () => store.listSources(p.id) });
         const status = revisionStatus(revisions);
         const proc: WorkspaceProcess = {
           id: p.id, name: p.name, status: revisions.length ? status.label : 'No process steps yet',
-          openQuestions: model ? model.openQuestions.filter(q => q.status === 'open').length : 0,
+          openQuestions: model ? askedOpenQuestions(model).length : 0,
           proposalsWaiting: proposals.filter(x => x.state === 'proposed' || x.state === 'selected').length,
           named: { analyst: nameOf(p.analystId), architect: nameOf(p.architectId), approver: nameOf(p.approverId) },
           card: assessment ? processCard(assessment) : null, systems: model ? model.systems.map(s => s.name) : [],
+          ...(purposeOf(model) !== 'assess' ? { purpose: purposeOf(model) } : {}),
+          ...(purposeOf(model) === 'decided' && model?.meta.decidedApproach ? { decidedLine: DECIDED_LIST_LINE(APPROACH_LABEL[model.meta.decidedApproach.approach]) } : {}),
         };
         return { proc, item: assessment ? { id: p.id, name: p.name, assessment, rate: decisions?.rate ?? null, costs: decisions?.costs ?? null } : null };
       }));

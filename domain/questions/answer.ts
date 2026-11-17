@@ -3,7 +3,7 @@
 // through the patch operations, and the question is closed with the answer in words, so the record keeps
 // where the value came from. Nothing here runs on its own: the screens apply the edit when a person saves.
 import type { AccessStatus, ProcessModel } from '../processModel/types.ts';
-import { addQuestion, answerQuestion, closeQuestions, routeException, setAccessStatus, updateFact, type OpResult } from '../processModel/patch.ts';
+import { addQuestion, answerQuestion, closeQuestions, routeException, setAccessStatus, setStepTrait, setSystemUiStable, updateFact, type OpResult, type TraitName } from '../processModel/patch.ts';
 import type { JsonPatchOp } from '../processModel/jsonPatch.ts';
 import type { TriageItem } from './triage.ts';
 
@@ -13,6 +13,15 @@ export const all = (...ops: Op[]) => (m: ProcessModel): OpResult => ops.reduce<{
 
 
 export const ACCESS: [AccessStatus, string][] = [['unknown', 'Unknown'], ['confirmed', 'Can be used'], ['reported', 'Exists, not confirmed for use'], ['confirmed_absent', 'Not available']];
+
+const YES_NO: [string, string][] = [['true', 'Yes'], ['false', 'No']];
+/** The answers to a fact of a step, or to whether an application's screens are stable (package 9). */
+export function choicesFor(trait: string): [string, string][] {
+  if (trait === 'input') return [['structured', 'Structured data'], ['semi_structured', 'Semi-structured'], ['unstructured', 'Documents'], ['paper', 'Paper']];
+  if (trait === 'write') return [['none', 'Nothing'], ['record', 'A record'], ['financial', 'Money'], ['irreversible', 'Cannot be undone']];
+  return YES_NO;
+}
+const choiceValue = (trait: string, v: string): unknown => (trait === 'input' || trait === 'write' ? v : v === 'true');
 
 /** Records an answer to an item, creating the stored question first when the item is a gap found by rule. */
 export const record = (item: TriageItem, answer: string, status: 'answered' | 'deferred' = 'answered'): Op => m => {
@@ -53,6 +62,14 @@ export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: s
       const ops: Op[] = changed.map(x => m => setAccessStatus(m, { systemId: t.id!, index: x.index, access: statuses[x.index] }));
       if (settled || note) ops.push(record(item, withSource(note || `Settled: ${changed.map(x => `${x.label.split(' (')[0]} ${ACCESS.find(y => y[0] === statuses[x.index])![1].toLowerCase()}`).join('; ')}`)));
       return { op: all(...ops), summary: `Interfaces of ${model.systems.find(s => s.id === t.id)?.name ?? 'a system'}` };
+    }
+    case 'choice': {
+      const hit = (item.choices ?? []).find(c => c[0] === a.pick);
+      if (!hit) return null;
+      const field = t.field ?? '';
+      const write: Op = t.kind === 'system' ? m => setSystemUiStable(m, { systemId: t.id!, value: hit[0] === 'true' })
+        : m => setStepTrait(m, { stepId: t.id!, trait: field.replace(/^traits\./, '') as TraitName, value: choiceValue(field.replace(/^traits\./, ''), hit[0]) });
+      return { op: all(write, record(item, withSource(note ? `${hit[1]}. ${note}` : hit[1]))), summary: `Answered: ${item.question}` };
     }
     case 'free':
       if (!note) return null;

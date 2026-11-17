@@ -5,6 +5,7 @@
 import type { JourneyStore, SourceRow } from '../store/types.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
+import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { Override } from '../../domain/assess/decisions.ts';
 import type { AskContext, Passage } from '../../domain/assistant/ask.ts';
 import { STATUS_LABEL } from '../../domain/workitems/board.ts';
@@ -20,7 +21,9 @@ export async function loadAskRecord(store: JourneyStore, p: { processId: string;
     .map(seg => ({ sourceKey: s.key, sourceTitle: s.title, locator: seg.locator, text: seg.text }))))).flat();
   const name = (id: string | null) => (id ? members.find(m => m.userId === id)?.name ?? null : null);
   return {
-    assessment: assessProcess(model, { rate: decisions?.rate ?? null, decisions, ...(settings ? { settings: settings.settings } : {}) }),
+    // Documented as it is (domain/plan/purpose.ts): no assessment is read at all.
+    // Decided (package 9): worked out for what the approach can do step by step; askFacts sends no score from it.
+    assessment: whatFollows(model).assessed || whatFollows(model).purpose === 'decided' ? assessProcess(model, { rate: decisions?.rate ?? null, decisions, ...(settings ? { settings: settings.settings } : {}) }) : null,
     requirements: requirements.filter(r => r.state === 'active').map(r => ({ code: r.code, statement: r.statement })),
     items: items.map(i => ({ id: i.id, projectId: i.projectId, title: i.title, type: i.type, status: STATUS_LABEL[i.status], owner: name(i.ownerId) })),
     passages,
