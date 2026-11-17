@@ -31,27 +31,42 @@ const after = new Map(walk(afterDist).map(f => [f, sha(path.join(afterDist, f))]
 fs.writeFileSync(path.join(out, 'built-before.txt'), [...before].sort().map(([f, h]) => `${h}  ${f}`).join('\n') + '\n');
 fs.writeFileSync(path.join(out, 'built-after.txt'), [...after].sort().map(([f, h]) => `${h}  ${f}`).join('\n') + '\n');
 
-// 1. The built site, file for file.
-const css = m => [...m.keys()].filter(f => f.endsWith('.css'));
-const [cssBefore, cssAfter] = [css(before), css(after)];
-if (cssBefore.length !== 1 || cssAfter.length !== 1) fail(`expected one stylesheet on each side, found ${cssBefore.length} and ${cssAfter.length}`);
-let same = 0;
-for (const [f, h] of before) {
-  if (f === cssBefore[0] || f === 'index.html') continue;
-  if (!after.has(f)) fail(`${f} is built before but not after`);
-  else if (after.get(f) !== h) fail(`${f} differs`);
-  else same++;
+// 1. The built site, file for file. Built files carry an 8-character hash of their content in their name
+// (index-D2f8JFG9.css), and a file that names another (index.html, a script that loads a later one) changes
+// when that one's name does. So files are paired by name without the hash, and a pair that differs is read
+// again with every hashed name in it written without its hash: if it is then identical, it differs only in
+// the names of other built files it refers to.
+const HASHED = /([A-Za-z0-9_.]+(?:-[A-Za-z0-9_]+)*?)-[A-Za-z0-9_-]{8}\.(js|mjs|css|svg|eot|woff2?|ttf|png|webp|jpe?g)\b/g;
+const keyOf = f => f.replace(HASHED, '$1.$2');
+const unhash = t => t.replace(HASHED, '$1-#.$2');
+const removedPublic = new Set(fs.existsSync(path.join(out, 'removed-public.txt')) ? fs.readFileSync(path.join(out, 'removed-public.txt'), 'utf8').split('\n').filter(Boolean).map(f => f.replace(/^public\//, '')) : []);
+const byKey = m => new Map([...m.keys()].map(f => [keyOf(f), f]));
+const kb = byKey(before), ka = byKey(after);
+if (kb.size !== before.size || ka.size !== after.size) fail('two built files share a name once their hashes are taken out');
+const sameBytes = [], namesOnly = [], differ = [], gonePublic = [];
+for (const [k, fb] of kb) {
+  const fa = ka.get(k);
+  if (!fa) { if (removedPublic.has(fb)) gonePublic.push(fb); else fail(`${fb} is built before but not after`); continue; }
+  if (before.get(fb) === after.get(fa)) { sameBytes.push(fb); continue; }
+  const tb = fs.readFileSync(path.join(beforeDist, fb), 'utf8'), ta = fs.readFileSync(path.join(afterDist, fa), 'utf8');
+  if (unhash(tb) === unhash(ta)) namesOnly.push([fb, fa]); else differ.push([fb, fa, tb, ta]);
 }
-for (const f of after.keys()) if (!before.has(f) && f !== cssAfter[0]) fail(`${f} is built after but not before`);
-say(`Built files: ${before.size} before, ${after.size} after; ${same} byte-identical; the other two are the stylesheet and index.html.`);
-
-const htmlBefore = fs.readFileSync(path.join(beforeDist, 'index.html'), 'utf8');
-const htmlAfter = fs.readFileSync(path.join(afterDist, 'index.html'), 'utf8');
-if (htmlBefore.split(cssBefore[0]).join(cssAfter[0]) !== htmlAfter) fail('index.html differs in more than the stylesheet\'s name');
-else {
-  const changed = htmlBefore.split('\n').map((l, i) => [l, htmlAfter.split('\n')[i]]).filter(([a, b]) => a !== b);
-  say(`index.html: ${changed.length} line differs, only in the stylesheet's name (${cssBefore[0]} → ${cssAfter[0]}).`);
+for (const [k, fa] of ka) if (!kb.has(k)) fail(`${fa} is built after but not before`);
+const firstDiff = (tb, ta) => {
+  let i = 0; while (i < tb.length && tb[i] === ta[i]) i++;
+  let j = 0; while (j < tb.length - i && j < ta.length - i && tb[tb.length - 1 - j] === ta[ta.length - 1 - j]) j++;
+  const cut = (t, end) => t.slice(Math.max(0, i - 160), Math.min(end + 160, i + 1500));
+  return { before: cut(tb, tb.length - j), after: cut(ta, ta.length - j), at: i, lengths: `${tb.length} → ${ta.length} characters` };
+};
+for (const [fb, fa, tb, ta] of differ) {
+  const w = firstDiff(unhash(tb), unhash(ta));
+  fs.appendFileSync(path.join(out, 'differences.txt'), `=== ${fb} → ${fa} (${w.lengths}; first difference at character ${w.at}, hashed names written as -#)\n--- before\n${w.before}\n--- after\n${w.after}\n\n`);
+  if (!fb.endsWith('.css')) fail(`${fb} differs in its content, not only in the names it refers to (differences.txt)`);
 }
+const cssPairs = differ.filter(([fb]) => fb.endsWith('.css'));
+fs.writeFileSync(path.join(out, 'names-only.txt'), namesOnly.map(([b, a]) => `${b} → ${a}`).join('\n') + '\n');
+say(`Built files: ${before.size} before, ${after.size} after. ${sameBytes.length} byte-identical under the same name; ${namesOnly.length} identical but for the hashed names of built files they refer to (names-only.txt); ${differ.length} with different content (${differ.map(([fb]) => fb).join(', ') || 'none'}); ${gonePublic.length} removed public files no longer copied.`);
+const cssBefore = cssPairs.map(([fb]) => fb), cssAfter = cssPairs.map(([, fa]) => fa);
 
 // 2. The stylesheet, declaration by declaration, each with the rules and at-rules it sits in.
 function entries(file) {
@@ -64,13 +79,16 @@ function entries(file) {
   });
   return list.map(e => ({ ...e, key: `${e.where} ⟩ ${e.text}` }));
 }
-const eb = entries(path.join(beforeDist, cssBefore[0]));
-const ea = entries(path.join(afterDist, cssAfter[0]));
-const removed = [];
-let j = 0;
-for (const e of eb) { if (j < ea.length && ea[j].key === e.key) j++; else removed.push(e); }
-if (j !== ea.length) fail(`the stylesheet after is not the one before with removals only: entry ${j + 1} of ${ea.length} after ("${ea[j].key}") is not found in order`);
-else say(`Stylesheet: ${eb.length} declarations before, ${ea.length} after; every one after is unchanged and in the same order; ${removed.length} removed, none added or changed.`);
+const eb = [], ea = [], removed = [];
+for (let n = 0; n < cssBefore.length; n++) {
+  const xb = entries(path.join(beforeDist, cssBefore[n])), xa = entries(path.join(afterDist, cssAfter[n]));
+  const gone = [];
+  let j = 0;
+  for (const e of xb) { if (j < xa.length && xa[j].key === e.key) j++; else gone.push(e); }
+  if (j !== xa.length) fail(`${cssAfter[n]} is not ${cssBefore[n]} with removals only: entry ${j + 1} of ${xa.length} after ("${xa[j].key}") is not found in order`);
+  else say(`${cssBefore[n]} → ${cssAfter[n]}: ${xb.length} declarations before, ${xa.length} after; every one after is unchanged and in the same order; ${gone.length} removed, none added or changed.`);
+  eb.push(...xb); ea.push(...xa); removed.push(...gone);
+}
 fs.writeFileSync(path.join(out, 'stylesheet-removed.txt'), removed.map(e => e.key).join('\n') + '\n');
 
 // The rules that went whole, and those that lost some declarations (for the report).

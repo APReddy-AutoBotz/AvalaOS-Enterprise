@@ -68,7 +68,11 @@ jobs:
           exit $status
 
       - name: The built site and the stylesheet
-        run: node scripts/compare-builds.mjs /tmp/before/dist /tmp/dist-after /tmp/before . /tmp/compare
+        run: |
+          mkdir -p /tmp/compare
+          git diff --name-only --diff-filter=D "$(git -C /tmp/before rev-parse HEAD)" HEAD -- public/ > /tmp/compare/removed-public.txt
+          echo "Public files removed: $(wc -l < /tmp/compare/removed-public.txt)"
+          node scripts/compare-builds.mjs /tmp/before/dist /tmp/dist-after /tmp/before . /tmp/compare
 
       - name: Summary
         if: always()
