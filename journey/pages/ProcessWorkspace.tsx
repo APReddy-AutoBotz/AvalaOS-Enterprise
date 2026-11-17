@@ -1,5 +1,8 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
+import { requirementsOnSwitch } from '../../domain/requirements/switch.ts';
+import { purposeTag } from '../../domain/assess/decided.ts';
+import { emptyDecisions } from '../../domain/assess/decisions.ts';
 import { useProcessChanged } from '../processChanged.ts';
 import { useAutoLook, useSharedLook } from '../process/sourceLook.ts';
 import { BriefPanel } from '../process/BriefPanel.tsx';
@@ -10,7 +13,7 @@ import { adoptBrief } from '../../domain/processModel/patch.ts';
 import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
-import { offersPurpose, purposeOffMessage, stagesForProcess, whatFollows } from '../../domain/plan/purpose.ts';
+import { offersPurpose, purposeOf, purposeOffMessage, stagesForProcess, whatFollows } from '../../domain/plan/purpose.ts';
 import { openItemCount } from '../../domain/processModel/selectors.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
@@ -133,6 +136,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className="min-w-0 break-words font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{process.name}</h1>
           <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
+          {/* What is wanted from the process, on every page of it, when it is not "Assess it and document it": it says why Assessment is missing. */}
+          {model && purposeTag(purposeOf(model), model.meta.decidedApproach) && <Tag tone="info" data-testid="purpose-tag" className="px-2 py-1 text-xs">{purposeTag(purposeOf(model), model.meta.decidedApproach)}</Tag>}
         </div>
         <div className="flex items-center gap-2">
           {canApprove && working && model && typicalCounts(model).total > 0 && (
@@ -222,6 +227,19 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   const impact = useImpactContext(store, processId, workspaceId);
   // Who answered what is wanted from the process is shown by name, never by email address.
   const [people, setPeople] = React.useState<{ meId: string | null; names: Record<string, string> }>({ meId: null, names: {} });
+  // A switch of the answer works the requirements out again and saves them at once, so nothing that reads
+  // the stored list sees one from the other answer (domain/requirements/switch.ts). If that cannot be saved
+  // now, the answer still stands and Documents brings them up to date when it opens; nothing is lost.
+  const onSwitched = React.useCallback(async (before: ProcessModel, after: ProcessModel): Promise<string | null> => {
+    try {
+      const [decisions, stored] = await Promise.all([store.getAssessmentDecisions(processId), store.listRequirements(processId)]);
+      const rows = requirementsOnSwitch(before, after, decisions ?? emptyDecisions(), stored);
+      if (rows?.length) await store.saveRequirements(processId, rows);
+      return null;
+    } catch {
+      return 'Your answer is saved. The requirements could not be brought up to date just now; they will be when Documents is opened.';
+    }
+  }, [store, processId]);
   React.useEffect(() => {
     if (!askPurpose) return;
     Promise.all([store.currentUser().catch(() => null), store.listMembers(workspaceId).catch(() => [])])
@@ -251,7 +269,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   return (
     <>
       <ErrorNote message={readError} />
-      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} purpose={askPurpose ? people : undefined} />
+      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} purpose={askPurpose ? { ...people, onSwitched } : undefined} />
       <TypicalPanel editor={editor} canEdit={canEdit} />
       <ProcessEditor processId={processId} editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>

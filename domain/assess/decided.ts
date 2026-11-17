@@ -77,3 +77,17 @@ export function decidedLine(s: DecidedSummary, names: Record<string, string> = {
 /** In a document, where today it says "recommended": who decided, when and why. */
 export const decidedSentence = (s: DecidedSummary, names: Record<string, string> = {}) =>
   `${s.label} was decided for the whole process ${decidedBy(s.decided, names)}, because: "${s.decided.reason.replace(/[.\s]+$/, '')}".`;
+
+/**
+ * Whether the decided approach can do fewer than half the steps it is weighed on (a step a system
+ * already does is not weighed): the line at the top of Documents is then amber, so it is not missed.
+ */
+export function decidedFallsShort(s: DecidedSummary): boolean {
+  const weighed = s.can.length + s.unknown.length + s.cannot.length + s.person.length;
+  return weighed > 0 && s.can.length * 2 < weighed;
+}
+
+/** The label beside the process name, when the answer is not "Assess it and document it". */
+export const PURPOSE_TAG_AS_IS = 'Documented as it is';
+export const purposeTag = (purpose: string, decided: { approach: Exclude<Approach, 'human'> } | null | undefined): string | null =>
+  purpose === 'as_is' ? PURPOSE_TAG_AS_IS : purpose === 'decided' && decided ? `Approach decided: ${APPROACH_LABEL[decided.approach]}` : null;

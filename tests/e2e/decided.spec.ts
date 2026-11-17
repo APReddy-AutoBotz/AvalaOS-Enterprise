@@ -27,12 +27,16 @@ test('decided as RPA: no Assessment page, the line at the top of Documents, only
   const asked = page.getByTestId('new-purpose');
   await asked.getByLabel(/already decided/).check();
   await expect(page.getByRole('button', { name: 'Add process' })).toBeDisabled();
-  await asked.getByLabel('Which approach').selectOption('rpa');
+  // The list starts empty: Avala OS suggests no approach, and a reason alone is not enough.
+  await expect(asked.getByLabel('Which approach')).toHaveValue('');
   await asked.getByLabel('Why this approach').fill('The client runs one RPA platform for every process');
+  await expect(page.getByRole('button', { name: 'Add process' })).toBeDisabled();
+  await asked.getByLabel('Which approach').selectOption('rpa');
   await shot(page, '75-new-process-decided');
   await page.getByRole('button', { name: 'Add process' }).click();
   await expect(page).toHaveURL(/\/process\/[0-9a-f-]{36}\/sources$/);
   await expect(rail(page).getByRole('link')).toHaveText(['Sources', 'Process', 'Documents', 'Flows', 'Work items'].map(s => new RegExp(s)));
+  await expect(page.getByTestId('purpose-tag')).toHaveText('Approach decided: Rule-based RPA');
 
   // The sample's hand-checked model stands in for an extraction; the answer and the approach stay on it.
   await page.evaluate(gold => {
@@ -51,6 +55,10 @@ test('decided as RPA: no Assessment page, the line at the top of Documents, only
   await expect(line).toContainText('"The client runs one RPA platform for every process"');
   await expect(line).toContainText(/It can do \d+ steps?\./);
   await expect(line).toContainText(/stays? with people because it cannot do/);
+  // RPA can do fewer than half the steps of the sample: the line is amber.
+  await expect(page.getByTestId('decided')).toHaveAttribute('data-short', 'yes');
+  // The label beside the name is on every page of the process.
+  for (const s of ['Sources', 'Process', 'Flows', 'Documents']) { await stage(page, s); await expect(page.getByTestId('purpose-tag')).toHaveText('Approach decided: Rule-based RPA'); }
   // The facts that settle a step not known yet lead the first list.
   await expect(page.getByTestId('gaps-banner')).toContainText(/\d+ things? only your people can tell us/);
   await page.getByRole('button', { name: 'Which steps, and why' }).click();
@@ -97,10 +105,28 @@ test('decided as RPA: no Assessment page, the line at the top of Documents, only
   await expect(page.getByTestId('decided-unknown')).toContainText('have an API that covers');
   await shot(page, '77-decided-not-known');
 
-  // Removing the decision while the answer is "decided" goes back to "Assess it and document it".
+  // Documents was opened while decided: requirements of steps the approach cannot do are "source removed" in the stored list.
+  // The stored list as code and state, in code order.
+  const states = () => page.evaluate(() => {
+    const state = JSON.parse(localStorage.getItem('avala.journey.memory.v1')!);
+    return (Object.values(state.requirements ?? {}).flat() as { code: string; state: string }[]).map(r => `${r.code}:${r.state}`).sort().join(' ');
+  });
+  const whileDecided = await states();
+  expect(whileDecided).toContain(':source_removed');
+  // Removing the decision while the answer is "decided" goes back to "Assess it and document it", and works the
+  // requirements out again in the same action: none is left "source removed", before any other page opens.
   await stage(page, 'Process');
   await page.getByTestId('decided-approach').getByRole('button', { name: 'Remove the decided approach' }).click();
   await expect(purpose.getByTestId('purpose-value')).toHaveText('Assess it and document it');
   await expect(page.getByTestId('decided-approach')).toHaveCount(0);
+  await expect(page.getByTestId('purpose-tag')).toHaveCount(0);
+  await expect.poll(states).not.toBe(whileDecided);
+  const afterSwitch = await states();
   await expect(rail(page).getByRole('link', { name: /Assessment/ })).toBeVisible();
+  // Nothing has to be brought up to date any more: Work items opened first, then Documents, change nothing in the stored list.
+  await stage(page, 'Work items');
+  await expect(page.getByRole('heading', { name: 'Proposed work items' })).toBeVisible();
+  await stage(page, 'Documents');
+  await expect(page.getByTestId('document')).toBeVisible();
+  expect(await states()).toBe(afterSwitch);
 });

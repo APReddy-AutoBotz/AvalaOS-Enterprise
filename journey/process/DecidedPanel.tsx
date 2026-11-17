@@ -6,7 +6,7 @@ import React from 'react';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { APPROACH_LABEL, MODEL_VERSION, type Approach, type DecidedQuestion } from '../../domain/assess/scoring.ts';
-import { decidedLine, decidedSummary, type DecidedStep } from '../../domain/assess/decided.ts';
+import { decidedFallsShort, decidedLine, decidedSummary, type DecidedStep } from '../../domain/assess/decided.ts';
 import { withoutOverride, type Decisions } from '../../domain/assess/decisions.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { assessmentResult } from '../../domain/assess/record.ts';
@@ -49,9 +49,11 @@ export function DecidedPanel({ model, assessment, names, meId, canEdit, editor, 
     return editor.apply(m => setStepTrait(m, { stepId: t.stepId, trait, value: parseTrait(trait, v) }), 'A fact of a step, for the decided approach');
   };
   const people = summary.cannot.length + summary.unknown.length;
+  const short = decidedFallsShort(summary);
 
   return (
-    <section className="rounded-xl border border-[#002C4B]/15 bg-white px-5 py-4" aria-label="The approach decided" data-testid="decided">
+    // Amber when the decided approach can do fewer than half the steps it is weighed on, so it is not missed.
+    <section className={cx('rounded-xl border px-5 py-4', short ? 'border-amber-300 bg-amber-50' : 'border-[#002C4B]/15 bg-white')} aria-label="The approach decided" data-testid="decided" data-short={short ? 'yes' : 'no'}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <p className="min-w-0 flex-1 text-sm leading-6 text-slate-800" data-testid="decided-line">{decidedLine(summary, names)}</p>
         <button type="button" className="text-sm font-semibold text-[#002C4B] hover:underline" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide the steps' : 'Which steps, and why'}</button>

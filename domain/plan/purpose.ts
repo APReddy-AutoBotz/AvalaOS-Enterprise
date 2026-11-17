@@ -138,8 +138,21 @@ export function asksQuestion(m: ProcessModel, q: { target: ElementTarget; questi
     if (kind && SAVING_FIGURES.has(kind)) return false;
   }
   if (t.kind === 'meta' && !t.field && FIGURE_WORDS.test(q.question)) return false;
+  // Documented as it is: a question in free words (tied to no fact) about automation is not asked.
+  if (purpose === 'as_is' && !t.field && aboutAutomation(q.question)) return false;
   return true;
 }
+
+// Whole words only ("both" is not "bot", "robotics" is a word of its own and is not matched).
+const AUTOMATION_WORDS = /\b(?:automat(?:e|es|ed|ing|ion|ions|able)|robots?|bots?|rpa|agentic|ai agents?|digital workers?)\b/i;
+const API_WORDS = /\bapis?\b/i;
+const BUILD_WORDS = /\b(?:build|built|building|integrat(?:e|es|ed|ing|ion|ions)|expos(?:e|es|ed|ing|ure)|automat(?:e|es|ed|ing|ion))\b/i;
+/**
+ * Whether a question in free words is about automation: it names automation, a robot or bot, RPA, an AI
+ * agent or a digital worker as whole words, or an API together with a build, an integration or exposing
+ * it. When unsure, it is not: the question is kept. ("Which API does the portal use today?" stays.)
+ */
+export const aboutAutomation = (text: string) => AUTOMATION_WORDS.test(text) || (API_WORDS.test(text) && BUILD_WORDS.test(text));
 
 /** Whether a figure of the process is one that only sizes a saving (kept in the document when recorded, never asked for). */
 export const savingFigure = (kind: string) => SAVING_FIGURES.has(kind);
