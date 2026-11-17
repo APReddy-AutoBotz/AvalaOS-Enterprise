@@ -6,8 +6,9 @@
 # throwaway Postgres 17 and check that every table of public and app_private holds the same number of
 # rows as the live database did. A failed run emails the repository owner (GitHub's own notice).
 #
-# This repository is public, so its artifacts and logs are public too: the dump is only ever stored
-# encrypted (AES-256, gpg), and the log shows totals and table names, never data.
+# Anyone who can read this repository can read its artifacts and logs (it is private since 17 November
+# 2026, which changes nothing here): the dump is only ever stored encrypted (AES-256, gpg), and the log
+# shows totals and table names, never data.
 #
 # Secrets (Settings -> Secrets and variables -> Actions):
 #   SUPABASE_DB_URL     the Session pooler connection string (Supabase: Connect -> Session pooler), with
@@ -67,7 +68,7 @@ jobs:
             echo "::notice::Backups are not set up yet: add SUPABASE_DB_URL and BACKUP_PASSPHRASE as repository secrets."
             echo "go=false" >> "$GITHUB_OUTPUT"
           elif [ "${#PASSPHRASE}" -lt 32 ]; then
-            echo "::error::BACKUP_PASSPHRASE is shorter than 32 characters; this repository is public, so use a long random one."
+            echo "::error::BACKUP_PASSPHRASE is shorter than 32 characters; anyone who can read this repository can download the encrypted dump, so use a long random one."
             exit 1
           else
             echo "go=true" >> "$GITHUB_OUTPUT"

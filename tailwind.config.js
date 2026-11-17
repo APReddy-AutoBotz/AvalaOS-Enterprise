@@ -3,9 +3,7 @@ export default {
   darkMode: 'class',
   content: [
     './index.html',
-    './App.tsx',
     './index.tsx',
-    './components/**/*.{ts,tsx}',
     './journey/**/*.{ts,tsx}',
   ],
   theme: {
