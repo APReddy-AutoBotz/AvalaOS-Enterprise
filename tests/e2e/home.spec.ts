@@ -126,6 +126,9 @@ test('homepage: the ways to start and the AI providers come from the product\'s 
   await expect(page).toHaveURL(/#trust$/);
   await expect(page.getByRole('heading', { name: 'What your security team will ask' })).toBeVisible();
   await expect(page.locator('#trust')).toContainText('Inside your own cloud, on request');
+  // Live with the seventh release (17 November 2026): a process can be documented without the assessment, or with the approach already decided.
+  await expect(page.locator('#start')).toContainText('Document a process as it is, with no assessment');
+  await expect(page.locator('#start')).toContainText('Technology already chosen? The documents follow it.');
   for (const name of ['Privacy', 'Terms', 'Security']) await expect(page.locator('#trust').getByRole('link', { name })).toHaveAttribute('href', `/${name.toLowerCase()}`);
   await expect(page.getByRole('list', { name: 'Ways to start' }).getByRole('heading')).toHaveText(['The full journey', 'Assess and Documents', 'Assess', 'The Delivery board on its own']);
   // The close asks for one thing, and shows the address for anyone whose mail program does not open.
