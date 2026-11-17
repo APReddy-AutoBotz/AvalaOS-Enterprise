@@ -65,6 +65,8 @@ export interface RevisionRow {
   modelHash: string | null;
   basedOn: string | null;
   createdAt: string;
+  /** When it was last saved (an edit to a working draft); absent when the store does not say. */
+  updatedAt?: string | null;
   approvedAt: string | null;
   /** Who approved it (a user id); null when not approved or not recorded. */
   approvedBy?: string | null;

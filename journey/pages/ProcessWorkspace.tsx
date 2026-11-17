@@ -1,8 +1,7 @@
 // One process, one page: a header with its status and the six stages. Internal versions
 // (edit counts, content hashes, schema versions) are only shown in the History drawer.
-import { requirementsOnSwitch } from '../../domain/requirements/switch.ts';
+import { followSwitch } from '../process/requirementsFollow.ts';
 import { purposeTag } from '../../domain/assess/decided.ts';
-import { emptyDecisions } from '../../domain/assess/decisions.ts';
 import { useProcessChanged } from '../processChanged.ts';
 import { useAutoLook, useSharedLook } from '../process/sourceLook.ts';
 import { BriefPanel } from '../process/BriefPanel.tsx';
@@ -30,7 +29,7 @@ import { AssessmentStage } from '../process/AssessmentStage.tsx';
 import { FlowsStage } from '../process/FlowsStage.tsx';
 import { WorkItemsStage } from '../process/WorkItemsStage.tsx';
 import { DocumentsStage } from '../process/DocumentsStage.tsx';
-import { SourceContext } from '../process/widgets.tsx';
+import { ChooserContext, SourceContext, type Chooser } from '../process/widgets.tsx';
 import { quoteInContext } from '../../domain/workspace/sources.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { SourceRow } from '../store/types.ts';
@@ -52,6 +51,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   const [busy, setBusy] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [me, setMe] = React.useState('');
+  // Who makes a choice here, by id and name (item 7 of package 10); the names show who made earlier ones.
+  const [chooser, setChooser] = React.useState<Chooser>({ id: null, name: '', names: {} });
   React.useEffect(() => { store.currentUser().then(u => setMe(u?.email ?? '')).catch(() => {}); }, [store]);
 
   // Sources, for titles and for showing a quote in its passage.
@@ -68,6 +69,15 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
       return quoteInContext(await segmentCache.current.get(src.id)!, ref as any);
     },
   }), [sources, store]);
+  const chooserWorkspace = data && data !== 'missing' ? data.process.workspaceId : null;
+  React.useEffect(() => {
+    if (!chooserWorkspace) return;
+    Promise.all([store.currentUser().catch(() => null), store.listMembers(chooserWorkspace).catch(() => [])]).then(([u, mem]) => {
+      const names = Object.fromEntries(mem.map(x => [x.userId, x.name]));
+      const mine = u?.id ? names[u.id] : '';
+      setChooser({ id: u?.id ?? null, name: mine && mine !== 'Unnamed member' ? mine : '', names });
+    });
+  }, [store, chooserWorkspace]);
 
   const load = React.useCallback(async () => {
     try {
@@ -127,7 +137,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
     <div>
       {/* The page head of the main pages (PageHead): a quiet line above, the name in navy. */}
       <nav aria-label="Breadcrumb" className="text-[13px] font-medium text-slate-500">
-        <a href="/processes" className="hover:text-slate-800" onClick={e => { e.preventDefault(); nav.go({ page: 'processes' }); }}>Processes</a>
+        <a href={nav.href({ page: 'processes' })} className="hover:text-slate-800" onClick={e => { e.preventDefault(); nav.go({ page: 'processes' }); }}>Processes</a>
         <span className="mx-2 text-slate-300" aria-hidden>/</span>
         <span className="text-slate-700">{process.name}</span>
       </nav>
@@ -170,7 +180,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
               <li key={s.id} className="flex items-center">
                 {i > 0 && <svg viewBox="0 0 8 12" className="mx-0.5 h-3 w-2 shrink-0 text-slate-300" aria-hidden><path d="m1.5 1.5 4.5 4.5-4.5 4.5" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" /></svg>}
                 <a
-                  href={`/process/${process.id}/${s.id}`}
+                  href={nav.href({ page: 'process', processId: process.id, stage: s.id })}
                   aria-current={here ? 'page' : undefined}
                   title={waiting ? 'Needs the process steps first' : undefined}
                   onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: process.id, stage: s.id }); }}
@@ -193,7 +203,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
       <section aria-label={STAGES.find(s => s.id === stage)!.label} className="mt-6" data-testid="stage-panel">
         {stageOff && purposeOff ? <EmptyState title="Documented as it is" action={<Button variant="secondary" onClick={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}>Open the brief</Button>}><span data-testid="purpose-off">{purposeOff}</span></EmptyState> :
          stageOff ? <EmptyState title="Not switched on">{offMessage(shownStages.length ? stage : 'processes', workspace?.organizationName ?? '')}</EmptyState> :
-        <SourceContext.Provider value={sourceCtx}>
+        <SourceContext.Provider value={sourceCtx}><ChooserContext.Provider value={chooser}>
         {stage === 'sources'
           ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} asksInMind={whatFollows(model).asksInMind} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
@@ -209,7 +219,7 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           : stage === 'process' && model
           ? <ProcessStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null} canEdit={canEdit} me={me} onSaved={load} processName={process.name} askPurpose={offersPurpose(workspace?.modules)} />
           : <StagePanel stage={stage} model={model} canEdit={canEdit} busy={busy} onStart={() => act(() => store.startDraft(process.id))} onGo={id => nav.go({ page: 'process', processId: process.id, stage: id })} />}
-        </SourceContext.Provider>}
+        </ChooserContext.Provider></SourceContext.Provider>}
       </section>
 
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
@@ -232,9 +242,7 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   // now, the answer still stands and Documents brings them up to date when it opens; nothing is lost.
   const onSwitched = React.useCallback(async (before: ProcessModel, after: ProcessModel): Promise<string | null> => {
     try {
-      const [decisions, stored] = await Promise.all([store.getAssessmentDecisions(processId), store.listRequirements(processId)]);
-      const rows = requirementsOnSwitch(before, after, decisions ?? emptyDecisions(), stored);
-      if (rows?.length) await store.saveRequirements(processId, rows);
+      await followSwitch(store, processId, before, after);
       return null;
     } catch {
       return 'Your answer is saved. The requirements could not be brought up to date just now; they will be when Documents is opened.';

@@ -1,4 +1,5 @@
 // Read-only views of a Process Model used by the assessment, documents, flows and the review UI.
+import { sameMatter } from '../questions/matter.ts';
 import { asksQuestion } from '../plan/purpose.ts';
 import type { Fact, Metric, MetricKind, ElementTarget, Flow, ProcessModel, Step, TypicalTraits } from './types.ts';
 
@@ -115,7 +116,9 @@ const sameTarget = (a: ElementTarget, b: ElementTarget) => a.kind === b.kind && 
 /** Gaps that no open question already covers. */
 export function untrackedGaps(m: ProcessModel): Gap[] {
   const open = m.openQuestions.filter(q => q.status === 'open');
-  return gaps(m).filter(g => !open.some(q => sameTarget(q.target, g.target)) && asksQuestion(m, { target: g.target, question: g.label }));
+  // A question asking only for the objective (or the owner) in its own words covers that gap (questions/matter.ts).
+  return gaps(m).filter(g => !open.some(q => sameTarget(q.target, g.target) || sameMatter({ target: q.target, text: q.question }, { target: g.target, text: g.label }))
+    && asksQuestion(m, { target: g.target, question: g.label }));
 }
 
 /** The open questions asked of this process: for one documented as it is, not those that serve an assessment (they stay on the record). */

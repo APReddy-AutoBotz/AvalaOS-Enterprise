@@ -11,6 +11,7 @@ import { sharedLookOf } from './process/sourceLook.ts';
 import { firstListCounts } from '../domain/questions/counts.ts';
 import { DECIDED_LIST_LINE, purposeOf, whatFollows } from '../domain/plan/purpose.ts';
 import { APPROACH_LABEL } from '../domain/assess/scoring.ts';
+import { lastChanged } from '../domain/work/changed.ts';
 
 export type LoadedFacts = ProcessFacts & {
   statusLabel: string; statusTone: 'neutral' | 'draft' | 'approved' | 'changed';
@@ -18,6 +19,8 @@ export type LoadedFacts = ProcessFacts & {
   card: ProcessCard | null;
   /** "Approach decided by a person: Rule-based RPA", when how it will be built is already decided. */
   decidedLine?: string;
+  /** When the process last changed: the later of its own change and its working draft's last saved edit. */
+  changedAt: string | null;
 };
 export const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
@@ -37,6 +40,7 @@ export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, setti
     // Open review comments, for the people named on the process (as the weekday email lists them).
     comments: comments.filter(c => !c.resolvedAt).map(c => ({ id: c.id, docType: c.docType, sectionKey: c.sectionKey, sectionTitle: c.sectionTitle, authorId: c.authorId, author: '', createdAt: c.createdAt })),
     statusLabel: status.label, statusTone: status.tone,
+    changedAt: lastChanged(p.updatedAt, revisions),
     // The approach in effect for each step, people's choices included, as on the process's own pages.
     // A process documented as it is has no assessment: no score, no recommendation, no place in a ranking.
     card: model && whatFollows(model).assessed ? processCard(assessProcess(model, { settings, decisions })) : null,

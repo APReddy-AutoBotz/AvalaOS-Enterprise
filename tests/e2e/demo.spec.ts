@@ -51,6 +51,26 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
   expect(result.violations.filter(v => v.impact === 'serious' || v.impact === 'critical').map(v => `${v.id}: ${v.nodes[0]?.target.join(' ')}`)).toEqual([]);
 });
 
+// Review of 17 November 2026: a link opened in a new tab must stay in the demo, not land on sign-in.
+test('in the demo, every link on the Processes page and on a process page stays in the demo', async ({ page }) => {
+  const leaving = async () => page.locator('a[href^="/"]').evaluateAll(as => as.map(a => a.getAttribute('href')!)
+    .filter(h => !h.startsWith('/demo') && h !== '/' && !h.startsWith('/brand/') && h !== '/terms' && h !== '/privacy'));
+  await page.goto('/demo/processes');
+  await expect(page.getByRole('link', { name: /Vendor invoice processing/ }).first()).toBeVisible();
+  expect(await page.locator('a[href^="/demo/process/"]').count()).toBeGreaterThan(0);
+  expect(await leaving()).toEqual([]);
+  await page.getByRole('link', { name: /Vendor invoice processing/ }).first().click();
+  await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/sources$/);
+  await expect(page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name: 'Assessment' })).toHaveAttribute('href', /^\/demo\/process\/[0-9a-f-]{36}\/assessment$/);
+  expect(await leaving()).toEqual([]);
+  // Opened in a new tab, a stage's link opens the demo on that stage, not the sign-in page.
+  const href = await page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name: 'Documents' }).getAttribute('href');
+  const tab = await page.context().newPage();
+  await tab.goto(href!);
+  await expect(tab.getByTestId('demo-banner')).toBeVisible();
+  await expect(tab).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/documents$/);
+});
+
 test('in the demo, changes work but are not kept: a reload starts again and nothing is stored', async ({ page }) => {
   await page.goto('/demo/settings/people');
   const people = page.getByTestId('people');

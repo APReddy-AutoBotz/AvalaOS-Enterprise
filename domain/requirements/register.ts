@@ -27,6 +27,8 @@ export interface StoredRequirement {
   order: number;
   /** For an edited requirement: the hash of the derived text it was edited from. */
   baseHash?: string | null;
+  /** Why it was retired on its own (retire.ts); absent when a person retired it or it is not retired. */
+  retiredReason?: string;
 }
 export interface Requirement extends StoredRequirement {
   /** An edited requirement whose derived text changed since the edit. */

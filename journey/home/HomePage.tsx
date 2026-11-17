@@ -350,7 +350,7 @@ function SiteNav({ go }: { go: { href: string; label: string } }) {
           {!signedIn && <li className="sm:hidden"><a href={WALK} onClick={() => setOpen(false)} className={`block ${link}`}>{WALK_LABEL}</a></li>}
         </ul>
       )}
-      <a href={go.href} className={`ml-1 rounded-lg border border-white/30 px-4 py-2 text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>{go.label}</a>
+      <a href={go.href} data-testid="site-go" className={`ml-1 whitespace-nowrap rounded-lg border border-white/30 px-3 py-2 sm:px-4 text-white hover:bg-white/10 ${focus} focus-visible:outline-white`}>{go.label}</a>
       {!signedIn && <a href={WALK} className={`ml-1 hidden whitespace-nowrap rounded-lg bg-[#E69F00] px-4 py-2 text-[#001B2F] hover:bg-[#F2B21E] sm:block ${focus} focus-visible:outline-white`}>{WALK_LABEL}</a>}
     </nav>
   );
@@ -366,8 +366,9 @@ export default function HomePage() {
       <style>{CSS}</style>
 
       <div className="overflow-hidden bg-[#001B2F] text-white">
-        <header className="mx-auto flex h-20 max-w-7xl items-center justify-between px-6">
-          <a href="/" className={`rounded ${focus} focus-visible:outline-white`}><img src="/brand/avala-os-logo-light.svg" alt="Avala OS, home" className="h-10 w-auto" /></a>
+        {/* On a phone the logo is a little smaller and the bar's buttons a little narrower, so "Open my work" stays on one line at 360 wide. */}
+        <header className="mx-auto flex h-20 max-w-7xl items-center justify-between gap-2 px-4 sm:px-6">
+          <a href="/" className={`shrink-0 rounded ${focus} focus-visible:outline-white`}><img src="/brand/avala-os-logo-light.svg" alt="Avala OS, home" className="h-7 w-auto sm:h-10" /></a>
           <SiteNav go={go} />
         </header>
         <section className="mx-auto grid max-w-7xl items-center gap-12 px-6 pb-14 pt-8 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] lg:pb-16 lg:pt-10 xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)]">

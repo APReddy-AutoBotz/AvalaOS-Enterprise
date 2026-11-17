@@ -3,6 +3,7 @@
 // A missing fact never becomes filler: it is a "Not provided" cell or an open item, and every open
 // item is listed again at the end of the document.
 import type { ElementTarget, FactStatus } from '../processModel/types.ts';
+import { sameMatter } from '../questions/matter.ts';
 
 /** 'questions' is a question pack sent to one owner; it has no layout of its own. */
 export type DocType = 'brd' | 'pdd' | 'frd' | 'sdd' | 'agent' | 'tests' | 'questions' | 'evidence';
@@ -66,12 +67,16 @@ export class DocBuilder {
   /** An open item in place; it is also listed at the end of the document. */
   open(text: string, target?: ElementTarget, owner: string | null = null) {
     const item: OpenItem = { text, owner, target, section: this.current?.number };
-    if (!this.openItems.some(x => x.text === text)) this.openItems.push(item);
+    if (!this.listed(text, target)) this.openItems.push(item);
     return this.add({ kind: 'openItem', item });
   }
   /** Records an open item for the closing list without showing it in place (for example from a "Not provided" cell). */
   note(text: string, target?: ElementTarget) {
-    if (!this.openItems.some(x => x.text === text)) this.openItems.push({ text, owner: null, target, section: this.current?.number });
+    if (!this.listed(text, target)) this.openItems.push({ text, owner: null, target, section: this.current?.number });
     return this;
+  }
+  /** Already in the closing list: the same words, or the same gap about the objective or the owner (questions/matter.ts). */
+  private listed(text: string, target?: ElementTarget) {
+    return this.openItems.some(x => x.text === text || sameMatter(x, { text, target }));
   }
 }

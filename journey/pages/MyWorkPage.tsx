@@ -77,6 +77,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
   const name = data.names.get(userId);
   const nameOf = (id: string) => data.names.get(id) ?? 'Someone no longer in this workspace';
   const openProcess = (id: string) => nav.go({ page: 'process', processId: id, stage: 'sources' });
+  const href = (id: string) => nav.href({ page: 'process', processId: id, stage: 'sources' });
   const processList = [...myProcesses.map(p => ({ p, mine: true })), ...unassigned.map(p => ({ p, mine: false }))];
   const hours = cardTotals(processList.map(x => x.p.card)).hours;
 
@@ -145,7 +146,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
                 <div className="flex items-baseline gap-2.5 px-6 py-4">
                   <h2 id="my-items" className={heading}>My work items</h2>
                   <span className="text-sm tabular-nums text-slate-500">{mine.length}</span>
-                  <a href="/board" onClick={e => { e.preventDefault(); nav.go({ page: 'board' }); }} className={cx(more, 'ml-auto')}>Open the board</a>
+                  <a href={nav.href({ page: 'board' })} onClick={e => { e.preventDefault(); nav.go({ page: 'board' }); }} className={cx(more, 'ml-auto')}>Open the board</a>
                 </div>
                 <ul className="divide-y divide-slate-100 border-t border-slate-100">
                   {shownItems.map(({ item, overdue }) => (
@@ -175,12 +176,12 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
                 <span className="text-sm tabular-nums text-slate-500">{processList.length}</span>
               </div>
               {processList.length === 1 ? (
-                <OneProcess p={processList[0]!.p} mine={processList[0]!.mine} userId={userId} nameOf={nameOf} open={openProcess} />
+                <OneProcess href={href} p={processList[0]!.p} mine={processList[0]!.mine} userId={userId} nameOf={nameOf} open={openProcess} />
               ) : (
                 <ul className="divide-y divide-slate-100 border-t border-slate-100">
                   {shownProcesses.map(({ p, mine: isMine }) => (
                     <li key={p.id} className="px-6 py-3.5">
-                      <a href={`/process/${p.id}/sources`} onClick={e => { e.preventDefault(); openProcess(p.id); }} className="block truncate text-[15px] font-semibold text-slate-900 hover:text-[#002C4B] hover:underline">{p.name}</a>
+                      <a href={href(p.id)} onClick={e => { e.preventDefault(); openProcess(p.id); }} className="block truncate text-[15px] font-semibold text-slate-900 hover:text-[#002C4B] hover:underline">{p.name}</a>
                       <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
                         <StatusPill facts={p} />
                         {isMine ? <span className="text-xs text-slate-600">{rolesOf(p, userId).join(', ')}</span> : <Tag tone="warn">Nobody named</Tag>}
@@ -208,10 +209,10 @@ const rolesOf = (p: LoadedFacts, userId: string) => (['analyst', 'architect', 'a
 const notAssessed = (p: LoadedFacts) => (p.decidedLine ? `${p.decidedLine}${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}` : p.purpose === 'as_is' ? `${NOT_ASSESSED}${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}` : p.status === 'none' ? 'No sources yet, so nothing to assess.' : `Not assessed yet${openOn(p).length ? `: ${openOn(p).join(', ')}.` : '.'}`);
 
 /** The only process a person has: room for its figures and the people on it. */
-function OneProcess({ p, mine, userId, nameOf, open }: { p: LoadedFacts; mine: boolean; userId: string; nameOf: (id: string) => string; open: (id: string) => void }) {
+function OneProcess({ p, mine, userId, nameOf, open, href }: { p: LoadedFacts; mine: boolean; userId: string; nameOf: (id: string) => string; open: (id: string) => void; href: (id: string) => string }) {
   return (
     <div className="border-t border-slate-100 px-6 pb-6 pt-5">
-      <a href={`/process/${p.id}/sources`} onClick={e => { e.preventDefault(); open(p.id); }} className="font-display text-lg font-semibold text-slate-900 hover:text-[#002C4B] hover:underline">{p.name}</a>
+      <a href={href(p.id)} onClick={e => { e.preventDefault(); open(p.id); }} className="font-display text-lg font-semibold text-slate-900 hover:text-[#002C4B] hover:underline">{p.name}</a>
       <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <StatusPill facts={p} />
         {mine && <Pill>You: {rolesOf(p, userId).join(', ')}</Pill>}
@@ -239,7 +240,7 @@ function NeedsYou({ needs, groups, nav }: { needs: Need[]; groups: ReturnType<ty
   const [all, setAll] = React.useState(false);
   const openNeed = (n: Need) => nav.go({ page: 'process', processId: n.processId, stage: n.stage });
   const processLink = (id: string, name: string, className: string) => (
-    <a href={`/process/${id}/sources`} onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: id, stage: 'sources' }); }} className={className}>{name}</a>
+    <a href={nav.href({ page: 'process', processId: id, stage: 'sources' })} onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: id, stage: 'sources' }); }} className={className}>{name}</a>
   );
   const frame = 'rounded-2xl border border-[#EFCF7A] bg-[#FFF8E6] shadow-attention';
   const label = 'text-[13px] font-bold uppercase tracking-wide text-[#6B4A00]';
