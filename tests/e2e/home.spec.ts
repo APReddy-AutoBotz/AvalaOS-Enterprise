@@ -205,10 +205,10 @@ test('homepage: no heading leaves one word alone on its last line', async ({ pag
         return { words: boxes.length, lines: lines.length, last: lines.length ? lines[lines.length - 1].length : 0 };
       };
       const wrap = (el: Element) => { const cs = getComputedStyle(el) as CSSStyleDeclaration & { textWrapStyle?: string; textWrap?: string }; return cs.textWrapStyle || cs.textWrap || ''; };
-      const checked = [...document.querySelectorAll('main h2, main [data-balanced]')];
+      const checked = [...document.querySelectorAll('h2, [data-balanced]')];
       return {
         count: checked.length,
-        notBalanced: [...checked, ...document.querySelectorAll('main h3')].filter(el => !wrap(el).includes('balance')).map(el => el.textContent!.slice(0, 40)),
+        notBalanced: [...checked, ...document.querySelectorAll('h3')].filter(el => !wrap(el).includes('balance')).map(el => el.textContent!.slice(0, 40)),
         alone: checked.map(el => ({ text: el.textContent!.slice(0, 60), ...linesOf(el) })).filter(x => x.words >= 4 && x.lines >= 2 && x.last === 1).map(x => x.text),
       };
     });
