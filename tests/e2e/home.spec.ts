@@ -49,10 +49,14 @@ test('homepage: the five stages can be picked and the tour paused', async ({ pag
   // The heading is about any process's documents, not the sample's five files, which sat confusingly above "five stages" (owner, 16 November 2026).
   await expect(page.getByRole('heading', { name: 'From your documents to a Delivery board' })).toBeVisible();
   await expect(page.getByText(/From five files/)).toHaveCount(0);
-  // The first letters of the five stages spell the name and are picked out in amber (owner, 17 November 2026).
+  // The first letters of the five stages spell the name. They are amber in the list of stages, where they line
+  // up, and nowhere else: the sentence above it is plain (owner, 17 November 2026).
   await expect(page.locator('#tour')).toContainText('to the board: Assess, Validate, Assemble, Launch, Audit. Watch');
-  await expect(page.locator('#tour [data-initial]')).toHaveText(['A', 'V', 'A', 'L', 'A']);
-  await expect(page.locator('#tour [data-initial]').first()).toHaveCSS('color', 'rgb(242, 178, 30)');
+  const initials = page.getByRole('list', { name: 'The five stages' }).locator('[data-initial]');
+  await expect(initials).toHaveText(['A', 'V', 'A', 'L', 'A']);
+  for (let i = 0; i < 5; i++) await expect(initials.nth(i)).toHaveCSS('color', 'rgb(242, 178, 30)');
+  await expect(page.locator('#tour [data-initial]')).toHaveCount(5);
+  await expect(page.getByRole('list', { name: 'The five stages' }).getByRole('button', { name: /^Assemble/ })).toBeVisible();
   const stages = page.getByRole('list', { name: 'The five stages' }).getByRole('button');
   await expect(stages).toHaveCount(5);
   await expect(stages.first()).toHaveAttribute('aria-current', 'step');

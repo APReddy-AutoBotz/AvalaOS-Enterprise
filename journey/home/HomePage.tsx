@@ -156,7 +156,7 @@ function Tour() {
               <li key={s.id}>
                 <button type="button" aria-current={here ? 'step' : undefined} onClick={() => { setStage(i); setMode('held'); }}
                   className={`w-full rounded-lg px-2 py-2 text-center transition-colors lg:px-3 lg:py-2.5 lg:text-left ${focus} focus-visible:outline-white ${here ? 'bg-white/10 ring-1 ring-white/25' : 'hover:bg-white/5'}`}>
-                  <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-white' : 'text-slate-300'}`}>{s.name}</span>
+                  <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-white' : 'text-slate-300'}`}><span data-initial className="text-[#F2B21E]">{s.name[0]}</span>{s.name.slice(1)}</span>
                   <span className="hidden text-sm text-slate-300 lg:block">{s.line}</span>
                   <span className={`mt-2 block h-1 overflow-hidden rounded-full ${here ? 'bg-white/20' : 'bg-transparent'}`} aria-hidden="true">
                     {here && <span key={stage} className="tour-fill block h-full rounded-full" style={{ background: AMBER }} onAnimationEnd={() => { if (mode === 'auto') setStage(n => (n + 1) % TOUR.length); }} />}
@@ -281,8 +281,6 @@ const ASK_POINTS: [string, string][] = [
 ];
 // The first step a buyer is asked for is a walkthrough, not a pilot (owner, 16 November 2026): an email
 // link to CONTACT_EMAIL until a form exists, with the address also shown as text at the close.
-// The five stages, whose first letters spell the name: shown in amber in the tour's opening line (owner, 17 November 2026).
-const STAGE_WORDS = ['Assess', 'Validate', 'Assemble', 'Launch', 'Audit'];
 const WALK = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('A walkthrough of Avala OS')}&body=${encodeURIComponent('Company:\nA process you would like to see assessed (optional):\n')}`;
 const WALK_LABEL = 'Book a walkthrough';
 const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#trust', 'Trust'], ['/demo', 'Live demo']];
@@ -437,7 +435,7 @@ export default function HomePage() {
         <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-[#002C4B] text-white">
           <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From your documents to a Delivery board</h2>
-            <p className="mt-4 max-w-2xl text-lg text-slate-200">Five stages take a process from its source files to the board: {STAGE_WORDS.map((w, i) => <React.Fragment key={w}>{i > 0 && ', '}<span data-initial className="font-semibold text-[#F2B21E]">{w[0]}</span>{w.slice(1)}</React.Fragment>)}. Watch the sample case go through them, or pick a stage to look at it.</p>
+            <p className="mt-4 max-w-2xl text-lg text-slate-200">Five stages take a process from its source files to the board: Assess, Validate, Assemble, Launch, Audit. Watch the sample case go through them, or pick a stage to look at it.</p>
             <Tour />
           </div>
         </section>
