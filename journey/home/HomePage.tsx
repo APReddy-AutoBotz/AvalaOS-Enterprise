@@ -281,6 +281,8 @@ const ASK_POINTS: [string, string][] = [
 ];
 // The first step a buyer is asked for is a walkthrough, not a pilot (owner, 16 November 2026): an email
 // link to CONTACT_EMAIL until a form exists, with the address also shown as text at the close.
+// The five stages, whose first letters spell the name: shown in amber in the tour's opening line (owner, 17 November 2026).
+const STAGE_WORDS = ['Assess', 'Validate', 'Assemble', 'Launch', 'Audit'];
 const WALK = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent('A walkthrough of Avala OS')}&body=${encodeURIComponent('Company:\nA process you would like to see assessed (optional):\n')}`;
 const WALK_LABEL = 'Book a walkthrough';
 const NAV: [string, string][] = [['#tour', 'Product tour'], ['#why', 'Why Avala OS'], ['#trust', 'Trust'], ['/demo', 'Live demo']];
@@ -435,7 +437,7 @@ export default function HomePage() {
         <section id="tour" aria-labelledby="tour-h" className="scroll-mt-6 bg-[#002C4B] text-white">
           <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="tour-h" className="max-w-3xl font-display text-4xl font-semibold tracking-tight sm:text-5xl">From your documents to a Delivery board</h2>
-            <p className="mt-4 max-w-2xl text-lg text-slate-200">Five stages take a process from its source files to the board: Assess, Validate, Assemble, Launch, Audit. Watch the sample case go through them, or pick a stage to look at it.</p>
+            <p className="mt-4 max-w-2xl text-lg text-slate-200">Five stages take a process from its source files to the board: {STAGE_WORDS.map((w, i) => <React.Fragment key={w}>{i > 0 && ', '}<span data-initial className="font-semibold text-[#F2B21E]">{w[0]}</span>{w.slice(1)}</React.Fragment>)}. Watch the sample case go through them, or pick a stage to look at it.</p>
             <Tour />
           </div>
         </section>
