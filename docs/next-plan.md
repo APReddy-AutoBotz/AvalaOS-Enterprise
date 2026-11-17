@@ -404,7 +404,7 @@ Seven small things, each with its test. One of them changes what is stored and i
 
 ## 3f. After the outside review of the repository: packages 13, 14 and 15 (owner's decisions, 17 November 2026)
 
-**Not built. For a builder chat; the review chat reviews each plan and each result before any release.**
+**Package 15 is built (17 November 2026, #195); packages 13 and 12 are next, package 14 after that release. The review chat reviews each plan and each result before any release.**
 
 An outside reviewer went through the whole repository at the eighth release. A separate chat checked every finding against the code and the live database; its table, with evidence, is `claude/repo-review-analysis.md` in the project (the F-numbers below are its). The outside report is right on the facts and wrong on urgency: nothing in it can be used against the live site today, where both accounts are the owner's. The owner made the repository private the same evening; notes that say "the repository is public" are out of date and are corrected with this work (backups stay encrypted and logs stay free of data all the same).
 
@@ -427,6 +427,8 @@ An outside reviewer went through the whole repository at the eighth release. A s
 **The download.** Once merged and released, the review chat makes one archive of `main` (the code only, no history) and sends it to the owner; GitHub's own "Download ZIP" gives the same. A new repository without the old history is not advised: the history is private now and loses nothing by staying.
 
 **Done when.** The two lists were shown and agreed; the proof of step 4 is in the report with its numbers; the tag exists; `AGENTS.md` describes the repository as it then is.
+
+**Built (17 November 2026, #195).** The lists were agreed with three additions (keep the light mark; two steps, files then libraries; keep the check names). Removed: 486 files, the stylesheet's two inherited sources, dead build branches, four removed functions' settings, the inherited test command and its CI steps, and nine libraries (139 packages left the lockfile, none changed version). The proof, by a temporary workflow on each step: of 67 built files before, 44 are byte-identical, 11 scripts and `index.html` differ only in the hashed names of other built files (the stylesheet's new name reaches the entry script, and from it the others' names), the stylesheet lost 298 declarations and gained or changed none, in the same order (147 class names and 21 variables, none named anywhere that stays and none built from parts), and 11 removed pictures are no longer copied; the five server functions load the same 53, 26, 4, 3 and 48 files, every one identical; after step 2 every built file is identical to step 1's, and two builds of the earlier state are identical, so the build is repeatable. 562 unit tests and 99 browser tests pass. The earlier state is the branch `claude/before-cleanup-2026-11`; the session could not create the tag, which the owner adds on that commit. Left for the owner: seven inherited environment names the build still writes into two scripts (removing them changes those scripts by that alone). Found for package 13: the extraction eval reads its sources from the repository's public address, which a private repository refuses.
 
 ### Package 13: soundness fixes from the review
 
