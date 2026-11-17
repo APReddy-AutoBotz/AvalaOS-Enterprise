@@ -549,7 +549,7 @@ export default function HomePage() {
         <section id="start" aria-labelledby="start-h" className="scroll-mt-6 bg-slate-50">
           <div className="mx-auto max-w-7xl px-6 py-12">
             <h2 id="start-h" className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">Start with one part, or use it all</h2>
-            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later; nothing is lost when a part is switched on or off.</p>
+            <p className="mt-3 max-w-3xl text-lg leading-8 text-slate-700">Add the rest later; nothing is lost. Not automating? Document a process as it is, with no assessment. Technology already chosen? The documents follow it.</p>
             <ul aria-label="Ways to start" className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {PLANS.map((p, i) => (
                 <li key={p.id} className={`flex flex-col rounded-2xl p-6 ring-1 ring-inset ${i === 0 ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white ring-slate-200'}`}>
