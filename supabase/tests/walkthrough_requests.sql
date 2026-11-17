@@ -85,7 +85,8 @@ begin
   -- 5. The limits: 3 an hour from one address, 20 an hour in total, 50 in any 24 hours; notices: 10, then one "more", then none.
   execute 'set local role service_role';
   for i in 1..3 loop r := public.submit_walkthrough_request('Same', 'same@example.com', 'Co', null, null); end loop;
-  r := public.submit_walkthrough_request('Same', 'SAME@example.com', 'Co', null, null);
+  -- The same address in other capitals and with spaces around it is the same address.
+  r := public.submit_walkthrough_request('Same', '  SAME@Example.com ', 'Co', null, null);
   if r ->> 'reason' <> 'too_many' then raise exception 'FAILED 5a: a 4th request from one address in an hour: %', r; end if;
   for i in 1..17 loop r := public.submit_walkthrough_request('P' || i, 'p' || i || '@example.com', 'Co', null, null); end loop;
   if (r ->> 'ok')::boolean is not true then raise exception 'FAILED 5b: the 20th request of the hour was refused: %', r; end if;

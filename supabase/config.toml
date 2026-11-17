@@ -105,5 +105,8 @@ verify_jwt = false
 [functions.journey-notify]
 verify_jwt = false
 
+[functions.journey-inquiry]
+verify_jwt = false
+
 [functions.journey-extract]
 verify_jwt = false

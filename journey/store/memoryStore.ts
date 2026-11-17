@@ -26,6 +26,7 @@ import { validateModules } from '../../domain/workspace/modules.ts';
 import { providerLabel } from '../../domain/auth/providers.ts';
 import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
+import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 interface State {
@@ -55,6 +56,10 @@ interface State {
   applications?: (Application & { workspaceId: string })[];
   /** What was looked up in each process's sources (the server's process_source_looks). */
   looks?: Record<string, StoredLook>;
+  /** Walkthrough requests from the homepage (the server's walkthrough_requests); the in-browser person is the platform owner. */
+  walkthroughRequests?: WalkthroughRequest[];
+  /** Set by a test that plays the platform owner: Settings then shows the walkthrough requests. */
+  platformOwner?: boolean;
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -175,6 +180,31 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     },
     // The in-browser store has one person, who is the owner.
     async canCreateOrganization() { return true; },
+    async isPlatformOwner() { return state.platformOwner === true; },
+    async listWalkthroughRequests() {
+      requireMe();
+      if (state.platformOwner !== true) throw new StoreError(403, 'Only the Avala OS owner can read walkthrough requests.');
+      return [...(state.walkthroughRequests ?? [])].sort((a, b) => b.createdAt.localeCompare(a.createdAt)).map(r => ({ ...r }));
+    },
+    async setWalkthroughRequestStatus(id, status) {
+      requireMe();
+      const r = (state.walkthroughRequests ?? []).find(x => x.id === id);
+      if (!r) throw new StoreError(404, 'No such request.');
+      r.status = status; r.lastContactAt = now();
+      save();
+    },
+    async noteWalkthroughReply(id) {
+      requireMe();
+      const r = (state.walkthroughRequests ?? []).find(x => x.id === id);
+      if (!r) throw new StoreError(404, 'No such request.');
+      r.lastContactAt = now();
+      save();
+    },
+    async deleteWalkthroughRequest(id) {
+      requireMe();
+      state.walkthroughRequests = (state.walkthroughRequests ?? []).filter(x => x.id !== id);
+      save();
+    },
     async createOrganization(organizationName, workspaceName) {
       requireMe();
       const id = uuid();
