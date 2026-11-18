@@ -413,7 +413,7 @@ Deno.serve(withCors(async (req: Request) => {
       if (run.kind === 'eval') {
         if (run.status !== 'queued') return fail(409, 'ALREADY_STARTED', 'This check has already started.');
         const checked = await checkCaseFiles(run.case_id ?? '', body.files);
-        if (!checked.ok) return fail(400, 'INVALID_FILES', checked.message);
+        if ('message' in checked) return fail(400, 'INVALID_FILES', checked.message);
         files = checked.files;
       }
       inBackground(() => stageStart(run, token, files), run.id); break;
