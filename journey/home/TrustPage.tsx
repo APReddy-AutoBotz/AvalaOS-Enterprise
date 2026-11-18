@@ -2,7 +2,7 @@
 // application or database client. The words are in domain/site/trust.ts.
 import React from 'react';
 import { TRUST_PAGES, type TrustPageId } from '../../domain/site/pages.ts';
-import { TRUST, UPDATED, inlineParts, type Block } from '../../domain/site/trust.ts';
+import { TRUST, inlineParts, updatedText, type Block } from '../../domain/site/trust.ts';
 import { SiteFooter, focus, useGo } from './site.tsx';
 
 const linkCls = `font-medium text-[#002C4B] underline decoration-[#E69F00] decoration-2 underline-offset-4 hover:decoration-[#002C4B] ${focus} focus-visible:outline-[#002C4B]`;
@@ -40,7 +40,7 @@ export default function TrustPage({ id }: { id: TrustPageId }) {
           <div className="max-w-3xl lg:ml-[18rem]">
             <h1 className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">{page.title}</h1>
             <p className="mt-4 text-lg leading-8 text-slate-700">{page.summary}</p>
-            <p className="mt-3 text-sm text-slate-500">Last updated {UPDATED[page.id]}</p>
+            <p className="mt-3 text-sm text-slate-500">Last updated {updatedText(page.id)}</p>
           </div>
         </div>
         <div className="mx-auto grid max-w-6xl gap-10 px-6 pb-14 pt-10 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-16 lg:pb-20">
