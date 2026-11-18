@@ -6,7 +6,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { shot } from './helpers.ts';
 
 // The demo's own words (domain/site/demo.ts).
-const POINTER = "You are looking at the sample's assessment: what each step would be done with, and why. Next, open Documents to see the process document written from it.";
+const POINTER = "You are looking at the sample's assessment: which steps can be done by rules, which need AI and which stay with people, and why. Next, open Documents to see the process document written from it.";
 const FILES_NOTE = "In the demo the sample's files are already read. Reading your own files happens in a workspace of your own.";
 const stage = (page: Page, name: string) => page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name }).click();
 

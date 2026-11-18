@@ -7,7 +7,7 @@ export const DEMO_START_STAGE = 'assessment' as const;
 
 /** The line on the page the demo opens on; `Documents` is the link's text. */
 export const DEMO_POINTER = {
-  before: "You are looking at the sample's assessment: what each step would be done with, and why. Next, open ",
+  before: "You are looking at the sample's assessment: which steps can be done by rules, which need AI and which stay with people, and why. Next, open ",
   link: 'Documents',
   after: ' to see the process document written from it.',
 } as const;

@@ -5,7 +5,7 @@ import { approvedAnswerNote, approvedNote } from './approval.ts';
 test('the Documents page never says an approved document is unchanged (F07)', () => {
   for (const line of [approvedNote(3), approvedAnswerNote(3)]) {
     assert.doesNotMatch(line, /unchanged|never change|final/i);
-    assert.match(line, /Revision 3/);
+    assert.match(line, /revision 3/i);
   }
-  assert.match(approvedNote(2), /section edits, choices and settings show in them/);
+  assert.equal(approvedNote(2), 'Approved revision 2 of the process is kept exactly as approved. Its documents are rebuilt each time they are opened, so later section edits, choices and settings appear in them too. Approve this draft to make these changes the approved version.');
 });

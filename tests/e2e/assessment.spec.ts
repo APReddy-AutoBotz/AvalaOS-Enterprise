@@ -793,7 +793,7 @@ test('after approval, a process change marks what changed in the documents, and 
   const since = page.getByTestId('since-approved');
   await expect(since).toContainText('since approved revision 1');
   // Until an approved document is kept as it read (package 14), the line never says it is unchanged (F07).
-  await expect(since).toContainText("Revision 1's process is kept as it was approved");
+  await expect(since).toContainText('Approved revision 1 of the process is kept exactly as approved.');
   await expect(since).not.toContainText('unchanged');
   await expect(page.getByTestId('document').locator('[data-testid="doc-section"]').filter({ hasText: 'Detailed As-Is steps' }).getByTestId('chip-changed')).toBeVisible();
   await since.getByRole('button', { name: 'Review changes' }).click();
