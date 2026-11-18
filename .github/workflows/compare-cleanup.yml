@@ -64,6 +64,9 @@ jobs:
           exit $status
 
       - name: The built site and the stylesheet
+        env:
+          # Package 13 A, step 2: the seven inherited settings names the build no longer writes.
+          REMOVED_ENV_NAMES: VITE_AVALA_HOSTED_SANDBOX_ENABLED,VITE_PR_C_CONTROLLED_HUMAN_RELEASE_SHA,VITE_PR_C_CONTROLLED_HUMAN_REVIEW_HEAD_SHA,VITE_PR_C_CONTROLLED_HUMAN_DEPLOY_ID,VITE_PR_C_CONTROLLED_HUMAN_DEPLOY_ORIGIN,VITE_PR_C_CONTROLLED_HUMAN_EXERCISE_DIGEST,VITE_PR_C_CONTROLLED_HUMAN_TARGET_FINGERPRINT
         run: |
           mkdir -p /tmp/compare
           git diff --name-only --diff-filter=D "$(git -C /tmp/before rev-parse HEAD)" HEAD -- public/ > /tmp/compare/removed-public.txt
