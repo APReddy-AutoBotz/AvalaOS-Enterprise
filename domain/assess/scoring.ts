@@ -7,7 +7,7 @@
 // caps and penalties are the tables below; nothing else decides the result, and no AI is involved.
 // The same model always gives the same scores. An unknown fact gets a middle value and lowers the
 // confidence; it never blocks a result.
-import { apiCovers, looseCovers } from './coverage.ts';
+import { apiAnswered, apiConfirmQuestion, apiCovers, apiQuestion, looseCovers } from './coverage.ts';
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
@@ -135,7 +135,7 @@ export interface StepScore {
   /** Would API integration win if the systems' APIs were confirmed for this work? */
   apiWouldWin: boolean;
   /**
-   * Applications whose API the rule before 18 November 2026 counted as covering this step and today's does
+   * Applications whose API the rule before the stricter one counted as covering this step and today's does
    * not (domain/assess/coverage.ts): the screens say so, so no figure changes without a line saying why.
    */
   narrowedBy?: string[];
@@ -200,7 +200,13 @@ function commonWords(model: ProcessModel): Set<string> {
 }
 
 type ApiState = keyof typeof VALUES.interfacePerSystem;
-interface SystemApi { system: SystemRef; state: ApiState; method?: AccessMethod; /** Covered by the rule before 18 November 2026, not by today's (coverage.ts). */ narrowed?: boolean }
+interface SystemApi {
+  system: SystemRef; state: ApiState; method?: AccessMethod;
+  /** Covered by the rule before the stricter one, not by today's (coverage.ts), and not answered by a person since. */
+  narrowed?: boolean;
+  /** A person answered whether this API does this step's work: the question is not asked again. */
+  answered?: boolean;
+}
 
 interface StepFacts {
   rules: Read<'complete' | 'incomplete' | 'unknown'>;
@@ -237,13 +243,14 @@ function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFa
     const covered = list.find(a => a.access === 'confirmed' && apiCovers(a, step));
     if (covered) return { system, state: 'covered' as const, method: covered };
     const confirmed = list.find(a => a.access === 'confirmed');
-    const narrowed = list.some(a => a.access === 'confirmed' && looseCovers(a, step, common));
-    if (confirmed) return { system, state: 'confirmed_other' as const, method: confirmed, ...(narrowed ? { narrowed: true } : {}) };
+    const answered = apiAnswered(model, system, step);
+    const narrowed = !answered && list.some(a => a.access === 'confirmed' && looseCovers(a, step, common));
+    if (confirmed) return { system, state: 'confirmed_other' as const, method: confirmed, ...(narrowed ? { narrowed: true } : {}), ...(answered ? { answered: true } : {}) };
     const reported = list.find(a => a.access === 'reported');
-    if (reported) return { system, state: 'reported' as const, method: reported };
+    if (reported) return { system, state: 'reported' as const, method: reported, ...(apiAnswered(model, system, step) ? { answered: true } : {}) };
     const absent = list.find(a => a.access === 'confirmed_absent');
     if (absent && list.every(a => a.access === 'confirmed_absent')) return { system, state: 'absent' as const, method: absent };
-    return { system, state: 'unknown' as const, method: list[0] };
+    return { system, state: 'unknown' as const, method: list[0], ...(apiAnswered(model, system, step) ? { answered: true } : {}) };
   });
   const ui = systems.map(s => known(s.uiStable as Fact<unknown> | undefined));
   const screens: StepFacts['screens'] = !systems.length ? 'none' : ui.some(f => f?.value === false) ? 'unstable' : ui.every(f => f?.value === true) ? 'stable' : 'unknown';
@@ -451,13 +458,14 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
   for (const sys of f.systems) {
     if (!known(sys.uiStable as Fact<unknown> | undefined)) push({ key: `screens:${sys.id}`, question: `Are the screens of ${sys.name} stable enough to automate?`, general: `Are the screens of ${sys.name} stable enough to automate?` });
   }
-  const openApis = f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent');
-  for (const a of openApis) push({ key: `api:${a.system.id}`, question: `Does ${a.system.name} have an API that covers "${step.name}"?`, general: `Does ${a.system.name} have an API for this work?` });
+  // An API a person has already answered about for this step is not asked about again (package 13 B).
+  const openApis = f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent' && !a.answered);
+  for (const a of openApis) push({ key: `api:${a.system.id}`, question: apiQuestion(a.system.name, step.name), general: `Does ${a.system.name} have an API for this work?` });
 
   const whatIf = openApis.length ? scoreApproaches(f, true) : null;
   const apiWouldWin = Boolean(whatIf && winner.approach !== 'api' && !s.human.floor && bestOf(whatIf).approach === 'api' && whatIf.api.score >= FIT.possible);
   const questions: StepQuestion[] = winner.approach === 'human' && !forNow ? [] : openApis.map(a => ({
-    target: { kind: 'system' as const, id: a.system.id, field: 'access' }, question: `Confirm whether ${a.system.name} has an API that covers "${step.name}".`,
+    target: { kind: 'system' as const, id: a.system.id, field: 'access' }, question: apiConfirmQuestion(a.system.name, step.name),
     whyItMatters: 'A confirmed API would make integration the better route than automating the screens.',
   }));
 

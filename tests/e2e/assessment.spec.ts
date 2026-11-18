@@ -913,3 +913,47 @@ test('a step set to agentic AI gets the agent document: planned, its steps and a
   expect((await csvFile).suggestedFilename()).toMatch(/Test pack\.csv$/);
   await shot(page, '74-test-pack');
 });
+
+test('a yes to "Does X have an API that covers <step>?" counts for the steps ticked, and the question does not come back (package 13 B)', async ({ page }) => {
+  await buildProcess(page);
+  await page.getByLabel('Add to systems for check invoice totals').selectOption({ label: 'SAP S/4HANA' });
+  await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
+  await stage(page, 'Assessment');
+  const q = page.getByTestId('why-firm').getByTestId('api-key-question');
+  await expect(q).toContainText('Does SAP S/4HANA have an API for this work?');
+  await expect(q).toContainText('For: Check invoice totals, Post invoice in SAP');
+  await q.getByRole('button', { name: 'Answer', exact: true }).click();
+  await expect(q.getByTestId('api-answer')).toContainText('Tick the steps the API of SAP S/4HANA does');
+  await q.getByLabel('The API of SAP S/4HANA does "Post invoice in SAP"').check();
+  await page.getByTestId('why-firm').scrollIntoViewIfNeeded();
+  await shot(page, 'api-answer-several-steps');
+  await q.getByRole('button', { name: 'Save answer' }).click();
+  await saved(page);
+  await expect(page.getByTestId('why-firm').getByTestId('api-key-question')).toHaveCount(0);
+  await expect(row(page, 'Post invoice in SAP').getByTestId('recommendation')).toHaveText('API integration');
+  let panel = await openStep(page, 'Post invoice in SAP');
+  await expect(panel.getByTestId('api-question')).toHaveCount(0);
+  await expect(panel.getByTestId('approach-score').first()).toContainText('API integration');
+  await page.keyboard.press('Escape');
+  panel = await openStep(page, 'Check invoice totals');
+  await expect(panel.getByTestId('api-question')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  // The answer survives a reload: it is in the saved process.
+  await page.reload();
+  await expect(row(page, 'Post invoice in SAP').getByTestId('recommendation')).toHaveText('API integration');
+  await shot(page, 'api-answer-after');
+});
+
+test('one step: Yes or No in the step\'s panel (package 13 B)', async ({ page }) => {
+  await buildProcess(page);
+  await stage(page, 'Assessment');
+  const panel = await openStep(page, 'Post invoice in SAP');
+  await expect(panel.getByTestId('api-answer')).toContainText('Yes, its API does this');
+  await shot(page, 'api-answer-one-step');
+  await panel.getByRole('button', { name: 'No', exact: true }).click();
+  await saved(page);
+  await expect(panel.getByTestId('api-question')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(row(page, 'Post invoice in SAP').getByTestId('recommendation')).toHaveText('Rule-based RPA');
+  await expect(page.getByTestId('why-firm').getByTestId('api-key-question')).toHaveCount(0);
+});

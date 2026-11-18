@@ -60,7 +60,8 @@ export interface RankedApproach {
 /** A fact sentence and the number of steps it applies to. */
 export interface Tally { text: string; steps: number }
 
-export interface KeyQuestion { key: string; question: string; steps: number }
+/** A question that would firm the assessment up, and the steps it serves (so an API question can list them). */
+export interface KeyQuestion { key: string; question: string; steps: number; stepIds: string[] }
 
 export interface ProcessAssessment {
   steps: StepScore[];
@@ -107,7 +108,7 @@ export interface ProcessAssessment {
   /** Readiness, ease of implementation, value and where the process sits among candidates. */
   priority: Priority;
   /**
-   * Steps whose API counted as covering them under the rule before 18 November 2026 and not under today's
+   * Steps whose API counted as covering them under the rule before the stricter one and not under today's
    * (coverage.ts), and those applications: the screens say so (coverageNotice), so no figure changes silently.
    */
   coverageNarrowed: { steps: number; systems: string[] };
@@ -233,8 +234,9 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   const confidence: Confidence = knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low';
   const byKey = new Map<string, KeyQuestion>();
   for (const s of scored) for (const u of s.unknowns) {
-    const k = byKey.get(u.key) ?? { key: u.key, question: u.general, steps: 0 };
+    const k = byKey.get(u.key) ?? { key: u.key, question: u.general, steps: 0, stepIds: [] };
     k.steps++;
+    k.stepIds.push(s.stepId);
     byKey.set(u.key, k);
   }
   const keyQuestions = [...byKey.values()].sort((a, b) => b.steps - a.steps || a.key.localeCompare(b.key)).slice(0, 6);

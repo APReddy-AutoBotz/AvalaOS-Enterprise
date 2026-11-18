@@ -80,7 +80,7 @@ export interface ProcessCard {
   intended: boolean;
   /** Those steps by how they would be done: rules (RPA or an API), AI (assisted or agentic), or kept with people. */
   split: { rules: number; ai: number; people: number };
-  /** Steps whose figures the stricter API rule of 18 November 2026 changed (coverage.ts); the card says so. */
+  /** Steps whose figures the stricter API rule changed (coverage.ts); the card says so. */
   narrowed?: number;
 }
 

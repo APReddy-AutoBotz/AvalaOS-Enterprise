@@ -7,6 +7,7 @@ import { APPROACH_LABEL, lower, type Approach } from '../../domain/assess/scorin
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { Button, cx } from '../ui.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL } from './assessmentShared.tsx';
+import { ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
 
 const SPLIT_ORDER: Approach[] = ['rpa', 'api', 'ai_assist', 'agent', 'human'];
 const SPLIT_LABEL: Record<Approach, string> = { ...APPROACH_LABEL, human: 'Stay with people' };
@@ -60,10 +61,12 @@ function StepChips({ ids, model, onOpen, max = 5 }: { ids: string[]; model: Proc
   );
 }
 
-export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable, reading, onRead, newApiQuestions, onAddQuestions }: {
+export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable, reading, onRead, newApiQuestions, onAddQuestions, onAnswerApi }: {
   model: ProcessModel; result: ProcessAssessment; onOpenStep: (id: string) => void;
   canEdit: boolean; aiAvailable: boolean; reading: string | null; onRead: () => void; newApiQuestions: number; onAddQuestions: () => void;
+  onAnswerApi: (systemId: string, covers: string[], notCovers: string[]) => void;
 }) {
+  const [answering, setAnswering] = React.useState<string | null>(null);
   const lead = result.lead;
   const n = result.assessed;
   const split = SPLIT_ORDER.map(a => ({ approach: a, count: result.counts[a] })).filter(x => x.count > 0);
@@ -167,12 +170,25 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
                   <>
                     <p className="text-xs font-semibold text-slate-500">Answers that would firm it up most</p>
                     <ul className="mt-2 divide-y divide-slate-100">
-                      {result.keyQuestions.slice(0, 5).map(q => (
-                        <li key={q.key} className="flex items-start justify-between gap-3 py-1.5 text-sm">
-                          <span className="text-slate-700">{cap(lower(q.question))}</span>
-                          <span className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{q.steps} {q.steps === 1 ? 'step' : 'steps'}</span>
-                        </li>
-                      ))}
+                      {result.keyQuestions.slice(0, 5).map(q => {
+                        // An API question can be answered here: Yes or No for one step, or the steps ticked (package 13 B).
+                        const systemId = q.key.startsWith('api:') ? q.key.slice(4) : null;
+                        const system = systemId ? model.systems.find(s => s.id === systemId) : undefined;
+                        const steps = q.stepIds.map(id => model.steps.find(s => s.id === id)).filter((s): s is NonNullable<typeof s> => Boolean(s)).map(s => ({ id: s.id, name: s.name }));
+                        return (
+                          <li key={q.key} className="py-1.5 text-sm" data-testid={system ? 'api-key-question' : undefined}>
+                            <div className="flex items-start justify-between gap-3">
+                              <span className="text-slate-700">{system && steps.length === 1 ? `Does ${system.name} have an API that covers "${steps[0].name}"?` : cap(lower(q.question))}</span>
+                              <span className="flex items-center gap-2">
+                                {system && canEdit && answering !== q.key && <Button variant="ghost" className="px-2 py-0.5 text-xs" onClick={() => setAnswering(q.key)}>Answer</Button>}
+                                <span className="whitespace-nowrap rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium tabular-nums text-slate-600">{q.steps} {q.steps === 1 ? 'step' : 'steps'}</span>
+                              </span>
+                            </div>
+                            {system && steps.length > 1 && answering !== q.key && <p className="mt-0.5 text-xs text-slate-500">For: {steps.map(s => s.name).join(', ')}</p>}
+                            {system && answering === q.key && <ApiCoverageAnswer system={system.name} steps={steps} onCancel={() => setAnswering(null)} onSave={(covers, notCovers) => { setAnswering(null); onAnswerApi(system.id, covers, notCovers); }} />}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </>
                 )}
