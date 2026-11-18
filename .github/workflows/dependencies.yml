@@ -1,0 +1,30 @@
+# The dependency check (package 13 A of docs/next-plan.md): on every pull request, every Monday, and by hand.
+# Lists every advisory on the locked packages by severity, and fails when something the site or the server
+# functions ship is high or critical. Reads the public registry only; installs nothing.
+name: Dependency check
+
+on:
+  pull_request:
+    branches: [next, main]
+  schedule:
+    - cron: '17 4 * * 1' # Mondays, 09:47 in India
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Dependency check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Read the advisories
+        run: |
+          npm audit --json > /tmp/all.json || true
+          npm audit --omit=dev --json > /tmp/shipped.json || true
+          node scripts/audit-summary.mjs /tmp/all.json /tmp/shipped.json
