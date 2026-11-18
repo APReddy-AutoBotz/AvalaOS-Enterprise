@@ -148,10 +148,27 @@ for (const name of lostClasses) {
   for (const [f, t] of texts) if (re.test(t)) (f === 'index.css' ? ownRules : found).push(`class ${name} in ${f}: ${t.split('\n').filter(l => re.test(l)).map(l => l.trim()).join(' | ')}`);
 }
 for (const v of lostVars) for (const [f, t] of texts) if (new RegExp(`${esc(v)}(?![A-Za-z0-9_-])`).test(t)) found.push(`variable ${v} in ${f}`);
-fs.writeFileSync(path.join(out, 'names-found.txt'), [...found, '--- named only in index.css\'s own rules (a selector that matches an element carrying the class; checked by hand in the report):', ...ownRules].join('\n') + '\n');
-if (ownRules.length) say(`Named only inside index.css's own rules, as part of another selector: ${ownRules.map(l => l.split(':')[0]).join('; ')}.`);
-if (found.length) fail(`${found.length} removed names appear in the tree after (names-found.txt)`);
-else say('Each removed name appears nowhere in the tree after, domain/ included.');
+fs.writeFileSync(path.join(out, 'names-found.txt'), [...found, '--- named only in index.css\'s own rules:', ...ownRules].join('\n') + '\n');
+// A removed name that appears as a word somewhere (an element called header, a test id, a comment) can only
+// keep a removed rule alive if every class that rule needs is in what stays: so for each removed selector,
+// at least one of its classes must appear nowhere. That class decides it; it is listed beside the rule.
+const wordHits = new Set(found.filter(l => l.startsWith('class ')).map(l => l.split(' ')[1]));
+const varHits = found.filter(l => l.startsWith('variable '));
+const decided = [], open = [];
+for (const where of new Set(removed.map(e => e.where))) {
+  const leaf = where.split(' ⟩ ').filter(p => !p.startsWith('@'));
+  const need = [...new Set(leaf.flatMap(p => [...classes(p)]))];
+  // A class still in a kept rule may well be on the page; a lost one with no word anywhere is on no element.
+  const absent = need.filter(c => lostClasses.includes(c) && !wordHits.has(c));
+  if (!need.length) continue; // a rule with no class (an element or :root) lost declarations only: the variables check covers it
+  if (absent.length) decided.push(`${where}  ← needs .${absent[0]}, which nothing that stays carries`); else open.push(where);
+}
+fs.writeFileSync(path.join(out, 'removed-rules-decided.txt'), decided.join('\n') + '\n');
+if (open.length) fail(`${open.length} removed rules need only classes that appear in what stays: ${open.slice(0, 10).join('; ')}`);
+if (varHits.length) fail(`${varHits.length} removed variables appear in what stays (names-found.txt)`);
+const plain = lostClasses.filter(c => !wordHits.has(c));
+say(`Of the ${lostClasses.length} class names the stylesheet lost, ${plain.length} appear nowhere in what stays, domain/ included; ${wordHits.size} appear only as other words (${[...wordHits].join(', ')}), and every removed rule also needs a class that nothing carries (removed-rules-decided.txt). No removed variable appears anywhere.`);
+if (ownRules.length) say(`Named only inside index.css's own rules: ${ownRules.map(l => l.split(':')[0]).join('; ')}.`);
 
 // 4. No code builds a class name from parts: for every removed class, no prefix of it ending in "-" or ":"
 // is followed by an interpolation or joined with "+" anywhere in the tree after.

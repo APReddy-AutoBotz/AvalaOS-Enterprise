@@ -12,6 +12,8 @@
 
 /* Preserve the Tailwind 3 defaults used by the existing visual system. */
 @theme {
+  --default-ring-width: 3px;
+  --default-ring-color: #6366f1;
 }
 
 @layer base {
@@ -52,6 +54,7 @@
   flex-shrink: 0;
 }
 
+.outline-none,
 .focus\:outline-none:focus {
   outline: 2px solid transparent;
   outline-offset: 2px;
@@ -197,11 +200,17 @@ body.app-bg {
   background-clip: padding-box;
 }
 
-.bg-slate-100 {
+.bg-slate-100,
+.dark .bg-abz-ink-950 {
   background: transparent !important;
 }
 
-.card {
+.premium-surface,
+.card,
+.bg-white.dark\:bg-slate-800,
+.dark .bg-white.dark\:bg-slate-800,
+.bg-white.dark\:bg-surface-dark,
+.dark .bg-white.dark\:bg-surface-dark {
   background: var(--kp-bg-elevated) !important;
   border: 1px solid var(--kp-border) !important;
   box-shadow: var(--kp-shadow-xs);
@@ -209,7 +218,8 @@ body.app-bg {
   -webkit-backdrop-filter: blur(12px);
 }
 
-.card {
+.card,
+.card-hover-effect {
   position: relative;
   border-radius: var(--kp-radius-lg) !important;
   transition:
@@ -218,7 +228,8 @@ body.app-bg {
     border-color 180ms ease;
 }
 
-.card:hover {
+.card:hover,
+.card-hover-effect:hover {
   transform: translateY(-3px);
   box-shadow: var(--kp-shadow-md);
   border-color: rgba(255, 188, 3, 0.34) !important;
@@ -282,7 +293,8 @@ body.app-bg {
 @media print {
   html,
   body,
-  #root {
+  #root,
+  .public-site {
     width: auto !important;
     height: auto !important;
     min-height: 0 !important;
