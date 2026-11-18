@@ -64,11 +64,11 @@ for (const [fb, fa, tb, ta] of differ) {
   fs.appendFileSync(path.join(out, 'differences.txt'), `=== ${fb} → ${fa} (${w.lengths}; first difference at character ${w.at}, hashed names written as -#)\n--- before\n${w.before}\n--- after\n${w.after}\n\n`);
   if (fb.endsWith('.css')) continue;
   // A script may differ by settings names the build no longer writes (REMOVED_ENV_NAMES): taken out of the
-  // before side as name:"value" pairs of the settings object, it must then be identical.
+  // before side as name:'value' pairs (any quote) of the settings object, it must then be identical.
   const names = (process.env.REMOVED_ENV_NAMES ?? '').split(',').filter(Boolean);
   if (names.length) {
     let without = unhash(tb);
-    const counts = names.map(n => { const re = new RegExp(`,?${n}:"[^"]*"`, 'g'); const c = (without.match(re) ?? []).length; without = without.replace(re, ''); return c; });
+    const counts = names.map(n => { const re = new RegExp(`,?${n}:(["'\`])[^"'\`]*\\1`, 'g'); const c = (without.match(re) ?? []).length; without = without.replace(re, ''); return c; });
     if (without === unhash(ta)) { envOnly.push(`${fb}: ${counts.reduce((a, b) => a + b, 0)} pairs taken out (${names.filter((_, i) => counts[i]).join(', ')})`); continue; }
   }
   fail(`${fb} differs in its content, not only in the names it refers to (differences.txt)`);
