@@ -1,0 +1,84 @@
+# Temporary (package 13 part A of docs/next-plan.md): proves that taking the unused hand-written rules out
+# of index.css changes nothing else. Builds the site from the pull request's base (next) and from this
+# pull request and compares them file for file; compares every file each server function bundles; reads
+# the stylesheet rule by rule. Removed before the pull request is merged.
+name: Compare with next
+
+on:
+  pull_request:
+    branches:
+      - next
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    name: Compare with next (temporary)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check out next
+        run: git worktree add /tmp/before "origin/${{ github.base_ref }}"
+
+      - name: Build after
+        run: |
+          npm ci
+          npm run build
+          mv dist /tmp/dist-after
+
+      - name: Build before
+        working-directory: /tmp/before
+        run: |
+          npm ci
+          npm run build
+
+      - name: Server functions, file for file
+        run: |
+          mkdir -p /tmp/compare
+          status=0
+          for fn in journey-ai journey-extract journey-inquiry journey-invite journey-notify; do
+            e="supabase/functions/$fn/index.ts"
+            AVALA_ROOT=/tmp/before node scripts/in-use.mjs --from "$e" > "/tmp/compare/$fn-before.txt"
+            node scripts/in-use.mjs --from "$e" > "/tmp/compare/$fn-after.txt"
+            if cmp -s "/tmp/compare/$fn-before.txt" "/tmp/compare/$fn-after.txt"; then
+              echo "- $fn: $(wc -l < "/tmp/compare/$fn-after.txt") files, every one identical before and after" | tee -a /tmp/compare/functions.md
+            else
+              echo "- FAIL: $fn bundles different files" | tee -a /tmp/compare/functions.md
+              diff "/tmp/compare/$fn-before.txt" "/tmp/compare/$fn-after.txt" || true
+              status=1
+            fi
+          done
+          cmp supabase/functions/deno.d.ts /tmp/before/supabase/functions/deno.d.ts && echo "- deno.d.ts identical" | tee -a /tmp/compare/functions.md
+          exit $status
+
+      - name: The built site and the stylesheet
+        run: |
+          mkdir -p /tmp/compare
+          git diff --name-only --diff-filter=D "$(git -C /tmp/before rev-parse HEAD)" HEAD -- public/ > /tmp/compare/removed-public.txt
+          echo "Public files removed: $(wc -l < /tmp/compare/removed-public.txt)"
+          node scripts/compare-builds.mjs /tmp/before/dist /tmp/dist-after /tmp/before . /tmp/compare
+
+      - name: Summary
+        if: always()
+        run: |
+          { echo "## Server functions"; cat /tmp/compare/functions.md 2>/dev/null; echo; echo "## The built site and the stylesheet"; cat /tmp/compare/report.md 2>/dev/null; } >> "$GITHUB_STEP_SUMMARY"
+          echo "BEGIN_COMPARE"; for f in /tmp/compare/*.txt /tmp/compare/*.md; do echo "=== $(basename "$f")"; cat "$f"; done; echo "END_COMPARE"
+
+      - name: Keep the comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compare-before-cleanup
+          path: /tmp/compare
