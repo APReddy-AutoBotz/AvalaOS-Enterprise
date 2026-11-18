@@ -7,6 +7,7 @@ import { parseJourneyPath } from './domain/workspace/route';
 import { publicPage } from './domain/site/pages';
 import { startMonitoring } from './journey/monitoring';
 import { ErrorBoundary } from './journey/ErrorBoundary';
+import { startCounting } from './journey/home/visits';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -37,6 +38,9 @@ const Root = React.lazy(async (): Promise<{ default: React.ComponentType }> => {
 
 // Errors are reported only when the build has VITE_SENTRY_DSN (journey/monitoring.ts).
 startMonitoring();
+
+// Visits to the public pages are counted on avalaos.com only, signed out (package 12, journey/home/visits.ts).
+if (pub) startCounting(pub);
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

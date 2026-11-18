@@ -9,6 +9,9 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
   },
+  // The visit-counting browser test opens the local build under the site's own name (tests/e2e/visits.spec.ts);
+  // this applies only to `vite preview` on a developer's or CI's machine, never to the built site.
+  preview: { allowedHosts: ['avalaos.com'] },
   plugins: [react()],
   build: {
     rollupOptions: {
