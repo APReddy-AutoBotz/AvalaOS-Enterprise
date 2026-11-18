@@ -56,26 +56,48 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A pull request that changes only the notes and plans (docs/ and Markdown files) needs no browser
+      # test: the job still runs under the same name and passes, after this step alone (owner, 18 November
+      # 2026, to save Actions minutes). Pushes to main always run everything.
+      - name: Decide whether the browser tests are needed
+        id: scope
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+            if [ -n "$changed" ] && ! echo "$changed" | grep -qvE '^docs/|\.md$'; then
+              echo "Only notes and plans changed; the browser tests are not needed."
+              echo "needed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "needed=true" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
+        if: steps.scope.outputs.needed == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
 
       - name: Install dependencies
+        if: steps.scope.outputs.needed == 'true'
         run: npm ci
 
       - name: Install Chromium (the runner image already has its system libraries)
+        if: steps.scope.outputs.needed == 'true'
         run: npx playwright install chromium
 
       - name: Browser tests
+        if: steps.scope.outputs.needed == 'true'
         run: npm run test:e2e
 
       # The agent's workspace cannot download artifacts, so on its branches the screenshots are
       # also printed to the log (base64 JPEG) for visual review.
       - name: Print screenshots for review
-        if: always() && startsWith(github.head_ref, 'claude/')
+        if: always() && steps.scope.outputs.needed == 'true' && startsWith(github.head_ref, 'claude/')
         run: |
           for f in test-results/screens/*.jpg; do
             [ -f "$f" ] || continue
@@ -91,7 +113,7 @@ jobs:
           fi
 
       - name: Keep screenshots and the report
-        if: always()
+        if: always() && steps.scope.outputs.needed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: e2e-results

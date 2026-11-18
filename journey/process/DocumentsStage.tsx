@@ -1,6 +1,7 @@
 // The Documents stage: the BRD and PDD of the process, written from the process model and the
 // assessment. Read-only for now; every table follows the model, so correcting a fact in the
 // Process or Assessment stage corrects the documents.
+import { approvedAnswerNote, approvedNote } from '../../domain/docs/approval.ts';
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
@@ -402,13 +403,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         )}
         {answerChanged && approvedModel && (
           <p className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="answer-changed">
-            <span className="font-semibold">Approved revision {approvedRevision} was approved as "{PURPOSE_LABEL[purposeOf(approvedModel)]}"</span>; this draft is "{PURPOSE_LABEL[purposeOf(model)]}". The approved documents are unchanged and follow the answer they were approved with; approve this draft to make these the approved version.
+            <span className="font-semibold">Approved revision {approvedRevision} was approved as "{PURPOSE_LABEL[purposeOf(approvedModel)]}"</span>; this draft is "{PURPOSE_LABEL[purposeOf(model)]}". {approvedAnswerNote(approvedRevision ?? '')}
           </p>
         )}
         {sinceApproved.length > 0 && (
           <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="since-approved">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span><span className="font-semibold">{sinceApproved.length} {sinceApproved.length === 1 ? 'section changed' : 'sections changed'} since approved revision {approvedRevision}</span>: the process was edited after approval. The approved document is unchanged; approve this draft to make these the approved version.</span>
+              <span><span className="font-semibold">{sinceApproved.length} {sinceApproved.length === 1 ? 'section changed' : 'sections changed'} since approved revision {approvedRevision}</span>: the process was edited after approval. {approvedNote(approvedRevision ?? '')}</span>
               <button type="button" className="font-semibold text-[#002C4B] hover:underline" onClick={() => setShowChanges(!showChanges)} aria-expanded={showChanges}>{showChanges ? 'Hide changes' : 'Review changes'}</button>
             </div>
             {showChanges && (

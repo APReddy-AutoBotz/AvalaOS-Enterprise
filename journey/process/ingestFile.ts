@@ -1,6 +1,7 @@
 // Turns an uploaded file into a stored source: parsed here in the browser with the domain parsers,
 // or, for an image, read as a flowchart by the AI on the server. Nothing is stored for a file that
 // cannot be read; the person is told why.
+import { DEMO_FILES_NOTE } from '../../domain/site/demo.ts';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import { parseFile } from '../../domain/ingest/parsers/index.ts';
 import type { PdfJs } from '../../domain/ingest/parsers/pdf.ts';
@@ -39,7 +40,9 @@ export async function ingestFile(store: JourneyStore, workspaceId: string, file:
     return { ok: true, source: { ...base, format, kind: FORMAT_LABEL[format], segments: r.segments, inferred: false, warnings: r.warnings } };
   }
   if (r.status === 'needs_vision') {
-    if (!store.aiAvailable) return { ok: false, message: 'Images are read by the AI on the server, which is not available in local mode. Upload the draw.io or BPMN file instead.' };
+    if (!store.aiAvailable) return { ok: false, message: store.kind === 'demo'
+      ? `${DEMO_FILES_NOTE} Here, a draw.io or BPMN file can be added instead.`
+      : 'Images are read by the AI on the server, which is not available in local mode. Upload the draw.io or BPMN file instead.' };
     if (bytes.length > MAX_IMAGE_BYTES) return { ok: false, message: 'The image is larger than 7 MB. Export it smaller, or upload the draw.io or BPMN file.' };
     const reading = await store.readFlowchartImage(workspaceId, await dataUrl(file));
     const graph = readingToGraph(reading);

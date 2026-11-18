@@ -1,11 +1,14 @@
 // The demo at /demo: the product itself on the sample case (eval/corpus/ap-invoice, a made-up company), in
 // the browser only. It starts from the state the tour test leaves the sample in (public/demo-data/sample.json,
-// refreshed from that test), keeps every change in memory, and never talks to the database or the AI.
+// refreshed from that test), keeps every change in memory, and never talks to the database or the AI. It opens
+// on the sample's assessment, with one line saying what to look at next.
 import React from 'react';
 import { Journey } from '../JourneyApp.tsx';
 import { createMemoryStore } from '../store/memoryStore.ts';
 import type { JourneyStore } from '../store/types.ts';
 import { DEMO_BASE } from '../../domain/site/pages.ts';
+import { DEMO_START_STAGE } from '../../domain/site/demo.ts';
+import type { JourneyRoute } from '../../domain/workspace/route.ts';
 import { Spinner } from '../ui.tsx';
 
 export const DEMO_DATA = '/demo-data/sample.json';
@@ -14,6 +17,8 @@ export const DEMO_ANSWERS = '/demo-data/ask-answers.json';
 
 export default function DemoApp() {
   const [store, setStore] = React.useState<JourneyStore | null>(null);
+  // The demo opens on the sample's assessment (marketing review, 18 November 2026).
+  const [start, setStart] = React.useState<JourneyRoute | undefined>(undefined);
   const [failed, setFailed] = React.useState(false);
 
   React.useEffect(() => {
@@ -23,7 +28,13 @@ export default function DemoApp() {
     const answers = fetch(DEMO_ANSWERS).then(r => (r.ok ? r.json() : [])).then(a => (Array.isArray(a) ? a : [])).catch(() => []);
     fetch(DEMO_DATA)
       .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
-      .then(async sample => { const recorded = await answers; if (live) setStore(createMemoryStore({ demo: sample, recorded: recorded.length ? recorded : undefined })); })
+      .then(async sample => {
+        const recorded = await answers;
+        if (!live) return;
+        const first = Array.isArray(sample?.processes) ? sample.processes[0] : null;
+        if (first?.id) setStart({ page: 'process', processId: String(first.id), stage: DEMO_START_STAGE });
+        setStore(createMemoryStore({ demo: sample, recorded: recorded.length ? recorded : undefined }));
+      })
       .catch(() => { if (live) setFailed(true); });
     return () => { live = false; };
   }, []);
@@ -37,5 +48,5 @@ export default function DemoApp() {
     );
   }
   if (!store) return <Spinner />;
-  return <Journey store={store} base={DEMO_BASE} />;
+  return <Journey store={store} base={DEMO_BASE} start={start} />;
 }

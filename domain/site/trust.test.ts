@@ -13,7 +13,7 @@ test('every trust page has a title, a summary and sections with unique ids', () 
     assert.equal(new Set(ids).size, ids.length, `${page.id}: duplicate section id`);
     for (const s of page.sections) assert.ok(s.body.length > 0, `${page.id}#${s.id} is empty`);
   }
-  assert.match(UPDATED, /^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+  for (const d of Object.values(UPDATED)) assert.match(d, /^\d{1,2} [A-Z][a-z]+ \d{4}$/);
 });
 
 test('the pages name who runs the service and how to reach them', () => {
@@ -53,4 +53,11 @@ test('security.txt names the same contact and has not expired', async () => {
   assert.match(txt, /^Policy: https:\/\/avalaos\.com\/security$/m);
   const expires = Date.parse(/^Expires: (.+)$/m.exec(txt)?.[1] ?? '');
   assert.ok(expires > Date.now(), 'security.txt has expired: renew its Expires line (at most a year ahead)');
+});
+
+test('the privacy notice names every AI provider a workspace may connect, and says its requests go only there', () => {
+  const text = pageText(TRUST.privacy);
+  for (const p of ['Azure OpenAI', 'Anthropic', 'Amazon Bedrock', 'Mistral AI', 'OpenAI-compatible endpoint']) assert.ok(text.includes(p), p);
+  assert.match(text, /only to that provider/);
+  assert.equal(UPDATED.privacy, '18 November 2026');
 });

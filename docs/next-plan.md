@@ -402,9 +402,19 @@ Seven small things, each with its test. One of them changes what is stored and i
 
 **Not in this package.** Counting inside the product (what signed-in people use): a different question, with its own privacy weight; not now. A/B tests. Any advertising or social network's tracker.
 
+**The account (owner, 18 November 2026).** Umami Cloud, EU region chosen at sign-up; website ID `14ef4005-3173-46da-a837-efcc39cf1a48` (not a secret). Before the privacy notice says where visit counts are stored, the builder confirms on the preview which address the page sends them to.
+
+### After that release: the Tiptap upgrade (owner, 18 November 2026; not built)
+
+The section editor's library, Tiptap, carries a moderate advisory (`mergeAttributes()` can turn an own `__proto__` key into inherited attributes) fixed only in Tiptap 3, a major version that changes how the editor is set up. A small separate package after the release: move `@tiptap/react`, `@tiptap/starter-kit` and `@tiptap/pm` to 3, adjust `journey/process/SectionEditor.tsx`, and keep what the editor allows and how saved sections read (the existing tests and a browser test of editing a section). The dependency check then shows no moderate advisory in what is shipped.
+
+### After package 12: a content security policy (owner, 18 November 2026; not built)
+
+A content security policy for every page, first in report-only mode, allowing exactly what the pages use: this site, the Supabase project, Sentry, and the visit counter of package 12. It is enforced only after a clean period with no unexpected reports. Its order: after package 12, before or with the release that follows, as the owner decides.
+
 ## 3f. After the outside review of the repository: packages 13, 14 and 15 (owner's decisions, 17 November 2026)
 
-**Package 15 is built (17 November 2026, #195); packages 13 and 12 are next, package 14 after that release. The review chat reviews each plan and each result before any release.**
+**Package 15 is built (17 November 2026, #195); package 13 part A is built (18 November 2026, #198), then parts B and C and package 12, one release on the owner's word; package 14 after that release. The review chat reviews each plan and each result before any release.**
 
 An outside reviewer went through the whole repository at the eighth release. A separate chat checked every finding against the code and the live database; its table, with evidence, is `claude/repo-review-analysis.md` in the project (the F-numbers below are its). The outside report is right on the facts and wrong on urgency: nothing in it can be used against the live site today, where both accounts are the owner's. The owner made the repository private the same evening; notes that say "the repository is public" are out of date and are corrected with this work (backups stay encrypted and logs stay free of data all the same).
 
@@ -444,6 +454,19 @@ One bundle in three parts, each its own pull request. Every item has its test. W
 - **The privacy notice names the AI providers a workspace may connect,** not only the platform's.
 - **The secret scanner looks at the folders that exist** (`journey/`, `domain/`), after package 15.
 
+Added by the owner on 18 November 2026, after the review of package 15 and the marketing review:
+
+1. **The microphone is allowed for the site itself only;** camera and location stay off.
+2. **The seven old settings names leave the build** (owner's yes). They are read by nothing; removing them changes the two scripts that carried them, and only by those names.
+3. **The hand-written rules in `index.css` that no page uses** (for example `.premium-sidebar`, left from the earlier screens) are removed, with the same proof as package 15: the stylesheet loses rules and gains or changes none, and no removed name appears in what stays.
+4. **Two demo fixes from the marketing review.** The demo opens on the sample's assessment, with one line pointing to what to look at next. Where the demo says a thing is "not available in local mode", it says in plain words that reading your own files happens in a workspace of your own, and offers the walkthrough.
+5. **`robots.txt` and a sitemap are real files.** Today both addresses return the homepage. The builder proposes which public pages the sitemap lists; the owner approves.
+6. **A fresh dependency check.** The earlier count of 24 warnings is stale after package 15. The report gives the count by severity, what is safe is fixed, and an automatic check is added so new warnings are seen.
+
+The owner approves the exact words of the Documents line, the privacy notice and the demo's pointer line before part A is merged.
+
+**Built (18 November 2026, #198).** The owner approved the privacy notice as written and the sitemap as proposed, and reworded two lines: the Documents line ("Approved revision R of the process is kept exactly as approved. Its documents are rebuilt each time they are opened, so later section edits, choices and settings appear in them too. Approve this draft to make these changes the approved version.") and the demo's pointer ("You are looking at the sample's assessment: which steps can be done by rules, which need AI and which stay with people, and why. Next, open Documents to see the process document written from it."). The security contact file (`public/.well-known/security.txt`) already existed and is live; it stays as it is and out of the sitemap. Proof and checks: `AGENTS.md`, Progress. Dependency check that day: 0 critical, 4 high (one advisory on a build tool, never shipped, with no fixed release yet), 24 moderate (one Tiptap advisory, fixed only in Tiptap 3); nothing could be fixed within the allowed versions. The browser tests no longer run for a pull request that changes only notes and plans (owner, to save Actions minutes); the two check names are unchanged.
+
 **B. Rules that the server functions carry.**
 
 - **An API covers a step only when that is certain (F09).** Today one shared word, or a five-letter stem, is enough: "Read supplier" counts as able to do "Update supplier", and the step's reason then states "has a confirmed API covering this work", which no source said. When the match is not certain, the step is scored as "not known to be covered", the reason says so, and the question is asked, as already happens for an unrelated operation. A person's own confirmation of an API without listed operations still covers the process (decided). **Before and after, report the sample's figures** (the split of its steps, "what would change the ranking", the portfolio) and those of the owner's two test processes; if the sample's change, the demo's data, its recorded Ask Avala answers and the homepage's pictures and wording are brought in step in the same release. Run the Ask Avala measure afterwards.
@@ -451,6 +474,15 @@ One bundle in three parts, each its own pull request. Every item has its test. W
 - **The allowance (F03, the small parts):** it is checked before "Test this key", which records its use; every attempt of a call is counted, not only the last.
 - **Reading sources on a workspace's own key does not need the platform's key to exist (F04).**
 - **A reply that lacks a list its task requires is refused (F16); a task name must be one of ours (F17).**
+- **The extraction check takes the sample's files from the caller** instead of the repository's public address, which a private repository refuses (found in package 15).
+
+Added by the owner on 18 November 2026:
+
+**Condition from part A (owner, 18 November 2026):** the privacy notice now says a workspace with its own key sends its requests "never to OpenAI on our key". That is true only with F05 (a workspace key that has gone missing stops the work and never falls back to the platform key), so F05 must be in the same release as part A.
+
+7. **The two error paths in the AI function that return internal text** return a plain message instead; the detail goes to the function's log only.
+8. **Allowed websites.** Today no value is set and every function answers any website. One value cannot be set by hand, because the previews use the same live functions. It becomes a list that covers avalaos.com and this site's previews; the report says which value the owner sets.
+9. **The extraction check:** the report says who can start one, and shows that taking the sample's files from the caller does not let anyone else send files to that function.
 
 **C. The walls between workspaces (the database: additive, its tests, a rolled-back trial, the owner's yes).**
 
