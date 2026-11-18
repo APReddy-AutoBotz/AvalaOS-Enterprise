@@ -58,11 +58,22 @@ const firstDiff = (tb, ta) => {
   const cut = (t, end) => t.slice(Math.max(0, i - 160), Math.min(end + 160, i + 1500));
   return { before: cut(tb, tb.length - j), after: cut(ta, ta.length - j), at: i, lengths: `${tb.length} → ${ta.length} characters` };
 };
+const envOnly = [];
 for (const [fb, fa, tb, ta] of differ) {
   const w = firstDiff(unhash(tb), unhash(ta));
   fs.appendFileSync(path.join(out, 'differences.txt'), `=== ${fb} → ${fa} (${w.lengths}; first difference at character ${w.at}, hashed names written as -#)\n--- before\n${w.before}\n--- after\n${w.after}\n\n`);
-  if (!fb.endsWith('.css')) fail(`${fb} differs in its content, not only in the names it refers to (differences.txt)`);
+  if (fb.endsWith('.css')) continue;
+  // A script may differ by settings names the build no longer writes (REMOVED_ENV_NAMES): taken out of the
+  // before side as name:"value" pairs of the settings object, it must then be identical.
+  const names = (process.env.REMOVED_ENV_NAMES ?? '').split(',').filter(Boolean);
+  if (names.length) {
+    let without = unhash(tb);
+    const counts = names.map(n => { const re = new RegExp(`,?${n}:"[^"]*"`, 'g'); const c = (without.match(re) ?? []).length; without = without.replace(re, ''); return c; });
+    if (without === unhash(ta)) { envOnly.push(`${fb}: ${counts.reduce((a, b) => a + b, 0)} pairs taken out (${names.filter((_, i) => counts[i]).join(', ')})`); continue; }
+  }
+  fail(`${fb} differs in its content, not only in the names it refers to (differences.txt)`);
 }
+if (envOnly.length) say(`Scripts that differ only by the settings names taken out: ${envOnly.join('; ')}.`);
 const cssPairs = differ.filter(([fb]) => fb.endsWith('.css'));
 fs.writeFileSync(path.join(out, 'names-only.txt'), namesOnly.map(([b, a]) => `${b} → ${a}`).join('\n') + '\n');
 say(`Built files: ${before.size} before, ${after.size} after. ${sameBytes.length} byte-identical under the same name; ${namesOnly.length} identical but for the hashed names of built files they refer to (names-only.txt); ${differ.length} with different content (${differ.map(([fb]) => fb).join(', ') || 'none'}); ${gonePublic.length} removed public files no longer copied.`);
@@ -136,7 +147,7 @@ say(`Names the stylesheet lost: ${lostClasses.length} class names, ${lostVars.le
 
 // Every text file of the tree after, domain/ included (the lockfile and the built site aside).
 // The notes (docs/ and Markdown) may name a removed rule while describing the change; they are not read by any page.
-const files = execSync('git ls-files', { cwd: afterTree, encoding: 'utf8' }).split('\n').filter(f => f && !f.endsWith('package-lock.json') && !f.startsWith('docs/') && !f.endsWith('.md') && !/\.(png|jpe?g|webp|gif|ico|pdf|docx|xlsx|pptx|woff2?|ttf|otf|zip|gz|mp3|wav|m4a|webm|mp4)$/i.test(f));
+const files = execSync('git ls-files', { cwd: afterTree, encoding: 'utf8' }).split('\n').filter(f => f && !f.endsWith('package-lock.json') && !f.startsWith('docs/') && !f.endsWith('.md') && f !== 'scripts/compare-builds.mjs' && !/\.(png|jpe?g|webp|gif|ico|pdf|docx|xlsx|pptx|woff2?|ttf|otf|zip|gz|mp3|wav|m4a|webm|mp4)$/i.test(f));
 const texts = files.map(f => [f, fs.readFileSync(path.join(afterTree, f), 'utf8')]);
 say(`Searched: ${texts.length} files of the tree after (everything tracked but pictures, documents, the notes and the lockfile).`);
 const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
