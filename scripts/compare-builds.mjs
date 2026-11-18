@@ -168,7 +168,10 @@ for (const where of new Set(removed.map(e => e.where))) {
   const frames = where.match(/^@keyframes ([A-Za-z0-9_-]+)/)?.[1];
   if (frames) {
     // A removed animation: no kept rule may name it, and no code may.
-    const named = ea.some(e => new RegExp(`(?<![A-Za-z0-9_-])${esc(frames)}(?![A-Za-z0-9_-])`).test(e.text)) || hasWord(frames);
+    // tailwind.config.js may define an animation of the same name; it reaches the page only through the class
+    // animate-<name>, so that class must appear nowhere either.
+    const inCode = texts.some(([f, t]) => f !== 'index.css' && f !== 'tailwind.config.js' && new RegExp(`(?<![A-Za-z0-9_-])${esc(frames)}(?![A-Za-z0-9_-])`).test(t));
+    const named = ea.some(e => new RegExp(`(?<![A-Za-z0-9_-])${esc(frames)}(?![A-Za-z0-9_-])`).test(e.text)) || inCode || hasWord(`animate-${frames}`);
     if (named) open.push(where); else decided.push(`${where}  ← the animation ${frames} is named by no kept rule and no code`);
     continue;
   }
