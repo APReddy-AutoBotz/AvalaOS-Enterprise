@@ -165,6 +165,13 @@ const hasWord = c => {
 };
 for (const where of new Set(removed.map(e => e.where))) {
   if (keptWhere.has(where)) continue; // the rule stays and lost declarations only: the variables check covers it
+  const frames = where.match(/^@keyframes ([A-Za-z0-9_-]+)/)?.[1];
+  if (frames) {
+    // A removed animation: no kept rule may name it, and no code may.
+    const named = ea.some(e => new RegExp(`(?<![A-Za-z0-9_-])${esc(frames)}(?![A-Za-z0-9_-])`).test(e.text)) || hasWord(frames);
+    if (named) open.push(where); else decided.push(`${where}  ← the animation ${frames} is named by no kept rule and no code`);
+    continue;
+  }
   const leaf = where.split(' ⟩ ').filter(p => !p.startsWith('@'));
   const need = [...new Set(leaf.flatMap(p => [...classes(p)]))];
   if (!need.length) { open.push(where); continue; }
