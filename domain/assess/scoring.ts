@@ -7,7 +7,7 @@
 // caps and penalties are the tables below; nothing else decides the result, and no AI is involved.
 // The same model always gives the same scores. An unknown fact gets a middle value and lowers the
 // confidence; it never blocks a result.
-import { apiAnswered, apiConfirmQuestion, apiCovers, apiQuestion, looseCovers } from './coverage.ts';
+import { apiAnswer, apiAnswered, apiConfirmQuestion, apiCovers, apiQuestion, looseCovers } from './coverage.ts';
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
@@ -240,7 +240,9 @@ function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFa
   const systems = step.systemIds.map(id => model.systems.find(s => s.id === id)).filter((s): s is SystemRef => Boolean(s)).filter(s => !NON_INTEGRABLE.includes(s.kind));
   const apis: SystemApi[] = systems.map(system => {
     const list = apiOf(system);
-    const covered = list.find(a => a.access === 'confirmed' && apiCovers(a, step));
+    // A person's no for this step wins over any listed operation.
+    const said = apiAnswer(model, system, step);
+    const covered = said === 'no' ? undefined : list.find(a => a.access === 'confirmed' && apiCovers(a, step));
     if (covered) return { system, state: 'covered' as const, method: covered };
     const confirmed = list.find(a => a.access === 'confirmed');
     const answered = apiAnswered(model, system, step);

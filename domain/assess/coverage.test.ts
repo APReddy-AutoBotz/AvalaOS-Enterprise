@@ -8,11 +8,11 @@ test('an operation covers a step only with the same action and the same thing (F
   assert.equal(operationCovers('Update supplier', 'Update supplier bank details'), true);
   assert.equal(operationCovers('Change supplier', 'Update supplier'), true, 'equal verbs count');
   assert.equal(operationCovers('post supplier invoice', 'Post invoice and attach PDF'), true);
-  assert.equal(operationCovers('create supplier invoice', 'Enter PO invoice'), true, 'enter and create name the same action');
+  assert.equal(operationCovers('create supplier invoice', 'Enter PO invoice'), false, '"enter" is not in the table: it matches only itself');
   assert.equal(operationCovers('read mail', 'Log invoice'), false);
   assert.equal(operationCovers('MIRO', 'Enter PO invoice'), false, 'a transaction code names no action');
-  assert.equal(operationCovers('read invoices', 'Check invoice'), true, 'a plural counts as its singular');
-  assert.equal(operationCovers('read invoicing data', 'Check invoice'), false, 'no word stems');
+  assert.equal(operationCovers('read invoices', 'Read invoice'), true, 'a plural counts as its singular');
+  assert.equal(operationCovers('read invoicing data', 'Read invoice'), false, 'no word stems');
   assert.equal(operationCovers('Scan paper invoices', 'Scan paper invoice'), true, 'a verb outside the table matches itself');
   assert.equal(operationCovers('Scan documents', 'Archive paper invoice'), false);
 });
@@ -34,7 +34,7 @@ test('the words of a name: the action is the first word, the rest are things', (
 test('a noun that is also a verb is a thing, not an action (owner, 18 November 2026)', () => {
   assert.equal(operationCovers('Create vendor', 'Update vendor record'), false, '"record" is the thing updated, not a second action');
   assert.equal(operationCovers('Read vendor email', 'Email vendor'), false, '"email" in the operation is a thing');
-  assert.equal(operationCovers('Create vendor record', 'Record vendor'), true, 'record as the first word is the action: create');
+  assert.equal(operationCovers('record vendor details', 'Record vendor'), true, 'record as the first word is the action, matching itself');
   // Each word of the table that is also a noun: as the first word an action, anywhere else a thing.
   for (const w of ['list', 'log', 'post', 'set', 'change', 'check', 'query', 'return', 'release', 'match', 'record', 'email', 'open', 'new', 'book', 'export', 'reply', 'share']) {
     const later = partsOf(`read ${w} details`);
@@ -44,10 +44,18 @@ test('a noun that is also a verb is a thing, not an action (owner, 18 November 2
     assert.notEqual(first.action, null, w);
   }
   assert.equal(operationCovers('read the post list', 'Post invoice'), false);
-  assert.equal(operationCovers('read price list', 'List prices'), true, 'reading the list and listing prices are the same action on the same thing');
+  assert.equal(operationCovers('read price list', 'List prices'), false, '"list" is not in the table');
   assert.equal(operationCovers('read the change log', 'Log invoice'), false);
   assert.equal(operationCovers('get release notes', 'Release payment'), false);
   assert.equal(operationCovers('read match results', 'Match invoice to PO'), false);
+});
+
+test('only verbs with one plain meaning are equal (owner, 18 November 2026)', () => {
+  assert.equal(operationCovers('Create invoice', 'Open invoice'), false, 'opening may be viewing');
+  assert.equal(operationCovers('Delete order', 'Close order'), false, 'closing is not deleting');
+  assert.equal(operationCovers('Create invoice', 'Post invoice in SAP'), false, 'posting is not creating');
+  assert.equal(operationCovers('Add invoice', 'Create invoice'), true);
+  assert.equal(operationCovers('Change vendor', 'Update vendor bank details'), true);
 });
 
 test('a step\'s own name, as a person\'s yes records it, covers that step', () => {

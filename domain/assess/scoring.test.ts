@@ -358,3 +358,15 @@ test('a yes to "Does X have an API that covers <step>?" covers that step, and ne
   assert.equal(scoreStep(again, again.steps[2]).winner, 'api', 'a later yes replaces the no');
   assert.equal(again.openQuestions.find(q => q.question.includes('Update vendor'))!.answer, 'Yes: the API of System 1 does this step\'s work.', 'the record says the latest answer');
 });
+
+test('a person\'s no for a step wins over any listed operation (owner, 18 November 2026)', () => {
+  const m = build([{ name: 'Check invoice totals', traits: clear, systems: [{ api: 'confirmed-nocover' }] }, { name: 'Check invoice tax', traits: clear }]);
+  m.steps[1].systemIds = ['sys-0-0'];
+  const after = answerApiCoverage(m, { systemId: 'sys-0-0', covers: ['s-0'], notCovers: ['s-1'] }).model;
+  assert.deepEqual(after.systems[0].access.find(a => a.status === 'user-confirmed')!.operations, ['Check invoice totals']);
+  assert.equal(scoreStep(after, after.steps[0]).winner, 'api');
+  const tax = scoreStep(after, after.steps[1]);
+  assert.notEqual(tax.winner, 'api', 'the listed "Check invoice totals" would match "Check invoice tax"; the no wins');
+  assert.match(tax.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /not known to cover this work/);
+  assert.deepEqual(tax.questions, []);
+});

@@ -10,15 +10,18 @@
 
 import type { AccessMethod, ProcessModel, Step, SystemRef } from '../processModel/types.ts';
 
-/** Verbs that name the same action, by group. Only the first word of a name or an operation is read as its action. */
+/**
+ * Verbs that name the same action, by group: only verbs with one plain meaning (owner, 18 November 2026).
+ * A verb left out ("open", "close", "post", "check", "enter", ...) matches only itself, so the question is
+ * asked and a person's yes counts. Only the first word of a name or an operation is read as its action.
+ */
 export const ACTIONS: Record<string, readonly string[]> = {
-  create: ['create', 'add', 'new', 'raise', 'register', 'open', 'submit', 'enter', 'post', 'record', 'log', 'book', 'capture', 'insert'],
-  read: ['read', 'get', 'retrieve', 'fetch', 'look', 'lookup', 'view', 'check', 'query', 'search', 'list', 'find', 'download', 'export', 'validate', 'verify'],
-  change: ['update', 'change', 'amend', 'edit', 'modify', 'set', 'maintain', 'correct'],
-  remove: ['delete', 'remove', 'cancel', 'close', 'archive', 'reverse'],
-  approve: ['approve', 'authorise', 'authorize', 'release', 'sign'],
-  send: ['send', 'email', 'notify', 'forward', 'reply', 'return', 'share', 'upload', 'attach', 'publish'],
-  match: ['match', 'reconcile', 'compare'],
+  create: ['create', 'add', 'register', 'insert'],
+  read: ['read', 'get', 'retrieve', 'fetch', 'view'],
+  change: ['update', 'change', 'amend', 'edit', 'modify'],
+  remove: ['delete', 'remove'],
+  approve: ['approve', 'authorise', 'authorize'],
+  send: ['send', 'email', 'forward'],
 };
 const ACTION_OF = new Map(Object.entries(ACTIONS).flatMap(([group, verbs]) => verbs.map(v => [v, group] as const)));
 
@@ -102,6 +105,17 @@ export const apiConfirmQuestion = (system: string, step: string) => `Confirm whe
  * answered question is what keeps the question from being asked again after a no.
  */
 export function apiAnswered(model: ProcessModel, system: SystemRef, step: Step): boolean {
+  return apiAnswer(model, system, step) !== null;
+}
+
+/**
+ * A person's answer for this application and step: 'yes', 'no', or 'other' for an answer in their own words
+ * (from the open questions), null when none. A no wins over any listed operation (owner, 18 November 2026):
+ * a yes for "Check invoice totals" does not make the API count for "Check invoice tax" left unticked.
+ */
+export function apiAnswer(model: ProcessModel, system: SystemRef, step: Step): 'yes' | 'no' | 'other' | null {
   const texts = [apiQuestion(system.name, step.name), apiConfirmQuestion(system.name, step.name)];
-  return model.openQuestions.some(q => q.status === 'answered' && q.target.kind === 'system' && q.target.id === system.id && texts.includes(q.question));
+  const q = model.openQuestions.find(x => x.status === 'answered' && x.target.kind === 'system' && x.target.id === system.id && texts.includes(x.question));
+  if (!q) return null;
+  return /^Yes:/.test(q.answer ?? '') ? 'yes' : /^No:/.test(q.answer ?? '') ? 'no' : 'other';
 }
