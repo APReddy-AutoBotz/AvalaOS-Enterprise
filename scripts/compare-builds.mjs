@@ -155,12 +155,20 @@ fs.writeFileSync(path.join(out, 'names-found.txt'), [...found, '--- named only i
 const wordHits = new Set(found.filter(l => l.startsWith('class ')).map(l => l.split(' ')[1]));
 const varHits = found.filter(l => l.startsWith('variable '));
 const decided = [], open = [];
+const anyHit = new Map();
+const hasWord = c => {
+  if (!anyHit.has(c)) {
+    const re = new RegExp(`(?<![${CLASS_CHAR.replace(/'|"/g, '')}])${esc(c)}(?![A-Za-z0-9_\\-/\\[\\]])`);
+    anyHit.set(c, texts.some(([f, t]) => f !== 'index.css' && re.test(t)));
+  }
+  return anyHit.get(c);
+};
 for (const where of new Set(removed.map(e => e.where))) {
+  if (keptWhere.has(where)) continue; // the rule stays and lost declarations only: the variables check covers it
   const leaf = where.split(' ⟩ ').filter(p => !p.startsWith('@'));
   const need = [...new Set(leaf.flatMap(p => [...classes(p)]))];
-  // A class still in a kept rule may well be on the page; a lost one with no word anywhere is on no element.
-  const absent = need.filter(c => lostClasses.includes(c) && !wordHits.has(c));
-  if (!need.length) continue; // a rule with no class (an element or :root) lost declarations only: the variables check covers it
+  if (!need.length) { open.push(where); continue; }
+  const absent = need.filter(c => !hasWord(c));
   if (absent.length) decided.push(`${where}  ← needs .${absent[0]}, which nothing that stays carries`); else open.push(where);
 }
 fs.writeFileSync(path.join(out, 'removed-rules-decided.txt'), decided.join('\n') + '\n');
