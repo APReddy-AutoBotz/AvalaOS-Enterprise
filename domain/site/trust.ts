@@ -8,7 +8,7 @@ import type { TrustPageId } from './pages.ts';
 export const OPERATOR = 'AP Reddy';
 export const CONTACT_EMAIL = 'hello@avalaos.com';
 /** When each page last changed, page by page (the privacy notice named the providers a workspace may connect on 18 November 2026). */
-export const UPDATED: Record<TrustPageId, string> = { privacy: '18 November 2026', terms: '17 November 2026', security: '17 November 2026' };
+export const UPDATED: Record<TrustPageId, string> = { privacy: '18 November 2026', terms: '17 November 2026', security: '18 November 2026' };
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
 /** Further days until the rolling database backups that still hold the data have expired. */
@@ -56,15 +56,16 @@ const privacy: TrustPage = {
             'Records of activity: who edited, approved or confirmed what and when, and changes to membership and roles.',
             'AI usage: for each request to the AI provider, the workspace, the person, the kind of task, the model, the number of tokens used and whether it succeeded. Not the content of the request.',
             'Technical data: our hosting and database providers keep standard request logs, such as IP address, browser and time.',
+            'Visits to our public pages: when you are not signed in, we count visits to the homepage, these legal pages and the opening of the demo, without cookies. A count holds the page, the site you came from, the campaign words in the link, your browser\'s language and screen size, and whether you opened or sent a walkthrough request, opened a "Read more" or picked a stage of the tour. Never anything you type. Nothing is counted inside the product, and nothing is sent when your browser asks not to be tracked.',
           ],
         },
-        'We do not use analytics, advertising or tracking tools.',
+        'We do not use advertising or tracking tools, and we count visits only as described above.',
       ],
     },
     {
       id: 'browser', title: 'Cookies and browser storage',
       body: [
-        'Avala OS sets no cookies of its own. It keeps two things in your browser\'s local storage: your sign-in session, and the last workspace you opened. Both are needed for the service to work, and neither is used for tracking. Signing out removes the session.',
+        'Avala OS sets no cookies of its own. It keeps two things in your browser\'s local storage: your sign-in session, and the last workspace you opened. Both are needed for the service to work, and neither is used for tracking. Signing out removes the session. Counting visits keeps nothing in your browser. Only if you open one of our pages with ?count=off does it keep a note that visits from that browser are not counted; ?count=on removes it.',
       ],
     },
     {
@@ -103,6 +104,7 @@ const privacy: TrustPage = {
             'Netlify: hosting of the website.',
             'Sentry: reports of errors in the website, so we can fix them. A report says what failed and on which page. It does not include what you typed or your account, and before it leaves your browser we remove email addresses and the tokens in links. It is used only to fix the product. Reports are stored in the European Union, and IP addresses are not stored.',
             'Google and Microsoft: only when you choose to sign in with them, to confirm who you are.',
+            'Umami: counting visits to our public pages, as described above. The counts are kept in Umami\'s EU region. Umami uses the network address of each visit to work out an approximate location and an anonymous count of visitors, and says it does not store the address in its analytics records.',
           ],
         },
         'They may process data outside India, including in Australia, Japan, the European Union and the United States. We will update this list before adding a provider that handles workspace content.',
@@ -292,7 +294,7 @@ const security: TrustPage = {
         {
           list: [
             'The site cannot be shown inside another site\'s frame, browsers are told not to guess content types, and pages send a limited referrer.',
-            'No analytics or advertising scripts run on Avala OS, and the fonts are served from our own site.',
+            'No analytics or advertising scripts from other companies run on Avala OS. Visits to the public pages are counted by a few lines of our own, only when you are not signed in, and the fonts are served from our own site.',
             'Text that people edit is cleaned before it is stored or shown, so it cannot carry scripts.',
             'Every proposed change to the code is checked automatically, including a scan for secrets.',
           ],

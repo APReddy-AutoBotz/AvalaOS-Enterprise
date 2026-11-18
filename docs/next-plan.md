@@ -376,7 +376,7 @@ Seven small things, each with its test. One of them changes what is stored and i
 
 ## 3e. Package 12: counting visits to the public pages (owner's go, 17 November 2026)
 
-**Not built. For a builder chat; the review chat reviews the plan and the result before any release.**
+**Built 18 November 2026 (see the end of this section); waiting in `next` for the release. The review chat reviews the result before the release.**
 
 **Why.** Marketing starts (`claude/marketing-brief.md` in the project). Today the only signal is the list of walkthrough requests: too few and too late to learn which effort works, or where the page loses people.
 
@@ -403,6 +403,10 @@ Seven small things, each with its test. One of them changes what is stored and i
 **Not in this package.** Counting inside the product (what signed-in people use): a different question, with its own privacy weight; not now. A/B tests. Any advertising or social network's tracker.
 
 **The account (owner, 18 November 2026).** Umami Cloud, EU region chosen at sign-up; website ID `14ef4005-3173-46da-a837-efcc39cf1a48` (not a secret). Before the privacy notice says where visit counts are stored, the builder confirms on the preview which address the page sends them to.
+
+**The owner's additions (18 November 2026).** The address is confirmed without a test switch in the code: the review chat sends one "Preview check" count from the preview in the owner's browser and the owner confirms it in his Umami dashboard. The privacy line claims only what is confirmed (counted without cookies, by Umami, kept in Umami's EU region), never that requests do not leave the EU; what it says about network addresses and location follows Umami's own statement, and the owner approves the exact words. The owner can leave out his own signed-out visits in his own browsers, with one flag in that browser and nothing about any visitor. Umami's optional visitor identifier and any custom data beyond this section's list are never sent.
+
+**Built (18 November 2026).** Our own few lines, no script of Umami's (the free plan accepts counts sent to its documented address). Rules and what is sent: `domain/site/visits.ts`; the browser side: `journey/home/visits.ts`; see "Visit counting" in `AGENTS.md`. Leaving out one's own visits: `?count=off` once in each browser, `?count=on` to undo; the footer says when a browser is left out. Umami's statement, checked on its own documentation on 18 November 2026: the visitor's network address is used, with the browser and a salt that changes each month, to make an anonymous visitor count, and to work out an approximate location; it is not stored in the analytics records. The privacy, terms and security pages each have their own date. Tests: `domain/site/visits.test.ts`; `tests/e2e/visits.spec.ts` opens the local build under the site's own name (mapped to the test machine; `preview.allowedHosts` in `vite.config.ts` applies only to `vite preview`) with Umami's address stood in for. The security headers' part (allowing exactly Umami's address) is the content security policy below. Waiting: the owner's approval of the privacy words, then the review chat's preview check.
 
 ### After that release: the Tiptap upgrade (owner, 18 November 2026; not built)
 
