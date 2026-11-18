@@ -68,10 +68,11 @@ test('the privacy and security pages carry the release date, set with the covera
   if (COVERAGE_RULE.since === null) assert.equal(updatedText('privacy'), '[release date]');
 });
 
-test('the privacy notice lists what the browser keeps, and that signing out removes all but display preferences', () => {
+test('the privacy notice lists what the browser keeps, what signing out removes, and the demo\'s copy', () => {
   const text = pageText(TRUST.privacy);
   for (const kept of ['sign-in session', 'last workspace you opened', 'lists and maps shown', 'what was found in their sources and what you set aside']) assert.ok(text.includes(kept), kept);
   assert.ok(!text.includes('keeps two things'));
+  assert.match(text, /except how you like lists and maps shown in general\. The demo has no sign-in/);
   assert.match(text, /title, the site you came from/);
   assert.match(text, /the kind of browser and device/);
 });

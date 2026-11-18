@@ -71,7 +71,7 @@ const privacy: TrustPage = {
     {
       id: 'browser', title: 'Cookies and browser storage',
       body: [
-        'Avala OS sets no cookies of its own. In your browser\'s storage it keeps your sign-in session, the last workspace you opened, how you like lists and maps shown, and, for processes you have opened, a copy of what was found in their sources and what you set aside. These are needed for the service to work and none is used for tracking. Signing out removes all of them except your display preferences. Counting visits keeps nothing in your browser. Only if you open one of our pages with ?count=off does it keep a note that visits from that browser are not counted; ?count=on removes it.',
+        'Avala OS sets no cookies of its own. In your browser\'s storage it keeps your sign-in session, the last workspace you opened, how you like lists and maps shown, and, for processes you have opened, a copy of what was found in their sources and what you set aside. These are needed for the service to work and none is used for tracking. Signing out removes all of them except how you like lists and maps shown in general. The demo has no sign-in, so its copy, which is about the made-up sample only, stays until you clear this site\'s data in your browser. Counting visits keeps nothing in your browser. Only if you open one of our pages with ?count=off does it keep a note that visits from that browser are not counted; ?count=on removes it.',
       ],
     },
     {
