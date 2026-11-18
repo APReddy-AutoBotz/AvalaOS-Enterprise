@@ -6,6 +6,7 @@
 // The page is light; the one coloured block is "Needs you", so the eye lands on it. It adapts to how
 // much there is: one need is a single large card, several are a list grouped by process; one process
 // shows its figures, several are compact rows.
+import { coverageNotice } from '../../domain/assess/coverage.ts';
 import { NOT_ASSESSED } from '../../domain/plan/purpose.ts';
 import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
@@ -218,6 +219,7 @@ function OneProcess({ p, mine, userId, nameOf, open, href }: { p: LoadedFacts; m
         {mine && <Pill>You: {rolesOf(p, userId).join(', ')}</Pill>}
       </div>
       {p.card ? <Figures card={p.card} className="mt-4 grid-cols-2 [&>*:first-child]:col-span-2" /> : <p className="mt-4 rounded-xl bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-600">{notAssessed(p)}</p>}
+      {p.card?.narrowed && coverageNotice({ steps: p.card.narrowed, systems: [] }, 'card') && <p className="mt-2 text-[13px] text-amber-900" data-testid="coverage-notice">{coverageNotice({ steps: p.card.narrowed, systems: [] }, 'card')}</p>}
       <div className="mt-4"><People facts={p} nameOf={nameOf} /></div>
     </div>
   );

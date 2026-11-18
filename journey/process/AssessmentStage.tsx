@@ -2,6 +2,7 @@
 // model. It shows the recommended approach, the ranking of the alternatives, why, and the result
 // for every step. People change it by correcting the facts it rests on, or by overriding a step
 // with a rationale; both persist, and the scoring's own answer stays visible.
+import { coverageNotice } from '../../domain/assess/coverage.ts';
 import React from 'react';
 import type { ProcessModel, SystemRef } from '../../domain/processModel/types.ts';
 import { addQuestion, setStepTrait, setSystemUiAllowed, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
@@ -172,6 +173,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       <ErrorNote message={error ?? editor.error} />
       {/* A process started from a typical one is assessed provisionally until its steps are confirmed (part I). */}
       {provisionalNote(editor.model) && <p className="rounded-xl bg-orange-50 px-4 py-3 text-sm leading-6 text-orange-950 ring-1 ring-inset ring-orange-200" data-testid="provisional">{provisionalNote(editor.model)}</p>}
+      {/* The stricter API rule of 18 November 2026 changed figures here: said, not done silently (package 13 B). */}
+      {coverageNotice(result.coverageNarrowed, 'assessment') && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="coverage-notice">{coverageNotice(result.coverageNarrowed, 'assessment')}</p>}
       {/* An approach decided for the whole process stays in effect here until a person removes it (package 9). */}
       {editor.model.meta.decidedApproach && (
         <p className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm leading-6 text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="decided-in-effect">

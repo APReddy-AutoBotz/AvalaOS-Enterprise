@@ -158,12 +158,18 @@ test('a person stating a fact changes the scores at once', () => {
   assert.equal(s.scores[0].factors[0].status, 'user-confirmed');
 });
 
-test('API coverage needs a word particular to the step', () => {
+test('API coverage needs the same action and the same thing as the step (F09)', () => {
   const m = build([{ name: 'Scan paper invoice', traits: clear, systems: [{ kind: 'email', api: 'confirmed' }] }]);
   m.meta.name = 'Vendor invoice processing';
   m.systems[0].access[0].operations = ['Read invoices from the AP mailbox'];
-  assert.equal(scoreStep(m, m.steps[0]).winner, 'rpa', '"invoice" alone does not show coverage');
+  assert.equal(scoreStep(m, m.steps[0]).winner, 'rpa', 'another action on the same thing does not show coverage');
+  assert.equal(scoreStep(m, m.steps[0]).narrowedBy, undefined, 'the rule before did not count this either');
   m.systems[0].access[0].operations = ['Scan documents to the mailbox'];
+  const s = scoreStep(m, m.steps[0]);
+  assert.equal(s.winner, 'rpa', 'the same action on another thing does not show coverage');
+  assert.deepEqual(s.narrowedBy, ['System 1'], 'the rule before counted a shared word: the screens say the rule changed');
+  assert.match(s.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /not known to cover this work/);
+  m.systems[0].access[0].operations = ['Scan paper invoices into the mailbox'];
   assert.equal(scoreStep(m, m.steps[0]).winner, 'api');
 });
 

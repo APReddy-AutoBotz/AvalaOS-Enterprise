@@ -7,6 +7,7 @@
 // caps and penalties are the tables below; nothing else decides the result, and no AI is involved.
 // The same model always gives the same scores. An unknown fact gets a middle value and lowers the
 // confidence; it never blocks a result.
+import { apiCovers, looseCovers } from './coverage.ts';
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
@@ -134,6 +135,11 @@ export interface StepScore {
   /** Would API integration win if the systems' APIs were confirmed for this work? */
   apiWouldWin: boolean;
   /**
+   * Applications whose API the rule before 18 November 2026 counted as covering this step and today's does
+   * not (domain/assess/coverage.ts): the screens say so, so no figure changes without a line saying why.
+   */
+  narrowedBy?: string[];
+  /**
    * Set only by assessProcess with people's decisions, on a step where a person chose another approach:
    * the scoring's own recommendation. `winner` is then the approach in effect; the scores are unchanged.
    */
@@ -193,17 +199,8 @@ function commonWords(model: ProcessModel): Set<string> {
   return new Set([...words(model.meta.name), ...[...counts].filter(([, n]) => n >= limit).map(([w]) => w)]);
 }
 
-/** Whether an interface's stated operations mention the work of the step, ignoring words common to the process. */
-function covers(a: AccessMethod, step: Step, common: Set<string>): boolean {
-  // A person who confirms an API without listing its operations has confirmed it for this process.
-  if (a.status === 'user-confirmed' && a.operations.length === 0) return true;
-  const stepWords = [...words(`${step.name} ${step.description}`)].filter(w => !common.has(w));
-  const stem = (w: string) => w.slice(0, 5);
-  return a.operations.some(op => [...words(op)].filter(w => !common.has(w)).some(w => stepWords.some(s => s === w || (w.length >= 5 && s.length >= 5 && stem(s) === stem(w)))));
-}
-
 type ApiState = keyof typeof VALUES.interfacePerSystem;
-interface SystemApi { system: SystemRef; state: ApiState; method?: AccessMethod }
+interface SystemApi { system: SystemRef; state: ApiState; method?: AccessMethod; /** Covered by the rule before 18 November 2026, not by today's (coverage.ts). */ narrowed?: boolean }
 
 interface StepFacts {
   rules: Read<'complete' | 'incomplete' | 'unknown'>;
@@ -237,10 +234,11 @@ function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFa
   const systems = step.systemIds.map(id => model.systems.find(s => s.id === id)).filter((s): s is SystemRef => Boolean(s)).filter(s => !NON_INTEGRABLE.includes(s.kind));
   const apis: SystemApi[] = systems.map(system => {
     const list = apiOf(system);
-    const covered = list.find(a => a.access === 'confirmed' && covers(a, step, common));
+    const covered = list.find(a => a.access === 'confirmed' && apiCovers(a, step));
     if (covered) return { system, state: 'covered' as const, method: covered };
     const confirmed = list.find(a => a.access === 'confirmed');
-    if (confirmed) return { system, state: 'confirmed_other' as const, method: confirmed };
+    const narrowed = list.some(a => a.access === 'confirmed' && looseCovers(a, step, common));
+    if (confirmed) return { system, state: 'confirmed_other' as const, method: confirmed, ...(narrowed ? { narrowed: true } : {}) };
     const reported = list.find(a => a.access === 'reported');
     if (reported) return { system, state: 'reported' as const, method: reported };
     const absent = list.find(a => a.access === 'confirmed_absent');
@@ -468,6 +466,7 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
     aiNeeded: winner.approach === 'ai_assist' || winner.approach === 'agent', aiUnnecessary: winner.approach === 'rpa' || winner.approach === 'api',
     human, rework, reason: `${toBuildNote(model, step)}${reasonFor(winner, order[0], best, forNow)}`, knownShare,
     confidence: knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low', unknowns, questions, apiWouldWin,
+    ...(f.apis.some(a => a.narrowed) ? { narrowedBy: f.apis.filter(a => a.narrowed).map(a => a.system.name) } : {}),
   };
 }
 

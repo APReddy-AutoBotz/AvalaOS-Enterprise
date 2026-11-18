@@ -5,12 +5,15 @@
 // POST { action: 'create', workspaceId, processId, sourceIds: [process_sources.id] }
 //      with the user's session -> { runId }. Members follow the run in extraction_runs.
 // POST { action: 'start' | 'pass' | 'merge' | 'review' | 'assemble', runId, token, ... } -> internal stages.
-//      An eval run is created in SQL and started with { action: 'start', runId, token }; it reads its
-//      sources from the public repository at a given commit and scores the result against the gold.
+//      An extraction check (an eval run) is made by the "Extraction check" workflow or in SQL, which needs
+//      the project's secret key or database access, and started with { action: 'start', runId, token,
+//      files }: the case's files, taken only when each matches the SHA-256 recorded in
+//      eval/corpus/cases.ts. It scores the result against the gold sent and checked with them.
 //
 // Deployed with verify_jwt = false: 'create' checks the user's session; stages check the run token.
 
-import { buildImageRequest, buildListingRequest, buildOpenAIRequest, isRetryableStatus, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
+import { withCors } from '../../../domain/site/origins.ts';
+import { buildImageRequest, buildListingRequest, buildOpenAIRequest, isRetryableStatus, missingListsMessage, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
 import { toGatewaySegments, type IngestSegment } from '../../../domain/ingest/segment.ts';
 import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, parseVtt } from '../../../domain/ingest/parsers/text.ts';
 import { parseDocx } from '../../../domain/ingest/parsers/docx.ts';
@@ -19,12 +22,13 @@ import { mergeFacts, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from '../
 import { reviewListing } from '../../../domain/extract/review.ts';
 import { finish } from '../../../domain/extract/pipeline.ts';
 import { score } from '../../../eval/scorer.ts';
+import { CASES, GOLD, checkCaseFiles } from '../../../eval/corpus/cases.ts';
 import { parseDrawio } from '../../../domain/flowchart/drawio.ts';
 import { graphToSegments } from '../../../domain/flowchart/graph.ts';
 import { readFlowchart, readingToGraph } from '../../../domain/flowchart/vision.ts';
 import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import {
-  chooseConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
+  decideConnection, isConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
 } from '../../../domain/ai/providers.ts';
 
 const env = (k: string) => Deno.env.get(k) ?? '';
@@ -38,14 +42,8 @@ const SECRET_KEY = pickKey('SUPABASE_SECRET_KEYS', 'SUPABASE_SERVICE_ROLE_KEY');
 const MODEL = env('OPENAI_EXTRACT_MODEL') || env('OPENAI_MODEL') || 'gpt-5.5';
 const EFFORT = env('OPENAI_REASONING_EFFORT') || 'low';
 const SELF = `${SUPABASE_URL}/functions/v1/journey-extract`;
-const REPO_RAW = 'https://raw.githubusercontent.com/APReddy-AutoBotz/AvalaOS-Enterprise';
 
-const CORS = {
-  'Access-Control-Allow-Origin': env('ALLOWED_ORIGIN') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = (status: number, code: string, message: string) => reply(status, { ok: false, error: { code, message } });
 
 const service = (extra: Record<string, string> = {}): Record<string, string> => ({
@@ -76,15 +74,19 @@ const callBudgetMs = () => Math.max(5_000, Math.min(115_000, WORKER_STARTED + 13
  * workspace named on it (how a provider is evaluated before it is offered; eval runs are made in SQL).
  */
 async function connectionFor(run: Pick<Run, 'workspace_id'> | null): Promise<AiConnection> {
-  let own: Parameters<typeof chooseConnection>[0] = null;
+  let own: Parameters<typeof decideConnection>[0] = null, saved = false;
   if (run?.workspace_id) {
     // A 404 means the lookup does not exist yet (database not migrated), so no workspace can have a key.
     const found = await rest('rpc/workspace_ai_connection', { method: 'POST', body: JSON.stringify({ target_workspace: run.workspace_id }) })
       .catch((e: Error) => { if (/^database 404/.test(e.message)) return null; throw e; });
     if (found) own = { ...validateAiChoice(found), apiKey: String(found.apiKey ?? '') };
+    // Settings saved but no key to read: the workspace's own key has gone missing, and the run stops (F05).
+    const rows = await rest(`workspace_ai_settings?workspace_id=eq.${run.workspace_id}&select=workspace_id`);
+    saved = Array.isArray(rows) && rows.length > 0;
   }
-  const c = chooseConnection(own, { apiKey: env('OPENAI_API_KEY'), model: MODEL });
-  if (!c) throw new Error('NOT_CONFIGURED: no AI provider key is set');
+  const decided = decideConnection(own, saved, { apiKey: env('OPENAI_API_KEY'), model: MODEL });
+  if (!isConnection(decided)) throw new Error(`${decided.code}: ${decided.message}`);
+  const c = decided;
   // An address an admin typed must resolve only to public addresses (see journey-ai), checked before each stage.
   const host = hostToCheck(c);
   if (host) {
@@ -99,6 +101,8 @@ async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
   // A Responses API body; providerRequest translates it for Anthropic (and refuses an input it cannot take).
   const target = providerRequest(conn, body);
   const payload = JSON.stringify(target.body);
+  // The tokens of a reply that is tried again are counted with the next one (F03).
+  let spent = { input: 0, output: 0 };
   for (let attempt = 1; ; attempt++) {
     const ctl = new AbortController();
     // Edge functions are stopped at 150 s; stop the call first so the stage can retry or fail cleanly.
@@ -111,8 +115,9 @@ async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
       const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
       if (!res.ok && !json?.error) json.error = { message: typeof json?.message === 'string' ? json.message.slice(0, 300) : `HTTP ${res.status}` };
       const parsed = parseProviderReply(conn, json);
-      if (!parsed.ok && parsed.code === 'INVALID_OUTPUT' && attempt < 2) continue;
-      return parsed;
+      const usage = { ...parsed.usage, input: parsed.usage.input + spent.input, output: parsed.usage.output + spent.output };
+      if (!parsed.ok && parsed.code === 'INVALID_OUTPUT' && attempt < 2) { spent = { input: usage.input, output: usage.output }; continue; }
+      return { ...parsed, usage } as typeof parsed;
     } catch (e) {
       if ((e as Error).name === 'AbortError') throw new Error('TIMEOUT: the AI provider took longer than this stage allows');
       if (attempt < 2) { await sleep(2000); continue; }
@@ -123,6 +128,13 @@ async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
   }
 }
 
+/** A task that failed, with the tokens its calls used, so they are counted all the same (F03). */
+class TaskError extends Error {
+  usage: { input: number; output: number };
+  constructor(message: string, usage: { input: number; output: number }) { super(message); this.usage = usage; }
+}
+const spentOn = (e: unknown) => (e instanceof TaskError ? e.usage : { input: 0, output: 0 });
+
 async function runTask(conn: AiConnection, task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string } | { image: string }) {
   const off = unsupported(conn, 'image' in input ? 'vision' : taskNeed(task));
   if (off) throw new Error(`NOT_SUPPORTED: ${off}`);
@@ -132,7 +144,7 @@ async function runTask(conn: AiConnection, task: TaskDefinition, input: { segmen
       : buildListingRequest(task, input.listing, model);
   if (takesReasoningEffort(model)) body.reasoning = { effort: task.reasoningEffort ?? EFFORT };
   const parsed = await callProvider(conn, body);
-  if (!parsed.ok) throw new Error(`${task.id}: ${parsed.code} ${parsed.message}`);
+  if (!parsed.ok) throw new TaskError(`${task.id}: ${parsed.code} ${parsed.message}`, parsed.usage);
   return { data: parsed.data, usage: parsed.usage };
 }
 
@@ -141,7 +153,7 @@ async function runTask(conn: AiConnection, task: TaskDefinition, input: { segmen
 interface SourceInput { sourceId: string; title: string; kind: string; segments: IngestSegment[]; inferred?: boolean }
 interface Run {
   id: string; kind: 'process' | 'eval'; status: string; token_hash: string; source_ids: string[];
-  input: { processName?: string; sources?: SourceInput[] }; case_id: string | null; ref: string | null;
+  input: { processName?: string; sources?: SourceInput[]; gold?: unknown }; case_id: string | null; ref: string | null;
   workspace_id: string | null; created_by: string | null;
 }
 
@@ -169,6 +181,18 @@ async function logUsage(run: Run, conn: AiConnection, task: string, usage: { inp
   if (ok && conn.source === 'workspace') {
     await rest(`workspace_ai_settings?workspace_id=eq.${run.workspace_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_used_at: new Date().toISOString() }) })
       .catch(e => console.error('last used update failed', e));
+  }
+}
+
+/** One task's call, logged with its tokens whether it worked or not (F03). */
+async function counted<T extends { usage: { input: number; output: number } }>(run: Run, conn: AiConnection, task: string, call: () => Promise<T>): Promise<T> {
+  try {
+    const r = await call();
+    await logUsage(run, conn, task, r.usage, true);
+    return r;
+  } catch (e) {
+    await logUsage(run, conn, task, spentOn(e), false, (e as Error).message);
+    throw e;
   }
 }
 
@@ -202,32 +226,8 @@ async function startPasses(run: Run, token: string, sourceIds: string[]) {
 }
 
 // ---- eval cases -----------------------------------------------------------------------------
-
-interface EvalCase { dir?: string; processName: string; sources: { sourceId: string; file: string; title: string; kind: string }[] }
-const AP_CALLS_AND_SOP = [
-      { sourceId: 'call-1', file: 'sources/01-discovery-call-2026-10-06.vtt', title: 'Discovery call, 6 October 2026', kind: 'meeting transcript' },
-      { sourceId: 'call-2', file: 'sources/02-exceptions-deep-dive-2026-10-09.srt', title: 'Exceptions deep dive, 9 October 2026', kind: 'meeting transcript' },
-      { sourceId: 'call-3', file: 'sources/03-sap-integration-call-2026-10-14.txt', title: 'SAP and integration review, 14 October 2026', kind: 'meeting transcript' },
-      { sourceId: 'sop', file: 'sources/04-SOP-FIN-AP-004-vendor-invoice-processing.docx', title: 'SOP FIN-AP-004 Vendor invoice processing', kind: 'standard operating procedure' },
-];
-const CASES: Record<string, EvalCase> = {
-  'ap-invoice': {
-    processName: 'Vendor invoice processing',
-    sources: [...AP_CALLS_AND_SOP, { sourceId: 'flow', file: 'sources/05-AP-Invoice-AsIs.drawio', title: 'As-Is flowchart (Appendix A)', kind: 'flowchart' }],
-  },
-  // The same case with the flowchart as an image instead of a draw.io file.
-  'ap-invoice-image': {
-    dir: 'ap-invoice',
-    processName: 'Vendor invoice processing',
-    sources: [...AP_CALLS_AND_SOP, { sourceId: 'flow', file: 'sources/06-AP-Invoice-AsIs.png', title: 'As-Is flowchart (Appendix A), image', kind: 'flowchart image' }],
-  },
-  'ap-invoice-no-flow': {
-    dir: 'ap-invoice',
-    processName: 'Vendor invoice processing',
-    sources: AP_CALLS_AND_SOP,
-  },
-};
-const corpusUrl = (run: Run, file: string) => `${REPO_RAW}/${run.ref}/eval/corpus/${CASES[run.case_id ?? '']?.dir ?? run.case_id}/${file}`;
+// The cases, their files and the files' SHA-256 are in eval/corpus/cases.ts. Whoever starts a check sends
+// the files with the start request; they are taken only when they are exactly the recorded files.
 
 /** The eval corpus formats; for 'create' the browser parses the files (and reads images through journey-ai). */
 async function parseCorpusFile(run: Run, file: string, bytes: Uint8Array, sourceId: string): Promise<IngestSegment[]> {
@@ -236,7 +236,8 @@ async function parseCorpusFile(run: Run, file: string, bytes: Uint8Array, source
   if (file.endsWith('.png')) {
     let bin = '';
     for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    const r = await runTask(await connectionFor(run), readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` });
+    const conn = await connectionFor(run);
+    const r = await counted(run, conn, readFlowchart.id, () => runTask(conn, readFlowchart, { image: `data:image/png;base64,${btoa(bin)}` }));
     return graphToSegments(readingToGraph(r.data), sourceId);
   }
   const text = new TextDecoder().decode(bytes);
@@ -245,25 +246,24 @@ async function parseCorpusFile(run: Run, file: string, bytes: Uint8Array, source
   return looksLikeTranscript(text) ? parseTranscriptText(text, sourceId) : parsePlainText(text, sourceId, file.endsWith('.md'));
 }
 
-async function loadEvalInput(run: Run) {
+async function loadEvalInput(run: Run, files: Map<string, Uint8Array>) {
   const c = CASES[run.case_id ?? ''];
-  if (!c || !/^[0-9a-f]{7,40}$|^main$/.test(run.ref ?? '')) throw new Error('unknown eval case or ref');
   const sources: SourceInput[] = [];
   for (const s of c.sources) {
-    const res = await fetch(corpusUrl(run, s.file));
-    if (!res.ok) throw new Error(`could not fetch ${s.file} (${res.status})`);
-    const segments = await parseCorpusFile(run, s.file, new Uint8Array(await res.arrayBuffer()), s.sourceId);
+    const segments = await parseCorpusFile(run, s.file, files.get(s.file)!, s.sourceId);
     if (!segments.length) throw new Error(`${s.file}: no text`);
     sources.push({ sourceId: s.sourceId, title: s.title, kind: s.kind, segments, ...(s.file.endsWith('.png') ? { inferred: true } : {}) });
   }
-  return { processName: c.processName, sources };
+  // The gold is kept with the run, so the result is scored against the file that was checked.
+  const gold = JSON.parse(new TextDecoder().decode(files.get(GOLD)!));
+  return { processName: c.processName, sources, gold };
 }
 
 // ---- stages ---------------------------------------------------------------------------------
 
-async function stageStart(run: Run, token: string) {
+async function stageStart(run: Run, token: string, files: Map<string, Uint8Array> | null) {
   if (run.status !== 'queued') return;
-  const input = run.kind === 'eval' ? await loadEvalInput(run) : run.input;
+  const input = run.kind === 'eval' ? await loadEvalInput(run, files!) : run.input;
   const sourceIds = (input.sources ?? []).map(s => s.sourceId);
   if (!sourceIds.length) throw new Error('no sources');
   await patchRun(run.id, { input, source_ids: sourceIds, status: 'running' });
@@ -279,11 +279,13 @@ async function stagePass(run: Run, token: string, sourceId: string, pass: 'facts
   try {
     const r = await runTask(conn, task, { segments });
     const v = verifyExcerpts(r.data, task.verifyArrays, segments);
+    // A reply lacking a list its task requires is refused, not stored unchecked (F16).
+    if (v.missing.length) throw new TaskError(`${task.id}: INVALID_OUTPUT ${missingListsMessage(v.missing)}`, r.usage);
     await logUsage(run, conn, task.id, r.usage, true);
     const next = await putPart(run.id, `pass:${pass}:${sourceId}`, { data: v.data, dropped: v.dropped }, r.usage);
     if (next === 'merge') await Promise.all(['flow', 'facts'].map(which => trigger({ action: 'merge', ...stageBody(run, token, { which }) })));
   } catch (e) {
-    await logUsage(run, conn, task.id, { input: 0, output: 0 }, false, (e as Error).message);
+    await logUsage(run, conn, task.id, spentOn(e), false, (e as Error).message);
     throw e;
   }
 }
@@ -304,8 +306,7 @@ async function stageMerge(run: Run, token: string, which: 'flow' | 'facts') {
   const { set } = await candidatesOf(run);
   const task = which === 'flow' ? mergeFlow : mergeFacts;
   const conn = await connectionFor(run);
-  const r = await runTask(conn, task, { listing: which === 'flow' ? flowListing(set) : factsListing(set) });
-  await logUsage(run, conn, task.id, r.usage, true);
+  const r = await counted(run, conn, task.id, () => runTask(conn, task, { listing: which === 'flow' ? flowListing(set) : factsListing(set) }));
   const next = await putPart(run.id, `merge:${which}`, r.data, r.usage);
   if (next === 'review') await trigger({ action: 'review', ...stageBody(run, token, {}) });
 }
@@ -314,8 +315,7 @@ async function stageReview(run: Run, token: string) {
   const { parts, set } = await candidatesOf(run);
   const flow = parts.find(p => p.part === 'merge:flow')?.output;
   const conn = await connectionFor(run);
-  const r = await runTask(conn, reviewFlow, { listing: reviewListing(flow, set) });
-  await logUsage(run, conn, reviewFlow.id, r.usage, true);
+  const r = await counted(run, conn, reviewFlow.id, () => runTask(conn, reviewFlow, { listing: reviewListing(flow, set) }));
   const next = await putPart(run.id, 'review:flow', r.data, r.usage);
   if (next === 'assemble') await trigger({ action: 'assemble', ...stageBody(run, token, {}) });
 }
@@ -329,9 +329,10 @@ async function stageAssemble(run: Run) {
   const { model, report } = finish(name, set, flow, facts, review);
   const result: Record<string, unknown> = { model, report: { ...report, droppedQuotes: dropped, candidates: set.items.length }, model_name: MODEL };
   if (run.kind === 'eval') {
-    const gold = await (await fetch(corpusUrl(run, 'expected.model.json'))).json();
+    const gold = run.input.gold;
+    if (!gold) throw new Error('the run has no gold to score against');
     const texts = Object.fromEntries((run.input.sources ?? []).map(s => [s.sourceId, s.segments.map(x => x.text).join('\n')]));
-    result.score = score(gold, model, texts);
+    result.score = score(gold as Parameters<typeof score>[0], model, texts);
   }
   await patchRun(run.id, { status: 'done', result });
 }
@@ -366,7 +367,13 @@ async function createRun(req: Request, body: any): Promise<Response> {
   // The monthly allowance applies only to the platform key; a workspace on its own key is not held back by it.
   let conn: AiConnection;
   try { conn = await connectionFor({ workspace_id: workspaceId }); } catch (e) {
-    return fail(422, 'AI_NOT_AVAILABLE', (e as Error).message.replace(/^[A-Z_]+: /, ''));
+    // A reason of ours (no key, the workspace's key gone, an address not allowed) is said as it is; anything
+    // else, such as a database error, goes to the log and the caller gets a plain message (item 7).
+    const message = (e as Error).message;
+    if (e instanceof EndpointError) return fail(422, 'ENDPOINT_NOT_ALLOWED', message.replace(/^ENDPOINT_NOT_ALLOWED: /, ''));
+    const known = /^(NOT_CONFIGURED|WORKSPACE_KEY_MISSING): /.exec(message);
+    if (!known) console.error('connection failed', message);
+    return fail(known?.[1] === 'WORKSPACE_KEY_MISSING' ? 409 : 422, known?.[1] ?? 'AI_NOT_AVAILABLE', known ? message.slice(known[0].length) : 'The AI provider could not be prepared just now. Try again in a minute.');
   }
   if (usesPlatformAllowance(conn)) {
     const used = Number(await rest('rpc/ai_tokens_used_this_month', { method: 'POST', body: JSON.stringify({ target_workspace: workspaceId }) }));
@@ -384,10 +391,13 @@ async function createRun(req: Request, body: any): Promise<Response> {
 
 // ---- entry ----------------------------------------------------------------------------------
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+// Cross-site headers on every answer, for the allowed websites only (domain/site/origins.ts).
+Deno.serve(withCors(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
-  if (!SUPABASE_URL || !SECRET_KEY || !env('OPENAI_API_KEY')) return fail(500, 'NOT_CONFIGURED', 'The server is not configured.');
+  // The platform key is not needed here: a workspace on its own key extracts without it (F04); a run that
+  // needs the platform key and finds none stops with NOT_CONFIGURED when its connection is decided.
+  if (!SUPABASE_URL || !SECRET_KEY) return fail(500, 'NOT_CONFIGURED', 'The server is not configured.');
   const body = await req.json().catch(() => null);
   if (body?.action === 'create') return createRun(req, body);
 
@@ -396,7 +406,18 @@ Deno.serve(async (req: Request) => {
   const token = String(body.token);
   const again = { ...body };
   switch (body.action) {
-    case 'start': inBackground(() => stageStart(run, token), run.id); break;
+    case 'start': {
+      // An extraction check (an eval run, made only by someone with the project's secret key or database
+      // access) reads the files sent with its start, and only before it has started; see eval/corpus/cases.ts.
+      let files: Map<string, Uint8Array> | null = null;
+      if (run.kind === 'eval') {
+        if (run.status !== 'queued') return fail(409, 'ALREADY_STARTED', 'This check has already started.');
+        const checked = await checkCaseFiles(run.case_id ?? '', body.files);
+        if (!checked.ok) return fail(400, 'INVALID_FILES', checked.message);
+        files = checked.files;
+      }
+      inBackground(() => stageStart(run, token, files), run.id); break;
+    }
     case 'pass':
       if (!['facts', 'steps'].includes(body.pass)) return fail(400, 'INVALID_REQUEST', 'pass is facts or steps.');
       inBackground(() => stagePass(run, token, String(body.sourceId), body.pass), run.id, again); break;
@@ -408,4 +429,4 @@ Deno.serve(async (req: Request) => {
     default: return fail(400, 'INVALID_REQUEST', 'Unknown action.');
   }
   return reply(202, { ok: true });
-});
+}, env('ALLOWED_ORIGIN')));

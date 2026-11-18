@@ -95,3 +95,18 @@ test('validateRequest accepts a transcribe request with recorded audio and rejec
   assert.equal(validateRequest({ action: 'transcribe', workspaceId: ws, audio: 'data:image/png;base64,AAAA' }, {}).ok, false);
   assert.equal(validateRequest({ action: 'transcribe', workspaceId: ws }, {}).ok, false);
 });
+
+test('a task name must be one of ours, not a name every object has (F17)', () => {
+  for (const task of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    const r = validateRequest({ action: 'run', workspaceId: WS, task, segments: [seg('s1', 'x')] }, TASKS);
+    assert.equal(r.ok, false, task);
+    assert.equal(!r.ok && r.code, 'UNKNOWN_TASK');
+  }
+});
+
+test('a reply lacking a required list is reported, so the function refuses it (F16)', () => {
+  const segments = [seg('s1', 'AP clerk posts the invoice.')];
+  assert.deepEqual(verifyExcerpts({}, ['roles'], segments).missing, ['roles']);
+  assert.deepEqual(verifyExcerpts({ roles: 'none' }, ['roles'], segments).missing, ['roles']);
+  assert.deepEqual(verifyExcerpts({ roles: [] }, ['roles'], segments).missing, []);
+});

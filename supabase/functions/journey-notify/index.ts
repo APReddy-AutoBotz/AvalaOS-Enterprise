@@ -15,6 +15,7 @@
 // service role may call. Deployed with verify_jwt = false: the digest checks the schedule's secret, and an
 // unsubscribe needs only the person's own token.
 
+import { withCors } from '../../../domain/site/origins.ts';
 import { commentLines, digestFacts, namedNeeds, needsDigest, type AssignedItem, type DigestProcessRow } from '../../../domain/work/digest.ts';
 import type { OpenComment } from '../../../domain/work/home.ts';
 import type { AccessLevel, Job } from '../../../domain/people/roles.ts';
@@ -35,12 +36,7 @@ const serviceHeaders = (): Record<string, string> =>
     ? { apikey: SECRET_KEY, 'Content-Type': 'application/json' }
     : { apikey: SECRET_KEY, Authorization: `Bearer ${SECRET_KEY}`, 'Content-Type': 'application/json' };
 
-const CORS = {
-  'Access-Control-Allow-Origin': env('ALLOWED_ORIGIN') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = (status: number, code: string, message: string) => reply(status, { ok: false, error: { code, message } });
 
 async function rpc(name: string, args: Record<string, unknown>): Promise<any> {
@@ -116,8 +112,9 @@ async function digest(): Promise<Response> {
   return reply(200, { ok: true, people: people.length, sent, failed, recorded });
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+// Cross-site headers on every answer, for the allowed websites only (domain/site/origins.ts).
+Deno.serve(withCors(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
   if (!SUPABASE_URL || !SECRET_KEY) return fail(500, 'NOT_CONFIGURED', 'Supabase environment is incomplete.');
 
@@ -138,4 +135,4 @@ Deno.serve(async (req: Request) => {
     console.error('journey-notify', (e as Error).message);
     return fail(500, 'FAILED', 'Something went wrong. Try again in a minute.');
   }
-});
+}, env('ALLOWED_ORIGIN')));

@@ -106,6 +106,11 @@ export interface ProcessAssessment {
   questions: StepQuestion[];
   /** Readiness, ease of implementation, value and where the process sits among candidates. */
   priority: Priority;
+  /**
+   * Steps whose API counted as covering them under the rule before 18 November 2026 and not under today's
+   * (coverage.ts), and those applications: the screens say so (coverageNotice), so no figure changes silently.
+   */
+  coverageNarrowed: { steps: number; systems: string[] };
 }
 
 const LEAD_TITLE: Record<Approach, string> = {
@@ -312,6 +317,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     aiStepIds: scored.filter(x => x.aiNeeded).map(x => x.stepId), mustStayStepIds: scored.filter(x => x.winner === 'human' && !x.forNow).map(x => x.stepId),
     forNowStepIds: scored.filter(x => x.forNow).map(x => x.stepId), approvalStepIds: scored.filter(x => x.winner !== 'human' && x.human === 'approve').map(x => x.stepId),
     automationFit: n ? automatedSteps / n : 0, aiSteps, approvalSteps, knownShare, confidence, keyQuestions, cautions, potential, hours, money, questions,
+    coverageNarrowed: { steps: scored.filter(x => x.narrowedBy?.length).length, systems: [...new Set(scored.flatMap(x => x.narrowedBy ?? []))] },
   };
 }
 

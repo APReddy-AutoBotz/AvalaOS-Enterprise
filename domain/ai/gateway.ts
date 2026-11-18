@@ -74,7 +74,8 @@ export function validateRequest(body: unknown, tasks: Record<string, TaskDefinit
     return { ok: true, value: { action, workspaceId: b.workspaceId, audio: b.audio } };
   }
 
-  if (typeof b.task !== 'string' || !tasks[b.task]) return fail('UNKNOWN_TASK', `Unknown task. Known tasks: ${Object.keys(tasks).join(', ')}.`);
+  // Only a task of ours (finding F17): a name such as "constructor" or "__proto__" is not one.
+  if (typeof b.task !== 'string' || !Object.hasOwn(tasks, b.task)) return fail('UNKNOWN_TASK', `Unknown task. Known tasks: ${Object.keys(tasks).join(', ')}.`);
   if (tasks[b.task].input === 'image') {
     if (typeof b.image === 'string' && b.image.length > LIMITS.maxImageChars) return fail('TOO_LARGE', 'The image is too large; use one under 7 MB.');
     if (!validImage(b.image)) return fail('INVALID_REQUEST', 'image must be a PNG, JPEG, WebP or GIF data URL.');
@@ -230,13 +231,16 @@ export interface DroppedItem {
  * the segment's own characters, so stored quotes are verbatim. Matching ignores case, whitespace
  * and typographic quote and dash differences, nothing else.
  */
-export function verifyExcerpts(data: unknown, arrays: string[], segments: Segment[]): { data: unknown; dropped: DroppedItem[] } {
+export function verifyExcerpts(data: unknown, arrays: string[], segments: Segment[]): { data: unknown; dropped: DroppedItem[]; missing: string[] } {
   const bySegment = new Map(segments.map(s => [s.id, { text: s.text, ...comparable(s.text) }]));
   const dropped: DroppedItem[] = [];
+  // A required list the reply does not have (finding F16): the caller refuses the reply as INVALID_OUTPUT
+  // instead of passing it on unchecked. Every list named here is required by its task's schema.
+  const missing: string[] = [];
   const out = structuredClone(data) as Record<string, unknown>;
   for (const path of arrays) {
     const list = out?.[path];
-    if (!Array.isArray(list)) continue;
+    if (!Array.isArray(list)) { missing.push(path); continue; }
     out[path] = list.filter((item: any) => {
       const segmentId = String(item?.segmentId ?? '');
       const excerpt = String(item?.excerpt ?? '');
@@ -249,8 +253,11 @@ export function verifyExcerpts(data: unknown, arrays: string[], segments: Segmen
       return true;
     });
   }
-  return { data: out, dropped };
+  return { data: out, dropped, missing };
 }
+
+/** The message for a reply that lacks a required list. */
+export const missingListsMessage = (missing: string[]) => `The reply has no ${missing.join(' or ')} list.`;
 
 export function monthlyBudgetExceeded(usedTokens: number, budget: number): boolean {
   return Number.isFinite(budget) && budget > 0 && usedTokens >= budget;
