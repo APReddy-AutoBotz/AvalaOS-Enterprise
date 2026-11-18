@@ -1,5 +1,5 @@
 -- Behaviour checks for the walls between workspaces (package 13 part C). Rolls back; success ends with
--- the error "ALL_TESTS_PASSED (7 groups)"; any other error names the failed check.
+-- the error "ALL_TESTS_PASSED (8 groups)"; any other error names the failed check.
 
 do $test$
 declare
@@ -101,6 +101,20 @@ begin
   perform set_config('request.jwt.claims', '', true);
   update public.workspaces set organization_id = org1 where id = ws2;
   if (select organization_id from public.workspaces where id = ws2) is distinct from org1 then raise exception 'FAILED 7: the database could not move it'; end if;
+  passed := passed + 1;
+
+  -- 8. Deleting a process works as before: its board items stay on their board in their workspace with the
+  --    process link emptied (and the link to a deleted proposal emptied); its proposals, revisions,
+  --    documents and reading runs go with it. (A process whose document revision points at one of its
+  --    revisions could not be deleted before either; the same holds after.)
+  delete from public.document_revisions where document_id = doc1;
+  delete from public.processes where id = p1;
+  select count(*) into n from public.delivery_work_items where id = story1 and workspace_id = ws1 and project_id = proj1 and process_id is null;
+  if n <> 1 then raise exception 'FAILED 8a: the board item did not stay with its process link emptied'; end if;
+  if exists (select 1 from public.work_item_proposals where process_id = p1) or exists (select 1 from public.process_model_revisions where process_id = p1)
+     or exists (select 1 from public.documents where process_id = p1) or exists (select 1 from public.extraction_runs where process_id = p1) then
+    raise exception 'FAILED 8b: something of the deleted process stayed';
+  end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;
