@@ -2,6 +2,7 @@
 // assessment. Read-only for now; every table follows the model, so correcting a fact in the
 // Process or Assessment stage corrects the documents.
 import { approvedAnswerNote, approvedNote } from '../../domain/docs/approval.ts';
+import { coverageNotice } from '../../domain/assess/coverage.ts';
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
@@ -401,6 +402,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             </ul>
           </section>
         )}
+        {/* The stricter API rule of 18 November 2026 changed figures here: said, not done silently (package 13 B). */}
+        {assessment && coverageNotice(assessment.coverageNarrowed, 'documents') && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="coverage-notice">{coverageNotice(assessment.coverageNarrowed, 'documents')}</p>}
         {answerChanged && approvedModel && (
           <p className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="answer-changed">
             <span className="font-semibold">Approved revision {approvedRevision} was approved as "{PURPOSE_LABEL[purposeOf(approvedModel)]}"</span>; this draft is "{PURPOSE_LABEL[purposeOf(model)]}". {approvedAnswerNote(approvedRevision ?? '')}

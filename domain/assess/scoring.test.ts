@@ -4,7 +4,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import type { AccessMethod, Fact, ProcessModel, Step, StepTraits, SystemRef } from '../processModel/types.ts';
 import { emptyModel } from '../processModel/empty.ts';
 import { validateModel } from '../processModel/validate.ts';
-import { setStepTrait, setSystemUiStable } from '../processModel/patch.ts';
+import { answerApiCoverage, setStepTrait, setSystemUiStable } from '../processModel/patch.ts';
 import { CAPS, COMPLEXITY_PENALTY, FIT, HUMAN_FLOOR, WEIGHTS, robotsBlocked, scoreOf, scoreStep, type Approach, type HumanPoint } from './scoring.ts';
 import { assessProcess, yearlyVolume } from './process.ts';
 import { DecisionError, decisionsFromEntries, decisionsToEntries, effectiveApproach, emptyDecisions, withOverride, withoutOverride, withRate } from './decisions.ts';
@@ -158,12 +158,18 @@ test('a person stating a fact changes the scores at once', () => {
   assert.equal(s.scores[0].factors[0].status, 'user-confirmed');
 });
 
-test('API coverage needs a word particular to the step', () => {
+test('API coverage needs the same action and the same thing as the step (F09)', () => {
   const m = build([{ name: 'Scan paper invoice', traits: clear, systems: [{ kind: 'email', api: 'confirmed' }] }]);
   m.meta.name = 'Vendor invoice processing';
   m.systems[0].access[0].operations = ['Read invoices from the AP mailbox'];
-  assert.equal(scoreStep(m, m.steps[0]).winner, 'rpa', '"invoice" alone does not show coverage');
+  assert.equal(scoreStep(m, m.steps[0]).winner, 'rpa', 'another action on the same thing does not show coverage');
+  assert.equal(scoreStep(m, m.steps[0]).narrowedBy, undefined, 'the rule before did not count this either');
   m.systems[0].access[0].operations = ['Scan documents to the mailbox'];
+  const s = scoreStep(m, m.steps[0]);
+  assert.equal(s.winner, 'rpa', 'the same action on another thing does not show coverage');
+  assert.deepEqual(s.narrowedBy, ['System 1'], 'the rule before counted a shared word: the screens say the rule changed');
+  assert.match(s.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /not known to cover this work/);
+  m.systems[0].access[0].operations = ['Scan paper invoices into the mailbox'];
   assert.equal(scoreStep(m, m.steps[0]).winner, 'api');
 });
 
@@ -310,4 +316,57 @@ test('robots not allowed on a system\'s screens: RPA is ruled out there, and a c
   assert.ok(blocked.questions.some(q => /API/.test(q.question)), 'and the API has to be confirmed');
   m = setSystemApi(m, { systemId: m.systems[0].id, access: 'confirmed' }).model;
   assert.equal(scoreStep(m, m.steps[0]).winner, 'api');
+});
+
+test('a yes to "Does X have an API that covers <step>?" covers that step, and neither answer is asked again', () => {
+  const m = build([
+    { name: 'Enter PO invoice', traits: clear, systems: [{ api: 'confirmed-nocover' }] },
+    { name: 'Park invoice', traits: clear },
+    { name: 'Update vendor', traits: clear },
+  ]);
+  // One application used by all three steps, with an API that reads the vendor master only.
+  m.steps[1].systemIds = ['sys-0-0'];
+  m.steps[2].systemIds = ['sys-0-0'];
+  const before = assessProcess(m);
+  const key = before.keyQuestions.find(q => q.key === 'api:sys-0-0')!;
+  assert.equal(key.question, 'Does System 1 have an API for this work?');
+  assert.deepEqual(key.stepIds, ['s-0', 's-1', 's-2'], 'the question lists the steps it serves');
+  assert.equal(scoreStep(m, m.steps[0]).questions[0].question, 'Confirm whether System 1 has an API that covers "Enter PO invoice".');
+
+  const after = answerApiCoverage(m, { systemId: 'sys-0-0', covers: ['s-0', 's-1'], notCovers: ['s-2'] }).model;
+  assert.equal(validateModel(after).valid, true);
+  const yes = scoreStep(after, after.steps[0]);
+  assert.equal(yes.winner, 'api', 'the yes counts');
+  assert.match(yes.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /covering this work/);
+  assert.deepEqual(yes.questions, [], 'and the question does not come back');
+  assert.equal(scoreStep(after, after.steps[1]).winner, 'api');
+  const no = scoreStep(after, after.steps[2]);
+  assert.notEqual(no.winner, 'api', 'a step the person left out is not covered');
+  assert.deepEqual(no.questions, [], 'and is not asked again either');
+  assert.equal(assessProcess(after).keyQuestions.some(q => q.key === 'api:sys-0-0'), false);
+  // What the record keeps: the step names as the API's operations, and the answered questions.
+  const mine = after.systems[0].access.find(a => a.status === 'user-confirmed')!;
+  assert.deepEqual(mine.operations, ['Enter PO invoice', 'Park invoice']);
+  assert.deepEqual(after.openQuestions.map(q => [q.question, q.status, q.answer]), [
+    ['Does System 1 have an API that covers "Enter PO invoice"?', 'answered', 'Yes: the API of System 1 does this step\'s work.'],
+    ['Does System 1 have an API that covers "Park invoice"?', 'answered', 'Yes: the API of System 1 does this step\'s work.'],
+    ['Does System 1 have an API that covers "Update vendor"?', 'answered', 'No: the API of System 1 does not do this step\'s work.'],
+  ]);
+  // A second yes adds to the same entry; an API a person confirmed with no operations is left alone.
+  const again = answerApiCoverage(after, { systemId: 'sys-0-0', covers: ['s-2'], notCovers: [] }).model;
+  assert.equal(again.systems[0].access.filter(a => a.status === 'user-confirmed').length, 1);
+  assert.equal(scoreStep(again, again.steps[2]).winner, 'api', 'a later yes replaces the no');
+  assert.equal(again.openQuestions.find(q => q.question.includes('Update vendor'))!.answer, 'Yes: the API of System 1 does this step\'s work.', 'the record says the latest answer');
+});
+
+test('a person\'s no for a step wins over any listed operation (owner, 18 November 2026)', () => {
+  const m = build([{ name: 'Check invoice totals', traits: clear, systems: [{ api: 'confirmed-nocover' }] }, { name: 'Check invoice tax', traits: clear }]);
+  m.steps[1].systemIds = ['sys-0-0'];
+  const after = answerApiCoverage(m, { systemId: 'sys-0-0', covers: ['s-0'], notCovers: ['s-1'] }).model;
+  assert.deepEqual(after.systems[0].access.find(a => a.status === 'user-confirmed')!.operations, ['Check invoice totals']);
+  assert.equal(scoreStep(after, after.steps[0]).winner, 'api');
+  const tax = scoreStep(after, after.steps[1]);
+  assert.notEqual(tax.winner, 'api', 'the listed "Check invoice totals" would match "Check invoice tax"; the no wins');
+  assert.match(tax.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /not known to cover this work/);
+  assert.deepEqual(tax.questions, []);
 });

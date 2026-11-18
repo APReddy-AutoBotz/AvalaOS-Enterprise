@@ -80,6 +80,8 @@ export interface ProcessCard {
   intended: boolean;
   /** Those steps by how they would be done: rules (RPA or an API), AI (assisted or agentic), or kept with people. */
   split: { rules: number; ai: number; people: number };
+  /** Steps whose figures the stricter API rule changed (coverage.ts); the card says so. */
+  narrowed?: number;
 }
 
 export function processCard(a: ProcessAssessment): ProcessCard | null {
@@ -89,6 +91,7 @@ export function processCard(a: ProcessAssessment): ProcessCard | null {
     lead: a.lead, fit: a.automationFit, steps: a.assessed, intended: a.intended,
     hours: v.computable ? v.value!.hours[1] : null, exact: v.computable ? v.value!.exact : false,
     split: { rules: c.rpa + c.api, ai: c.ai_assist + c.agent, people: c.human },
+    ...(a.coverageNarrowed?.steps ? { narrowed: a.coverageNarrowed.steps } : {}),
   };
 }
 

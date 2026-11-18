@@ -60,7 +60,8 @@ export interface RankedApproach {
 /** A fact sentence and the number of steps it applies to. */
 export interface Tally { text: string; steps: number }
 
-export interface KeyQuestion { key: string; question: string; steps: number }
+/** A question that would firm the assessment up, and the steps it serves (so an API question can list them). */
+export interface KeyQuestion { key: string; question: string; steps: number; stepIds: string[] }
 
 export interface ProcessAssessment {
   steps: StepScore[];
@@ -106,6 +107,11 @@ export interface ProcessAssessment {
   questions: StepQuestion[];
   /** Readiness, ease of implementation, value and where the process sits among candidates. */
   priority: Priority;
+  /**
+   * Steps whose API counted as covering them under the rule before the stricter one and not under today's
+   * (coverage.ts), and those applications: the screens say so (coverageNotice), so no figure changes silently.
+   */
+  coverageNarrowed: { steps: number; systems: string[] };
 }
 
 const LEAD_TITLE: Record<Approach, string> = {
@@ -228,8 +234,9 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   const confidence: Confidence = knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low';
   const byKey = new Map<string, KeyQuestion>();
   for (const s of scored) for (const u of s.unknowns) {
-    const k = byKey.get(u.key) ?? { key: u.key, question: u.general, steps: 0 };
+    const k = byKey.get(u.key) ?? { key: u.key, question: u.general, steps: 0, stepIds: [] };
     k.steps++;
+    k.stepIds.push(s.stepId);
     byKey.set(u.key, k);
   }
   const keyQuestions = [...byKey.values()].sort((a, b) => b.steps - a.steps || a.key.localeCompare(b.key)).slice(0, 6);
@@ -312,6 +319,7 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     aiStepIds: scored.filter(x => x.aiNeeded).map(x => x.stepId), mustStayStepIds: scored.filter(x => x.winner === 'human' && !x.forNow).map(x => x.stepId),
     forNowStepIds: scored.filter(x => x.forNow).map(x => x.stepId), approvalStepIds: scored.filter(x => x.winner !== 'human' && x.human === 'approve').map(x => x.stepId),
     automationFit: n ? automatedSteps / n : 0, aiSteps, approvalSteps, knownShare, confidence, keyQuestions, cautions, potential, hours, money, questions,
+    coverageNarrowed: { steps: scored.filter(x => x.narrowedBy?.length).length, systems: [...new Set(scored.flatMap(x => x.narrowedBy ?? []))] },
   };
 }
 

@@ -150,12 +150,25 @@ export interface AiConnection { provider: AiProvider; model: string; endpoint: s
 
 export interface PlatformAi { apiKey: string; model: string }
 
-/** The workspace's own connection when it has one, otherwise the platform's, or null when neither exists. */
-export function chooseConnection(workspace: (AiChoice & { apiKey: string }) | null, platform: PlatformAi): AiConnection | null {
-  if (workspace) return { ...workspace, source: 'workspace' };
-  if (!platform.apiKey) return null;
+/** Why no call can be made: the workspace's own key has gone missing, or no key is set at all. */
+export type NoConnection = { code: 'WORKSPACE_KEY_MISSING' | 'NOT_CONFIGURED'; message: string };
+export const WORKSPACE_KEY_MISSING = 'This workspace is set to use its own AI key, which can no longer be read. An administrator should enter it again in Settings → AI provider.';
+
+/**
+ * The connection for one call (finding F05 of the outside review, package 13 B). A workspace whose
+ * settings say it uses its own key, but whose key can no longer be read (the lookup joins the settings,
+ * the key's row and the Vault, so a missing key or secret reads as no connection), stops here: it never
+ * falls back to the platform key, so its work never goes to our provider without its admin knowing.
+ * Every server function that calls a provider decides through this.
+ */
+export function decideConnection(workspace: (AiChoice & { apiKey: string }) | null, settingsSaved: boolean, platform: PlatformAi): AiConnection | NoConnection {
+  if (workspace && workspace.apiKey) return { ...workspace, source: 'workspace' };
+  if (workspace || settingsSaved) return { code: 'WORKSPACE_KEY_MISSING', message: WORKSPACE_KEY_MISSING };
+  if (!platform.apiKey) return { code: 'NOT_CONFIGURED', message: 'No AI provider key is set.' };
   return { provider: 'openai', model: platform.model, endpoint: null, apiKey: platform.apiKey, source: 'platform' };
 }
+export const isConnection = (c: AiConnection | NoConnection): c is AiConnection => 'apiKey' in c;
+
 
 /** Only calls on the platform key count against the platform's monthly allowance. */
 export const usesPlatformAllowance = (c: AiConnection) => c.source === 'platform';

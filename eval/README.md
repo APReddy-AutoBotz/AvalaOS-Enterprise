@@ -63,23 +63,13 @@ Transcripts are plain text files in `sources/` and are edited directly. After an
 
 ## Live extraction runs
 
-The extraction pipeline runs in the `journey-extract` edge function (see `domain/extract/`). An eval run reads the case's sources from this repository at a given commit, runs every pass against the AI provider, and scores the result against the gold at the same commit. Cases: `ap-invoice` (all sources, flowchart as draw.io), `ap-invoice-image` (flowchart as PNG, read by the vision task), `ap-invoice-no-flow` (calls and SOP only). Start one from the SQL editor (or any SQL client with service access):
+The extraction pipeline runs in the `journey-extract` edge function (see `domain/extract/`). An extraction check runs one case's sources through every pass against the AI provider and scores the result against the case's gold. Cases (`eval/corpus/cases.ts`): `ap-invoice` (all sources, flowchart as draw.io), `ap-invoice-image` (flowchart as PNG, read by the vision task), `ap-invoice-no-flow` (calls and SOP only).
 
-```sql
-with t as (select encode(extensions.gen_random_bytes(24), 'hex') as tok),
-r as (
-  insert into public.extraction_runs (kind, case_id, ref, token_hash, input)
-  select 'eval', 'ap-invoice', '<commit sha>', encode(extensions.digest(tok, 'sha256'), 'hex'), jsonb_build_object('tok', tok) from t
-  returning id, input->>'tok' tok
-)
-select r.id, net.http_post(
-  url := 'https://<project-ref>.supabase.co/functions/v1/journey-extract',
-  body := jsonb_build_object('action', 'start', 'runId', r.id, 'token', r.tok),
-  headers := '{"Content-Type": "application/json"}'::jsonb
-) from r;
-```
+Start one from GitHub: Actions → **Extraction check** → Run workflow, choose the case and, to run on a workspace's own AI connection, give that workspace's id. It prints the scorecard after two to three minutes. Locally, with the project's secret key: `EXTRACT_URL=https://<project-ref>.supabase.co EXTRACT_KEY=<secret key> node eval/corpus/check.ts ap-invoice [workspace id]`.
 
-The token is replaced when the run starts. After two to three minutes, read the scorecard:
+Who can start a check: only someone holding the project's secret key or database access, because a check is a row in `extraction_runs` that no signed-in user can write, and the function starts it only with that row's one-time token. The case's files go with the start request (they are no longer fetched from GitHub, which a private repository refuses). The function takes them only before the run has started, only when they are exactly the case's files, and only when each one's SHA-256, the gold's included, is the one recorded in `eval/corpus/cases.ts`, which is compiled into the function when it is deployed. So a check reads exactly the files of this repository at the deployed commit, whoever sends them. After editing a corpus file, run `node eval/corpus/hashes.ts`, paste the output into `CORPUS_SHA256`, and deploy `journey-extract`; `cases.test.ts` fails until the hashes match.
+
+Read a check again later:
 
 ```sql
 select status, error, result->'score' from public.extraction_runs where id = '<run id>';
@@ -89,7 +79,7 @@ Extraction is not deterministic. Judge a change on the mean of at least two runs
 
 ### Evaluating an AI provider
 
-A provider is offered to workspaces only after this eval has been run with it (`checked` in `domain/ai/providers.ts`). Until then Settings → AI provider lists it only for the platform owner. To evaluate one: the owner creates a workspace for the check, connects the provider's key there and presses "Test this key"; then start eval runs as above with that workspace's id added (`insert into public.extraction_runs (kind, case_id, ref, workspace_id, token_hash, input)`). The run uses that workspace's connection, including for the flowchart image in `ap-invoice-image`, and its usage is logged against that workspace. Run each case at least twice and compare the mean with OpenAI's before setting `checked: true`.
+A provider is offered to workspaces only after this eval has been run with it (`checked` in `domain/ai/providers.ts`). Until then Settings → AI provider lists it only for the platform owner. To evaluate one: the owner creates a workspace for the check, connects the provider's key there and presses "Test this key"; then start extraction checks as above with that workspace's id. The run uses that workspace's connection, including for the flowchart image in `ap-invoice-image`, and its usage is logged against that workspace. Run each case at least twice and compare the mean with OpenAI's before setting `checked: true`.
 
 # Ask Avala measure
 

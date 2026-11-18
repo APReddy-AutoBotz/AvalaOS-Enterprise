@@ -38,7 +38,18 @@ export const WORK_OF_TASK: Record<string, string> = {
   askProcess: 'Ask Avala',
   askBoard: 'Ask Avala',
   askWorkspace: 'Ask Avala',
+  health: 'Testing the AI key',
 };
+
+/**
+ * "Test this key" (package 13 B). On the platform key a test is checked against the monthly allowance and
+ * counted in it, like any call. On a workspace's own key it is not held back by our allowance, or a workspace
+ * whose allowance is used up could never switch to its own key; it has its own small limit instead, counted
+ * from the usage log's 'health' rows of the last hour. Every test, working or not, is logged.
+ */
+export const KEY_TEST_LIMIT = { perHour: 10 } as const;
+export const keyTestLimited = (testsInLastHour: number): boolean => testsInLastHour >= KEY_TEST_LIMIT.perHour;
+export const KEY_TEST_LIMITED = `The key has been tested ${KEY_TEST_LIMIT.perHour} times in the last hour. Try again later.`;
 export const workOf = (task: string) => WORK_OF_TASK[task] ?? 'Other AI work';
 
 const tokensOf = (r: UsageRow) => Math.max(0, Number(r.inputTokens) || 0) + Math.max(0, Number(r.outputTokens) || 0);
