@@ -1,5 +1,6 @@
 // The Sources stage: upload files, see what was read from each, and extract the process model.
 // A finished extraction is reviewed as a change set before anything reaches the model.
+import { DemoFilesNote } from '../demo/DemoFilesNote.tsx';
 import React from 'react';
 import { applyChanges, proposeChanges, type ChangeSet, type ProposedChange } from '../../domain/extract/rebase.ts';
 import { deepEqual, type JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
@@ -212,7 +213,9 @@ function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onAppl
           {running ? STATUS_TEXT[run!.status] : `Extract from ${chosenCount} source${chosenCount === 1 ? '' : 's'}`}
         </Button>
       </div>
-      {!store.aiAvailable && <p className="text-sm text-slate-500">Extraction runs on the server and is not available in local mode.</p>}
+      {!store.aiAvailable && (store.kind === 'demo'
+        ? <DemoFilesNote />
+        : <p className="text-sm text-slate-500">Extraction runs on the server and is not available in local mode.</p>)}
       {running && <p role="status" className="text-sm text-slate-600">{STATUS_TEXT[run!.status]} This takes a few minutes; you can leave this page and come back.</p>}
       {run?.status === 'failed' && <ErrorNote message={`The last extraction failed: ${run.error ?? 'unknown error'}. Try again.`} />}
       {run?.status === 'done' && run.model && <ChangeReview store={store} processId={processId} extracted={run.model} finishedAt={run.updatedAt} onApplied={onApplied} />}

@@ -1,7 +1,8 @@
+import { forgetOnSignOut } from '../forgetOnSignOut.ts';
 import type { AuditEntry } from '../../domain/people/roles.ts';
 import type { SectionComment } from '../../domain/docs/review.ts';
 import type { TestCaseEdit } from '../../domain/docs/testEdits.ts';
-import { monthStart } from '../../domain/ai/usage.ts';
+import { monthStart, USAGE_PAGES, usageMorePages } from '../../domain/ai/usage.ts';
 import { documentSettingsFrom, validateBranding } from '../../domain/docs/branding.ts';
 import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/assess/settings.ts';
 // The real store: Supabase auth, row level security for reads, and the model RPCs for writes.
@@ -100,7 +101,7 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail({ message: /database error|invitation/i.test(error.message) ? 'Sign-up is by invitation. Ask a workspace admin to invite this email address, then create the account with it.' : error.message, status: error.status ?? 400 });
       return { needsConfirmation: !data.session };
     },
-    async signOut() { await db.auth.signOut(); },
+    async signOut() { forgetOnSignOut(); await db.auth.signOut(); },
     async requestPasswordReset(email) {
       const { error } = await db.auth.resetPasswordForEmail(email, { redirectTo: `${location.origin}/reset-password` });
       // Only a rate limit is worth telling the person; anything else would say whether the address has an account.
@@ -428,21 +429,31 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
     },
     async getAiUsage(workspaceId) {
-      const MAX = 10_000;
+      // The server returns at most a set number of rows per request (1,000 by default) and says nothing when it
+      // stops there, so the month is read page by page until a page comes back short (finding F11 of the
+      // outside review). Past USAGE_PAGES.max rows the page says the figures cover the most recent ones.
       const from = monthStart(new Date()).toISOString();
-      const [{ data, error }, allowance] = await Promise.all([
-        db.from('ai_usage').select('created_at, task, user_id, input_tokens, output_tokens, status, key_source')
-          .eq('workspace_id', workspaceId).gte('created_at', from).order('created_at', { ascending: false }).limit(MAX),
-        call('journey-ai', { action: 'allowance', workspaceId }).catch(() => null),
-      ]);
-      if (error) fail(error);
+      const readAll = async () => {
+        const all: any[] = [];
+        for (let at = 0; at < USAGE_PAGES.max; at += USAGE_PAGES.size) {
+          const { data, error } = await db.from('ai_usage').select('created_at, task, user_id, input_tokens, output_tokens, status, key_source')
+            .eq('workspace_id', workspaceId).gte('created_at', from).order('created_at', { ascending: false }).order('id', { ascending: false })
+            .range(at, at + USAGE_PAGES.size - 1);
+          if (error) fail(error);
+          all.push(...(data ?? []));
+          if (!usageMorePages(data?.length ?? 0)) return { rows: all, partial: false };
+        }
+        return { rows: all, partial: true };
+      };
+      const [read, allowance] = await Promise.all([readAll(), call('journey-ai', { action: 'allowance', workspaceId }).catch(() => null)]);
+      const data = read.rows;
       const rows = (data ?? []).map((r: any) => ({
         createdAt: r.created_at, task: r.task, userId: r.user_id ?? null, inputTokens: Number(r.input_tokens) || 0,
         outputTokens: Number(r.output_tokens) || 0, status: r.status, keySource: r.key_source === 'workspace' ? 'workspace' as const : 'platform' as const,
       }));
       return {
         rows,
-        partial: rows.length >= MAX,
+        partial: read.partial,
         allowance: allowance?.ok ? {
           source: allowance.source === 'workspace' ? 'workspace' : 'platform',
           budget: typeof allowance.budget === 'number' ? allowance.budget : null,

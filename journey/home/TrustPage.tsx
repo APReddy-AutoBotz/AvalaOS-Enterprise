@@ -40,7 +40,7 @@ export default function TrustPage({ id }: { id: TrustPageId }) {
           <div className="max-w-3xl lg:ml-[18rem]">
             <h1 className="font-display text-4xl font-semibold tracking-tight text-[#002C4B] sm:text-5xl">{page.title}</h1>
             <p className="mt-4 text-lg leading-8 text-slate-700">{page.summary}</p>
-            <p className="mt-3 text-sm text-slate-500">Last updated {UPDATED}</p>
+            <p className="mt-3 text-sm text-slate-500">Last updated {UPDATED[page.id]}</p>
           </div>
         </div>
         <div className="mx-auto grid max-w-6xl gap-10 px-6 pb-14 pt-10 lg:grid-cols-[14rem_minmax(0,1fr)] lg:gap-16 lg:pb-20">

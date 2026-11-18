@@ -96,7 +96,7 @@ for (const f of tracked) if (KEPT_WHOLE.some(re => re.test(f))) { if (!used.has(
 // it as a quoted base name beside a template for its folder (the tour's `/marketing/tour/${name}.webp`), or
 // when it is one the server or the browser asks for by its own name. The light mark stays on the owner's
 // word (17 November 2026): it is the current mark, though no page shows it today.
-const BY_NAME = new Set(['public/_headers', 'public/_redirects', 'public/robots.txt', 'public/favicon.ico', 'public/.well-known/security.txt', 'public/security.txt']);
+const BY_NAME = new Set(['public/_headers', 'public/_redirects', 'public/robots.txt', 'public/sitemap.xml', 'public/favicon.ico', 'public/.well-known/security.txt', 'public/security.txt']);
 const KEPT_ON_WORD = new Set(['public/brand/avala-os-mark-light.svg']);
 const texts = [...used].filter(f => /\.(ts|tsx|html|css|toml|json|txt|xml|webmanifest)$/.test(f) && !f.startsWith('public/') && !f.startsWith('docs/') && !f.startsWith('supabase/') && !f.endsWith('package-lock.json'))
   .concat(tracked.filter(f => f.startsWith('public/') && /\.(html|txt|xml|webmanifest|json)$/.test(f)))

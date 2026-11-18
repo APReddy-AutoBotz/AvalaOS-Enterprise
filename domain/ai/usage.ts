@@ -113,3 +113,13 @@ export function tokenWords(n: number): string {
   if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0).replace(/\.0$/, '')} thousand`;
   return `${(n / 1_000_000).toFixed(n < 10_000_000 ? 1 : 0).replace(/\.0$/, '')} million`;
 }
+
+/**
+ * Reading a month's rows: the server hands back at most `size` rows a request and does not say when it stops,
+ * so the page reads on until a request comes back short, up to `max` rows (then it says the figures cover the
+ * most recent ones).
+ */
+export const USAGE_PAGES = { size: 1000, max: 20_000 } as const;
+
+/** Whether another page may hold more rows: only a full page can. */
+export const usageMorePages = (rowsInPage: number): boolean => rowsInPage >= USAGE_PAGES.size;

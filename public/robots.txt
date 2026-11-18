@@ -1,0 +1,12 @@
+# Avala OS. The public pages may be read; the signed-in product and its sign-in pages are not for search.
+User-agent: *
+Disallow: /signin
+Disallow: /reset-password
+Disallow: /unsubscribe
+Disallow: /work
+Disallow: /processes
+Disallow: /process/
+Disallow: /board
+Disallow: /settings
+
+Sitemap: https://avalaos.com/sitemap.xml

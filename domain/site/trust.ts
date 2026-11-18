@@ -7,7 +7,8 @@ import type { TrustPageId } from './pages.ts';
 
 export const OPERATOR = 'AP Reddy';
 export const CONTACT_EMAIL = 'hello@avalaos.com';
-export const UPDATED = '17 November 2026';
+/** When each page last changed, page by page (the privacy notice named the providers a workspace may connect on 18 November 2026). */
+export const UPDATED: Record<TrustPageId, string> = { privacy: '18 November 2026', terms: '17 November 2026', security: '17 November 2026' };
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
 /** Further days until the rolling database backups that still hold the data have expired. */
@@ -84,8 +85,9 @@ const privacy: TrustPage = {
     {
       id: 'ai', title: 'AI processing',
       body: [
-        'When you ask Avala OS to read sources, read a flowchart image, turn a voice answer into text, or draft the wording of a document section, the text or image needed for that request is sent from our server to OpenAI\'s API. Requests never go from your browser to the AI provider directly.',
-        `We ask OpenAI not to store the responses. OpenAI states that it does not train its models on API data by default, and that it may keep API inputs and outputs for up to ${OPENAI_RETENTION_DAYS} days to provide the service and detect abuse, or longer where the law requires.`,
+        'When you ask Avala OS to read sources, read a flowchart image, turn a voice answer into text, or draft the wording of a document section, the text or image needed for that request is sent from our server to the workspace\'s AI provider: OpenAI\'s API on our key, unless the workspace has its own key (below). Requests never go from your browser to the AI provider directly.',
+        'A workspace\'s administrator may connect the workspace\'s own key with Azure OpenAI, Anthropic, Amazon Bedrock (Claude), Mistral AI or an OpenAI-compatible endpoint the organisation runs. That workspace\'s requests then go only to that provider, under the organisation\'s own agreement with it, and never to OpenAI on our key. Settings → AI provider shows which provider a workspace uses.',
+        `On our key, we ask OpenAI not to store the responses. OpenAI states that it does not train its models on API data by default, and that it may keep API inputs and outputs for up to ${OPENAI_RETENTION_DAYS} days to provide the service and detect abuse, or longer where the law requires.`,
         'Scores and recommendations are worked out by fixed rules, not by the AI. Anything the AI reads or drafts is shown to a person to confirm or edit.',
       ],
     },
@@ -97,7 +99,7 @@ const privacy: TrustPage = {
           list: [
             'Supabase: the database, sign-in and the server functions. The database is hosted in Sydney, Australia.',
             'Resend: sending emails from avalaos.com (sign-up confirmations, password resets, invitations and the "Needs you" emails). It receives the address each email goes to and the email itself, and sends from its Tokyo, Japan region.',
-            'OpenAI: the AI requests described above.',
+            'OpenAI: the AI requests described above, on our key.',
             'Netlify: hosting of the website.',
             'Sentry: reports of errors in the website, so we can fix them. A report says what failed and on which page. It does not include what you typed or your account, and before it leaves your browser we remove email addresses and the tokens in links. It is used only to fix the product. Reports are stored in the European Union, and IP addresses are not stored.',
             'Google and Microsoft: only when you choose to sign in with them, to confirm who you are.',
