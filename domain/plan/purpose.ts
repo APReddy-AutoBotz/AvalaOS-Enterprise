@@ -92,6 +92,19 @@ export function offersDocument(m: ProcessModel | null | undefined, type: DocType
   return d === null || d.includes(type);
 }
 
+/** The Documents page's tabs in their order; the first five are documents, then the test pack and the evidence pack. */
+export const DOCUMENT_TAB_ORDER: readonly DocType[] = ['brd', 'pdd', 'frd', 'sdd', 'agent', 'tests', 'evidence'];
+/** The tabs that are documents (the homepage's count of the sample's documents, domain/site/sample.ts). */
+export const DOCUMENT_TABS: readonly DocType[] = ['brd', 'pdd', 'frd', 'sdd', 'agent'];
+
+/**
+ * The tabs the Documents page offers for a process: every document this process is offered, and the
+ * agent document only when the delivery plan lists it, planned or one click away (part E).
+ */
+export function documentTabs(m: ProcessModel | null | undefined, deliveryDocs: readonly { doc: string }[] | null | undefined): DocType[] {
+  return DOCUMENT_TAB_ORDER.filter(t => offersDocument(m, t) && (t !== 'agent' || (deliveryDocs ?? []).some(d => d.doc === 'agent')));
+}
+
 /**
  * The question whether to ask it at all: only an organisation that uses the documents has a use for
  * "Document it as it is". Without them, every process is assessed and nothing is asked.

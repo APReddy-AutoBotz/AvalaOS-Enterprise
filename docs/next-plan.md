@@ -416,6 +416,22 @@ The section editor's library, Tiptap, carries a moderate advisory (`mergeAttribu
 
 A content security policy for every page, first in report-only mode, allowing exactly what the pages use: this site, the Supabase project, Sentry, and the visit counter of package 12. It is enforced only after a clean period with no unexpected reports. Its order: after package 12, before or with the release that follows, as the owner decides.
 
+### Two small additions to this release (owner, 19 November 2026)
+
+Screens only, one pull request into `next`. **The sample's figures under the homepage's screenshots** are what the demo shows: five source files; five documents (BRD, PDD, FRD, SDD and the agent document, the Documents page's tabs; the test pack and the evidence pack are not counted; two of the five, PDD and SDD, are the ones the delivery plan plans); 32 test cases; a 50-item Delivery board (the line said four documents and 43 items). The figures are in `domain/site/sample.ts`, and `sample.test.ts` reads the demo the way its pages do and fails when they differ. **A canonical link** on the homepage, the three trust pages and the demo (every page of the demo names `/demo`), the same addresses as the sitemap (a test keeps them equal); the unsubscribe page and the application have none.
+
+### After this release: a marketing package (owner, 19 November 2026; not built)
+
+From the marketing chat's first piece of work (`claude/marketing-first-work-19-nov.md` in the project, section 6). One package, built only on the owner's word:
+
+- **Each teardown as an extra sample in the demo,** with its licence's credit line, a link to the source and the date it was retrieved, and the sentence that it illustrates the method from published text, is not a review of the organisation and is not endorsed by it. No logos, no personal data.
+- **A "Teardowns" workspace** with neutral profile names, so screenshots, the evidence pack and "Answered by" name no real person.
+- **A check that downloaded Word and PDF files carry no account name in their properties** (author, last modified by, and the like), with its test.
+- **Counting on the teardown pages,** by the rules of package 12 (section 3e), with the events listed there and no others without asking.
+- **A partner page** with the design-partner offer in plain words, after the lawyer has read it.
+
+**Before the first account that is not the owner's: a per-minute AI limit** on `journey-ai` (from the security check of 18 November 2026), beside the monthly allowance, with a plain message when it is reached.
+
 ## 3f. After the outside review of the repository: packages 13, 14 and 15 (owner's decisions, 17 November 2026)
 
 **Package 15 is built (17 November 2026, #195); package 13 is built (18 November 2026: A #198, B #199, C applied to the live database the same evening), package 12 is built (18 November 2026, #201), then one release on the owner's word; package 14 after that release. The review chat reviews each plan and each result before any release.**

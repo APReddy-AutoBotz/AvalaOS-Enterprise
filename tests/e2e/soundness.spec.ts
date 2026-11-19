@@ -35,3 +35,14 @@ test('robots.txt and the sitemap are real files', async ({ request }) => {
   expect(map).toContain('<loc>https://avalaos.com/privacy</loc>');
   expect(map).not.toContain('<html');
 });
+
+test('each public page names its one canonical address; the application names none', async ({ page }) => {
+  const canonical = () => page.locator('link[rel="canonical"]');
+  for (const [path, url] of [['/?utm_source=test', 'https://avalaos.com/'], ['/privacy', 'https://avalaos.com/privacy'], ['/terms', 'https://avalaos.com/terms'], ['/security', 'https://avalaos.com/security'], ['/demo', 'https://avalaos.com/demo'], ['/demo/board', 'https://avalaos.com/demo']] as const) {
+    await page.goto(path);
+    await expect(canonical()).toHaveCount(1);
+    await expect(canonical()).toHaveAttribute('href', url);
+  }
+  await page.goto('/signin');
+  await expect(canonical()).toHaveCount(0);
+});
