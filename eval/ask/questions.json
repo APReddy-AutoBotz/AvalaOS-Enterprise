@@ -138,7 +138,7 @@
       "say": [["As-Is"], ["To-Be"]] },
     { "id": "W02", "kind": "platform", "question": "We want to deliver this process with a single technology. Can API integration alone do all the steps?",
       "cite": ["a:only:api", "a:rank:api"],
-      "say": [["9", "nine"]] },
+      "say": [["5", "five"]] },
     { "id": "W03", "kind": "platform", "question": "If we used rule-based RPA for every step, which steps could it not do, and why?",
       "cite": ["a:only:rpa"],
       "say": [["unstructured"], ["step 1", "Log invoice"]] },

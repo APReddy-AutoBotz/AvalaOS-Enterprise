@@ -95,6 +95,29 @@ export function coverageNotice(n: { steps: number; systems: string[] }, where: '
   return where === 'documents' ? `${text} These documents are rebuilt each time they are opened, so this applies to an approved revision too.` : text;
 }
 
+/**
+ * What the sources say an application's API cannot do: the operations listed under an API recorded as
+ * absent (for example "create supplier invoices with PO reference" for an API that is not activated).
+ * Shown beside the question about that application, so a person answers with it in view.
+ */
+export function absentOperations(system: SystemRef): string[] {
+  const ops = (system.access ?? []).filter(a => a.method === 'api' && a.access === 'confirmed_absent').flatMap(a => a.operations);
+  return [...new Set(ops.map(o => o.trim()).filter(Boolean))];
+}
+
+/**
+ * The API entry the sources record as absent for this step's work: one of its operations names the
+ * same action on the same thing as the step (the strict rule of `operationCovers`), so the step is
+ * scored as having no API for this work. Nothing beyond that rule is guessed (owner, 19 November 2026).
+ */
+export function absentFor(system: SystemRef, step: Step): { entry: AccessMethod; operation: string } | null {
+  for (const entry of (system.access ?? []).filter(a => a.method === 'api' && a.access === 'confirmed_absent')) {
+    const operation = entry.operations.find(op => operationCovers(op, step.name));
+    if (operation) return { entry, operation };
+  }
+  return null;
+}
+
 /** The question asked about one application and one step, and the one the step's panel puts to the open questions. */
 export const apiQuestion = (system: string, step: string) => `Does ${system} have an API that covers "${step}"?`;
 export const apiConfirmQuestion = (system: string, step: string) => `Confirm whether ${system} has an API that covers "${step}".`;

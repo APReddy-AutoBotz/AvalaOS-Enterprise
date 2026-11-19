@@ -4,6 +4,15 @@
 // (answerApiCoverage in domain/processModel/patch.ts).
 import React from 'react';
 import { Button } from '../ui.tsx';
+import { absentOperations } from '../../domain/assess/coverage.ts';
+import type { SystemRef } from '../../domain/processModel/types.ts';
+
+/** What the sources say the application's API cannot do, beside the question about it (owner, 19 November 2026). */
+export function AbsentOperations({ system }: { system: SystemRef }) {
+  const ops = absentOperations(system);
+  if (!ops.length) return null;
+  return <p className="mt-1 text-xs leading-5 text-slate-500" data-testid="api-absent">The sources say {system.name} has no API to: {ops.join('; ')}.</p>;
+}
 
 export function ApiCoverageAnswer({ system, steps, onSave, onCancel }: {
   system: string; steps: { id: string; name: string }[];

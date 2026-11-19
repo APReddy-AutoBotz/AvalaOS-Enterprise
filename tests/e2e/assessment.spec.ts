@@ -956,4 +956,8 @@ test('one step: Yes or No in the step\'s panel (package 13 B)', async ({ page })
   await page.keyboard.press('Escape');
   await expect(row(page, 'Post invoice in SAP').getByTestId('recommendation')).toHaveText('Rule-based RPA');
   await expect(page.getByTestId('why-firm').getByTestId('api-key-question')).toHaveCount(0);
+  // The no rules API integration out for the step, and says who said so (owner, 19 November 2026).
+  const again = await openStep(page, 'Post invoice in SAP');
+  await again.getByRole('button', { name: /API integration/ }).click();
+  await expect(again).toContainText('A person confirmed that the API of SAP S/4HANA does not do this work');
 });
