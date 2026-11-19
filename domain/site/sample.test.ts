@@ -25,7 +25,8 @@ async function demoFigures() {
   const assessment = assessProcess(model, { rate: decisions.rate, settings, decisions });
   const tabs = documentTabs(model, deliveryPlan(model, assessment).docs);
   const register = reconcile(deriveRequirements(model, assessment), await store.listRequirements(p.id));
-  const pack = testPack({ model, assessment, decisions, sources: [], revision, requirements: register.requirements });
+  // The revision's label and date only head the document; they do not change which cases there are.
+  const pack = testPack({ model, assessment, decisions, sources: [], revision: { label: 'Working draft', state: revision.state === 'approved' ? 'approved' : 'working', date: '' }, requirements: register.requirements });
   const projects = await store.listProjects(ws.id);
   const items = (await Promise.all(projects.map(pr => store.listWorkItems(pr.id)))).flat();
   return {
