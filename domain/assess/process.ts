@@ -127,14 +127,13 @@ const heldByApiCap = (s: StepScore): boolean => {
 
 /**
  * The line that says an API-led verdict is provisional, on the Assessment's headline and on the card;
- * null unless the lead is API integration and some of its steps are held. Wording proposed for the
- * owner's approval (19 November 2026).
+ * null unless the lead is API integration and some of its steps are held. Wording: the owner's (19 November 2026).
  */
 export function apiHeldText(a: Pick<ProcessAssessment, 'lead' | 'apiHeld'>, where: 'headline' | 'card'): string | null {
   const { steps, of } = a.apiHeld;
   if (a.lead !== 'api' || !steps) return null;
-  if (where === 'card') return `Provisional: ${steps} of ${of} API steps wait on a confirmed API.`;
-  return `Provisional: ${steps} of its ${of} ${of === 1 ? 'step' : 'steps'} ${steps === 1 ? 'has' : 'have'} no API confirmed for ${steps === 1 ? 'its' : 'their'} work yet, so ${steps === 1 ? 'that step is' : 'they are'} held at ${CAPS.apiNotConfirmed} out of 100. Confirming the API for that work, or answering no, settles ${steps === 1 ? 'it' : 'them'}.`;
+  if (where === 'card') return `Provisional: ${steps} of ${of} API steps wait for an answer about the API.`;
+  return `Provisional: ${steps} of its ${of} ${of === 1 ? 'step' : 'steps'} ${steps === 1 ? 'waits' : 'wait'} for an answer about the API. Each is held at ${CAPS.apiNotConfirmed} out of 100 until someone confirms the API does that work, or says it does not.`;
 }
 
 const LEAD_TITLE: Record<Approach, string> = {

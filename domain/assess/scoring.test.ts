@@ -431,8 +431,11 @@ test('an API-led verdict resting on steps no API is confirmed for says so, with 
   const a = assessProcess(m);
   assert.equal(a.lead, 'api');
   assert.deepEqual(a.apiHeld, { steps: 1, of: 2 }, '"Read vendor master" is covered; "Enter PO invoice" is held at the cap');
-  assert.equal(apiHeldText(a, 'headline'), `Provisional: 1 of its 2 steps has no API confirmed for its work yet, so that step is held at ${CAPS.apiNotConfirmed} out of 100. Confirming the API for that work, or answering no, settles it.`);
-  assert.equal(processCard(a)!.apiHeld, 'Provisional: 1 of 2 API steps wait on a confirmed API.');
+  assert.equal(apiHeldText(a, 'headline'), `Provisional: 1 of its 2 steps waits for an answer about the API. Each is held at ${CAPS.apiNotConfirmed} out of 100 until someone confirms the API does that work, or says it does not.`);
+  assert.equal(processCard(a)!.apiHeld, 'Provisional: 1 of 2 API steps wait for an answer about the API.');
+  const many = { lead: 'api' as const, apiHeld: { steps: 7, of: 7 } };
+  assert.equal(apiHeldText(many, 'headline'), 'Provisional: 7 of its 7 steps wait for an answer about the API. Each is held at 60 out of 100 until someone confirms the API does that work, or says it does not.');
+  assert.equal(apiHeldText(many, 'card'), 'Provisional: 7 of 7 API steps wait for an answer about the API.');
   // Answered no, the step leaves API integration and nothing is held.
   const after = assessProcess(answerApiCoverage(m, { systemId: 'sys-0-0', covers: [], notCovers: ['s-0'] }).model);
   assert.deepEqual(after.apiHeld, { steps: 0, of: 1 });
@@ -440,4 +443,36 @@ test('an API-led verdict resting on steps no API is confirmed for says so, with 
   assert.equal(processCard(after)!.apiHeld, undefined);
   // Not API-led: nothing to say.
   assert.equal(apiHeldText({ lead: 'rpa', apiHeld: { steps: 3, of: 3 } }, 'card'), null);
+});
+
+test('one application the step needs with no API for its work rules API integration out, and the reason names it (owner, 19 November 2026)', () => {
+  // Two applications: a person's no for one of them.
+  const two = build([{ name: 'Return invoice to vendor', traits: clear, systems: [{ api: 'confirmed-nocover', kind: 'email' }, { api: 'unknown', kind: 'spreadsheet' }] }]);
+  assert.equal(scoreOf(scoreStep(two, two.steps[0]), 'api'), CAPS.apiNotConfirmed);
+  const noForOne = answerApiCoverage(two, { systemId: 'sys-0-0', covers: [], notCovers: ['s-0'] }).model;
+  const a = scoreStep(noForOne, noForOne.steps[0]);
+  const api = a.scores.find(x => x.approach === 'api')!;
+  assert.equal(api.score, CAPS.apiAbsent, 'the no for the first application is enough');
+  assert.ok(api.caps.some(c => c.reason === 'A person confirmed that the API of System 1 does not do this work.'), 'and the reason names it');
+  assert.deepEqual(a.questions, [], 'the other application\'s API could not change the step, so it is not asked about');
+  assert.equal(a.apiWouldWin, false);
+
+  // Three applications: one recorded as having no API at all.
+  const three = build([{ name: 'Check for duplicates', traits: clear, systems: [{ api: 'absent' }, { api: 'confirmed-nocover', kind: 'spreadsheet' }, { api: 'unknown', kind: 'email' }] }]);
+  const b = scoreStep(three, three.steps[0]);
+  const api3 = b.scores.find(x => x.approach === 'api')!;
+  assert.equal(api3.score, CAPS.apiAbsent);
+  assert.ok(api3.caps.some(c => c.reason === 'System 1 is confirmed to have no API.'));
+  assert.deepEqual(b.questions, []);
+
+  // Three applications: the sources say one of them has no API for this work.
+  const sources = build([{ name: 'Post invoice and attach PDF', traits: clear, systems: [{ api: 'confirmed-nocover' }, { api: 'unknown', kind: 'document_store' }, { api: 'confirmed-nocover', kind: 'email' }] }]);
+  sources.systems[0].access.push({ method: 'api', name: 'API_SUPPLIERINVOICE_PROCESS_SRV', operations: ['post supplier invoices with PO reference'], access: 'confirmed_absent', status: 'stated', sources: src });
+  const c = scoreStep(sources, sources.steps[0]);
+  assert.equal(scoreOf(c, 'api'), CAPS.apiAbsent);
+  assert.ok(c.scores.find(x => x.approach === 'api')!.caps.some(x => x.reason === 'The sources say System 1 has no API to post supplier invoices with PO reference.'));
+
+  // Every application with an API for the work: integration stays open.
+  const open = build([{ name: 'Return invoice to vendor', traits: clear, systems: [{ api: 'confirmed-nocover', kind: 'email' }, { api: 'unknown', kind: 'spreadsheet' }] }]);
+  assert.ok(scoreStep(open, open.steps[0]).questions.length >= 1);
 });

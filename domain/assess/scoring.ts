@@ -360,7 +360,9 @@ function scoreApproaches(f: StepFacts, assumeApi: boolean): Record<Approach, App
   const iface = interfaceFactor(f, WEIGHTS.api.interface, assumeApi);
   const apiCaps = [...commonCaps('api')];
   if (!f.apis.length) apiCaps.push({ to: CAPS.apiNoSystem, reason: 'The step uses no system to integrate with.' });
-  else if (!assumeApi && f.apis.every(a => a.state === 'absent')) apiCaps.push({ to: CAPS.apiAbsent, reason: `${absentWords(f.apis).join('; ').replace(/^./, c => c.toUpperCase())}.` });
+  // One application the step needs with no API for this work rules integration out for the step, whatever the
+  // others have (owner, 19 November 2026); assuming the open APIs confirmed does not bring it back.
+  else if (f.apis.some(a => a.state === 'absent')) apiCaps.push({ to: CAPS.apiAbsent, reason: `${absentWords(f.apis).join('; ').replace(/^./, c => c.toUpperCase())}.` });
   else if (!assumeApi && !f.apis.every(a => a.state === 'covered')) apiCaps.push({ to: CAPS.apiNotConfirmed, reason: 'No API is confirmed for this work, so integration cannot be planned on yet.', id: 'apiNotConfirmed' });
   const api = finishScore('api', [iface, rulesF(WEIGHTS.api.rules), inputF(WEIGHTS.api.input), noJudgmentF(WEIGHTS.api.noJudgment)], apiCaps);
 
@@ -483,7 +485,9 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
     if (!known(sys.uiStable as Fact<unknown> | undefined)) push({ key: `screens:${sys.id}`, question: `Are the screens of ${sys.name} stable enough to automate?`, general: `Are the screens of ${sys.name} stable enough to automate?` });
   }
   // An API a person has already answered about for this step is not asked about again (package 13 B).
-  const openApis = f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent' && !a.answered);
+  // Nor is it asked about an API that could not change the step: another application it needs has none for this work.
+  const ruledOut = f.apis.some(a => a.state === 'absent');
+  const openApis = ruledOut ? [] : f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent' && !a.answered);
   for (const a of openApis) push({ key: `api:${a.system.id}`, question: apiQuestion(a.system.name, step.name), general: `Does ${a.system.name} have an API for this work?` });
 
   const whatIf = openApis.length ? scoreApproaches(f, true) : null;
@@ -553,7 +557,7 @@ export function decidedFit(model: ProcessModel, step: Step, approach: Exclude<Ap
     g.screens = 'stable';
     for (const s of f.systems.filter(x => !known(x.uiStable as Fact<unknown> | undefined))) questions.push({ key: `screens:${s.id}`, question: `Are the screens of ${s.name} stable enough to automate?`, target: { kind: 'screens', systemId: s.id } });
   }
-  const openApis = approach === 'api' ? f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent') : [];
+  const openApis = approach === 'api' && !f.apis.some(a => a.state === 'absent') ? f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent') : [];
   for (const a of openApis) questions.push({ key: `api:${a.system.id}`, question: `Does ${a.system.name} have an API that covers "${step.name}"?`, target: { kind: 'api', systemId: a.system.id } });
   const best = scoreApproaches(g, openApis.length > 0)[approach];
   if (best.score < FIT.possible || !questions.length) return { status: 'cannot', score: now.score, reason: limiter(now), questions: [] };
