@@ -2,6 +2,7 @@
 // (eval/corpus/ap-invoice: a made-up company, its call transcripts, procedure and flowchart, and the
 // hand-checked process model for them) through the product and captures each stage. The captured
 // screens are committed to public/marketing/tour/ when the tour is refreshed.
+// How each picture is made from these screens (sizes and crops): AGENTS.md, "Homepage".
 import fs from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
 
