@@ -5,7 +5,6 @@ import { SAMPLE_FIGURES, sampleLine } from './sample.ts';
 import { createMemoryStore } from '../../journey/store/memoryStore.ts';
 import { assessProcess } from '../assess/process.ts';
 import { deliveryPlan } from '../plan/delivery.ts';
-import { DOCUMENT_TABS, documentTabs } from '../plan/purpose.ts';
 import { deriveRequirements } from '../requirements/derive.ts';
 import { reconcile } from '../requirements/register.ts';
 import { testPack } from '../docs/tests.ts';
@@ -23,7 +22,7 @@ async function demoFigures() {
   const decisions = await store.getAssessmentDecisions(p.id);
   const { settings } = await store.getSettings(ws.id);
   const assessment = assessProcess(model, { rate: decisions.rate, settings, decisions });
-  const tabs = documentTabs(model, deliveryPlan(model, assessment).docs);
+  const planned = deliveryPlan(model, assessment).docs.filter(d => d.planned).map(d => d.doc);
   const register = reconcile(deriveRequirements(model, assessment), await store.listRequirements(p.id));
   // The revision's label and date only head the document; they do not change which cases there are.
   const pack = testPack({ model, assessment, decisions, sources: [], revision: { label: 'Working draft', state: revision.state === 'approved' ? 'approved' : 'working', date: '' }, requirements: register.requirements });
@@ -31,17 +30,19 @@ async function demoFigures() {
   const items = (await Promise.all(projects.map(pr => store.listWorkItems(pr.id)))).flat();
   return {
     sources: (await store.listSources(p.id)).filter(s => !s.archived).length,
-    documents: tabs.filter(t => (DOCUMENT_TABS as readonly string[]).includes(t)).length,
+    plannedDocuments: planned,
     testCases: pack.cases.length,
     boardItems: items.length,
   };
 }
 
 test('the homepage\'s figures for the sample case are what the demo shows', async () => {
-  assert.deepEqual({ ...SAMPLE_FIGURES }, await demoFigures());
+  const demo = await demoFigures();
+  assert.deepEqual([...demo.plannedDocuments], ['pdd', 'sdd'], 'the sample\'s delivery plan plans exactly a PDD and an SDD');
+  assert.deepEqual({ ...SAMPLE_FIGURES, plannedDocuments: [...SAMPLE_FIGURES.plannedDocuments] }, { ...demo, plannedDocuments: [...demo.plannedDocuments] });
 });
 
-test('the line says the figures in words up to ten, digits above', () => {
-  assert.equal(sampleLine(), 'Real product screens. A made-up sample case: five source files in; five documents, 32 test cases and a 50-item Delivery board out.');
-  assert.match(sampleLine({ sources: 12, documents: 2, testCases: 3, boardItems: 7 }), /12 source files in; two documents, 3 test cases and a 7-item/);
+test('the line names the planned documents and says the counts in words up to ten, digits above', () => {
+  assert.equal(sampleLine(), 'Real product screens. A made-up sample case: five source files in; a PDD and an SDD, 32 test cases and a 50-item Delivery board out.');
+  assert.match(sampleLine({ sources: 12, plannedDocuments: ['pdd', 'agent', 'sdd'], testCases: 3, boardItems: 7 }), /12 source files in; a PDD, an agent document and an SDD, 3 test cases and a 7-item/);
 });

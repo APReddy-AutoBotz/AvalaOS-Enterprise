@@ -418,7 +418,7 @@ A content security policy for every page, first in report-only mode, allowing ex
 
 ### Two small additions to this release (owner, 19 November 2026)
 
-Screens only, one pull request into `next`. **The sample's figures under the homepage's screenshots** are what the demo shows: five source files; five documents (BRD, PDD, FRD, SDD and the agent document, the Documents page's tabs; the test pack and the evidence pack are not counted; two of the five, PDD and SDD, are the ones the delivery plan plans); 32 test cases; a 50-item Delivery board (the line said four documents and 43 items). The figures are in `domain/site/sample.ts`, and `sample.test.ts` reads the demo the way its pages do and fails when they differ. **A canonical link** on the homepage, the three trust pages and the demo (every page of the demo names `/demo`), the same addresses as the sitemap (a test keeps them equal); the unsubscribe page and the application have none.
+Screens only, one pull request into `next`. **The sample's figures under the homepage's screenshots** are what the demo shows: five source files; a PDD and an SDD, the documents the sample's delivery plan plans (owner's wording; the other documents are one click away); 32 test cases; a 50-item Delivery board (the line said four documents and 43 items). The figures are in `domain/site/sample.ts`, and `sample.test.ts` reads the demo the way its pages do and fails when they differ. **A canonical link** on the homepage, the three trust pages and the demo (every page of the demo names `/demo`), the same addresses as the sitemap (a test keeps them equal); the unsubscribe page and the application have none.
 
 ### After this release: a marketing package (owner, 19 November 2026; not built)
 

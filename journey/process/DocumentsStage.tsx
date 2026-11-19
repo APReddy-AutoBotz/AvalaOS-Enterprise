@@ -23,7 +23,7 @@ import { useQuestionPlan } from './sourceLook.ts';
 import { nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
 import { DecidedPanel } from './DecidedPanel.tsx';
-import { documentsNote, documentTabs, offersDocument, PURPOSE_LABEL, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
+import { documentsNote, offersDocument, PURPOSE_LABEL, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
 import { useModelEditor } from './useModelEditor.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
@@ -199,7 +199,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const delivery = React.useMemo(() => (assessment && follows.future ? deliveryPlan(model, assessment) : null), [model, assessment, follows.future]);
   const planned = React.useMemo(() => (follows.future ? new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)) : new Set<DocType>(['pdd'])), [delivery, follows.future]);
   // The agent document is a tab only when the delivery plan lists it, planned or one click away (part E).
-  const types = React.useMemo(() => { const tabs = documentTabs(model, delivery?.docs); return TYPES.filter(t => tabs.includes(t.id)); }, [delivery, model]);
+  const types = React.useMemo(() => TYPES.filter(t => offersDocument(model, t.id) && (t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent'))), [delivery, model]);
   const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
   const typeChosen = React.useRef(Boolean(asked.current));
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
