@@ -19,16 +19,16 @@
      "group": "Why RPA"
     },
     {
-     "text": "API integration is not recommended for any step because no API is confirmed for this work, so integration cannot be planned on yet for several steps.",
+     "text": "API integration is not recommended for any step, most often because SAP S/4HANA is confirmed to have no API.",
      "segmentId": "a:rank:api",
-     "excerpt": "API integration ranks 2 of 4 with an average score of 37 out of 100 and is the recommendation for 0 steps. Not the best fit for any of the 20 steps; it could do 9. Most often held back because no API is confirmed for this work",
+     "excerpt": "API integration ranks 3 of 4 with an average score of 22 out of 100 and is the recommendation for 0 steps. Not the best fit for any of the 20 steps; it could do 5. Most often held back because SAP S/4HANA is confirmed to have no API",
      "role": "point",
      "group": "Why not API"
     },
     {
      "text": "AI-assisted automation is recommended for only one step and is usually held back because structured inputs with no free text can be handled by rules without AI.",
      "segmentId": "a:rank:ai_assist",
-     "excerpt": "AI-assisted automation ranks 3 of 4 with an average score of 23 out of 100 and is the recommendation for 1 steps. Best fit for 1 of 20 steps. Its strongest ground: the input is unstructured documents (1 step). Most often held back because the input is structured data and there is no free text: rules can do this without AI",
+     "excerpt": "AI-assisted automation ranks 2 of 4 with an average score of 23 out of 100 and is the recommendation for 1 steps. Best fit for 1 of 20 steps. Its strongest ground: the input is unstructured documents (1 step). Most often held back because the input is structured data and there is no free text: rules can do this without AI",
      "role": "point",
      "group": "Why not AI"
     },
