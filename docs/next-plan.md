@@ -430,6 +430,29 @@ From the marketing chat's first piece of work (`claude/marketing-first-work-19-n
 - **Counting on the teardown pages,** by the rules of package 12 (section 3e), with the events listed there and no others without asking.
 - **A partner page** with the design-partner offer in plain words, after the lawyer has read it.
 
+### After this release: reading sources within the length of one answer (owner, 19 November 2026; not built)
+
+**Why.** The first extraction check on Anthropic (below) stopped at the facts merge: its answer reached the merge's output ceiling and was cut off, so the reading had nothing to score. OpenAI never reached it on the sample, but a larger process could reach any ceiling on any provider. Anthropic stays unavailable until it passes the check after this package (owner).
+
+**What changes** (`domain/extract/tasks.ts`, `domain/extract/`, `journey-extract`; it goes live with a release):
+
+1. **For the general case, not for this sample.** The facts merge is split into smaller answers (for example rules and exceptions in one; roles, applications, figures and questions in another), each well under the output ceiling and the time a call may take (each call must finish within about 115 seconds, `callBudgetMs`; Claude Sonnet wrote about 140 tokens a second in this run). When an answer is still cut off, the reading splits that part further, or stops with a plain message that names the step and says why (for example "Combining the facts from the sources: the answer was longer than one reply may be. Try fewer sources at a time."). A reading never fails without a reason a person can read.
+2. **The flow merge too.** Its ceiling is 16,000 output tokens; in this run it wrote 9,313 in one answer, in about 57 seconds. The plan for the package says whether it gets the same split or the same rule only (split further or stop with the message), from what the sample and the owner's real processes write. The other ceilings: reading one source's steps 12,000, its facts 16,000, the review of the flow 6,000.
+3. **The extraction check:** after the change, run on OpenAI and Azure OpenAI before the release that carries it (both are offered today), and on Anthropic and Mistral AI after it. A provider is offered only once it passes.
+4. Since #199 (in `next`), a stage that fails records the tokens it used; on the released code the cut-off answer below was not recorded.
+
+**The first check on Anthropic (19 November 2026), for comparison.** Run `f531172e` on the released code and sample files (`main`, `bab6440`), case `ap-invoice` (all sources, flowchart as draw.io), on the Test workspace's own Anthropic key, model `claude-sonnet-5-5`; every call went to Anthropic on that key, no rate limit was met. Started 05:33 UTC, stopped after 1 minute 51 seconds with `merge_facts: TRUNCATED Response incomplete: max_tokens.` Tokens per step (in / out):
+
+| Step | Calls | Input | Output | Largest single answer |
+| --- | --- | --- | --- | --- |
+| Reading each source's steps | 5 | 34,892 | 15,702 | 4,306 |
+| Reading each source's facts | 5 | 42,132 | 25,104 | 6,257 |
+| Combining the flow | 1 | 12,148 | 9,313 | 9,313 |
+| Combining the facts | 1 | not recorded | cut off at 12,000 | 12,000 (the ceiling) |
+| Review of the flow | not reached | | | |
+
+Recorded: 89,172 tokens in and 50,119 out, about $0.68 at Sonnet 5.5's list prices ($2 a million in, $10 out); with the cut-off answer about $0.80 in all. For comparison, OpenAI's last passing runs (`gpt-5.5`, 11 November 2026, an older version of the reading code): flowchart file, steps found 90.5%, steps correct 90.5%, roles 100%, applications 85.1%, quotes 100%, open questions 90%, ways in overclaimed 0; flowchart picture 95.2%, 95.2%, 95%, 85.8%, 100%, 90%, 0. On the owner's real processes `gpt-5.5`'s facts merge has averaged about 5,900 output tokens, its reasoning included.
+
 **Before the first account that is not the owner's: a per-minute AI limit** on `journey-ai` (from the security check of 18 November 2026), beside the monthly allowance, with a plain message when it is reached.
 
 ## 3f. After the outside review of the repository: packages 13, 14 and 15 (owner's decisions, 17 November 2026)
