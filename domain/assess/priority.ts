@@ -321,7 +321,7 @@ export function prioritise(model: ProcessModel, ctx: PriorityContext): Priority 
     ...(!hasVolume ? [{ id: 'volume', label: 'Volume', why: 'Gives the hours a year, and with them the value.' }] : []),
     ...(!allEffort && !hasCase ? [{ id: 'time', label: hasPeople ? 'Time per case' : 'Time per case, or the people doing the work', why: 'Bounds the value even when step times are not known.' }] : []),
     ...(pcUnknown(model) ? [{ id: 'change', label: 'Change expected in the next six months', why: 'Settles readiness and a quarter of the build effort score.' }] : []),
-    ...(ctx.apiSwitch.steps > 0 ? [{ id: 'api', label: `API of ${ctx.apiSwitch.systems.join(', ')}`, why: `Confirming it would move ${plural(ctx.apiSwitch.steps, 'step')} to API integration.` }] : []),
+    ...(ctx.apiSwitch.steps > 0 ? [{ id: 'api', label: `API of ${ctx.apiSwitch.systems.join(', ')}`, why: `Confirming the API does this work would move ${plural(ctx.apiSwitch.steps, 'step')} to API integration.` }] : []),
     ...(ctx.keyQuestions[0] ? [{ id: 'fact', label: ctx.keyQuestions[0].question, why: `Not known for ${plural(ctx.keyQuestions[0].steps, 'step')}.` }] : []),
     ...(!allEffort && (hasCase || hasPeople) ? [{ id: 'step_time', label: 'Time per step', why: 'Turns the upper bound on the value into a calculated range.' }] : []),
     ...(allEffort && !allShare ? [{ id: 'share', label: 'Share of cases per step', why: 'Turns the upper bound on the value into a calculated range.' }] : []),
