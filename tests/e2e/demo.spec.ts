@@ -23,6 +23,7 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
   // The open fact is whether an API does the step's work, not whether one exists (owner, 19 November 2026).
   await expect(page.getByTestId('api-switch-line')).toHaveText('if an API is confirmed to do this work in:');
   await expect(page.getByTestId('why-switch')).toContainText('steps move to API integration');
+  await expect(page.getByText('Confirming the API does this work would move 5 steps to API integration.')).toBeVisible();
   await expect(page.getByTestId('demo-banner')).toContainText('made-up company');
   await expect(page.getByRole('link', { name: 'Leave the demo' })).toHaveAttribute('href', '/');
   await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);

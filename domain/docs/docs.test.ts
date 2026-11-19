@@ -8,6 +8,7 @@ import { assessProcess } from '../assess/process.ts';
 import { emptyDecisions, withOverride } from '../assess/decisions.ts';
 import { buildPdd } from './pdd.ts';
 import { buildBrd } from './brd.ts';
+import { applyEdits, newEdit } from './edits.ts';
 import { toMarkdown } from './markdown.ts';
 import type { DocTree } from './tree.ts';
 import type { DocInput } from './common.ts';
@@ -167,4 +168,22 @@ test('a company Word template: its headings, font and heading colour are read, a
   assert.match(styles, /7A1F5C/);
   const names = buf.toString('latin1').match(/word\/media\/[^\s"]+?\.png/g) ?? [];
   assert.ok(names.length > 0, 'the logo is embedded');
+});
+
+test('BRD: the Dependencies row asks whether the API does this work; a person\'s edit of that section keeps their words (owner, 19 November 2026)', () => {
+  const i = input(gold);
+  assert.ok(i.assessment.apiSwitch.steps > 0, 'the gold case has APIs to confirm');
+  const d = buildBrd(i);
+  const sec = d.sections.find(s => s.blocks.some(b => b.kind === 'table' && b.caption === 'Dependencies'))!;
+  const deps = sec.blocks.find(b => b.kind === 'table' && b.caption === 'Dependencies') as Extract<typeof sec.blocks[number], { kind: 'table' }>;
+  assert.equal(deps.rows[0][0].text, `Confirming that the API of ${i.assessment.apiSwitch.systems.join(', ')} does this work`);
+  assert.equal(deps.rows[0][1].text, String(i.assessment.apiSwitch.steps));
+  // Tables always come from the record; an edit replaces the section's narrative only, so changing the row
+  // leaves an edited section as the person wrote it and does not ask for a review.
+  const mine = newEdit('brd', sec, '<p>Our own words on assumptions and dependencies.</p>');
+  const { doc, status } = applyEdits(d, [mine]);
+  assert.equal(status[sec.id].state, 'edited');
+  const kept = doc.sections.find(s => s.id === sec.id)!;
+  assert.ok(kept.blocks.some(b => b.kind === 'rich' && b.html === '<p>Our own words on assumptions and dependencies.</p>'));
+  assert.ok(kept.blocks.some(b => b.kind === 'table' && b.caption === 'Dependencies'));
 });
