@@ -7,7 +7,7 @@ import { APPROACH_LABEL, lower, type Approach } from '../../domain/assess/scorin
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { Button, cx } from '../ui.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL } from './assessmentShared.tsx';
-import { ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
+import { AbsentOperations, ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
 
 const SPLIT_ORDER: Approach[] = ['rpa', 'api', 'ai_assist', 'agent', 'human'];
 const SPLIT_LABEL: Record<Approach, string> = { ...APPROACH_LABEL, human: 'Stay with people' };
@@ -185,6 +185,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
                               </span>
                             </div>
                             {system && steps.length > 1 && answering !== q.key && <p className="mt-0.5 text-xs text-slate-500">For: {steps.map(s => s.name).join(', ')}</p>}
+                            {system && <AbsentOperations system={system} />}
                             {system && answering === q.key && <ApiCoverageAnswer system={system.name} steps={steps} onCancel={() => setAnswering(null)} onSave={(covers, notCovers) => { setAnswering(null); onAnswerApi(system.id, covers, notCovers); }} />}
                           </li>
                         );

@@ -9,7 +9,7 @@ import { addQuestion, answerApiCoverage, setStepTrait, setSystemUiAllowed, setSy
 import { hashModel } from '../../domain/processModel/hash.ts';
 import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type ApproachScore, type FactorScore, type StepScore } from '../../domain/assess/scoring.ts';
-import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
+import { apiHeldText, assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { DeliveryPlanPanel } from './DeliveryPlanPanel.tsx';
 import { EffortCard } from './EffortCard.tsx';
@@ -30,7 +30,7 @@ import { coarsePatch } from './SourcesStage.tsx';
 import { ChooserContext, chosenBy, Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
 import { AssessmentReport } from './AssessmentReport.tsx';
 import { AssessmentWhy } from './AssessmentWhy.tsx';
-import { ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
+import { AbsentOperations, ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
 import { AssessmentInputs } from './AssessmentInputs.tsx';
 import { LastChangeImpact, useImpactContext } from './ImpactNote.tsx';
 import { AssessmentPriority } from './AssessmentPriority.tsx';
@@ -277,6 +277,7 @@ function Hero({ result, scoring, onReport }: { result: ProcessAssessment; scorin
           <p className="text-xs font-semibold text-[#FFBC03]">{differs ? 'Approach, with people\'s choices' : 'Recommended approach'}</p>
           <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="verdict">{result.verdict}</h2>
           <p className="mt-3 text-base leading-7 text-slate-200" data-testid="split">{result.split}</p>
+          {apiHeldText(result, 'headline') && <p className="mt-2 rounded-lg bg-amber-400/15 px-3 py-2 text-sm leading-6 text-amber-100 ring-1 ring-inset ring-amber-300/30" data-testid="api-held">{apiHeldText(result, 'headline')}</p>}
           {differs && <p className="mt-2 text-sm leading-6 text-slate-300" data-testid="scoring-alone">The scoring alone recommends {scoring.verdict}. {scoring.split}</p>}
         </div>
         {result.assessed > 0 && <button type="button" onClick={onReport} className="rounded-xl bg-[#FFBC03] px-4 py-2.5 text-sm font-semibold text-[#002C4B] shadow-sm transition hover:bg-[#ffc933] focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Open the assessment report</button>}
@@ -480,6 +481,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
             return (
               <li key={q.question}>
                 {q.question}{result.apiWouldWin ? ' A confirmed API would make integration the first choice here.' : ''}
+                {system && <AbsentOperations system={system} />}
                 {canEdit && system && <ApiCoverageAnswer system={system.name} steps={[{ id: step.id, name: step.name }]}
                   onSave={(covers, notCovers) => editor.apply(m => answerApiCoverage(m, { systemId: system.id, covers, notCovers }), covers.length ? `API of ${system.name} does "${step.name}"` : `API of ${system.name} does not do "${step.name}"`)} />}
               </li>

@@ -367,6 +367,77 @@ test('a person\'s no for a step wins over any listed operation (owner, 18 Novemb
   assert.equal(scoreStep(after, after.steps[0]).winner, 'api');
   const tax = scoreStep(after, after.steps[1]);
   assert.notEqual(tax.winner, 'api', 'the listed "Check invoice totals" would match "Check invoice tax"; the no wins');
-  assert.match(tax.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /not known to cover this work/);
+  assert.match(tax.scores.find(x => x.approach === 'api')!.factors.find(x => x.id === 'interface')!.text, /A person confirmed that the API of System 1 does not do this work/);
   assert.deepEqual(tax.questions, []);
+});
+
+test('a person\'s no rules API integration out for that step, and it falls to its next best approach (owner, 19 November 2026)', async () => {
+  const { setSystemUiAllowed } = await import('../processModel/patch.ts');
+  // Robots may not use the screens, and the application's API is confirmed but not known to do this work.
+  let m = build([{ name: 'Enter PO invoice', traits: { ...clear, write: f('financial') }, systems: [{ api: 'confirmed-nocover', ui: true }] }]);
+  m = setSystemUiAllowed(m, { systemId: m.systems[0].id, value: false }).model;
+  const before = scoreStep(m, m.steps[0]);
+  assert.equal(before.winner, 'api');
+  assert.equal(scoreOf(before, 'api'), CAPS.apiNotConfirmed, 'held at the cap while the question is open');
+  assert.equal(before.questions.length, 1);
+
+  const after = answerApiCoverage(m, { systemId: 'sys-0-0', covers: [], notCovers: ['s-0'] }).model;
+  const no = scoreStep(after, after.steps[0]);
+  const api = no.scores.find(x => x.approach === 'api')!;
+  assert.equal(api.score, CAPS.apiAbsent, 'no API for this work');
+  assert.ok(api.caps.some(c => c.reason === 'A person confirmed that the API of System 1 does not do this work.'));
+  assert.notEqual(no.winner, 'api');
+  assert.equal(scoreOf(no, 'rpa'), 0, 'robots are still not allowed on the screens');
+  const next = no.scores.filter(x => x.approach !== 'api').sort((x, y) => y.score - x.score)[0];
+  assert.equal(no.winner, next.score >= FIT.possible && next.approach !== 'human' ? next.approach : 'human', 'the step falls to its next best approach');
+  assert.deepEqual(no.questions, [], 'and the question is not asked again');
+  assert.equal(assessProcess(after).keyQuestions.some(q => q.key === 'api:sys-0-0'), false);
+});
+
+test('what the sources say an API cannot do is a no for a step it names by the strict rule, and nothing more (owner, 19 November 2026)', async () => {
+  const { absentOperations } = await import('./coverage.ts');
+  const m = build([
+    { name: 'Post invoice and attach PDF', traits: clear, systems: [{ api: 'confirmed-nocover' }] },
+    { name: 'Enter PO invoice', traits: clear },
+    { name: 'Post goods receipt', traits: clear },
+  ]);
+  for (const st of m.steps) st.systemIds = ['sys-0-0'];
+  m.systems[0].access.push({ method: 'api', name: 'API_SUPPLIERINVOICE_PROCESS_SRV', operations: ['create supplier invoices with PO reference', 'post supplier invoices with PO reference'], access: 'confirmed_absent', status: 'stated', sources: src });
+  assert.deepEqual(absentOperations(m.systems[0]), ['create supplier invoices with PO reference', 'post supplier invoices with PO reference']);
+
+  const post = scoreStep(m, m.steps[0]);
+  const api = post.scores.find(x => x.approach === 'api')!;
+  assert.equal(api.score, CAPS.apiAbsent, '"post supplier invoices" names the same action on the same thing as "Post invoice and attach PDF"');
+  assert.ok(api.caps.some(c => c.reason === 'The sources say System 1 has no API to post supplier invoices with PO reference.'));
+  assert.deepEqual(post.questions, [], 'nothing to ask: the sources answer it');
+
+  const enter = scoreStep(m, m.steps[1]);
+  assert.equal(scoreOf(enter, 'api') > CAPS.apiAbsent, true, '"enter" is not "create" or "post" by the rule, so no guess');
+  assert.equal(enter.questions.length, 1, 'it stays a question, answered with the absent operations in view');
+  assert.equal(scoreStep(m, m.steps[2]).questions.length, 1, 'posting goods receipts is not posting supplier invoices');
+
+  // A person's yes wins over what the sources say.
+  const yes = answerApiCoverage(m, { systemId: 'sys-0-0', covers: ['s-0'], notCovers: [] }).model;
+  assert.equal(scoreStep(yes, yes.steps[0]).winner, 'api');
+});
+
+test('an API-led verdict resting on steps no API is confirmed for says so, with the number of steps (owner, 19 November 2026)', async () => {
+  const { setSystemUiAllowed } = await import('../processModel/patch.ts');
+  const { apiHeldText } = await import('./process.ts');
+  const { processCard } = await import('./portfolio.ts');
+  let m = build([{ name: 'Enter PO invoice', traits: clear, systems: [{ api: 'confirmed-nocover', ui: true }] }, { name: 'Read vendor master', traits: clear }]);
+  m.steps[1].systemIds = ['sys-0-0'];
+  m = setSystemUiAllowed(m, { systemId: 'sys-0-0', value: false }).model;
+  const a = assessProcess(m);
+  assert.equal(a.lead, 'api');
+  assert.deepEqual(a.apiHeld, { steps: 1, of: 2 }, '"Read vendor master" is covered; "Enter PO invoice" is held at the cap');
+  assert.equal(apiHeldText(a, 'headline'), `Provisional: 1 of its 2 steps has no API confirmed for its work yet, so that step is held at ${CAPS.apiNotConfirmed} out of 100. Confirming the API for that work, or answering no, settles it.`);
+  assert.equal(processCard(a)!.apiHeld, 'Provisional: 1 of 2 API steps wait on a confirmed API.');
+  // Answered no, the step leaves API integration and nothing is held.
+  const after = assessProcess(answerApiCoverage(m, { systemId: 'sys-0-0', covers: [], notCovers: ['s-0'] }).model);
+  assert.deepEqual(after.apiHeld, { steps: 0, of: 1 });
+  assert.equal(apiHeldText(after, 'headline'), null);
+  assert.equal(processCard(after)!.apiHeld, undefined);
+  // Not API-led: nothing to say.
+  assert.equal(apiHeldText({ lead: 'rpa', apiHeld: { steps: 3, of: 3 } }, 'card'), null);
 });
