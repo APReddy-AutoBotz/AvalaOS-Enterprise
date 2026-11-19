@@ -120,7 +120,7 @@ export function AssessmentWhy({ model, result, onOpenStep, canEdit, aiAvailable,
           {result.apiSwitch.steps > 0 ? (
             <>
               <Big value={result.apiSwitch.steps} label={`${result.apiSwitch.steps === 1 ? 'step moves' : 'steps move'} to API integration`} />
-              <p className="mt-2 text-sm text-slate-600">if an API is confirmed for:</p>
+              <p className="mt-2 text-sm text-slate-600" data-testid="api-switch-line">if an API is confirmed to do this work in:</p>
               <div className="mt-2 flex flex-wrap gap-1.5">{result.apiSwitch.systems.map(s => <span key={s} className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-900 ring-1 ring-inset ring-emerald-200">{s}</span>)}</div>
             </>
           ) : (
