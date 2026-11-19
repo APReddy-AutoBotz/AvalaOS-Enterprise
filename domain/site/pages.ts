@@ -26,6 +26,21 @@ export function publicPage(pathname: string): PublicPage | null {
   return TRUST_PAGES.find(p => p.path === path.toLowerCase())?.id ?? null;
 }
 
+/** The site's one address: canonical links and the sitemap name it, never www or a preview. */
+export const SITE_ORIGIN = 'https://avalaos.com';
+
+/**
+ * The canonical address of a public page: the homepage, the trust pages and the demo, whichever of the
+ * demo's own pages is open (the same addresses as public/sitemap.xml; a test keeps them equal). The page
+ * that stops the weekday email has none: it is reached only from an email's link and is not listed.
+ */
+export function canonicalUrl(page: PublicPage): string | null {
+  if (page === 'unsubscribe') return null;
+  if (page === 'home') return `${SITE_ORIGIN}/`;
+  if (page === 'demo') return `${SITE_ORIGIN}${DEMO_BASE}`;
+  return `${SITE_ORIGIN}${TRUST_PAGES.find(p => p.id === page)!.path}`;
+}
+
 /** The journey path inside the demo (/demo/board -> /board); /demo itself opens My work. */
 export function demoPath(pathname: string): string {
   const rest = pathname.replace(/\/+$/, '').slice(DEMO_BASE.length);

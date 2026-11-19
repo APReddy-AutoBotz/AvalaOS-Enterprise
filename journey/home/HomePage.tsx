@@ -7,6 +7,7 @@
 // The tour starts when it comes into view, and a stage a visitor picks plays its two screens and stays.
 // The page is kept short on purpose (owner, 16 November 2026: about seven screens on a laptop): each
 // section says its point in a sentence or two, and the longer explanation sits behind "Read more".
+import { sampleLine } from '../../domain/site/sample.ts';
 import { countEvent } from './visits.ts';
 import React from 'react';
 import { InquiryDialog } from './InquiryDialog.tsx';
@@ -424,7 +425,7 @@ export default function HomePage() {
       </div>
 
       <p className="border-b border-slate-200 bg-slate-50 px-6 py-3 text-center text-sm text-slate-700">
-        Real product screens. A made-up sample case: five source files in; four documents, 32 test cases and a 43-item Delivery board out.
+        {sampleLine()}
       </p>
 
       <main>
