@@ -70,6 +70,9 @@ test('the screens say the rule changed until the end of January 2027', () => {
 
 test('what a person sees where the rule changed a process\'s figures, approved revisions included', () => {
   const now = new Date('2026-11-20T00:00:00Z');
+  const released = COVERAGE_RULE.since;
+  COVERAGE_RULE.since = null; // before the release's own commit sets it, the screens show where the date goes
+  try {
   assert.equal(coverageNotice({ steps: 0, systems: [] }, 'assessment', now), null, 'nothing changed: nothing to say');
   const n = { steps: 2, systems: ['SAP S/4HANA', 'Shared AP mailbox'] };
   assert.equal(coverageNotice(n, 'assessment', now), 'Since [release date], an application\'s API counts for a step only when one of its listed operations does that step\'s work: the same action on the same thing. For this process, 2 steps are no longer counted as covered by the API of SAP S/4HANA and Shared AP mailbox, so the figures may differ from before. If the API does do that work, answer yes to the question on that step and it will count again.');
@@ -78,6 +81,10 @@ test('what a person sees where the rule changed a process\'s figures, approved r
   assert.match(coverageNotice({ steps: 1, systems: ['SAP'] }, 'assessment', now)!, /1 step is no longer counted/);
   assert.equal(coverageNotice(n, 'card', new Date('2027-02-01T00:00:00Z')), null);
   COVERAGE_RULE.since = '25 November 2026';
-  try { assert.equal(coverageNotice(n, 'card', now), 'Figures changed on 25 November 2026: a stricter API rule applies to 2 steps.', 'the release sets the date'); }
-  finally { COVERAGE_RULE.since = null; }
+  assert.equal(coverageNotice(n, 'card', now), 'Figures changed on 25 November 2026: a stricter API rule applies to 2 steps.', 'the release sets the date');
+  } finally { COVERAGE_RULE.since = released; }
+});
+
+test('the release has set the date of the coverage notice (20 November 2026)', () => {
+  assert.equal(COVERAGE_RULE.since, '20 November 2026');
 });
