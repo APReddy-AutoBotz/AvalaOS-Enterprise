@@ -84,7 +84,7 @@ export function buildBrd(input: DocInput): DocTree {
     ...m.controls.map(c => [c.text, sourceList(c.sources)]),
   ];
   b.table('Constraints', ['Constraint', 'Source'], constraints, 'No constraints are recorded.');
-  b.table('Dependencies', ['Dependency', 'Steps affected'], a.apiSwitch.steps ? [[`Confirming the API of ${a.apiSwitch.systems.join(', ')}`, String(a.apiSwitch.steps)]] : [], dec ? `No open dependency holds back ${dec.label}.` : 'No open dependency changes the recommendation.');
+  b.table('Dependencies', ['Dependency', 'Steps affected'], a.apiSwitch.steps ? [[`Confirming that the API of ${a.apiSwitch.systems.join(', ')} does this work`, String(a.apiSwitch.steps)]] : [], dec ? `No open dependency holds back ${dec.label}.` : 'No open dependency changes the recommendation.');
 
   b.section('10', 'Risks and issues', 1);
   b.table('Risks', ['Risk', 'Source'], m.risks.map(r => [r.text, sourceList(r.sources)]), 'No risks are recorded.');

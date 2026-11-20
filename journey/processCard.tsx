@@ -1,6 +1,7 @@
 // What a process looks like on My work and on the Processes page: its assessment in three figures, the
 // bar that shows how its steps would be done, the people named on it, and what is open. The figures
 // are the process's own assessment (domain/assess/portfolio.ts); nothing here is typed in.
+import { coverageNotice } from '../domain/assess/coverage.ts';
 import React from 'react';
 import type { ProcessCard } from '../domain/assess/portfolio.ts';
 import { APPROACH_LABEL } from '../domain/assess/scoring.ts';
@@ -48,6 +49,8 @@ export function StepSplit({ card }: { card: ProcessCard }) {
       <ul className="mt-2.5 flex flex-wrap gap-x-4 gap-y-1.5">
         {parts.map(p => <li key={p.label} className="flex items-center gap-1.5 text-[13px] text-slate-700"><span aria-hidden className={cx('h-2.5 w-2.5 rounded-[3px]', p.cls)} />{p.n} {p.label}</li>)}
       </ul>
+      {card.apiHeld && <p className="mt-2 text-[13px] text-amber-900" data-testid="api-held">{card.apiHeld}</p>}
+      {card.narrowed && coverageNotice({ steps: card.narrowed, systems: [] }, 'card') && <p className="mt-2 text-[13px] text-amber-900" data-testid="coverage-notice">{coverageNotice({ steps: card.narrowed, systems: [] }, 'card')}</p>}
     </div>
   );
 }

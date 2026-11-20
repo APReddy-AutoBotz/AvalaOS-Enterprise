@@ -2,17 +2,15 @@
 import React from 'react';
 import { TRUST_PAGES } from '../../domain/site/pages.ts';
 import { CONTACT_EMAIL } from '../../domain/site/trust.ts';
+import { countingOff, hasSession } from './visits.ts';
 
 export const focus = 'focus-visible:outline-2 focus-visible:outline-offset-2';
 
-/** The local-storage key of the application's sign-in session (journey/store/supabaseStore.ts). */
-export const SESSION_KEY = 'avala.journey.auth';
+export { SESSION_KEY } from './visits.ts';
 
 /** "Open my work" for a visitor with a sign-in session in local storage, otherwise "Sign in". */
 export function useGo(): { href: string; label: string } {
-  const signedIn = React.useMemo(() => {
-    try { return Object.keys(window.localStorage).some(k => k === SESSION_KEY || /^sb-.+-auth-token$/.test(k)); } catch { return false; }
-  }, []);
+  const signedIn = React.useMemo(hasSession, []);
   return signedIn ? { href: '/work', label: 'Open my work' } : { href: '/signin', label: 'Sign in' };
 }
 
@@ -28,6 +26,7 @@ export function SiteFooter({ go }: { go: { href: string; label: string } }) {
         </nav>
         <a href={go.href} className={`font-semibold text-white underline decoration-[#E69F00] decoration-2 underline-offset-4 ${focus} focus-visible:outline-white`}>{go.label}</a>
       </div>
+      {countingOff() && <p className="mx-auto max-w-7xl px-6 pb-6 text-xs text-slate-400" data-testid="counting-off">Visits from this browser are not counted. Open any page with ?count=on to count them again.</p>}
     </footer>
   );
 }

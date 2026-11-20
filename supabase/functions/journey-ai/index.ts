@@ -15,15 +15,17 @@
 // falls back to the platform key, and only calls on the platform key count against its monthly allowance.
 // Deployed with verify_jwt = false because the function authenticates the caller itself.
 
+import { withCors } from '../../../domain/site/origins.ts';
 import {
-  validateRequest, buildOpenAIRequest, buildImageRequest, verifyExcerpts,
+  validateRequest, buildOpenAIRequest, buildImageRequest, verifyExcerpts, missingListsMessage,
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
+import { KEY_TEST_LIMITED, keyTestLimited } from '../../../domain/ai/usage.ts';
 import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
 import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
 import {
-  chooseConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
+  decideConnection, isConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
   unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
 } from '../../../domain/ai/providers.ts';
 
@@ -49,14 +51,9 @@ const serviceHeaders = (): Record<string, string> =>
     ? { apikey: SECRET_KEY, 'Content-Type': 'application/json' }
     : { apikey: SECRET_KEY, Authorization: `Bearer ${SECRET_KEY}`, 'Content-Type': 'application/json' };
 
-const CORS = {
-  'Access-Control-Allow-Origin': env('ALLOWED_ORIGIN') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
 
 const reply = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = (status: number, code: string, message: string) => reply(status, { ok: false, error: { code, message } });
 
 /** Constant-time string comparison. */
@@ -108,6 +105,23 @@ async function logUsage(row: Record<string, unknown>): Promise<void> {
 }
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** Whether the workspace's settings say it uses its own key (whether or not the key can still be read). */
+async function settingsSaved(workspaceId: string): Promise<boolean> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/workspace_ai_settings?workspace_id=eq.${workspaceId}&select=workspace_id`, { headers: serviceHeaders() });
+  if (!res.ok) throw new Error(`AI settings lookup failed (${res.status})`);
+  const rows = await res.json();
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+/** How many times the workspace's key was tested in the last hour (the usage log's 'health' rows). */
+async function keyTestsInLastHour(workspaceId: string): Promise<number> {
+  const since = new Date(Date.now() - 3_600_000).toISOString();
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/ai_usage?workspace_id=eq.${workspaceId}&task=eq.health&created_at=gte.${since}&select=id&limit=50`, { headers: serviceHeaders() });
+  if (!res.ok) throw new Error(`usage lookup failed (${res.status})`);
+  const rows = await res.json();
+  return Array.isArray(rows) ? rows.length : 0;
+}
 
 /** The workspace's own AI connection (with its key, read by the service role), or null when it has none. */
 async function workspaceConnection(workspaceId: string) {
@@ -162,8 +176,9 @@ async function callResponses(conn: AiConnection, body: Record<string, unknown>):
 
 const STATUS_FOR: Record<string, string> = { PROVIDER_ERROR: 'provider_error', INVALID_OUTPUT: 'invalid_output', TRUNCATED: 'truncated', REFUSED: 'refused' };
 
-Deno.serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+// Cross-site headers on every answer, for the allowed websites only (domain/site/origins.ts).
+Deno.serve(withCors(async (req: Request) => {
+  if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
   if (!SUPABASE_URL || !PUBLISHABLE_KEY || !SECRET_KEY) return fail(500, 'NOT_CONFIGURED', 'Supabase environment is incomplete.');
 
@@ -185,14 +200,19 @@ Deno.serve(async (req: Request) => {
     userId = user.id;
   }
 
-  // The workspace's own key when it has one (never falling back to the platform's), otherwise the platform key.
-  let conn: AiConnection | null;
+  // The workspace's own key when it has one, otherwise the platform key. A workspace set to use its own key
+  // whose key can no longer be read stops here, never falling back to the platform's (F05).
+  let conn: AiConnection;
   try {
-    conn = chooseConnection(await workspaceConnection(request.workspaceId), { apiKey: env('OPENAI_API_KEY'), model: env('OPENAI_MODEL') || 'gpt-5.5' });
+    const [own, saved] = await Promise.all([workspaceConnection(request.workspaceId), settingsSaved(request.workspaceId)]);
+    const decided = decideConnection(own, saved, { apiKey: env('OPENAI_API_KEY'), model: env('OPENAI_MODEL') || 'gpt-5.5' });
+    if (!isConnection(decided)) return fail(decided.code === 'WORKSPACE_KEY_MISSING' ? 409 : 500, decided.code, decided.message);
+    conn = decided;
   } catch (e) {
-    return fail(500, 'AI_SETTINGS_UNAVAILABLE', (e as Error).message);
+    // The detail goes to the log only; the caller gets a plain message (item 7).
+    console.error('AI settings lookup failed', (e as Error).message);
+    return fail(500, 'AI_SETTINGS_UNAVAILABLE', 'The workspace\'s AI settings could not be read just now. Try again in a minute.');
   }
-  if (!conn) return fail(500, 'NOT_CONFIGURED', 'No AI provider key is set.');
   const model = conn.model;
 
   // AI use and limits (Settings): no provider call, so no address check. The allowance is a server setting.
@@ -219,18 +239,49 @@ Deno.serve(async (req: Request) => {
       return fail(422, 'ENDPOINT_NOT_ALLOWED', e instanceof EndpointError ? e.message : 'The endpoint\'s address could not be checked.');
     }
   }
-  const usage = (row: Record<string, unknown>) => logUsage({ ...row, provider: conn!.provider, key_source: conn!.source });
+  const usage = (row: Record<string, unknown>) => logUsage({ ...row, provider: conn.provider, key_source: conn.source });
 
-  // "Test this key": a tiny real request through the same address, key and model the workspace uses.
+  const budget = Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000);
+  const checkAllowance = async (): Promise<Response | null> => {
+    if (!usesPlatformAllowance(conn)) return null;
+    try {
+      if (monthlyBudgetExceeded(await tokensUsedThisMonth(request.workspaceId), budget)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
+    } catch (e) {
+      // The detail goes to the log only; the caller gets a plain message (item 7).
+      console.error('allowance lookup failed', (e as Error).message);
+      return fail(500, 'BUDGET_UNAVAILABLE', 'The AI allowance could not be checked just now. Try again in a minute.');
+    }
+    return null;
+  };
+
+  // "Test this key": a tiny real request through the same address, key and model the workspace uses. On the
+  // platform key it is checked against the allowance like any call; on the workspace's own key it has its own
+  // small limit instead, so a workspace whose allowance is used up can still switch to its own key. Every
+  // test is logged with its tokens, working or not (F03).
   if (request.action === 'health') {
+    if (conn.source === 'workspace') {
+      let tests: number;
+      try { tests = await keyTestsInLastHour(request.workspaceId); } catch (e) {
+        console.error('key test count failed', (e as Error).message);
+        return fail(500, 'BUDGET_UNAVAILABLE', 'The key could not be tested just now. Try again in a minute.');
+      }
+      if (keyTestLimited(tests)) return fail(429, 'TEST_LIMIT', KEY_TEST_LIMITED);
+    } else {
+      const over = await checkAllowance();
+      if (over) return over;
+    }
     const target = providerRequest(conn, testRequestBody(conn));
-    let status = 0;
+    const started = Date.now();
+    let status = 0, tokens = { input: 0, output: 0 };
     try {
       const res = await post(target.url, target.headers, JSON.stringify(target.body));
       status = res.status;
-      await res.body?.cancel();
-    } catch { status = 0; }
+      const json = await res.json().catch(() => ({}));
+      const u = parseProviderReply(conn, json).usage;
+      tokens = { input: Number(u.input) || 0, output: Number(u.output) || 0 };
+    } catch { /* unreachable, or a reply that could not be read: the status says which */ }
     const ok = status >= 200 && status < 300;
+    await usage({ workspace_id: request.workspaceId, user_id: userId, task: 'health', model, status: ok ? 'ok' : 'provider_error', input_tokens: tokens.input, output_tokens: tokens.output, attempts: 1, error_code: ok ? null : `HTTP_${status}`, duration_ms: Date.now() - started });
     if (conn.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_tested_at: new Date().toISOString(), last_test_ok: ok });
     if (status === 401 || status === 403) return fail(502, 'PROVIDER_AUTH', 'The AI provider rejected the key.');
     if (status === 404) return fail(502, 'MODEL_UNAVAILABLE', `The provider has no model or deployment named ${model} for this key.`);
@@ -239,15 +290,7 @@ Deno.serve(async (req: Request) => {
     return reply(200, { ok: true, model, provider: conn.provider, source: conn.source, tasks: Object.keys(TASKS) });
   }
 
-  const budget = Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000);
-  const checkAllowance = async (): Promise<Response | null> => {
-    if (!usesPlatformAllowance(conn!)) return null;
-    try {
-      if (monthlyBudgetExceeded(await tokensUsedThisMonth(request.workspaceId), budget)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
-    } catch (e) { return fail(500, 'BUDGET_UNAVAILABLE', (e as Error).message); }
-    return null;
-  };
-  const used = async () => { if (conn!.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_used_at: new Date().toISOString() }); };
+  const used = async () => { if (conn.source === 'workspace') await noteWorkspaceAi(request.workspaceId, { last_used_at: new Date().toISOString() }); };
 
   if (request.action === 'transcribe') {
     const off = unsupported(conn, 'transcription');
@@ -300,9 +343,17 @@ Deno.serve(async (req: Request) => {
   const started = Date.now();
   let { parsed, attempts } = await callResponses(conn, openaiBody);
   if (!parsed.ok && parsed.code === 'INVALID_OUTPUT') {
+    // The first reply's tokens were spent too: both calls are counted (F03).
+    const first = parsed.usage;
     const again = await callResponses(conn, openaiBody);
     attempts += again.attempts;
-    parsed = again.parsed;
+    parsed = { ...again.parsed, usage: { ...again.parsed.usage, input: again.parsed.usage.input + first.input, output: again.parsed.usage.output + first.output } } as ParsedResponse;
+  }
+  // A reply lacking a list its task requires is refused, not passed on unchecked (F16).
+  let verified: ReturnType<typeof verifyExcerpts> | null = null;
+  if (parsed.ok && task.input !== 'image') {
+    verified = verifyExcerpts(parsed.data, task.verifyArrays, segments);
+    if (verified.missing.length) parsed = { ok: false, code: 'INVALID_OUTPUT', message: missingListsMessage(verified.missing), usage: parsed.usage };
   }
 
   await usage({
@@ -320,7 +371,6 @@ Deno.serve(async (req: Request) => {
 
   if (!parsed.ok) return fail(502, parsed.code, parsed.message);
   await used();
-  if (task.input === 'image') return reply(200, { ok: true, data: parsed.data, dropped: [], usage: parsed.usage, model });
-  const { data, dropped } = verifyExcerpts(parsed.data, task.verifyArrays, segments);
-  return reply(200, { ok: true, data, dropped, usage: parsed.usage, model });
-});
+  if (task.input === 'image' || !verified) return reply(200, { ok: true, data: parsed.data, dropped: [], usage: parsed.usage, model });
+  return reply(200, { ok: true, data: verified.data, dropped: verified.dropped, usage: parsed.usage, model });
+}, env('ALLOWED_ORIGIN')));

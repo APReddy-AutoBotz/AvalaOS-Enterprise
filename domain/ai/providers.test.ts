@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  AiSettingsError, chooseConnection, keyHint, responsesTarget, takesReasoningEffort, taskNeed, transcriptionTarget,
+  AiSettingsError, decideConnection, isConnection, WORKSPACE_KEY_MISSING, keyHint, responsesTarget, takesReasoningEffort, taskNeed, transcriptionTarget,
   unsupported, usesPlatformAllowance, validateAiChoice, validateApiKey, type AiConnection,
 } from './providers.ts';
 
@@ -36,14 +36,23 @@ test('a key is checked for shape only, and only its last four characters may be 
 });
 
 test('a workspace with its own key uses it, with no allowance; otherwise the platform key within its allowance', () => {
-  const own = chooseConnection({ provider: 'azure_openai', model: 'prod', endpoint: 'https://acme.openai.azure.com', apiKey: 'azure-key-0000000000000000' }, platform)!;
+  const own = decideConnection({ provider: 'azure_openai', model: 'prod', endpoint: 'https://acme.openai.azure.com', apiKey: 'azure-key-0000000000000000' }, true, platform) as AiConnection;
   assert.equal(own.source, 'workspace');
   assert.equal(own.apiKey, 'azure-key-0000000000000000');
   assert.equal(usesPlatformAllowance(own), false);
-  const shared = chooseConnection(null, platform)!;
+  const shared = decideConnection(null, false, platform) as AiConnection;
   assert.deepEqual({ source: shared.source, provider: shared.provider, model: shared.model }, { source: 'platform', provider: 'openai', model: 'gpt-5.5' });
   assert.equal(usesPlatformAllowance(shared), true);
-  assert.equal(chooseConnection(null, { apiKey: '', model: 'gpt-5.5' }), null);
+  assert.deepEqual(decideConnection(null, false, { apiKey: '', model: 'gpt-5.5' }), { code: 'NOT_CONFIGURED', message: 'No AI provider key is set.' });
+});
+
+test('a workspace\'s own key that has gone missing stops the work, never falling back to the platform key (F05)', () => {
+  const gone = decideConnection(null, true, platform);
+  assert.equal(isConnection(gone), false);
+  assert.deepEqual(gone, { code: 'WORKSPACE_KEY_MISSING', message: WORKSPACE_KEY_MISSING });
+  const empty = decideConnection({ provider: 'openai', model: 'gpt-5.5', endpoint: null, apiKey: '' }, true, platform);
+  assert.equal(isConnection(empty), false, 'a Vault secret that reads as empty is a missing key too');
+  assert.match(WORKSPACE_KEY_MISSING, /Settings → AI provider/);
 });
 
 test('calls go to the provider\'s own address with its own way of passing the key', () => {

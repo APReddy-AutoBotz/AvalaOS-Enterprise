@@ -14,6 +14,7 @@
 // "Avala OS <no-reply@avalaos.com>"), SITE_URL (default https://avalaos.com), ALLOWED_ORIGIN. Deployed with
 // verify_jwt = false: anyone may send a request, and the limits are the database's.
 
+import { withCors } from '../../../domain/site/origins.ts';
 import { checkInquiry, inquiryNotice, INQUIRY_CAPS } from '../../../domain/site/inquiry.ts';
 import { CONTACT_EMAIL } from '../../../domain/site/trust.ts';
 
@@ -33,19 +34,15 @@ const serviceHeaders = (): Record<string, string> =>
     ? { apikey: SECRET_KEY, 'Content-Type': 'application/json' }
     : { apikey: SECRET_KEY, Authorization: `Bearer ${SECRET_KEY}`, 'Content-Type': 'application/json' };
 
-const CORS = {
-  'Access-Control-Allow-Origin': env('ALLOWED_ORIGIN') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
-const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+const reply = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = (status: number, code: string, message: string) => reply(status, { ok: false, error: { code, message } });
 
 /** A request is a few hundred characters; anything far larger is not a person filling in the form. */
 const MAX_BODY = 8_000;
 
-Deno.serve(async req => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+// Cross-site headers on every answer, for the allowed websites only (domain/site/origins.ts).
+Deno.serve(withCors(async req => {
+  if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
   if (!SUPABASE_URL || !SECRET_KEY) return fail(500, 'NOT_CONFIGURED', 'Supabase environment is incomplete.');
 
@@ -87,4 +84,4 @@ Deno.serve(async req => {
     if (!sent?.ok) console.error('walkthrough notice not sent', sent?.status ?? 'unreachable');
   }
   return reply(200, { ok: true });
-});
+}, env('ALLOWED_ORIGIN')));

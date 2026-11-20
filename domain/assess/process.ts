@@ -14,7 +14,7 @@ import { prioritise, type Priority } from './priority.ts';
 import { notDoneToday, processWords } from '../plan/intended.ts';
 import { DEFAULT_SETTINGS, type AssessmentSettings } from './settings.ts';
 import type { Decisions } from './decisions.ts';
-import { APPROACH_LABEL, AUTOMATION, FIT, limiter, lower, decidedFits, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
+import { APPROACH_LABEL, AUTOMATION, CAPS, FIT, limiter, lower, decidedFits, scoreOf, scoreSteps, type Approach, type Confidence, type StepQuestion, type StepScore } from './scoring.ts';
 
 export const THRESHOLDS = {
   /** Simplify first when this share of steps is rework or duplicate entry. */
@@ -60,7 +60,8 @@ export interface RankedApproach {
 /** A fact sentence and the number of steps it applies to. */
 export interface Tally { text: string; steps: number }
 
-export interface KeyQuestion { key: string; question: string; steps: number }
+/** A question that would firm the assessment up, and the steps it serves (so an API question can list them). */
+export interface KeyQuestion { key: string; question: string; steps: number; stepIds: string[] }
 
 export interface ProcessAssessment {
   steps: StepScore[];
@@ -106,6 +107,33 @@ export interface ProcessAssessment {
   questions: StepQuestion[];
   /** Readiness, ease of implementation, value and where the process sits among candidates. */
   priority: Priority;
+  /**
+   * Steps whose API counted as covering them under the rule before the stricter one and not under today's
+   * (coverage.ts), and those applications: the screens say so (coverageNotice), so no figure changes silently.
+   */
+  coverageNarrowed: { steps: number; systems: string[] };
+  /**
+   * Of the steps API integration is chosen for (`of`), those held at the cap because no API is confirmed
+   * for their work yet (`steps`): an API-led verdict that rests on them says so (apiHeldText).
+   */
+  apiHeld: { steps: number; of: number };
+}
+
+/** Whether a step's API score is held down by the cap for work no API is confirmed for. */
+const heldByApiCap = (s: StepScore): boolean => {
+  const api = s.scores.find(x => x.approach === 'api');
+  return Boolean(api && api.caps.some(c => c.id === 'apiNotConfirmed' && c.to === api.score && api.raw - api.penalty > c.to));
+};
+
+/**
+ * The line that says an API-led verdict is provisional, on the Assessment's headline and on the card;
+ * null unless the lead is API integration and some of its steps are held. Wording: the owner's (19 November 2026).
+ */
+export function apiHeldText(a: Pick<ProcessAssessment, 'lead' | 'apiHeld'>, where: 'headline' | 'card'): string | null {
+  const { steps, of } = a.apiHeld;
+  if (a.lead !== 'api' || !steps) return null;
+  if (where === 'card') return `Provisional: ${steps} of ${of} API steps wait for an answer about the API.`;
+  return `Provisional: ${steps} of its ${of} ${of === 1 ? 'step' : 'steps'} ${steps === 1 ? 'waits' : 'wait'} for an answer about the API. Each is held at ${CAPS.apiNotConfirmed} out of 100 until someone confirms the API does that work, or says it does not.`;
 }
 
 const LEAD_TITLE: Record<Approach, string> = {
@@ -228,8 +256,9 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
   const confidence: Confidence = knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low';
   const byKey = new Map<string, KeyQuestion>();
   for (const s of scored) for (const u of s.unknowns) {
-    const k = byKey.get(u.key) ?? { key: u.key, question: u.general, steps: 0 };
+    const k = byKey.get(u.key) ?? { key: u.key, question: u.general, steps: 0, stepIds: [] };
     k.steps++;
+    k.stepIds.push(s.stepId);
     byKey.set(u.key, k);
   }
   const keyQuestions = [...byKey.values()].sort((a, b) => b.steps - a.steps || a.key.localeCompare(b.key)).slice(0, 6);
@@ -312,6 +341,8 @@ export function assessProcess(model: ProcessModel, options: { rate?: Rate | null
     aiStepIds: scored.filter(x => x.aiNeeded).map(x => x.stepId), mustStayStepIds: scored.filter(x => x.winner === 'human' && !x.forNow).map(x => x.stepId),
     forNowStepIds: scored.filter(x => x.forNow).map(x => x.stepId), approvalStepIds: scored.filter(x => x.winner !== 'human' && x.human === 'approve').map(x => x.stepId),
     automationFit: n ? automatedSteps / n : 0, aiSteps, approvalSteps, knownShare, confidence, keyQuestions, cautions, potential, hours, money, questions,
+    coverageNarrowed: { steps: scored.filter(x => x.narrowedBy?.length).length, systems: [...new Set(scored.flatMap(x => x.narrowedBy ?? []))] },
+    apiHeld: { steps: scored.filter(x => x.winner === 'api' && heldByApiCap(x)).length, of: scored.filter(x => x.winner === 'api').length },
   };
 }
 

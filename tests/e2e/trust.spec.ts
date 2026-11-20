@@ -18,7 +18,8 @@ for (const p of PAGES) {
     await expect(page).toHaveURL(new RegExp(`${p.path}$`));
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(p.title);
     await expect(page).toHaveTitle(`${p.title} | Avala OS`);
-    await expect(page.getByText(/^Last updated \d{1,2} [A-Z][a-z]+ \d{4}$/)).toBeVisible();
+    // A page changed in the coming release shows "[release date]" until the release's own commit sets it (domain/site/trust.ts).
+    await expect(page.getByText(/^Last updated (\d{1,2} [A-Z][a-z]+ \d{4}|\[release date\])$/)).toBeVisible();
     // The contents list jumps to each section.
     const contents = page.getByRole('navigation', { name: 'On this page' }).getByRole('link');
     expect(await contents.count()).toBeGreaterThanOrEqual(5);

@@ -1,6 +1,7 @@
 // Answers from notes or voice: the person types, pastes or speaks; the AI proposes which open
 // questions the text answers, each with the words that answer it; the person ticks what is right
 // and applies. The text is kept as a source of the process, so every answer can be traced to it.
+import { microphoneProblem } from '../../domain/site/microphone.ts';
 import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
@@ -80,7 +81,7 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
         <textarea aria-label={label} rows={rows} value={value} onChange={e => onChange(e.target.value)} disabled={disabled || busy || recording} placeholder={placeholder}
           className="block w-full resize-y rounded-xl bg-transparent px-3.5 py-3 pr-16 text-sm leading-6 focus:outline-none disabled:text-slate-500" />
         {canSpeak && (
-          <button type="button" onClick={() => (recording ? recorder.stop() : recorder.start().catch(e => setError(messageOf(e))))} disabled={disabled || busy}
+          <button type="button" onClick={() => (recording ? recorder.stop() : recorder.start().catch(e => setError(microphoneProblem((e as { name?: string })?.name))))} disabled={disabled || busy}
             aria-label={recording ? 'Stop recording' : 'Speak your answer'} title={recording ? 'Stop recording' : 'Speak your answer'}
             className={cx('absolute bottom-2.5 right-2.5 flex h-10 w-10 items-center justify-center rounded-full shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
               recording ? 'bg-rose-600 text-white focus-visible:ring-rose-400' : 'bg-[#002C4B] text-white hover:bg-[#003d68] focus-visible:ring-[#002C4B] disabled:opacity-50')}>

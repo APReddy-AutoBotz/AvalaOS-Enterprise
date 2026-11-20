@@ -9,6 +9,7 @@ import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, 
 import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 import { mergeApplication, type Application } from '../workspace/applications.ts';
+import { apiConfirmQuestion, apiQuestion } from '../assess/coverage.ts';
 
 export interface OpResult {
   model: ProcessModel;
@@ -384,6 +385,45 @@ export function setSystemRemote(model: ProcessModel, args: { systemId: string; v
     const sys = m.systems.find(s => s.id === args.systemId);
     if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
     sys.remote = confirmed(args.value);
+  });
+}
+
+/**
+ * A person answers "Does X have an API that covers <step>?" for one or more steps (package 13 B). For each
+ * step the API does, its name is added to the operations of the API a person confirmed (one is added when
+ * there is none), so the API counts for that step; an API a person confirmed without listing operations
+ * already counts for every step and is left as it is. Every step answered, yes or no, gets the question
+ * recorded as answered, and any open copy of it is closed, so it is not asked again. The model keeps its
+ * shape: the released site opens a process saved this way (its rule counts the step's name too).
+ */
+export function answerApiCoverage(model: ProcessModel, args: { systemId: string; covers: string[]; notCovers: string[] }): OpResult {
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    const stepOf = (id: string) => {
+      const st = m.steps.find(x => x.id === id);
+      if (!st) throw new ModelOpError('NOT_FOUND', `No step with id ${id}.`);
+      return st;
+    };
+    const yes = [...new Set(args.covers)].map(stepOf), no = [...new Set(args.notCovers)].filter(id => !args.covers.includes(id)).map(stepOf);
+    if (!yes.length && !no.length) throw new ModelOpError('EMPTY', 'Choose the steps the API does.');
+    const apis = sys.access.filter(a => a.method === 'api');
+    const coversAll = apis.some(a => a.access === 'confirmed' && a.status === 'user-confirmed' && a.operations.length === 0);
+    if (yes.length && !coversAll) {
+      let mine = apis.find(a => a.access === 'confirmed' && a.status === 'user-confirmed');
+      if (!mine) { mine = { method: 'api', operations: [], access: 'confirmed', status: 'user-confirmed', sources: [] }; sys.access.push(mine); }
+      for (const st of yes) if (!mine.operations.includes(st.name)) mine.operations.push(st.name);
+    }
+    const record = (st: Step, answer: string) => {
+      const texts = [apiQuestion(sys.name, st.name), apiConfirmQuestion(sys.name, st.name)];
+      const same = m.openQuestions.filter(q => q.target.kind === 'system' && q.target.id === sys.id && texts.includes(q.question));
+      for (const q of same) { q.status = 'answered'; q.answer = answer; }
+      if (!same.some(q => q.question === texts[0])) {
+        m.openQuestions.push({ id: newId(m, 'q'), target: { kind: 'system', id: sys.id, field: 'access' }, question: texts[0], whyItMatters: '', owner: null, status: 'answered', answer });
+      }
+    };
+    for (const st of yes) record(st, `Yes: the API of ${sys.name} does this step's work.`);
+    for (const st of no) record(st, `No: the API of ${sys.name} does not do this step's work.`);
   });
 }
 

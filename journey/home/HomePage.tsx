@@ -7,6 +7,8 @@
 // The tour starts when it comes into view, and a stage a visitor picks plays its two screens and stays.
 // The page is kept short on purpose (owner, 16 November 2026: about seven screens on a laptop): each
 // section says its point in a sentence or two, and the longer explanation sits behind "Read more".
+import { sampleLine } from '../../domain/site/sample.ts';
+import { countEvent } from './visits.ts';
 import React from 'react';
 import { InquiryDialog } from './InquiryDialog.tsx';
 import { SiteFooter, focus, useGo } from './site.tsx';
@@ -155,7 +157,7 @@ function Tour() {
             const here = i === stage;
             return (
               <li key={s.id}>
-                <button type="button" aria-label={`${s.name}. ${s.line}`} aria-current={here ? 'step' : undefined} onClick={() => { setStage(i); setMode('held'); }}
+                <button type="button" aria-label={`${s.name}. ${s.line}`} aria-current={here ? 'step' : undefined} onClick={() => { setStage(i); setMode('held'); countEvent('Tour stage picked', s.name); }}
                   className={`w-full rounded-lg px-2 py-2 text-center transition-colors lg:px-3 lg:py-2.5 lg:text-left ${focus} focus-visible:outline-white ${here ? 'bg-white/10 ring-1 ring-white/25' : 'hover:bg-white/5'}`}>
                   <span className={`block font-display text-xs font-semibold sm:text-sm lg:text-lg ${here ? 'text-white' : 'text-slate-300'}`}><span data-initial className="text-[#F2B21E]">{s.name[0]}</span>{s.name.slice(1)}</span>
                   <span className="hidden text-sm text-slate-300 lg:block">{s.line}</span>
@@ -294,9 +296,9 @@ const HERO_FACTS: [string, string][] = [
 ];
 
 /** The longer explanation of a point, one click away, so the page stays short. */
-function More({ children, dark }: { children: React.ReactNode; dark?: boolean }) {
+function More({ children, dark, which }: { children: React.ReactNode; dark?: boolean; which: string }) {
   return (
-    <details className="mt-2">
+    <details className="mt-2" onToggle={e => { if ((e.currentTarget as HTMLDetailsElement).open) countEvent('Read more opened', which); }}>
       <summary className={`w-fit cursor-pointer rounded text-sm font-semibold underline decoration-[#E69F00] decoration-2 underline-offset-4 ${dark ? 'text-white' : 'text-[#002C4B]'} ${focus} ${dark ? 'focus-visible:outline-white' : 'focus-visible:outline-[#002C4B]'}`}>Read more</summary>
       <div className={`mt-2 text-base leading-7 ${dark ? 'text-slate-200' : 'text-slate-700'}`}>{children}</div>
     </details>
@@ -321,7 +323,7 @@ function Reasons() {
               <button type="button" aria-pressed={i === open} onClick={() => setOpen(i)} className={`rounded text-left ${focus} focus-visible:outline-[#002C4B]`}>{r.title}</button>
             </h3>
             <p className="mt-1.5 text-base leading-7 text-slate-700">{r.text}</p>
-            <More>{r.more}</More>
+            <More which={r.id}>{r.more}</More>
             <div className="mt-4 lg:hidden">{picture(r)}</div>
           </li>
         ))}
@@ -423,7 +425,7 @@ export default function HomePage() {
       </div>
 
       <p className="border-b border-slate-200 bg-slate-50 px-6 py-3 text-center text-sm text-slate-700">
-        Real product screens. A made-up sample case: five source files in; four documents, 32 test cases and a 43-item Delivery board out.
+        {sampleLine()}
       </p>
 
       <main>
@@ -477,7 +479,7 @@ export default function HomePage() {
                 </li>
               ))}
             </ul>
-            <More>
+            <More which="effort">
               <dl className="grid gap-x-10 gap-y-4 lg:grid-cols-3">
                 {EFFORT_POINTS.map(([t, x]) => (
                   <div key={t}>

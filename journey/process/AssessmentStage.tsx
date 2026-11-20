@@ -2,13 +2,14 @@
 // model. It shows the recommended approach, the ranking of the alternatives, why, and the result
 // for every step. People change it by correcting the facts it rests on, or by overriding a step
 // with a rationale; both persist, and the scoring's own answer stays visible.
+import { coverageNotice } from '../../domain/assess/coverage.ts';
 import React from 'react';
 import type { ProcessModel, SystemRef } from '../../domain/processModel/types.ts';
-import { addQuestion, setStepTrait, setSystemUiAllowed, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
+import { addQuestion, answerApiCoverage, setStepTrait, setSystemUiAllowed, setSystemUiStable, type TraitName } from '../../domain/processModel/patch.ts';
 import { hashModel } from '../../domain/processModel/hash.ts';
 import { orderedSteps } from '../../domain/processModel/selectors.ts';
 import { APPROACH_LABEL, COMPLEXITY_PENALTY, MODEL_VERSION, type Approach, type ApproachScore, type FactorScore, type StepScore } from '../../domain/assess/scoring.ts';
-import { assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
+import { apiHeldText, assessProcess, type ProcessAssessment } from '../../domain/assess/process.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
 import { DeliveryPlanPanel } from './DeliveryPlanPanel.tsx';
 import { EffortCard } from './EffortCard.tsx';
@@ -29,6 +30,7 @@ import { coarsePatch } from './SourcesStage.tsx';
 import { ChooserContext, chosenBy, Select, SidePanel, SourceList, StatusBadge } from './widgets.tsx';
 import { AssessmentReport } from './AssessmentReport.tsx';
 import { AssessmentWhy } from './AssessmentWhy.tsx';
+import { AbsentOperations, ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
 import { AssessmentInputs } from './AssessmentInputs.tsx';
 import { LastChangeImpact, useImpactContext } from './ImpactNote.tsx';
 import { AssessmentPriority } from './AssessmentPriority.tsx';
@@ -139,6 +141,12 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
     return cur;
   }, `Asked ${newApiQuestions.length} API question${newApiQuestions.length === 1 ? '' : 's'}`);
 
+  // A person's answer to "Does X have an API that covers <step>?" (package 13 B).
+  const answerApi = (systemId: string, covers: string[], notCovers: string[]) => {
+    const name = editor.model.systems.find(s => s.id === systemId)?.name ?? 'an application';
+    return editor.apply(m => answerApiCoverage(m, { systemId, covers, notCovers }), covers.length ? `API of ${name} does ${covers.length} ${covers.length === 1 ? 'step' : 'steps'}` : `API of ${name} does not do ${notCovers.length === 1 ? 'the step' : `${notCovers.length} steps`}`);
+  };
+
   const steps = orderedSteps(editor.model);
   const byStep = new Map<string, StepScore>(result.steps.map(r => [r.stepId, r] as [string, StepScore]));
   const current = open ? byStep.get(open) : undefined;
@@ -172,6 +180,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       <ErrorNote message={error ?? editor.error} />
       {/* A process started from a typical one is assessed provisionally until its steps are confirmed (part I). */}
       {provisionalNote(editor.model) && <p className="rounded-xl bg-orange-50 px-4 py-3 text-sm leading-6 text-orange-950 ring-1 ring-inset ring-orange-200" data-testid="provisional">{provisionalNote(editor.model)}</p>}
+      {/* The stricter API rule of 18 November 2026 changed figures here: said, not done silently (package 13 B). */}
+      {coverageNotice(result.coverageNarrowed, 'assessment') && <p className="rounded-xl bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="coverage-notice">{coverageNotice(result.coverageNarrowed, 'assessment')}</p>}
       {/* An approach decided for the whole process stays in effect here until a person removes it (package 9). */}
       {editor.model.meta.decidedApproach && (
         <p className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm leading-6 text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="decided-in-effect">
@@ -187,7 +197,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
       {result.assessed > 0 && (
         <AssessmentWhy model={editor.model} result={result} onOpenStep={setOpen} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits}
-          newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} />
+          newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} onAnswerApi={answerApi} />
       )}
       <Benefit result={result} decisions={d} canEdit={canEdit && decisions !== null} me={me} onSave={save} />
 
@@ -267,6 +277,7 @@ function Hero({ result, scoring, onReport }: { result: ProcessAssessment; scorin
           <p className="text-xs font-semibold text-[#FFBC03]">{differs ? 'Approach, with people\'s choices' : 'Recommended approach'}</p>
           <h2 className="mt-2 font-display text-3xl font-semibold tracking-tight sm:text-4xl" data-testid="verdict">{result.verdict}</h2>
           <p className="mt-3 text-base leading-7 text-slate-200" data-testid="split">{result.split}</p>
+          {apiHeldText(result, 'headline') && <p className="mt-2 rounded-lg bg-amber-400/15 px-3 py-2 text-sm leading-6 text-amber-100 ring-1 ring-inset ring-amber-300/30" data-testid="api-held">{apiHeldText(result, 'headline')}</p>}
           {differs && <p className="mt-2 text-sm leading-6 text-slate-300" data-testid="scoring-alone">The scoring alone recommends {scoring.verdict}. {scoring.split}</p>}
         </div>
         {result.assessed > 0 && <button type="button" onClick={onReport} className="rounded-xl bg-[#FFBC03] px-4 py-2.5 text-sm font-semibold text-[#002C4B] shadow-sm transition hover:bg-[#ffc933] focus:outline-none focus-visible:ring-2 focus-visible:ring-white">Open the assessment report</button>}
@@ -465,7 +476,17 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
       {result.questions.length > 0 && (
         <section>
           <h3 className="text-xs font-semibold text-slate-500">To confirm</h3>
-          <ul className="mt-2 space-y-1 text-sm text-slate-700" data-testid="api-question">{result.questions.map(q => <li key={q.question}>{q.question}{result.apiWouldWin ? ' A confirmed API would make integration the first choice here.' : ''}</li>)}</ul>
+          <ul className="mt-2 space-y-3 text-sm text-slate-700" data-testid="api-question">{result.questions.map(q => {
+            const system = model.systems.find(s => s.id === q.target.id);
+            return (
+              <li key={q.question}>
+                {q.question}{result.apiWouldWin ? ' A confirmed API would make integration the first choice here.' : ''}
+                {system && <AbsentOperations system={system} />}
+                {canEdit && system && <ApiCoverageAnswer system={system.name} steps={[{ id: step.id, name: step.name }]}
+                  onSave={(covers, notCovers) => editor.apply(m => answerApiCoverage(m, { systemId: system.id, covers, notCovers }), covers.length ? `API of ${system.name} does "${step.name}"` : `API of ${system.name} does not do "${step.name}"`)} />}
+              </li>
+            );
+          })}</ul>
         </section>
       )}
 

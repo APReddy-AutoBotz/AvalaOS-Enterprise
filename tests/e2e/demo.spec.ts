@@ -5,6 +5,9 @@ import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Page } from '@playwright/test';
 import { shot } from './helpers.ts';
 
+// The demo's own words (domain/site/demo.ts).
+const POINTER = "You are looking at the sample's assessment: which steps can be done by rules, which need AI and which stay with people, and why. Next, open Documents to see the process document written from it.";
+const FILES_NOTE = "In the demo the sample's files are already read. Reading your own files happens in a workspace of your own.";
 const stage = (page: Page, name: string) => page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name }).click();
 
 test('the demo opens the sample case at every stage, under /demo, without a server', async ({ page }) => {
@@ -13,10 +16,22 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
 
   await page.goto('/');
   await page.getByRole('link', { name: 'Try the live demo' }).first().click();
-  await expect(page).toHaveURL(/\/demo(\/work)?$/);
+  // It opens on the sample's assessment, with one line on what to look at next (marketing review, 18 November 2026).
+  await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/assessment$/);
+  await expect(page.getByTestId('verdict')).toContainText('RPA');
+  await expect(page.getByTestId('demo-pointer')).toHaveText(POINTER);
+  // The open fact is whether an API does the step's work, not whether one exists (owner, 19 November 2026).
+  await expect(page.getByTestId('api-switch-line')).toHaveText('if an API is confirmed to do this work in:');
+  await expect(page.getByTestId('why-switch')).toContainText('steps move to API integration');
+  await expect(page.getByText('Confirming the API does this work would move 5 steps to API integration.')).toBeVisible();
   await expect(page.getByTestId('demo-banner')).toContainText('made-up company');
   await expect(page.getByRole('link', { name: 'Leave the demo' })).toHaveAttribute('href', '/');
   await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
+  await shot(page, '84-demo-opens');
+  await page.getByTestId('demo-pointer').getByRole('link', { name: 'Documents' }).click();
+  await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/documents$/);
+  await expect(page.getByTestId('demo-pointer')).toHaveCount(0);
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'My work' }).click();
   await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
 
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Processes' }).click();
@@ -24,6 +39,13 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
   await page.getByRole('link', { name: /Vendor invoice processing/ }).click();
   await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/sources$/);
   await expect(page.getByTestId('source-row')).toHaveCount(5);
+  // Reading one's own files: plain words and the walkthrough, never "local mode".
+  await expect(page.getByTestId('demo-files-note')).toContainText(FILES_NOTE);
+  await expect(page.getByText('local mode')).toHaveCount(0);
+  await page.getByTestId('demo-files-note').getByRole('button', { name: 'Book a walkthrough' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
 
   await stage(page, 'Assessment');
   await expect(page.getByTestId('verdict')).toContainText('RPA');

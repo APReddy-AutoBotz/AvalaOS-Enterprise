@@ -3,6 +3,7 @@
 // closes it, and focus goes back to the button that opened it. It exists only while open, so the page itself
 // does not grow. The same rule as the server checks the fields first (domain/site/inquiry.ts); the wait before
 // sending is elapsed time measured here, in the browser. Whatever goes wrong, the visitor gets the address.
+import { countEvent } from './visits.ts';
 import React from 'react';
 import { checkInquiry, FIELD_LABEL, INQUIRY_LIMITS, PEOPLE_CHOICES, PROMISE, REFUSED, THANKS, TRAP_FIELD, type Inquiry } from '../../domain/site/inquiry.ts';
 import { CONTACT_EMAIL } from '../../domain/site/trust.ts';
@@ -22,7 +23,7 @@ export function InquiryDialog({ onClose }: { onClose: () => void }) {
 
   React.useEffect(() => {
     const d = ref.current;
-    if (d && !d.open) { d.showModal(); opened.current = performance.now(); }
+    if (d && !d.open) { d.showModal(); opened.current = performance.now(); countEvent('Walkthrough opened'); }
   }, []);
 
   // Tab and Shift+Tab go round the window's own controls, never out to the browser's.
@@ -51,7 +52,8 @@ export function InquiryDialog({ onClose }: { onClose: () => void }) {
         body: JSON.stringify({ ...fields, elapsedMs: Math.round(performance.now() - opened.current) }),
       });
       setState(res.ok ? { kind: 'sent' } : { kind: 'failed' });
-    } catch { setState({ kind: 'failed' }); }
+      countEvent(res.ok ? 'Walkthrough sent' : 'Walkthrough not sent');
+    } catch { setState({ kind: 'failed' }); countEvent('Walkthrough not sent'); }
   };
 
   const input = 'mt-1 block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[#002C4B]';

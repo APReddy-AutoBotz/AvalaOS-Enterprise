@@ -1,3 +1,4 @@
+import { forgetOnSignOut } from '../forgetOnSignOut.ts';
 import { leavesNoAdmin, PeopleError, roleOf, validateEmail, type AuditEntry } from '../../domain/people/roles.ts';
 import type { SectionComment } from '../../domain/docs/review.ts';
 import type { TestCaseEdit } from '../../domain/docs/testEdits.ts';
@@ -155,7 +156,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       listeners.forEach(l => l(state.me));
     },
     async signUp(email, password) { await this.signIn(email, password); return { needsConfirmation: false }; },
-    async signOut() { state.me = null; save(); listeners.forEach(l => l(null)); },
+    async signOut() { forgetOnSignOut(); state.me = null; save(); listeners.forEach(l => l(null)); },
     // The in-browser store has no email and no passwords to keep: both succeed and change nothing.
     async requestPasswordReset() { /* nothing to send */ },
     async setNewPassword() { requireMe(); },

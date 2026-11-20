@@ -4,9 +4,10 @@ import '@fontsource-variable/outfit/wght.css';
 import './index.css';
 import ReactDOM from 'react-dom/client';
 import { parseJourneyPath } from './domain/workspace/route';
-import { publicPage } from './domain/site/pages';
+import { canonicalUrl, publicPage } from './domain/site/pages';
 import { startMonitoring } from './journey/monitoring';
 import { ErrorBoundary } from './journey/ErrorBoundary';
+import { startCounting } from './journey/home/visits';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -20,6 +21,15 @@ if (!rootElement) {
 // pages), which load without the application, /demo, the product on the sample case in the browser, and
 // /unsubscribe, which stops the weekday email from the link in it.
 const pub = publicPage(window.location.pathname);
+// One address per public page for search engines, whichever address it was opened at (www, a preview, a
+// link with campaign words, a page inside the demo): domain/site/pages.ts, `canonicalUrl`.
+const canonical = pub && canonicalUrl(pub);
+if (canonical) {
+  const link = document.createElement('link');
+  link.rel = 'canonical';
+  link.href = canonical;
+  document.head.appendChild(link);
+}
 if (!pub && !parseJourneyPath(window.location.pathname)) {
   window.history.replaceState(null, '', `/work${window.location.hash}`);
 }
@@ -37,6 +47,9 @@ const Root = React.lazy(async (): Promise<{ default: React.ComponentType }> => {
 
 // Errors are reported only when the build has VITE_SENTRY_DSN (journey/monitoring.ts).
 startMonitoring();
+
+// Visits to the public pages are counted on avalaos.com only, signed out (package 12, journey/home/visits.ts).
+if (pub) startCounting(pub);
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>

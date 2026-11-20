@@ -7,6 +7,7 @@
 // caps and penalties are the tables below; nothing else decides the result, and no AI is involved.
 // The same model always gives the same scores. An unknown fact gets a middle value and lowers the
 // confidence; it never blocks a result.
+import { absentFor, apiAnswer, apiAnswered, apiConfirmQuestion, apiCovers, apiQuestion, looseCovers } from './coverage.ts';
 import type { AccessMethod, Fact, InputForm, ProcessModel, SourceRef, Step, StepTraits, SystemRef, WriteImpact } from '../processModel/types.ts';
 
 import { stepTrait, TYPICAL_TRAITS } from '../processModel/selectors.ts';
@@ -98,7 +99,7 @@ export interface ApproachScore {
   /** The weighted sum before caps, floor and penalty. */
   raw: number;
   factors: FactorScore[];
-  caps: { to: number; reason: string }[];
+  caps: { to: number; reason: string; id?: 'apiNotConfirmed' }[];
   penalty: number;
   floor?: { to: number; reason: string };
   fit: FitBand;
@@ -133,6 +134,11 @@ export interface StepScore {
   questions: StepQuestion[];
   /** Would API integration win if the systems' APIs were confirmed for this work? */
   apiWouldWin: boolean;
+  /**
+   * Applications whose API the rule before the stricter one counted as covering this step and today's does
+   * not (domain/assess/coverage.ts): the screens say so, so no figure changes without a line saying why.
+   */
+  narrowedBy?: string[];
   /**
    * Set only by assessProcess with people's decisions, on a step where a person chose another approach:
    * the scoring's own recommendation. `winner` is then the approach in effect; the scores are unchanged.
@@ -193,17 +199,19 @@ function commonWords(model: ProcessModel): Set<string> {
   return new Set([...words(model.meta.name), ...[...counts].filter(([, n]) => n >= limit).map(([w]) => w)]);
 }
 
-/** Whether an interface's stated operations mention the work of the step, ignoring words common to the process. */
-function covers(a: AccessMethod, step: Step, common: Set<string>): boolean {
-  // A person who confirms an API without listing its operations has confirmed it for this process.
-  if (a.status === 'user-confirmed' && a.operations.length === 0) return true;
-  const stepWords = [...words(`${step.name} ${step.description}`)].filter(w => !common.has(w));
-  const stem = (w: string) => w.slice(0, 5);
-  return a.operations.some(op => [...words(op)].filter(w => !common.has(w)).some(w => stepWords.some(s => s === w || (w.length >= 5 && s.length >= 5 && stem(s) === stem(w)))));
-}
-
 type ApiState = keyof typeof VALUES.interfacePerSystem;
-interface SystemApi { system: SystemRef; state: ApiState; method?: AccessMethod }
+interface SystemApi {
+  system: SystemRef; state: ApiState; method?: AccessMethod;
+  /** Covered by the rule before the stricter one, not by today's (coverage.ts), and not answered by a person since. */
+  narrowed?: boolean;
+  /** A person answered whether this API does this step's work: the question is not asked again. */
+  answered?: boolean;
+  /**
+   * Why there is no API for this step's work when the application has one: a person said no for this step,
+   * or the sources say the API cannot do it (an operation recorded as absent names the step's work).
+   */
+  ruledOut?: { by: 'person' } | { by: 'sources'; operation: string };
+}
 
 interface StepFacts {
   rules: Read<'complete' | 'incomplete' | 'unknown'>;
@@ -237,15 +245,23 @@ function readFacts(model: ProcessModel, step: Step, common: Set<string>): StepFa
   const systems = step.systemIds.map(id => model.systems.find(s => s.id === id)).filter((s): s is SystemRef => Boolean(s)).filter(s => !NON_INTEGRABLE.includes(s.kind));
   const apis: SystemApi[] = systems.map(system => {
     const list = apiOf(system);
-    const covered = list.find(a => a.access === 'confirmed' && covers(a, step, common));
+    // A person's no for this step wins over any listed operation: no API for this work (owner, 19 November 2026).
+    const said = apiAnswer(model, system, step);
+    if (said === 'no') return { system, state: 'absent' as const, method: list.find(a => a.access === 'confirmed') ?? list[0], answered: true, ruledOut: { by: 'person' as const } };
+    // What the sources say the API cannot do, by the same strict rule; a person's yes wins over it.
+    const absent = said === 'yes' ? null : absentFor(system, step);
+    if (absent) return { system, state: 'absent' as const, method: absent.entry, ruledOut: { by: 'sources' as const, operation: absent.operation } };
+    const covered = list.find(a => a.access === 'confirmed' && apiCovers(a, step));
     if (covered) return { system, state: 'covered' as const, method: covered };
     const confirmed = list.find(a => a.access === 'confirmed');
-    if (confirmed) return { system, state: 'confirmed_other' as const, method: confirmed };
+    const answered = apiAnswered(model, system, step);
+    const narrowed = !answered && list.some(a => a.access === 'confirmed' && looseCovers(a, step, common));
+    if (confirmed) return { system, state: 'confirmed_other' as const, method: confirmed, ...(narrowed ? { narrowed: true } : {}), ...(answered ? { answered: true } : {}) };
     const reported = list.find(a => a.access === 'reported');
-    if (reported) return { system, state: 'reported' as const, method: reported };
-    const absent = list.find(a => a.access === 'confirmed_absent');
-    if (absent && list.every(a => a.access === 'confirmed_absent')) return { system, state: 'absent' as const, method: absent };
-    return { system, state: 'unknown' as const, method: list[0] };
+    if (reported) return { system, state: 'reported' as const, method: reported, ...(apiAnswered(model, system, step) ? { answered: true } : {}) };
+    const none = list.find(a => a.access === 'confirmed_absent');
+    if (none && list.every(a => a.access === 'confirmed_absent')) return { system, state: 'absent' as const, method: none };
+    return { system, state: 'unknown' as const, method: list[0], ...(apiAnswered(model, system, step) ? { answered: true } : {}) };
   });
   const ui = systems.map(s => known(s.uiStable as Fact<unknown> | undefined));
   const screens: StepFacts['screens'] = !systems.length ? 'none' : ui.some(f => f?.value === false) ? 'unstable' : ui.every(f => f?.value === true) ? 'stable' : 'unknown';
@@ -284,10 +300,23 @@ function interfaceFactor(f: StepFacts, weight: number, assumeConfirmed: boolean)
   if (by('confirmed_other').length) parts.push(`${names(by('confirmed_other'))} has a confirmed API, but it is not known to cover this work`);
   if (by('reported').length) parts.push(`an API is reported for ${names(by('reported'))} but not confirmed`);
   if (by('unknown').length) parts.push(`no API is confirmed for ${names(by('unknown'))}`);
-  if (by('absent').length) parts.push(`${names(by('absent'))} is confirmed to have no API`);
+  parts.push(...absentWords(f.apis));
   const text = parts.join('; ').replace(/^./, c => c.toUpperCase());
   const sources = f.apis.flatMap(a => a.method?.sources ?? []);
   return { id: 'interface', label: 'A confirmed API for this work', weight, value, points: weight * value, known: f.apis.every(a => a.state === 'covered' || a.state === 'absent'), text, sources };
+}
+
+/** Why each application has no API for this work, in words: a person's no, what the sources say, or no API at all. */
+function absentWords(apis: SystemApi[]): string[] {
+  const absent = apis.filter(a => a.state === 'absent');
+  const person = absent.filter(a => a.ruledOut?.by === 'person').map(a => a.system);
+  const sources = absent.filter(a => a.ruledOut?.by === 'sources');
+  const none = absent.filter(a => !a.ruledOut).map(a => a.system);
+  return [
+    ...(person.length ? [`a person confirmed that the API of ${names(person)} does not do this work`] : []),
+    ...sources.map(a => `the sources say ${a.system.name} has no API to ${(a.ruledOut as { operation: string }).operation}`),
+    ...(none.length ? [`${names(none)} is confirmed to have no API`] : []),
+  ];
 }
 
 function screensFactor(f: StepFacts, weight: number): FactorScore {
@@ -331,8 +360,10 @@ function scoreApproaches(f: StepFacts, assumeApi: boolean): Record<Approach, App
   const iface = interfaceFactor(f, WEIGHTS.api.interface, assumeApi);
   const apiCaps = [...commonCaps('api')];
   if (!f.apis.length) apiCaps.push({ to: CAPS.apiNoSystem, reason: 'The step uses no system to integrate with.' });
-  else if (!assumeApi && f.apis.every(a => a.state === 'absent')) apiCaps.push({ to: CAPS.apiAbsent, reason: `${names(f.systems)} is confirmed to have no API.` });
-  else if (!assumeApi && !f.apis.every(a => a.state === 'covered')) apiCaps.push({ to: CAPS.apiNotConfirmed, reason: 'No API is confirmed for this work, so integration cannot be planned on yet.' });
+  // One application the step needs with no API for this work rules integration out for the step, whatever the
+  // others have (owner, 19 November 2026); assuming the open APIs confirmed does not bring it back.
+  else if (f.apis.some(a => a.state === 'absent')) apiCaps.push({ to: CAPS.apiAbsent, reason: `${absentWords(f.apis).join('; ').replace(/^./, c => c.toUpperCase())}.` });
+  else if (!assumeApi && !f.apis.every(a => a.state === 'covered')) apiCaps.push({ to: CAPS.apiNotConfirmed, reason: 'No API is confirmed for this work, so integration cannot be planned on yet.', id: 'apiNotConfirmed' });
   const api = finishScore('api', [iface, rulesF(WEIGHTS.api.rules), inputF(WEIGHTS.api.input), noJudgmentF(WEIGHTS.api.noJudgment)], apiCaps);
 
   const reading = Math.max(VALUES.readingByInput[f.input.state], VALUES.readingByLanguage[f.language.state]);
@@ -453,13 +484,16 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
   for (const sys of f.systems) {
     if (!known(sys.uiStable as Fact<unknown> | undefined)) push({ key: `screens:${sys.id}`, question: `Are the screens of ${sys.name} stable enough to automate?`, general: `Are the screens of ${sys.name} stable enough to automate?` });
   }
-  const openApis = f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent');
-  for (const a of openApis) push({ key: `api:${a.system.id}`, question: `Does ${a.system.name} have an API that covers "${step.name}"?`, general: `Does ${a.system.name} have an API for this work?` });
+  // An API a person has already answered about for this step is not asked about again (package 13 B).
+  // Nor is it asked about an API that could not change the step: another application it needs has none for this work.
+  const ruledOut = f.apis.some(a => a.state === 'absent');
+  const openApis = ruledOut ? [] : f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent' && !a.answered);
+  for (const a of openApis) push({ key: `api:${a.system.id}`, question: apiQuestion(a.system.name, step.name), general: `Does ${a.system.name} have an API for this work?` });
 
   const whatIf = openApis.length ? scoreApproaches(f, true) : null;
   const apiWouldWin = Boolean(whatIf && winner.approach !== 'api' && !s.human.floor && bestOf(whatIf).approach === 'api' && whatIf.api.score >= FIT.possible);
   const questions: StepQuestion[] = winner.approach === 'human' && !forNow ? [] : openApis.map(a => ({
-    target: { kind: 'system' as const, id: a.system.id, field: 'access' }, question: `Confirm whether ${a.system.name} has an API that covers "${step.name}".`,
+    target: { kind: 'system' as const, id: a.system.id, field: 'access' }, question: apiConfirmQuestion(a.system.name, step.name),
     whyItMatters: 'A confirmed API would make integration the better route than automating the screens.',
   }));
 
@@ -468,6 +502,7 @@ export function scoreStep(model: ProcessModel, step: Step, common = commonWords(
     aiNeeded: winner.approach === 'ai_assist' || winner.approach === 'agent', aiUnnecessary: winner.approach === 'rpa' || winner.approach === 'api',
     human, rework, reason: `${toBuildNote(model, step)}${reasonFor(winner, order[0], best, forNow)}`, knownShare,
     confidence: knownShare >= 0.8 ? 'high' : knownShare >= 0.5 ? 'medium' : 'low', unknowns, questions, apiWouldWin,
+    ...(f.apis.some(a => a.narrowed) ? { narrowedBy: f.apis.filter(a => a.narrowed).map(a => a.system.name) } : {}),
   };
 }
 
@@ -522,7 +557,7 @@ export function decidedFit(model: ProcessModel, step: Step, approach: Exclude<Ap
     g.screens = 'stable';
     for (const s of f.systems.filter(x => !known(x.uiStable as Fact<unknown> | undefined))) questions.push({ key: `screens:${s.id}`, question: `Are the screens of ${s.name} stable enough to automate?`, target: { kind: 'screens', systemId: s.id } });
   }
-  const openApis = approach === 'api' ? f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent') : [];
+  const openApis = approach === 'api' && !f.apis.some(a => a.state === 'absent') ? f.apis.filter(a => a.state !== 'covered' && a.state !== 'absent') : [];
   for (const a of openApis) questions.push({ key: `api:${a.system.id}`, question: `Does ${a.system.name} have an API that covers "${step.name}"?`, target: { kind: 'api', systemId: a.system.id } });
   const best = scoreApproaches(g, openApis.length > 0)[approach];
   if (best.score < FIT.possible || !questions.length) return { status: 'cannot', score: now.score, reason: limiter(now), questions: [] };

@@ -7,7 +7,14 @@ import type { TrustPageId } from './pages.ts';
 
 export const OPERATOR = 'AP Reddy';
 export const CONTACT_EMAIL = 'hello@avalaos.com';
-export const UPDATED = '17 November 2026';
+/**
+ * When each page last changed, page by page. The privacy and security pages change with the next release
+ * (the AI providers a workspace may connect, visit counting, what the browser keeps), so their date is the
+ * release's, set in the release's own commit together with `COVERAGE_RULE.since` (owner, 18 November 2026);
+ * until then they show "[release date]".
+ */
+export const UPDATED: Record<TrustPageId, string | null> = { privacy: '20 November 2026', terms: '17 November 2026', security: '20 November 2026' };
+export const updatedText = (id: TrustPageId): string => UPDATED[id] ?? '[release date]';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
 /** Further days until the rolling database backups that still hold the data have expired. */
@@ -55,15 +62,16 @@ const privacy: TrustPage = {
             'Records of activity: who edited, approved or confirmed what and when, and changes to membership and roles.',
             'AI usage: for each request to the AI provider, the workspace, the person, the kind of task, the model, the number of tokens used and whether it succeeded. Not the content of the request.',
             'Technical data: our hosting and database providers keep standard request logs, such as IP address, browser and time.',
+            'Visits to our public pages: when you are not signed in, we count visits to the homepage, these legal pages and the opening of the demo, without cookies. A count holds the page and its title, the site you came from, the campaign words in the link, your browser\'s language and screen size, the kind of browser and device, and whether you opened or sent a walkthrough request, opened a "Read more" or picked a stage of the tour. Never anything you type. Nothing is counted inside the product, and nothing is sent when your browser asks not to be tracked.',
           ],
         },
-        'We do not use analytics, advertising or tracking tools.',
+        'We do not use advertising or tracking tools, and we count visits only as described above.',
       ],
     },
     {
       id: 'browser', title: 'Cookies and browser storage',
       body: [
-        'Avala OS sets no cookies of its own. It keeps two things in your browser\'s local storage: your sign-in session, and the last workspace you opened. Both are needed for the service to work, and neither is used for tracking. Signing out removes the session.',
+        'Avala OS sets no cookies of its own. In your browser\'s storage it keeps your sign-in session, the last workspace you opened, how you like lists and maps shown, and, for processes you have opened, a copy of what was found in their sources and what you set aside. These are needed for the service to work and none is used for tracking. Signing out removes all of them except how you like lists and maps shown in general. The demo has no sign-in, so its copy, which is about the made-up sample only, stays until you clear this site\'s data in your browser. Counting visits keeps nothing in your browser. Only if you open one of our pages with ?count=off does it keep a note that visits from that browser are not counted; ?count=on removes it.',
       ],
     },
     {
@@ -84,8 +92,9 @@ const privacy: TrustPage = {
     {
       id: 'ai', title: 'AI processing',
       body: [
-        'When you ask Avala OS to read sources, read a flowchart image, turn a voice answer into text, or draft the wording of a document section, the text or image needed for that request is sent from our server to OpenAI\'s API. Requests never go from your browser to the AI provider directly.',
-        `We ask OpenAI not to store the responses. OpenAI states that it does not train its models on API data by default, and that it may keep API inputs and outputs for up to ${OPENAI_RETENTION_DAYS} days to provide the service and detect abuse, or longer where the law requires.`,
+        'When you ask Avala OS to read sources, read a flowchart image, turn a voice answer into text, or draft the wording of a document section, the text or image needed for that request is sent from our server to the workspace\'s AI provider: OpenAI\'s API on our key, unless the workspace has its own key (below). Requests never go from your browser to the AI provider directly.',
+        'A workspace\'s administrator may connect the workspace\'s own key with Azure OpenAI, Anthropic, Amazon Bedrock (Claude), Mistral AI or an OpenAI-compatible endpoint the organisation runs. That workspace\'s requests then go only to that provider, under the organisation\'s own agreement with it, and never to OpenAI on our key. Settings → AI provider shows which provider a workspace uses.',
+        `On our key, we ask OpenAI not to store the responses. OpenAI states that it does not train its models on API data by default, and that it may keep API inputs and outputs for up to ${OPENAI_RETENTION_DAYS} days to provide the service and detect abuse, or longer where the law requires.`,
         'Scores and recommendations are worked out by fixed rules, not by the AI. Anything the AI reads or drafts is shown to a person to confirm or edit.',
       ],
     },
@@ -97,10 +106,11 @@ const privacy: TrustPage = {
           list: [
             'Supabase: the database, sign-in and the server functions. The database is hosted in Sydney, Australia.',
             'Resend: sending emails from avalaos.com (sign-up confirmations, password resets, invitations and the "Needs you" emails). It receives the address each email goes to and the email itself, and sends from its Tokyo, Japan region.',
-            'OpenAI: the AI requests described above.',
+            'OpenAI: the AI requests described above, on our key.',
             'Netlify: hosting of the website.',
             'Sentry: reports of errors in the website, so we can fix them. A report says what failed and on which page. It does not include what you typed or your account, and before it leaves your browser we remove email addresses and the tokens in links. It is used only to fix the product. Reports are stored in the European Union, and IP addresses are not stored.',
             'Google and Microsoft: only when you choose to sign in with them, to confirm who you are.',
+            'Umami: counting visits to our public pages, as described above. The counts are kept in Umami\'s EU region. Umami uses the network address of each visit to work out an approximate location and an anonymous count of visitors, and says it does not store the address in its analytics records.',
           ],
         },
         'They may process data outside India, including in Australia, Japan, the European Union and the United States. We will update this list before adding a provider that handles workspace content.',
@@ -290,7 +300,7 @@ const security: TrustPage = {
         {
           list: [
             'The site cannot be shown inside another site\'s frame, browsers are told not to guess content types, and pages send a limited referrer.',
-            'No analytics or advertising scripts run on Avala OS, and the fonts are served from our own site.',
+            'No analytics or advertising scripts from other companies run on Avala OS. Visits to the public pages are counted by a few lines of our own, which send each count to Umami, only when you are not signed in. The fonts are served from our own site.',
             'Text that people edit is cleaned before it is stored or shown, so it cannot carry scripts.',
             'Every proposed change to the code is checked automatically, including a scan for secrets.',
           ],

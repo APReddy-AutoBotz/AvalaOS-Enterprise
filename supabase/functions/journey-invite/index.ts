@@ -8,6 +8,7 @@
 // EMAIL_FROM (default "Avala OS <no-reply@avalaos.com>"), SITE_URL (default https://avalaos.com),
 // ALLOWED_ORIGIN. Deployed with verify_jwt = false because the function authenticates the caller itself.
 
+import { withCors } from '../../../domain/site/origins.ts';
 import { inviteEmail } from '../../../domain/people/inviteEmail.ts';
 import { validateEmail, type AccessLevel, type Job } from '../../../domain/people/roles.ts';
 
@@ -23,13 +24,8 @@ function pickKey(jsonVar: string, legacyVar: string): string {
 }
 const PUBLISHABLE_KEY = pickKey('SUPABASE_PUBLISHABLE_KEYS', 'SUPABASE_ANON_KEY');
 
-const CORS = {
-  'Access-Control-Allow-Origin': env('ALLOWED_ORIGIN') || '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-};
 const reply = (status: number, body: unknown) =>
-  new Response(JSON.stringify(body), { status, headers: { ...CORS, 'Content-Type': 'application/json' } });
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const fail = (status: number, code: string, message: string) => reply(status, { ok: false, error: { code, message } });
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -39,8 +35,9 @@ interface People {
   invites: { email: string; role: AccessLevel; job: Job | null; canApprove: boolean }[];
 }
 
-Deno.serve(async req => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+// Cross-site headers on every answer, for the allowed websites only (domain/site/origins.ts).
+Deno.serve(withCors(async req => {
+  if (req.method === 'OPTIONS') return new Response('ok');
   if (req.method !== 'POST') return fail(405, 'METHOD_NOT_ALLOWED', 'Use POST.');
   if (!SUPABASE_URL || !PUBLISHABLE_KEY) return fail(500, 'NOT_CONFIGURED', 'Supabase environment is incomplete.');
 
@@ -95,4 +92,4 @@ Deno.serve(async req => {
     return fail(502, 'EMAIL_FAILED', sent.status === 429 ? 'Too many emails sent today. Try again later.' : 'The email could not be sent. Try again later.');
   }
   return reply(200, { ok: true, sent: true, id: result?.id ?? null });
-});
+}, env('ALLOWED_ORIGIN')));

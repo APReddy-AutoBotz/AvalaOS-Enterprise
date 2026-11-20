@@ -66,8 +66,9 @@ const directProviderNames = [
   joinName('AZURE', 'OPENAI', api, key),
 ];
 
+// Files that may name a server-only setting without holding a value: the browser's own list of settings names
+// VITE_SUPABASE_ANON_KEY, the public key, whose name contains SUPABASE_ANON_KEY.
 const localDemoDebtPaths = new Set([
-  'services/geminiService.ts',
   'vite-env.d.ts',
 ]);
 
@@ -76,23 +77,23 @@ const allowedNameOnlyPrefixes = [
   'docs/schema/',
   'supabase/functions/',
   'scripts/check-secret-hygiene.mjs',
-  'scripts/check-ai-boundary.mjs',
 ];
 
+// What reaches the browser: the journey, the shared rules it bundles, the page and the build's settings
+// (package 13 A: the folders of the earlier application are gone since package 15).
 const clientPathPrefixes = [
-  'components/',
-  'constants/',
-  'data/',
-  'hooks/',
+  'journey/',
+  'domain/',
   'services/',
+  'public/',
 ];
 
 const clientPathNames = new Set([
-  'App.tsx',
-  'constants.ts',
-  'types.ts',
+  'index.html',
+  'index.tsx',
   'vite-env.d.ts',
   'vite.config.ts',
+  'tailwind.config.js',
 ]);
 
 const normalizePath = (filePath) => filePath.split(path.sep).join('/');

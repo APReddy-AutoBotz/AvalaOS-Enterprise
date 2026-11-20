@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeUsage, tokenWords, workOf, type UsageRow } from './usage.ts';
+import { summarizeUsage, tokenWords, USAGE_PAGES, usageMorePages, workOf, type UsageRow } from './usage.ts';
 import { TASKS } from './tasks.ts';
 import { EXTRACTION_TASKS } from '../extract/tasks.ts';
 
@@ -56,4 +56,19 @@ test('every registered task has a name in plain words', () => {
 test('token counts read at a glance', () => {
   assert.deepEqual([0, 950, 1000, 12_400, 151_000, 1_500_000, 2_000_000, 24_000_000].map(tokenWords),
     ['0', '950', '1 thousand', '12 thousand', '151 thousand', '1.5 million', '2 million', '24 million']);
+});
+
+test('a month is read page by page: only a full page can have more after it (F11)', () => {
+  assert.equal(usageMorePages(USAGE_PAGES.size), true);
+  assert.equal(usageMorePages(USAGE_PAGES.size - 1), false);
+  assert.equal(usageMorePages(0), false);
+  assert.ok(USAGE_PAGES.max % USAGE_PAGES.size === 0 && USAGE_PAGES.max > USAGE_PAGES.size);
+});
+
+test('"Test this key" on a workspace\'s own key has its own small limit, not the monthly allowance', async () => {
+  const { KEY_TEST_LIMIT, keyTestLimited, WORK_OF_TASK } = await import('./usage.ts');
+  assert.equal(KEY_TEST_LIMIT.perHour, 10);
+  assert.equal(keyTestLimited(9), false);
+  assert.equal(keyTestLimited(10), true);
+  assert.equal(WORK_OF_TASK.health, 'Testing the AI key', 'tests show in the usage panel under their own name');
 });

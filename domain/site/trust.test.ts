@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TRUST, CONTACT_EMAIL, OPERATOR, UPDATED, inlineParts, pageText } from './trust.ts';
+import { TRUST, CONTACT_EMAIL, OPERATOR, UPDATED, inlineParts, pageText, updatedText } from './trust.ts';
+import { COVERAGE_RULE } from '../assess/coverage.ts';
 import { TRUST_PAGES } from './pages.ts';
 
 const pages = TRUST_PAGES.map(p => TRUST[p.id]);
@@ -13,7 +14,7 @@ test('every trust page has a title, a summary and sections with unique ids', () 
     assert.equal(new Set(ids).size, ids.length, `${page.id}: duplicate section id`);
     for (const s of page.sections) assert.ok(s.body.length > 0, `${page.id}#${s.id} is empty`);
   }
-  assert.match(UPDATED, /^\d{1,2} [A-Z][a-z]+ \d{4}$/);
+  for (const d of Object.values(UPDATED)) if (d !== null) assert.match(d, /^\d{1,2} [A-Z][a-z]+ \d{4}$/);
 });
 
 test('the pages name who runs the service and how to reach them', () => {
@@ -53,4 +54,25 @@ test('security.txt names the same contact and has not expired', async () => {
   assert.match(txt, /^Policy: https:\/\/avalaos\.com\/security$/m);
   const expires = Date.parse(/^Expires: (.+)$/m.exec(txt)?.[1] ?? '');
   assert.ok(expires > Date.now(), 'security.txt has expired: renew its Expires line (at most a year ahead)');
+});
+
+test('the privacy notice names every AI provider a workspace may connect, and says its requests go only there', () => {
+  const text = pageText(TRUST.privacy);
+  for (const p of ['Azure OpenAI', 'Anthropic', 'Amazon Bedrock', 'Mistral AI', 'OpenAI-compatible endpoint']) assert.ok(text.includes(p), p);
+  assert.match(text, /only to that provider/);
+});
+
+test('the privacy and security pages carry the release date, set with the coverage notice\'s date', () => {
+  assert.equal(UPDATED.privacy, COVERAGE_RULE.since);
+  assert.equal(UPDATED.security, COVERAGE_RULE.since);
+  if (COVERAGE_RULE.since === null) assert.equal(updatedText('privacy'), '[release date]');
+});
+
+test('the privacy notice lists what the browser keeps, what signing out removes, and the demo\'s copy', () => {
+  const text = pageText(TRUST.privacy);
+  for (const kept of ['sign-in session', 'last workspace you opened', 'lists and maps shown', 'what was found in their sources and what you set aside']) assert.ok(text.includes(kept), kept);
+  assert.ok(!text.includes('keeps two things'));
+  assert.match(text, /except how you like lists and maps shown in general\. The demo has no sign-in/);
+  assert.match(text, /title, the site you came from/);
+  assert.match(text, /the kind of browser and device/);
 });

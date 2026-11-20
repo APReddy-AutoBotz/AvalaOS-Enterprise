@@ -1,6 +1,6 @@
 // The portfolio: every assessed process side by side, in the order to take them. Derived from each
 // process's own assessment; nothing is typed in here and no AI ranks anything.
-import type { ProcessAssessment } from './process.ts';
+import { apiHeldText, type ProcessAssessment } from './process.ts';
 import { PRIORITY, type Quadrant, type ReadinessState } from './priority.ts';
 import type { Approach } from './scoring.ts';
 import { paybackOf, type Costs } from './payback.ts';
@@ -80,6 +80,10 @@ export interface ProcessCard {
   intended: boolean;
   /** Those steps by how they would be done: rules (RPA or an API), AI (assisted or agentic), or kept with people. */
   split: { rules: number; ai: number; people: number };
+  /** Steps whose figures the stricter API rule changed (coverage.ts); the card says so. */
+  narrowed?: number;
+  /** An API-led verdict resting on steps no API is confirmed for yet: the card says so (apiHeldText). */
+  apiHeld?: string;
 }
 
 export function processCard(a: ProcessAssessment): ProcessCard | null {
@@ -89,6 +93,8 @@ export function processCard(a: ProcessAssessment): ProcessCard | null {
     lead: a.lead, fit: a.automationFit, steps: a.assessed, intended: a.intended,
     hours: v.computable ? v.value!.hours[1] : null, exact: v.computable ? v.value!.exact : false,
     split: { rules: c.rpa + c.api, ai: c.ai_assist + c.agent, people: c.human },
+    ...(a.coverageNarrowed?.steps ? { narrowed: a.coverageNarrowed.steps } : {}),
+    ...(apiHeldText(a, 'card') ? { apiHeld: apiHeldText(a, 'card')! } : {}),
   };
 }
 

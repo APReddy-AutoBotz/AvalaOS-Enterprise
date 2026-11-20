@@ -1,5 +1,6 @@
 // The process journey: sign in, pick a process, work through its stages.
 // Owns the paths /signin, /processes and /process/:id/:stage; everything else is the earlier app.
+import { DEMO_POINTER } from '../domain/site/demo.ts';
 import React from 'react';
 import { journeyPath, parseJourneyPath, type JourneyRoute } from '../domain/workspace/route.ts';
 import { createJourneyStore } from './store/index.ts';
@@ -35,10 +36,22 @@ export interface Nav {
   href(route: JourneyRoute): string;
 }
 
+const sameRoute = (a: JourneyRoute, b: JourneyRoute) => JSON.stringify(a) === JSON.stringify(b);
+
 /** The route from the address; `base` is a prefix the journey runs under (the demo's /demo). */
-function useRoute(base: string): Nav {
-  const current = React.useCallback(() => parseJourneyPath(location.pathname.slice(base.length) || '/work') ?? { page: 'work' } as JourneyRoute, [base]);
+function useRoute(base: string, start?: JourneyRoute): Nav {
+  // The address under the prefix; nothing after it opens `start` when one is given (the demo opens on the
+  // sample's assessment), else My work.
+  const current = React.useCallback(() => {
+    const rest = location.pathname.slice(base.length).replace(/\/+$/, '');
+    if (!rest && start) return start;
+    return parseJourneyPath(rest || '/work') ?? { page: 'work' } as JourneyRoute;
+  }, [base, start]);
   const [route, setRoute] = React.useState<JourneyRoute>(current);
+  // The opening route is written into the address, so a reload or a shared link opens the same screen.
+  React.useEffect(() => {
+    if (start && !location.pathname.slice(base.length).replace(/\/+$/, '')) history.replaceState(null, '', base + journeyPath(start));
+  }, [base, start]);
   React.useEffect(() => {
     const onPop = () => setRoute(current());
     addEventListener('popstate', onPop);
@@ -78,8 +91,8 @@ const NAV_ICON = {
   board: <><rect x="3" y="3.5" width="3.8" height="13" rx="1.1" /><rect x="8.1" y="3.5" width="3.8" height="8" rx="1.1" /><rect x="13.2" y="3.5" width="3.8" height="10.5" rx="1.1" /></>,
 } as const;
 
-export function Journey({ store, base = '' }: { store: JourneyStore; base?: string }) {
-  const nav = useRoute(base);
+export function Journey({ store, base = '', start }: { store: JourneyStore; base?: string; /** Where the journey opens when the address names nothing under `base`. */ start?: JourneyRoute }) {
+  const nav = useRoute(base, start);
   const demo = store.kind === 'demo';
   const [me, setMe] = React.useState<Me | null | undefined>(undefined);
   const afterSignIn = React.useRef<JourneyRoute | null>(null);
@@ -181,6 +194,13 @@ export function Journey({ store, base = '' }: { store: JourneyStore; base?: stri
           {/* On a phone the top bar has no room for it. */}
           <a href="/" className="ml-1 font-semibold underline sm:hidden">Leave the demo</a>
         </div>
+      )}
+      {demo && start && sameRoute(nav.route, start) && start.page === 'process' && (
+        <p data-testid="demo-pointer" className="border-b border-slate-200 bg-white px-6 py-2.5 text-center text-sm text-slate-700">
+          {DEMO_POINTER.before}
+          <a href={nav.href({ ...start, stage: 'documents' })} onClick={e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); nav.go({ ...start, stage: 'documents' }); }} className="font-semibold text-[#002C4B] underline decoration-[#E69F00] decoration-2 underline-offset-4">{DEMO_POINTER.link}</a>
+          {DEMO_POINTER.after}
+        </p>
       )}
       {store.kind === 'memory' && (
         <div data-testid="local-mode" className="border-b border-amber-200 bg-amber-50 px-6 py-1.5 text-center text-xs text-amber-900">
