@@ -16,6 +16,8 @@ Releases (owner, 17 November 2026): 65 Netlify credits are left, about 15 a prod
 
 The order from here (owner, 20 November 2026), replacing the order written in sections 3e and 3f: (1) reading sources within the length of one answer (section 3e, "After this release: reading sources within the length of one answer"), with a short plan the owner sends to the review chat before anything is built; (2) the per-minute AI limit; (3) the marketing package without the partner page (the partner page waits for the lawyer); (4) package 14 (section 3f); (5) the Tiptap upgrade; (6) the content security policy, report-only first. No release before 22 November 2026. The full Ask Avala measure runs on 1 December 2026 on the released functions. About 1 million tokens of this month's allowance on the platform key are left (owner, 20 November 2026); it is not raised.
 
+**Changed the same afternoon (owner, 20 November 2026).** After package 14 come the content security policy, then package 16, then the Tiptap upgrade. The order is now: (1) reading sources within the length of one answer; (2) the per-minute AI limit; (3) the marketing package without the partner page; (4) package 14; (5) the content security policy, report-only first; (6) package 16, closing questions from the Assessment stage; (7) the Tiptap upgrade. Package 17, speech to text for Azure OpenAI, is not in the order: it is due before the first workspace on an Azure OpenAI key. Both packages, and two dated items (the platform key's speech model by 15 January 2027; the weekday email's link for open questions before the first organisation on the "Assess" set-up), are in section 3g.
+
 **Update, 16 November 2026 (late evening): the sixth release.** Sections 3 and 3b and the homepage package (package 7) are live (merge commit `218943a` on `main`, on the owner's word), reviewed first (`claude/review-sixth-release-16-nov.md` and `claude/review-second-bundle-16-nov.md` in the project). Where a section below says "in review", read "released". The server functions were redeployed from `main` (the first run failed on GitHub's rate limit before deploying anything; the second succeeded). Still to be seen: the first weekday email with the new count and comments, compared with My work. What comes next is section 4, with three additions from the reviews: an inquiry form on the homepage (today "Book a walkthrough" opens an email; it needs a server function, a place to keep requests, spam control and a line in the privacy notice: ask first); the evidence pack saying that its count of open questions is every item as recorded (the screens merge repeats); and recording who made a choice of approach by name or id.
 
 **Update, 17 November 2026 (late night): section 3f comes first.** An outside review of the repository was checked finding by finding (`claude/repo-review-analysis.md` in the project). The owner decided: package 15 (only the code in use, with proof), package 13 (soundness fixes), then package 12 (section 3e), one release; package 14 (an approved document is final, a change makes a new version) as the release after. The repository is private since that evening. With the owner: confirm two old keys in the history are deleted at their provider; a monthly spend limit at OpenAI; the rule on `main` in GitHub (the review chat's access cannot set it).
@@ -50,6 +52,7 @@ The map's single shape, the repeated look in the sources and the other small fau
 
 - A failed extraction keeps no detail of what it had read.
 - Errors in the server functions are only in the Supabase logs, not in the error monitor.
+- The weekday email's link for open questions opens Documents (`domain/work/home.ts`, the stage of the questions need), which the "Assess" set-up does not have. Due before the first organisation on that set-up; `journey-notify` loads that file, so the fix changes the function at a release. Package 16 fixes My work's screen only (section 3g).
 
 The weekday email's count, review comments in it and on My work, and the look in the sources shared by everyone are built (section 3b), in review.
 
@@ -595,6 +598,74 @@ Added by the owner on 18 November 2026: every link between two rows that each be
 **Underneath.** The baseline has a table `document_revisions` with no rows; say in the plan whether it fits. A database change is expected: additive, its test, a rolled-back trial, the owner's yes. What is kept is the built document, not only what it was built from, so a release cannot change it.
 
 **Done when.** Unit tests: an approved version is unchanged by each kind of later change; the reason is required; what changed lists exactly the sections that differ. A database test for who may write and that a kept version cannot be altered. Browser tests on the sample: approve, edit a section, see "unapproved changes", approve with a reason, open version 1 and download it as it was. The homepage's line "An approved revision is never changed" is then true of the documents as well.
+
+**Added for package 16 (owner, 20 November 2026).** The confirmation of approving says how many open questions could change the recommendation (the label "Changes the recommendation", repeats merged as Closing the gaps lists them) and how many of those are left with someone. For an approach already decided it says how many settle it ("Settles the decided approach"); for a process documented as it is it says nothing about them. One function returns both numbers, in a new file under `domain/questions/` (not `triage.ts` or `firstList.ts`), with its unit test; package 16 reuses it.
+
+## 3g. Packages 16 and 17, and two dated items (owner, 20 November 2026)
+
+From "Ask Avala discovery: work packages A and B" (the spec, in the owner's project: https://claude.ai/artifact/7cUj4mDoUgg8BvFuS3fngk), after the builder chat's check (`claude/discovery-step1-check-20-nov.md`) and plan (`claude/discovery-step2-plan-20-nov.md`), both reviewed by the review chat. Package B of the spec, guided discovery, gets its own chat later and is not planned here.
+
+### Package 16: closing questions from the Assessment stage (not built)
+
+**When.** After package 14 and the content security policy are released; the Tiptap upgrade follows it (section 1, the changed order of 20 November 2026).
+
+**Why.** On 20 November 2026, 143 of the 156 questions raised on the three live processes were open, and none was with a named person. Closing the gaps, the one screen that reads notes or a transcript against many questions at once, opens only from Documents (`journey/process/DocumentsStage.tsx`), so an organisation on the "Assess" set-up cannot reach it.
+
+**What a person sees.**
+
+- **On the Assessment stage**, under "What would sharpen this most": "N open questions could change the recommendation" ("1 open question could change the recommendation" for one), with **Answer them**. It shows only when N is more than 0. N counts the open questions labelled "Changes the recommendation", repeats merged as Closing the gaps lists them (one question per application about its access), not counting those already left with someone; it is the count package 14 adds. The button opens Closing the gaps on those N questions, a list that is new ("Showing the N that could change the recommendation · Show all"), with "Back to the assessment". The words must not read as the same number as "Questions (N)" in Ask Avala, which counts the first list and the answers found in the sources.
+- **In Ask Avala's Questions tab**, for a person who can edit where AI is available: "Answer several from notes or a transcript". It closes the panel and opens Closing the gaps on "Several at once": on the Assessment stage, or on Documents for a process with no Assessment stage (documented as it is, or with the approach decided). The one-question interview is unchanged.
+- **After answers read from notes, a transcript or a returned question file are saved:** "N of M open questions closed", and what is left grouped by the kind of person to ask, the same three groups as the question files ("Process owner or SME", "IT or application owner", "Finance or controls"), the questions that could change the recommendation first in each group. A name typed under "Ask someone later" shows on its question. Under it, a link to "Send questions to the people who know". The result shows wherever Closing the gaps is opened, Documents included.
+- **My work's "Answer them"** opens the Assessment stage with Closing the gaps when the process has no Documents stage. Today it opens Documents, which says "Not switched on" in the "Assess" set-up. In the screen only; the weekday email's link is a dated item below.
+
+**Rules.** Screens only: no AI task, no database change, no server function change. No change to `triage.ts`, `firstList.ts`, `packs.ts`, `domain/work/home.ts`, `digest.ts`, `purpose.ts` or `platform.ts`; if one proves necessary, stop and ask first (the weekday email counts from them). No verdict line, no new tags, no renamed labels, no change to Approve, no change to scores, ranking or recommendation. A question file per named person is left to package B.
+
+**The browser tests read notes with a stand-in.** The in-browser store has no AI, so in the browser-test build only (`VITE_JOURNEY_STORE=memory`) a stand-in answers the reading of notes with a reply the test gives, and counts the calls. It answers only that reading, never the automatic look in the sources. A check fails if the stand-in is in the released bundle. The demo is not affected.
+
+**Done when.**
+
+- Unit tests: the result's counts, worked out from the process before and after a save; the groups are those of the question files; a typed name shows on its question; the questions that could change the recommendation come first in each group; a process documented as it is lists no question about an application's access.
+- A browser test on the sample in an organisation set to "Assess": the line shows N, and its button opens Closing the gaps on the same N questions; several are answered from pasted notes; nothing is saved before Save (no new source, no new edit in History); after Save the result's figures match the saved process; the stand-in counts one AI call, the reading of the notes, so the line and the result add none. The Ask Avala link opens the same screen, and `tests/e2e/assistant.spec.ts` passes unchanged. My work's "Answer them" opens the Assessment stage with Closing the gaps.
+- No file a server function loads is changed: the import walk of `scripts/in-use.mjs`, from each `supabase/functions/journey-*/index.ts`, finds none of the pull request's files. A guard test keeps the weekday email's counts for the demo's sample (`public/demo-data/sample.json`) as they are.
+- The stand-in is not in the released bundle (the check above, run on `npm run build`).
+- When package 16 is released, not before: the line in `domain/assistant/platform.ts` saying where questions are answered, with a run of the Ask Avala measure in that month's allowance (about 1.4 million tokens). Then the user guide's chapters 2, 5 and 10, in the owner's project.
+
+### Package 17: speech to text for Azure OpenAI (not built; due before the first workspace on an Azure OpenAI key)
+
+Not in the order. It is due when the first workspace is to connect its own Azure OpenAI key; no workspace uses its own key today (read on 20 November 2026). Nothing is set up in Azure until then.
+
+**Why.** For a workspace on its own Azure OpenAI key the microphone shows, but the recording is refused with a plain message (`domain/ai/providers.ts`, `can.transcription` false for Azure OpenAI; `supabase/functions/journey-ai/index.ts`, the `transcribe` action).
+
+**First, before anything is built: one real call settles the address.** It is not proven. The code would call `<endpoint>/openai/v1/audio/transcriptions` with the deployment as the model; Microsoft's reference gives `<endpoint>/openai/deployments/<deployment>/audio/transcriptions` with an API version. The owner runs three calls in PowerShell on his own computer, in the folder that holds a recording of 5 to 10 seconds of speech, `test.m4a` (Windows Sound Recorder). The key is typed into a hidden prompt; it is never shown, and never sent to anyone.
+
+```
+$res = "https://YOUR-RESOURCE.openai.azure.com"
+$dep = "YOUR-SPEECH-DEPLOYMENT"
+$sec = Read-Host "Azure key" -AsSecureString
+$key = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec))
+# 1. The address the code would call today
+curl.exe -s -w "`nHTTP %{http_code}`n" -H "api-key: $key" -F "model=$dep" -F "file=@test.m4a" "$res/openai/v1/audio/transcriptions"
+# 2. The address in Microsoft's reference
+curl.exe -s -w "`nHTTP %{http_code}`n" -H "api-key: $key" -F "file=@test.m4a" "$res/openai/deployments/$dep/audio/transcriptions?api-version=2024-10-21"
+# 3. The same address with a newer version, so a version error is not read as an address error
+curl.exe -s -w "`nHTTP %{http_code}`n" -H "api-key: $key" -F "file=@test.m4a" "$res/openai/deployments/$dep/audio/transcriptions?api-version=2025-04-01-preview"
+Remove-Variable key, sec
+```
+
+What to send back: the region; the model and version as the Azure portal shows them; the deployment name; whether the resource's address ends `openai.azure.com`, `cognitiveservices.azure.com` or `services.ai.azure.com`; and for each call the line "HTTP …" with the text or the error above it. Never the key.
+
+What it needs on Azure: one resource holding a text deployment and a speech deployment for the audio API (on 20 November 2026, `gpt-4o-mini-transcribe`, version 2025-12-15; not a model the catalog describes as streaming only). Azure offers speech models in fewer regions than text models, so one resource serves both only where its region has both (Microsoft's table of regions: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability). Not tested by these calls: the browser records WebM, not M4A; the first real recording after the build tests that.
+
+**What changes.** In Settings → AI, for Azure OpenAI: an optional "Speech-to-text deployment" under the deployment name. Filled: spoken answers go to that deployment, on the same key and the same resource. Empty: the microphone is replaced by "Voice input needs a speech-to-text deployment. An admin can add one in Settings, AI.", and no call is made. "Test this key" tests the speech deployment too and says which of the two failed. The audio of a workspace on its own key never goes on the platform key.
+
+**Underneath.** A new column beside the provider and model in `workspace_ai_settings`, with `set_workspace_ai` and `workspace_ai_connection` changed: additive, its test, a rolled-back trial, the owner's yes. `journey-ai` changes (the speech deployment for Azure; "Test this key"); it goes live with a release.
+
+**Done when.** An Azure workspace with the field filled records an answer and sees its text; with it empty it sees the line, and no call is made; a workspace on the platform key and one on an OpenAI key behave as before; the usage row names the workspace's key as its source. Unit tests for the address and the choice of deployment; the database test for the column and who may write it; a browser test for the line.
+
+### Dated items
+
+- **The platform key's speech model, by 15 January 2027 at the latest.** OpenAI shuts down `gpt-4o-transcribe` on 26 February 2027 and names `gpt-transcribe` for audio files. After the content security policy is released, the owner sets the Supabase secret `OPENAI_TRANSCRIBE_MODEL` to `gpt-transcribe` (Supabase → Edge Functions → Secrets; it takes effect at once, with no deploy; while the secret is not set the code uses `gpt-4o-transcribe`). Then: record one spoken answer on avalaos.com and check its text; and check that its row in "AI use this month" still shows tokens, because the code reads the token counts from the reply and the monthly allowance is counted from them (if they show 0, stop and say so). At the next release, change the default in `supabase/functions/journey-ai/index.ts` to match.
+- **The weekday email's link for open questions, before the first organisation on the "Assess" set-up.** It opens Documents (`domain/work/home.ts`, the stage of the questions need), which that set-up does not have. `journey-notify` loads that file, so the fix changes the function at a release. Package 16 fixes My work's screen only.
 
 ## 4. After that release: the order advised
 
