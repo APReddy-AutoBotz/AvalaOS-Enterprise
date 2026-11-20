@@ -93,16 +93,21 @@ export function flowListing(set: CandidateSet): string {
   ].join('\n\n');
 }
 
-/** The candidate listing for merge_facts. Step names are context only. */
-export function factsListing(set: CandidateSet): string {
+/**
+ * The candidate listing for the facts merge. Step names are context only. With `kinds`, only those
+ * sections (an answer that groups one or two kinds); without, every kind (the answer that finds
+ * conflicts and questions). Ids are the same either way.
+ */
+export function factsListing(set: CandidateSet, kinds?: readonly CandidateKind[]): string {
   const stepNames = [...new Set(set.items.filter(c => c.kind === 'step').map(c => String(c.data.name)))];
+  const shown = (k: CandidateKind) => !kinds || kinds.includes(k);
   return [
     header(set),
-    section(set, 'rule', 'RULES', c => `${clip(c.data.name, 80)}: if ${clip(c.data.condition)} then ${clip(c.data.action)}`),
-    section(set, 'exception', 'EXCEPTIONS', c => `${clip(c.data.name, 80)} (${c.data.kind}) | trigger: ${clip(c.data.trigger)} | handling: ${clip(c.data.handling)} | routed to: ${clip(c.data.routedTo, 60) || '—'}`),
-    section(set, 'interface', 'INTERFACES', c => `${clip(c.data.system, 60)} · ${c.data.method}${c.data.name ? ` ${clip(c.data.name, 60)}` : ''} · ${list(c.data.operations)} · ${c.data.access}`),
-    section(set, 'metric', 'METRICS', c => `${c.data.kind}: ${clip(c.data.label, 100)} = ${formatMetric(c.data)}${c.data.period ? ` (${clip(c.data.period, 40)})` : ''}${c.data.appliesTo ? ` [applies to ${clip(c.data.appliesTo, 60)}]` : ''}`),
-    section(set, 'unknown', 'UNKNOWNS', c => clip(c.data.question)),
+    shown('rule') && section(set, 'rule', 'RULES', c => `${clip(c.data.name, 80)}: if ${clip(c.data.condition)} then ${clip(c.data.action)}`),
+    shown('exception') && section(set, 'exception', 'EXCEPTIONS', c => `${clip(c.data.name, 80)} (${c.data.kind}) | trigger: ${clip(c.data.trigger)} | handling: ${clip(c.data.handling)} | routed to: ${clip(c.data.routedTo, 60) || '—'}`),
+    shown('interface') && section(set, 'interface', 'INTERFACES', c => `${clip(c.data.system, 60)} · ${c.data.method}${c.data.name ? ` ${clip(c.data.name, 60)}` : ''} · ${list(c.data.operations)} · ${c.data.access}`),
+    shown('metric') && section(set, 'metric', 'METRICS', c => `${c.data.kind}: ${clip(c.data.label, 100)} = ${formatMetric(c.data)}${c.data.period ? ` (${clip(c.data.period, 40)})` : ''}${c.data.appliesTo ? ` [applies to ${clip(c.data.appliesTo, 60)}]` : ''}`),
+    shown('unknown') && section(set, 'unknown', 'UNKNOWNS', c => clip(c.data.question)),
     ['STEP NAMES (context only)', stepNames.map(n => `- ${clip(n, 80)}`).join('\n')].join('\n'),
-  ].join('\n\n');
+  ].filter(Boolean).join('\n\n');
 }

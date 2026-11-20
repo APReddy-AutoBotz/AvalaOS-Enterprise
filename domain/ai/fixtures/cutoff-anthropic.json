@@ -1,0 +1,17 @@
+{
+  "standIn": "Written from the Messages API's documented reply for a cut-off answer, until the real reply is recorded with the extraction check's record-cutoff option on the Test workspace's Anthropic key; replace this whole file with the printed reply.",
+  "provider": "anthropic",
+  "model": "claude-sonnet-5-5",
+  "httpStatus": 200,
+  "reply": {
+    "id": "msg_standin",
+    "type": "message",
+    "role": "assistant",
+    "model": "claude-sonnet-5-5",
+    "content": [{ "type": "text", "text": "{\"passage\":\"The AP Clerk logs each invoice in" }],
+    "stop_reason": "max_tokens",
+    "stop_sequence": null,
+    "usage": { "input_tokens": 182, "output_tokens": 16 }
+  },
+  "read": "TRUNCATED"
+}

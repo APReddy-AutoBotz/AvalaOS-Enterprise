@@ -5,6 +5,11 @@
 // POST { action: 'create', workspaceId, processId, sourceIds: [process_sources.id] }
 //      with the user's session -> { runId }. Members follow the run in extraction_runs.
 // POST { action: 'start' | 'pass' | 'merge' | 'review' | 'assemble', runId, token, ... } -> internal stages.
+//      The facts merge runs in parts (domain/extract/factsParts.ts): { action: 'merge', which: 'facts', part }.
+// POST { action: 'look', runId } with the user's session (or the run's token) -> ends a run whose step was
+//      stopped from outside (domain/extract/failure.ts, STALL_MS) with the step and a plain reason.
+// POST { action: 'record-cutoff', runId, token } -> an extraction check run only: one tiny call cut off on
+//      purpose, whose reply is kept as it came, for the tests (domain/ai/fixtures/).
 //      An extraction check (an eval run) is made by the "Extraction check" workflow or in SQL, which needs
 //      the project's secret key or database access, and started with { action: 'start', runId, token,
 //      files }: the case's files, taken only when each matches the SHA-256 recorded in
@@ -18,7 +23,11 @@ import { toGatewaySegments, type IngestSegment } from '../../../domain/ingest/se
 import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, parseVtt } from '../../../domain/ingest/parsers/text.ts';
 import { parseDocx } from '../../../domain/ingest/parsers/docx.ts';
 import { buildCandidates, factsListing, flowListing, type SourcePassOutput } from '../../../domain/extract/candidates.ts';
-import { mergeFacts, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from '../../../domain/extract/tasks.ts';
+import { FACTS_TASKS, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from '../../../domain/extract/tasks.ts';
+import { factsProgress, factsStartFor, isFactsPart, joinFacts, listingKinds, splitAfter, startParts, type FactsStart } from '../../../domain/extract/factsParts.ts';
+import {
+  TaskError, classify, codeOf, isStalled, plainFailure, spentOn, stepOfRun, STALL_MS, type FailureCode, type ReadingStep,
+} from '../../../domain/extract/failure.ts';
 import { reviewListing } from '../../../domain/extract/review.ts';
 import { finish } from '../../../domain/extract/pipeline.ts';
 import { score } from '../../../eval/scorer.ts';
@@ -128,12 +137,6 @@ async function callProvider(conn: AiConnection, body: Record<string, unknown>) {
   }
 }
 
-/** A task that failed, with the tokens its calls used, so they are counted all the same (F03). */
-class TaskError extends Error {
-  usage: { input: number; output: number };
-  constructor(message: string, usage: { input: number; output: number }) { super(message); this.usage = usage; }
-}
-const spentOn = (e: unknown) => (e instanceof TaskError ? e.usage : { input: 0, output: 0 });
 
 async function runTask(conn: AiConnection, task: TaskDefinition, input: { segments: ReturnType<typeof toGatewaySegments> } | { listing: string } | { image: string }) {
   const off = unsupported(conn, 'image' in input ? 'vision' : taskNeed(task));
@@ -144,7 +147,7 @@ async function runTask(conn: AiConnection, task: TaskDefinition, input: { segmen
       : buildListingRequest(task, input.listing, model);
   if (takesReasoningEffort(model)) body.reasoning = { effort: task.reasoningEffort ?? EFFORT };
   const parsed = await callProvider(conn, body);
-  if (!parsed.ok) throw new TaskError(`${task.id}: ${parsed.code} ${parsed.message}`, parsed.usage);
+  if (!parsed.ok) throw new TaskError(`${task.id}: ${parsed.code} ${parsed.message}`, parsed.usage, parsed.code);
   return { data: parsed.data, usage: parsed.usage };
 }
 
@@ -153,13 +156,13 @@ async function runTask(conn: AiConnection, task: TaskDefinition, input: { segmen
 interface SourceInput { sourceId: string; title: string; kind: string; segments: IngestSegment[]; inferred?: boolean }
 interface Run {
   id: string; kind: 'process' | 'eval'; status: string; token_hash: string; source_ids: string[];
-  input: { processName?: string; sources?: SourceInput[]; gold?: unknown }; case_id: string | null; ref: string | null;
-  workspace_id: string | null; created_by: string | null;
+  input: { processName?: string; sources?: SourceInput[]; gold?: unknown; factsStart?: FactsStart }; case_id: string | null; ref: string | null;
+  workspace_id: string | null; created_by: string | null; updated_at: string;
 }
 
 async function loadRun(id: string, token: string): Promise<Run | null> {
   if (!/^[0-9a-f-]{36}$/i.test(id) || typeof token !== 'string' || token.length < 32) return null;
-  const rows = await rest(`extraction_runs?id=eq.${id}&select=id,kind,status,token_hash,source_ids,input,case_id,ref,workspace_id,created_by`);
+  const rows = await rest(`extraction_runs?id=eq.${id}&select=id,kind,status,token_hash,source_ids,input,case_id,ref,workspace_id,created_by,updated_at`);
   const run: Run | undefined = rows?.[0];
   if (!run) return null;
   const hash = await sha256hex(token);
@@ -172,11 +175,12 @@ const patchRun = (id: string, fields: Record<string, unknown>) => rest(`extracti
 const putPart = (id: string, part: string, output: unknown, usage: { input: number; output: number }): Promise<string | null> =>
   rest('rpc/extraction_put_part', { method: 'POST', body: JSON.stringify({ target_run: id, part_name: part, part_output: output, used_input: usage.input, used_output: usage.output }) });
 
-async function logUsage(run: Run, conn: AiConnection, task: string, usage: { input: number; output: number }, ok: boolean, error?: string) {
+const USAGE_STATUS: Partial<Record<FailureCode, string>> = { TRUNCATED: 'truncated', REFUSED: 'refused', INVALID_OUTPUT: 'invalid_output' };
+async function logUsage(run: Run, conn: AiConnection, task: string, usage: { input: number; output: number }, ok: boolean, error?: string, code?: FailureCode) {
   if (!run.workspace_id) return;
   await rest('ai_usage', { method: 'POST', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({
     workspace_id: run.workspace_id, user_id: run.created_by, task, model: conn.model, provider: conn.provider, key_source: conn.source,
-    status: ok ? 'ok' : 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : (error ?? '').slice(0, 60),
+    status: ok ? 'ok' : (code && USAGE_STATUS[code]) ?? 'provider_error', input_tokens: usage.input, output_tokens: usage.output, attempts: 1, error_code: ok ? null : (error ?? '').slice(0, 60),
   }) }).catch(e => console.error('usage log failed', e));
   if (ok && conn.source === 'workspace') {
     await rest(`workspace_ai_settings?workspace_id=eq.${run.workspace_id}`, { method: 'PATCH', headers: { Prefer: 'return=minimal' }, body: JSON.stringify({ last_used_at: new Date().toISOString() }) })
@@ -191,7 +195,7 @@ async function counted<T extends { usage: { input: number; output: number } }>(r
     await logUsage(run, conn, task, r.usage, true);
     return r;
   } catch (e) {
-    await logUsage(run, conn, task, spentOn(e), false, (e as Error).message);
+    await logUsage(run, conn, task, spentOn(e), false, (e as Error).message, codeOf(e));
     throw e;
   }
 }
@@ -205,22 +209,42 @@ async function trigger(body: Record<string, unknown>) {
 
 /**
  * Runs a stage after the response. A stage that timed out is started once more in a fresh
- * invocation (the provider is sometimes slow under load); any other failure fails the run.
+ * invocation (the provider is sometimes slow under load); any other failure fails the run, with the
+ * step and the reason in plain words (domain/extract/failure.ts).
  */
-function inBackground(work: () => Promise<void>, runId: string, retry?: Record<string, unknown>) {
+function inBackground(work: () => Promise<void>, runId: string, step: ReadingStep, stepKey: string, retry?: Record<string, unknown>) {
   const p = work().catch(async e => {
     const message = String((e as Error).message ?? e);
     console.error('stage failed', runId, message);
     if (retry && message.startsWith('TIMEOUT') && !retry.retried) {
       try { await trigger({ ...retry, retried: true }); return; } catch { /* fall through and fail the run */ }
     }
-    await patchRun(runId, { status: 'failed', error: message.slice(0, 1000) }).catch(() => {});
+    await failRun(runId, step, stepKey, e, Boolean(retry?.retried));
   });
   const rt = (globalThis as any).EdgeRuntime;
   if (rt?.waitUntil) rt.waitUntil(p);
 }
 
+/**
+ * Ends a run with the sentence a person sees. The technical text goes to the run's record and the log;
+ * the failed call's tokens go to the run's totals through a part of their own, which moves no stage on.
+ */
+async function failRun(runId: string, step: ReadingStep, stepKey: string, e: unknown, twice: boolean) {
+  const message = String((e as Error)?.message ?? e);
+  const code = codeOf(e), { detail } = classify(message), usage = spentOn(e);
+  await putPart(runId, `failed:${stepKey}`, { step: step.key, code, detail: message.slice(0, 1000), usage }, usage).catch(err => console.error('failure part', runId, err));
+  await patchRun(runId, {
+    status: 'failed', error: plainFailure(step, code, runId, detail, twice),
+    result: { failure: { step: stepKey, code, detail: message.slice(0, 1000) } },
+  }).catch(err => console.error('failure write', runId, err));
+}
+
 const stageBody = (run: Run, token: string, extra: Record<string, unknown>) => ({ runId: run.id, token, ...extra });
+/** The merges, started together once every source is read: the flow, and the first parts of the facts. */
+const startMerges = (run: Run, token: string) => Promise.all([
+  trigger({ action: 'merge', ...stageBody(run, token, { which: 'flow' }) }),
+  ...startParts(run.input.factsStart).map(part => trigger({ action: 'merge', ...stageBody(run, token, { which: 'facts', part }) })),
+]);
 async function startPasses(run: Run, token: string, sourceIds: string[]) {
   await Promise.all(sourceIds.flatMap(sourceId => ['facts', 'steps'].map(pass => trigger({ action: 'pass', ...stageBody(run, token, { sourceId, pass }) }))));
 }
@@ -261,9 +285,9 @@ async function loadEvalInput(run: Run, files: Map<string, Uint8Array>) {
 
 // ---- stages ---------------------------------------------------------------------------------
 
-async function stageStart(run: Run, token: string, files: Map<string, Uint8Array> | null) {
+async function stageStart(run: Run, token: string, files: Map<string, Uint8Array> | null, factsStart: FactsStart) {
   if (run.status !== 'queued') return;
-  const input = run.kind === 'eval' ? await loadEvalInput(run, files!) : run.input;
+  const input = run.kind === 'eval' ? { ...(await loadEvalInput(run, files!)), ...(factsStart === 'kinds' ? { factsStart } : {}) } : run.input;
   const sourceIds = (input.sources ?? []).map(s => s.sourceId);
   if (!sourceIds.length) throw new Error('no sources');
   await patchRun(run.id, { input, source_ids: sourceIds, status: 'running' });
@@ -280,12 +304,12 @@ async function stagePass(run: Run, token: string, sourceId: string, pass: 'facts
     const r = await runTask(conn, task, { segments });
     const v = verifyExcerpts(r.data, task.verifyArrays, segments);
     // A reply lacking a list its task requires is refused, not stored unchecked (F16).
-    if (v.missing.length) throw new TaskError(`${task.id}: INVALID_OUTPUT ${missingListsMessage(v.missing)}`, r.usage);
+    if (v.missing.length) throw new TaskError(`${task.id}: INVALID_OUTPUT ${missingListsMessage(v.missing)}`, r.usage, 'INVALID_OUTPUT');
     await logUsage(run, conn, task.id, r.usage, true);
     const next = await putPart(run.id, `pass:${pass}:${sourceId}`, { data: v.data, dropped: v.dropped }, r.usage);
-    if (next === 'merge') await Promise.all(['flow', 'facts'].map(which => trigger({ action: 'merge', ...stageBody(run, token, { which }) })));
+    if (next === 'merge') await startMerges(run, token);
   } catch (e) {
-    await logUsage(run, conn, task.id, spentOn(e), false, (e as Error).message);
+    await logUsage(run, conn, task.id, spentOn(e), false, (e as Error).message, codeOf(e));
     throw e;
   }
 }
@@ -302,12 +326,47 @@ async function candidatesOf(run: Run) {
   return { parts, set: buildCandidates(sources.map(({ segments: _s, ...info }) => info), outputs, sources.flatMap(s => s.segments)), dropped };
 }
 
-async function stageMerge(run: Run, token: string, which: 'flow' | 'facts') {
+async function stageMergeFlow(run: Run, token: string) {
   const { set } = await candidatesOf(run);
-  const task = which === 'flow' ? mergeFlow : mergeFacts;
   const conn = await connectionFor(run);
-  const r = await counted(run, conn, task.id, () => runTask(conn, task, { listing: which === 'flow' ? flowListing(set) : factsListing(set) }));
-  const next = await putPart(run.id, `merge:${which}`, r.data, r.usage);
+  const r = await counted(run, conn, mergeFlow.id, () => runTask(conn, mergeFlow, { listing: flowListing(set) }));
+  const next = await putPart(run.id, 'merge:flow', r.data, r.usage);
+  if (next === 'review') await trigger({ action: 'review', ...stageBody(run, token, {}) });
+}
+
+/**
+ * One part of the facts merge (domain/extract/factsParts.ts). Its answer is stored as `facts:<part>`
+ * with its tokens and time. A cut-off answer, or a second time-out, is replaced by smaller parts: a note
+ * `facts:<part>` records the split and the failed answer's tokens (so they are in the run's totals), and
+ * the smaller parts start. When every part the merge needs is in, they are joined into `merge:facts`,
+ * which moves the run on as the single answer did. The run's row is locked while a part is stored, so
+ * the last part to arrive always sees the others; a second join is ignored by the database.
+ */
+async function stageFactsPart(run: Run, token: string, part: string, retried: boolean) {
+  const { set } = await candidatesOf(run);
+  const task = FACTS_TASKS[part];
+  const conn = await connectionFor(run);
+  const started = Date.now();
+  try {
+    const r = await counted(run, conn, task.id, () => runTask(conn, task, { listing: factsListing(set, listingKinds(part) ?? undefined) }));
+    await putPart(run.id, `facts:${part}`, { data: r.data, usage: r.usage, ms: Date.now() - started }, r.usage);
+  } catch (e) {
+    const children = splitAfter(part, codeOf(e), retried);
+    if (!children) throw e;
+    const usage = spentOn(e);
+    await putPart(run.id, `facts:${part}`, { splitInto: children, reason: codeOf(e), usage, ms: Date.now() - started }, usage);
+    await Promise.all(children.map(c => trigger({ action: 'merge', ...stageBody(run, token, { which: 'facts', part: c }) })));
+    return;
+  }
+  await joinFactsWhenComplete(run, token);
+}
+
+async function joinFactsWhenComplete(run: Run, token: string) {
+  const rows: { part: string; output: unknown }[] = await rest(`extraction_run_parts?run_id=eq.${run.id}&part=like.facts:*&select=part,output`);
+  const stored = Object.fromEntries(rows.map(r => [r.part.slice('facts:'.length), r.output]));
+  const progress = factsProgress(run.input.factsStart ?? 'pairs', stored);
+  if (!progress.complete) return;
+  const next = await putPart(run.id, 'merge:facts', joinFacts(progress.leaves, stored), { input: 0, output: 0 });
   if (next === 'review') await trigger({ action: 'review', ...stageBody(run, token, {}) });
 }
 
@@ -345,6 +404,11 @@ async function createRun(req: Request, body: any): Promise<Response> {
   const user = userRes.ok ? await userRes.json() : null;
   if (!user?.id) return fail(401, 'UNAUTHENTICATED', 'Sign in again.');
   const { workspaceId, processId, sourceIds } = body ?? {};
+  // Starting the facts merge one kind at a time is for the extraction check only.
+  if (body?.startAtKinds !== undefined) {
+    const refused = factsStartFor('process', body.startAtKinds);
+    if ('refused' in refused) return fail(400, 'INVALID_REQUEST', refused.refused);
+  }
   const UUID = /^[0-9a-f-]{36}$/i;
   if (typeof workspaceId !== 'string' || !UUID.test(workspaceId) || typeof processId !== 'string' || !UUID.test(processId)
     || !Array.isArray(sourceIds) || !sourceIds.length || sourceIds.length > 40 || !sourceIds.every((x: unknown) => typeof x === 'string' && UUID.test(x))) {
@@ -389,6 +453,71 @@ async function createRun(req: Request, body: any): Promise<Response> {
   return reply(202, { ok: true, runId: row.id });
 }
 
+// ---- a run whose step was stopped from outside -----------------------------------------------
+
+/**
+ * The next look at a run (the Sources screen, the extraction check): a run that has not changed for
+ * longer than any step can take was stopped by the platform mid-step, so it is ended here with the step
+ * it was in and a plain reason. A member of the run's workspace may look, or the holder of its token.
+ * The write is conditional on the run being as it was read, so a run that moved on meanwhile is left.
+ */
+async function lookAtRun(req: Request, body: any): Promise<Response> {
+  const runId = String(body?.runId ?? '');
+  if (!/^[0-9a-f-]{36}$/i.test(runId)) return fail(400, 'INVALID_REQUEST', 'runId is required.');
+  let run: Pick<Run, 'id' | 'status' | 'updated_at' | 'workspace_id'> | null = null;
+  if (typeof body.token === 'string') run = await loadRun(runId, body.token);
+  else {
+    const auth = req.headers.get('Authorization') ?? '';
+    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: PUBLISHABLE_KEY, Authorization: auth } });
+    const user = userRes.ok ? await userRes.json() : null;
+    if (!user?.id) return fail(401, 'UNAUTHENTICATED', 'Sign in again.');
+    const rows = await rest(`extraction_runs?id=eq.${runId}&select=id,status,updated_at,workspace_id`);
+    const found = rows?.[0];
+    if (found?.workspace_id) {
+      const member = await fetch(`${SUPABASE_URL}/rest/v1/workspace_members?workspace_id=eq.${found.workspace_id}&user_id=eq.${user.id}&select=role`, { headers: { apikey: PUBLISHABLE_KEY, Authorization: auth } });
+      const memberRows = member.ok ? await member.json() : [];
+      if (Array.isArray(memberRows) && memberRows.length) run = found;
+    }
+  }
+  if (!run) return fail(404, 'NOT_FOUND', 'Unknown run.');
+  if (!isStalled(run.status, run.updated_at, Date.now())) return reply(200, { ok: true, stalled: false });
+  const parts: { part: string }[] = await rest(`extraction_run_parts?run_id=eq.${run.id}&select=part`);
+  const step = stepOfRun(run.status, parts.map(p => p.part));
+  const detail = `stopped from outside: no change for more than ${STALL_MS / 60_000} minutes while ${run.status}`;
+  console.error('stage stalled', run.id, run.status, run.updated_at);
+  await rest(`extraction_runs?id=eq.${run.id}&status=eq.${run.status}&updated_at=eq.${encodeURIComponent(run.updated_at)}`, {
+    method: 'PATCH', headers: { Prefer: 'return=minimal' },
+    body: JSON.stringify({ status: 'failed', error: plainFailure(step, 'STOPPED', run.id), result: { failure: { step: step.key, code: 'STOPPED', detail } } }),
+  });
+  return reply(200, { ok: true, stalled: true });
+}
+
+/**
+ * An extraction check run only: one call on the run's connection with a reply limit far too small for
+ * the answer, so the provider cuts it off; the reply is kept in the run's result exactly as it came, to
+ * be copied into the tests (domain/ai/fixtures/). Sample text only; well under 1,000 tokens.
+ */
+async function recordCutoff(run: Run) {
+  const conn = await connectionFor(run);
+  const task: TaskDefinition = {
+    id: 'record_cutoff', schemaName: 'record_cutoff', maxOutputTokens: 16, verifyArrays: [],
+    instructions: 'Write the passage back in full, word for word.',
+    schema: { type: 'object', additionalProperties: false, required: ['passage'], properties: { passage: { type: 'string' } } },
+  };
+  const listing = 'The AP Clerk logs each invoice in the AP tracker, checks SAP for duplicates, matches it with the purchase order and the goods receipt, and sends any invoice over the tolerance to the approver named in the delegation of authority.';
+  const body = buildListingRequest(task, listing, conn.model);
+  if (takesReasoningEffort(conn.model)) body.reasoning = { effort: 'low' };
+  const target = providerRequest(conn, body);
+  const res = await fetch(target.url, { method: 'POST', body: JSON.stringify(target.body), headers: target.headers, redirect: 'error', signal: AbortSignal.timeout(60_000) });
+  const json = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }));
+  const parsed = parseProviderReply(conn, json);
+  await logUsage(run, conn, task.id, parsed.usage, parsed.ok, parsed.ok ? undefined : parsed.message, parsed.ok ? undefined : parsed.code);
+  await patchRun(run.id, {
+    status: 'done', input_tokens: parsed.usage.input, output_tokens: parsed.usage.output,
+    result: { recorded: { provider: conn.provider, model: conn.model, httpStatus: res.status, reply: json, read: parsed.ok ? 'ok' : parsed.code } },
+  });
+}
+
 // ---- entry ----------------------------------------------------------------------------------
 
 // Cross-site headers on every answer, for the allowed websites only (domain/site/origins.ts).
@@ -400,15 +529,18 @@ Deno.serve(withCors(async (req: Request) => {
   if (!SUPABASE_URL || !SECRET_KEY) return fail(500, 'NOT_CONFIGURED', 'The server is not configured.');
   const body = await req.json().catch(() => null);
   if (body?.action === 'create') return createRun(req, body);
-
+  if (body?.action === 'look') return lookAtRun(req, body);
   const run = await loadRun(String(body?.runId ?? ''), String(body?.token ?? ''));
   if (!run) return fail(404, 'NOT_FOUND', 'Unknown run.');
   const token = String(body.token);
   const again = { ...body };
+  const sourceTitle = (id: string) => run.input.sources?.find(x => x.sourceId === id)?.title ?? id;
   switch (body.action) {
     case 'start': {
       // An extraction check (an eval run, made only by someone with the project's secret key or database
       // access) reads the files sent with its start, and only before it has started; see eval/corpus/cases.ts.
+      const start = factsStartFor(run.kind, body.startAtKinds);
+      if ('refused' in start) return fail(400, 'INVALID_REQUEST', start.refused);
       let files: Map<string, Uint8Array> | null = null;
       if (run.kind === 'eval') {
         if (run.status !== 'queued') return fail(409, 'ALREADY_STARTED', 'This check has already started.');
@@ -416,16 +548,21 @@ Deno.serve(withCors(async (req: Request) => {
         if ('message' in checked) return fail(400, 'INVALID_FILES', checked.message);
         files = checked.files;
       }
-      inBackground(() => stageStart(run, token, files), run.id); break;
+      inBackground(() => stageStart(run, token, files, start.start), run.id, { key: 'start' }, 'start'); break;
     }
+    case 'record-cutoff':
+      if (run.kind !== 'eval' || run.status !== 'queued') return fail(409, 'NOT_A_NEW_CHECK', 'Only a new extraction check run can record a cut-off reply.');
+      inBackground(() => recordCutoff(run), run.id, { key: 'start' }, 'record-cutoff'); break;
     case 'pass':
       if (!['facts', 'steps'].includes(body.pass)) return fail(400, 'INVALID_REQUEST', 'pass is facts or steps.');
-      inBackground(() => stagePass(run, token, String(body.sourceId), body.pass), run.id, again); break;
+      inBackground(() => stagePass(run, token, String(body.sourceId), body.pass), run.id,
+        { key: 'pass', title: sourceTitle(String(body.sourceId)) }, `pass-${body.pass}-${String(body.sourceId).slice(0, 60)}`, again); break;
     case 'merge':
-      if (!['flow', 'facts'].includes(body.which)) return fail(400, 'INVALID_REQUEST', 'which is flow or facts.');
-      inBackground(() => stageMerge(run, token, body.which), run.id, again); break;
-    case 'review': inBackground(() => stageReview(run, token), run.id, again); break;
-    case 'assemble': inBackground(() => stageAssemble(run), run.id); break;
+      if (body.which === 'flow') { inBackground(() => stageMergeFlow(run, token), run.id, { key: 'merge-flow' }, 'merge-flow', again); break; }
+      if (body.which !== 'facts' || !isFactsPart(body.part)) return fail(400, 'INVALID_REQUEST', 'which is flow, or facts with a part of the facts merge.');
+      inBackground(() => stageFactsPart(run, token, body.part, Boolean(body.retried)), run.id, { key: 'merge-facts' }, `facts-${body.part}`, again); break;
+    case 'review': inBackground(() => stageReview(run, token), run.id, { key: 'review' }, 'review', again); break;
+    case 'assemble': inBackground(() => stageAssemble(run), run.id, { key: 'assemble' }, 'assemble'); break;
     default: return fail(400, 'INVALID_REQUEST', 'Unknown action.');
   }
   return reply(202, { ok: true });

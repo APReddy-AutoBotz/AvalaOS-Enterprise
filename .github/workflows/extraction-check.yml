@@ -18,6 +18,11 @@ on:
       workspace_id:
         description: Run on this workspace's own AI connection (empty for the platform key)
         default: ''
+      option:
+        description: "none; start-at-kinds (the facts merge one answer per kind); record-cutoff (one tiny call cut off on purpose, its reply printed)"
+        type: choice
+        options: [none, start-at-kinds, record-cutoff]
+        default: none
 
 concurrency:
   group: extraction-check
@@ -35,6 +40,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       CASE: ${{ inputs.case }}
       WORKSPACE_ID: ${{ inputs.workspace_id }}
+      OPTION: ${{ inputs.option }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,4 +61,5 @@ jobs:
             exit 1
           fi
           echo "::add-mask::$key"
-          EXTRACT_URL="https://$PROJECT_REF.supabase.co" EXTRACT_KEY="$key" node eval/corpus/check.ts "$CASE" "$WORKSPACE_ID"
+          opt=""; if [ "$OPTION" != "none" ]; then opt="--$OPTION"; fi
+          EXTRACT_URL="https://$PROJECT_REF.supabase.co" EXTRACT_KEY="$key" node eval/corpus/check.ts "$CASE" "$WORKSPACE_ID" $opt

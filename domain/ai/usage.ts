@@ -28,6 +28,11 @@ export interface Allowance {
 /** Kinds of AI work, in the words the screens use. Tasks not listed are "Other AI work". */
 export const WORK_OF_TASK: Record<string, string> = {
   source_facts: 'Reading sources', source_steps: 'Reading sources', merge_facts: 'Reading sources', merge_flow: 'Reading sources',
+  // The facts merge in parts (domain/extract/factsParts.ts); `merge_facts` is its single answer, kept for earlier months.
+  merge_facts_rules_exceptions: 'Reading sources', merge_facts_interfaces_metrics: 'Reading sources', merge_facts_conflicts_questions: 'Reading sources',
+  merge_facts_rules: 'Reading sources', merge_facts_exceptions: 'Reading sources', merge_facts_interfaces: 'Reading sources',
+  merge_facts_metrics: 'Reading sources', merge_facts_conflicts: 'Reading sources', merge_facts_questions: 'Reading sources',
+  record_cutoff: 'Reading sources',
   review_flow: 'Reading sources', participants: 'Reading sources',
   readFlowchart: 'Reading flowchart pictures',
   stepTraits: 'Finding facts for the assessment', profileFacts: 'Finding facts for the assessment',

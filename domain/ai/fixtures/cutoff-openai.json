@@ -1,0 +1,16 @@
+{
+  "standIn": "Written from the Responses API's documented reply for a cut-off answer, until the real reply is recorded with the extraction check's record-cutoff option on the platform key; replace this whole file with the printed reply.",
+  "provider": "openai",
+  "model": "gpt-5.5",
+  "httpStatus": 200,
+  "reply": {
+    "id": "resp_standin",
+    "object": "response",
+    "model": "gpt-5.5",
+    "status": "incomplete",
+    "incomplete_details": { "reason": "max_output_tokens" },
+    "output": [{ "id": "rs_standin", "type": "reasoning", "summary": [] }],
+    "usage": { "input_tokens": 96, "input_tokens_details": { "cached_tokens": 0 }, "output_tokens": 16, "output_tokens_details": { "reasoning_tokens": 16 }, "total_tokens": 112 }
+  },
+  "read": "TRUNCATED"
+}

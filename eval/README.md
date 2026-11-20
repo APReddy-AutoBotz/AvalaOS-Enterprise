@@ -77,6 +77,8 @@ select status, error, result->'score' from public.extraction_runs where id = '<r
 
 Extraction is not deterministic. Judge a change on the mean of at least two runs, not on one.
 
+Two options (the workflow's `option`, or a last argument to `check.ts`): `start-at-kinds` starts the facts merge at one answer per kind (`domain/extract/factsParts.ts`), to show that path on a real provider; a process reading is refused it. `record-cutoff` reads nothing: it makes one call with a reply limit of 16 tokens on sample text and prints the provider's reply between `BEGIN_CUTOFF_REPLY` and `END_CUTOFF_REPLY`, to be saved as `domain/ai/fixtures/cutoff-<provider>.json`. A finished or failed check prints the facts merge's tokens and seconds per part; a failed one also prints the technical detail kept in `result.failure`.
+
 ### Evaluating an AI provider
 
 A provider is offered to workspaces only after this eval has been run with it (`checked` in `domain/ai/providers.ts`). Until then Settings → AI provider lists it only for the platform owner. To evaluate one: the owner creates a workspace for the check, connects the provider's key there and presses "Test this key"; then start extraction checks as above with that workspace's id. The run uses that workspace's connection, including for the flowchart image in `ap-invoice-image`, and its usage is logged against that workspace. Run each case at least twice and compare the mean with OpenAI's before setting `checked: true`.

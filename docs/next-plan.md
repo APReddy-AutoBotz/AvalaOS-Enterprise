@@ -437,7 +437,19 @@ From the marketing chat's first piece of work (`claude/marketing-first-work-19-n
 - **Counting on the teardown pages,** by the rules of package 12 (section 3e), with the events listed there and no others without asking.
 - **A partner page** with the design-partner offer in plain words, after the lawyer has read it.
 
-### After this release: reading sources within the length of one answer (owner, 19 November 2026; not built)
+### After this release: reading sources within the length of one answer (owner, 19 November 2026; built 20 November 2026, in review)
+
+**Built (20 November 2026), in review; not deployed, not released.** The plan was reviewed and approved with changes (`claude/reading-split-builder-plan-20-nov.md` in the project). What was built:
+
+- **The facts merge in parts** (`domain/extract/factsParts.ts`, `FACTS_TASKS` in `domain/extract/tasks.ts`): three answers, rules and exceptions, interfaces and figures, conflicts and questions (this one sees every kind of candidate, because conflicts set rules against figures in most recorded readings); each stored as `facts:<part>` with its tokens and time, then joined into `merge:facts`, so the review and assembly are unchanged. A cut-off answer, or one that times out a second time, is asked again one kind at a time; a single kind still cut off stops the reading. The extraction check can start at one answer per kind (`--start-at-kinds`, workflow option `start-at-kinds`); a process reading is refused it.
+- **The flow merge: the rule only.** A cut-off flow, or a second time-out, stops the reading with the plain message; nothing is split.
+- **Plain words for every failure** (`domain/extract/failure.ts`): the run's `error` is one sentence, the step, the reason, what to do and `Reference: <first eight characters of the run id>.`; the technical text is in the run's `result.failure` and the function's log. The Sources screen says "The last reading stopped." before it. A step the platform stops mid-call (it stops an invocation at 150 seconds whatever it is doing, and nothing is written) leaves the run unchanged; once it has not changed for 7 minutes (`STALL_MS`), the next look (the Sources screen, the check) ends it with "the server stopped this step before it finished, at the time limit for one step" (`look` action). The earlier "was stopped by the platform time limit" text was written by hand in the database on 11 November 2026; no code wrote it.
+- **The tokens of a failed answer** go to the run's totals (a `failed:<step>` part, or the split note) and, for a process reading, to `ai_usage` with the status `truncated` where it was cut off, which the allowance counts.
+- **A recorded cut-off reply per provider family**, kept in `domain/ai/fixtures/` (`--record-cutoff`, workflow option `record-cutoff`: one call with a reply limit of 16 tokens on sample text). Until recorded after the early deploy, the two files are stand-ins written from the providers' documented replies and say so.
+- **One database change**, not applied: `20261120160000_extraction_facts_parts.sql` allows the part names `facts:` and `failed:`; test `supabase/tests/extraction_facts_parts.sql` (5 groups), for the rolled-back trial before it is applied.
+- **Anthropic stays unavailable** (owner, 20 November 2026). Before it is offered: find why it writes about 0.83 tokens per stored character on the flow merge against about 0.21 on OpenAI, starting with thinking that the adapter does not switch off (`domain/ai/anthropic.ts` leaves `reasoning` out). On the owner's largest process the flow merge is estimated at about 15,700 of its 16,000 tokens on Anthropic.
+- **Azure OpenAI:** the OpenAI check stands for it for this package (owner, 20 November 2026); the reasoning-effort risk is in package 17's notes.
+
 
 **Why.** The first extraction check on Anthropic (below) stopped at the facts merge: its answer reached the merge's output ceiling and was cut off, so the reading had nothing to score. OpenAI never reached it on the sample, but a larger process could reach any ceiling on any provider. Anthropic stays unavailable until it passes the check after this package (owner).
 
@@ -653,6 +665,8 @@ Remove-Variable key, sec
 ```
 
 What to send back: the region; the model and version as the Azure portal shows them; the deployment name; whether the resource's address ends `openai.azure.com`, `cognitiveservices.azure.com` or `services.ai.azure.com`; and for each call the line "HTTP …" with the text or the error above it. Never the key.
+
+**Also before the first Azure workspace (owner, 20 November 2026, from the reading-split plan):** the reasoning effort is sent only when the deployment's name shows the model (`takesReasoningEffort` in `domain/ai/providers.ts`). A deployment named, say, "prod-extract" runs at the model's default effort, writes more reasoning inside the same output ceilings and is slower; the check run of 11 November 2026 at medium effort had its flow merge stopped by the time limit. Either the deployment is named so it shows the model (for example `gpt-5.5`), or Settings takes the model behind the deployment, and one extraction check runs on that workspace before it is used.
 
 What it needs on Azure: one resource holding a text deployment and a speech deployment for the audio API (on 20 November 2026, `gpt-4o-mini-transcribe`, version 2025-12-15; not a model the catalog describes as streaming only). Azure offers speech models in fewer regions than text models, so one resource serves both only where its region has both (Microsoft's table of regions: https://learn.microsoft.com/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure-region-availability). Not tested by these calls: the browser records WebM, not M4A; the first real recording after the build tests that.
 

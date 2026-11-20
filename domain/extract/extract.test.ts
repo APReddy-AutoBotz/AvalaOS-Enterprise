@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { extractProcessModel, type RunTask } from './pipeline.ts';
-import { assembleModel, cautiousAccess } from './assemble.ts';
+import { extractProcessModel, finish, runFactsMerge, runSourceStage, type RunTask } from './pipeline.ts';
+import { TaskError, plainFailureOf, spentOn } from './failure.ts';
+import { listingKinds } from './factsParts.ts';
+import { FACTS_TASKS } from './tasks.ts';
+import { parseProviderReply } from '../ai/providers.ts';
+import fs from 'node:fs';
+import { assembleModel, cautiousAccess, type MergeFactsOutput } from './assemble.ts';
+import type { TaskDefinition } from '../ai/gateway.ts';
 import { buildCandidates, factsListing, flowListing } from './candidates.ts';
 import { validateModel } from '../processModel/validate.ts';
 import type { IngestSegment } from '../ingest/segment.ts';
@@ -20,10 +26,31 @@ const CALL = [
   seg('c1:3', 'call-1', 'Meera: around nine to ten thousand invoices a month. SAP is set to five percent tolerance.', { timestamp: '00:01:08', speaker: 'Meera Iyer' }),
 ];
 
+/** The facts merge's answer as one; each part of the merge returns its own lists of it. */
+const FACTS: MergeFactsOutput = {
+  rules: [{ name: 'Price tolerance', condition: '2% or INR 5,000', action: 'post', members: ['B1'] }, { name: 'SAP tolerance', condition: '5%', action: 'block', members: ['B2'] }],
+  exceptions: [{ name: 'Fraud', kind: 'business', trigger: 'x', handling: 'y', routedTo: 'CFO', members: ['X1'] }],
+  interfaces: [
+    { system: 'SAP S/4HANA', method: 'api', name: 'Supplier invoice API', operations: ['create invoices'], access: 'confirmed', members: ['I1', 'I2'] },
+    { system: 'SAP S/4HANA', method: 'api', name: 'PO read API', operations: ['read purchase orders'], access: 'confirmed', members: ['I3'] },
+  ],
+  metrics: [{ label: 'Invoices per month', chosen: 'M2', members: ['M1', 'M2'] }],
+  conflicts: [
+    { summary: 'Tolerance: 2% in policy, 5% in SAP.', about: 'rule', members: ['B1', 'B2'] },
+    { summary: 'Volume: 8,500 vs 9,000 to 10,000 per month.', about: 'metric', members: ['M1', 'M2'] },
+    { summary: 'Not really a conflict.', about: 'other', members: ['B1'] },
+  ],
+  questions: [{ question: 'When will the supplier invoice API be activated?', whyItMatters: 'API-first design.', members: ['U1'] }],
+};
+
+/** The lists a facts task's schema asks for, taken from FACTS. */
+const partOf = (task: TaskDefinition) => Object.fromEntries(Object.keys((task.schema as any).properties).map(k => [k, (FACTS as any)[k]]));
+
 const empty = { roles: [], systems: [], interfaces: [], rules: [], exceptions: [], metrics: [], unknowns: [] };
 const fake: RunTask = async (task, input) => {
   const usage = { input: 10, output: 5 };
   const sourceId = 'segments' in input ? input.segments[0].sourceId : '';
+  if (task.id.startsWith('merge_facts_')) return { usage, data: partOf(task) };
   switch (task.id) {
     case 'source_facts':
       return { usage, data: sourceId === 'sop' ? {
@@ -73,22 +100,6 @@ const fake: RunTask = async (task, input) => {
           { from: 'g1', to: 'e2', label: 'Yes' }, { from: 'g1', to: 'e3', label: 'No' },
           { from: 's2', to: 's3', label: '' }, { from: 'e2', to: 's1', label: '' }, { from: 's1', to: 's1', label: '' }, { from: 'zz', to: 's1', label: '' },
         ],
-      } };
-    case 'merge_facts':
-      return { usage, data: {
-        rules: [{ name: 'Price tolerance', condition: '2% or INR 5,000', action: 'post', members: ['B1'] }, { name: 'SAP tolerance', condition: '5%', action: 'block', members: ['B2'] }],
-        exceptions: [{ name: 'Fraud', kind: 'business', trigger: 'x', handling: 'y', routedTo: 'CFO', members: ['X1'] }],
-        interfaces: [
-          { system: 'SAP S/4HANA', method: 'api', name: 'Supplier invoice API', operations: ['create invoices'], access: 'confirmed', members: ['I1', 'I2'] },
-          { system: 'SAP S/4HANA', method: 'api', name: 'PO read API', operations: ['read purchase orders'], access: 'confirmed', members: ['I3'] },
-        ],
-        metrics: [{ label: 'Invoices per month', chosen: 'M2', members: ['M1', 'M2'] }],
-        conflicts: [
-          { summary: 'Tolerance: 2% in policy, 5% in SAP.', about: 'rule', members: ['B1', 'B2'] },
-          { summary: 'Volume: 8,500 vs 9,000 to 10,000 per month.', about: 'metric', members: ['M1', 'M2'] },
-          { summary: 'Not really a conflict.', about: 'other', members: ['B1'] },
-        ],
-        questions: [{ question: 'When will the supplier invoice API be activated?', whyItMatters: 'API-first design.', members: ['U1'] }],
       } };
     case 'review_flow':
       return { usage, data: { merges: [], removals: [] } };
@@ -266,4 +277,93 @@ test('a figure given only in words: the number another source gives is kept, and
   assert.deepEqual(model.conflicts[1].target, { kind: 'metric', id: 'm-1', field: 'value' });
   assert.equal(model.conflicts[1].values.length, 3);
   assert.deepEqual(validateModel(model).issues.filter(i => i.severity === 'error'), []);
+});
+
+// ---- the facts merge in parts (docs/next-plan.md, section 3e) ---------------------------------
+
+async function candidateSet() {
+  const stage1 = await Promise.all(SOURCES.map(src => runSourceStage(fake, src)));
+  return buildCandidates(SOURCES, stage1.map(r => r.output), SOURCES.flatMap(src => src.segments));
+}
+const lines = (listing: string) => listing.split('\n').filter(l => /^[A-Z]\d+ \[/.test(l));
+
+test('facts parts: each answer sees only its own sections, with the same ids as the whole listing', async () => {
+  const set = await candidateSet();
+  const whole = lines(factsListing(set));
+  for (const part of Object.keys(FACTS_TASKS)) {
+    const listing = factsListing(set, listingKinds(part) ?? undefined);
+    for (const l of lines(listing)) assert.ok(whole.includes(l), `${part}: ${l} is the same line as in the whole listing`);
+    const kinds = listingKinds(part);
+    if (!kinds) { assert.deepEqual(lines(listing), whole, `${part} sees every candidate`); continue; }
+    const prefixes = new Set(lines(listing).map(l => l[0]));
+    const allowed = new Set(kinds.map(k => ({ rule: 'B', exception: 'X', interface: 'I', metric: 'M' } as Record<string, string>)[k]));
+    for (const p of prefixes) assert.ok(allowed.has(p), `${part} shows only its own kinds (found ${p})`);
+    assert.doesNotMatch(listing, /^UNKNOWNS/m, `${part} has no unknowns`);
+    assert.match(listing, /^STEP NAMES \(context only\)/m);
+  }
+});
+
+test('facts parts: the model read in parts is the model read from one answer (Done when 1)', async () => {
+  const set = await candidateSet();
+  const flow = (await fake({ id: 'merge_flow' } as any, { listing: '' })).data as any;
+  const one = finish('Vendor invoice processing', set, flow, FACTS, { merges: [], removals: [] } as any);
+  for (const start of ['pairs', 'kinds'] as const) {
+    const parts = await extractProcessModel(fake, 'Vendor invoice processing', SOURCES, start);
+    assert.deepEqual(parts.model, one.model, start);
+    assert.deepEqual(parts.report.dropped, one.report.dropped, start);
+  }
+});
+
+/** A fake whose named facts parts are cut off, as the provider's recorded reply reads. */
+function cutting(parts: string[], calls: string[]): RunTask {
+  const cut = JSON.parse(fs.readFileSync(new URL('../ai/fixtures/cutoff-openai.json', import.meta.url), 'utf8'));
+  const conn = { provider: 'openai', model: 'gpt-5.5', endpoint: null, apiKey: 'k', source: 'platform' } as const;
+  return async (task, input) => {
+    calls.push(task.id);
+    if (parts.map(p => FACTS_TASKS[p]?.id ?? p).includes(task.id)) {
+      const r = parseProviderReply(conn, cut.reply);
+      if (r.ok) throw new Error('the fixture should be cut off');
+      throw new TaskError(`${task.id}: ${r.code} ${r.message}`, { input: 900, output: 12000 }, r.code);
+    }
+    return fake(task, input);
+  };
+}
+
+test('a cut-off facts part is asked again one kind at a time, and the model is the same (Done when 3)', async () => {
+  const calls: string[] = [];
+  const set = await candidateSet();
+  const r = await runFactsMerge(cutting(['rules-exceptions'], calls), set);
+  assert.deepEqual(r.facts, FACTS);
+  assert.deepEqual(calls.filter(c => c.startsWith('merge_facts_')).sort(),
+    ['merge_facts_conflicts_questions', 'merge_facts_exceptions', 'merge_facts_interfaces_metrics', 'merge_facts_rules', 'merge_facts_rules_exceptions']);
+  assert.deepEqual((r.stored['rules-exceptions'] as any).splitInto, ['rules', 'exceptions']);
+  // 7b: the cut-off answer's tokens are counted with the others (four answers of 15 tokens, one cut off).
+  assert.deepEqual(r.usage, { input: 900 + 4 * 10, output: 12000 + 4 * 5 });
+  const parts = await extractProcessModel(cutting(['rules-exceptions', 'conflicts-questions'], []), 'Vendor invoice processing', SOURCES);
+  const whole = await extractProcessModel(fake, 'Vendor invoice processing', SOURCES);
+  assert.deepEqual(parts.model, whole.model);
+});
+
+test('a single kind still cut off stops the reading, with the facts line of the table (Done when 3)', async () => {
+  const calls: string[] = [];
+  await assert.rejects(extractProcessModel(cutting(['rules-exceptions', 'rules'], calls), 'P', SOURCES), (e: unknown) => {
+    assert.ok(e instanceof TaskError);
+    assert.equal(e.code, 'TRUNCATED');
+    assert.deepEqual(spentOn(e), { input: 900, output: 12000 });
+    assert.equal(plainFailureOf({ key: 'merge-facts' }, e.message, 'abcdef12-0000-0000-0000-000000000000'),
+      'Combining the facts from the sources: the answer was longer than one reply may be. Try fewer sources at a time. Reference: abcdef12.');
+    return true;
+  });
+  assert.equal(calls.filter(c => c === 'merge_facts_rules').length, 1, 'a single kind is not asked again');
+});
+
+test('the flow merge has the rule only: a cut-off flow stops the reading with the flow line, and nothing is split (Done when 5)', async () => {
+  const calls: string[] = [];
+  await assert.rejects(extractProcessModel(cutting(['merge_flow'], calls), 'P', SOURCES), (e: unknown) => {
+    assert.ok(e instanceof TaskError && e.code === 'TRUNCATED');
+    assert.equal(plainFailureOf({ key: 'merge-flow' }, (e as Error).message, 'abcdef12-0000-0000-0000-000000000000'),
+      'Combining the steps from the sources: the answer was longer than one reply may be. Try fewer sources at a time. Reference: abcdef12.');
+    return true;
+  });
+  assert.equal(calls.filter(c => c === 'merge_flow').length, 1);
 });
