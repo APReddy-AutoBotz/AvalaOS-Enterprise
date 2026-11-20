@@ -13,7 +13,7 @@ export const CONTACT_EMAIL = 'hello@avalaos.com';
  * release's, set in the release's own commit together with `COVERAGE_RULE.since` (owner, 18 November 2026);
  * until then they show "[release date]".
  */
-export const UPDATED: Record<TrustPageId, string | null> = { privacy: null, terms: '17 November 2026', security: null };
+export const UPDATED: Record<TrustPageId, string | null> = { privacy: '20 November 2026', terms: '17 November 2026', security: '20 November 2026' };
 export const updatedText = (id: TrustPageId): string => UPDATED[id] ?? '[release date]';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;

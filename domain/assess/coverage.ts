@@ -74,7 +74,7 @@ export function looseCovers(a: AccessMethod, step: Step, common: Set<string>): b
  * screens show "[release date]", so the preview shows where the date goes. The notice shows until the
  * end of January 2027, after which the rule is simply how it works.
  */
-export const COVERAGE_RULE: { since: string | null; noticeUntil: string } = { since: null, noticeUntil: '2027-01-31' };
+export const COVERAGE_RULE: { since: string | null; noticeUntil: string } = { since: '20 November 2026', noticeUntil: '2027-01-31' };
 export const showsCoverageNotice = (now: Date): boolean => now.toISOString().slice(0, 10) <= COVERAGE_RULE.noticeUntil;
 const sinceText = () => COVERAGE_RULE.since ?? '[release date]';
 
