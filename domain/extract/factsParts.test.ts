@@ -49,19 +49,14 @@ test('each part\'s task asks only for its own lists, with the schema of the sing
   assert.match(FACTS_TASKS['interfaces-metrics'].instructions, /most cautious access status/);
 });
 
-test('questions: one per matter, and the rest of the questions instructions as before (owner, 20 November 2026)', () => {
-  const ONE_PER_MATTER = 'One question per matter, never two questions about the same thing.';
+test('questions: the single answer\'s paragraph, word for word (the "one question per matter" line was taken out, owner, 20 November 2026)', () => {
   for (const part of ['conflicts-questions', 'questions']) {
     const line = FACTS_TASKS[part].instructions.split('\n').find(l => l.startsWith('questions: '));
-    assert.ok(line, part);
-    assert.equal(line!.split(ONE_PER_MATTER).length, 2, `${part}: the line is there once`);
-    // Removing it gives back the single answer's paragraph word for word.
-    assert.equal(line!.replace(` ${ONE_PER_MATTER}`, ''),
-      'questions: what someone would still need to know to assess and automate this process: every "unknowns" candidate, plus missing volumes or handling times for a path, unclear owners or turnaround times, unconfirmed interfaces, and unhandled cases. One question each, with why it matters. "members" are the candidate ids it comes from (may be empty).');
+    assert.equal(line,
+      'questions: what someone would still need to know to assess and automate this process: every "unknowns" candidate, plus missing volumes or handling times for a path, unclear owners or turnaround times, unconfirmed interfaces, and unhandled cases. One question each, with why it matters. "members" are the candidate ids it comes from (may be empty).', part);
   }
-  for (const part of ['rules-exceptions', 'interfaces-metrics', 'conflicts', 'rules']) {
-    assert.doesNotMatch(FACTS_TASKS[part].instructions, /One question per matter/, `${part} asks for no questions`);
-  }
+  // Runs 9d6899d3 and d714b013 folded the supplier invoice API question into one broad question about SAP with it.
+  for (const task of Object.values(FACTS_TASKS)) assert.doesNotMatch(task.instructions, /One question per matter/, task.id);
 });
 
 test('conflicts and questions see every kind of candidate; grouping sees only its own', () => {
