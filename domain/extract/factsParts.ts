@@ -78,6 +78,13 @@ export function splitAfter(part: string, code: FailureCode, retried: boolean): s
   return null;
 }
 
+/**
+ * Whether the smaller answers that replace a cut-off one may start: not once the run has ended (another
+ * step failed meanwhile, or it was ended as stopped), so no AI call is made for a reading nobody will see.
+ */
+export const startsSmallerParts = (runStatus: string | null | undefined): boolean =>
+  typeof runStatus === 'string' && runStatus !== 'failed' && runStatus !== 'done';
+
 /** A stored answer. */
 export interface FactsAnswer { data: Partial<MergeFactsOutput>; usage: Usage; ms?: number }
 /** A stored note that an answer was replaced by smaller ones, with the tokens the failed answer used. */

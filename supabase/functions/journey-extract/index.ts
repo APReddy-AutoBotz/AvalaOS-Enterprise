@@ -24,7 +24,7 @@ import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, par
 import { parseDocx } from '../../../domain/ingest/parsers/docx.ts';
 import { buildCandidates, factsListing, flowListing, type SourcePassOutput } from '../../../domain/extract/candidates.ts';
 import { FACTS_TASKS, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from '../../../domain/extract/tasks.ts';
-import { factsProgress, factsStartFor, isFactsPart, joinFacts, listingKinds, splitAfter, startParts, type FactsStart } from '../../../domain/extract/factsParts.ts';
+import { factsProgress, factsStartFor, isFactsPart, joinFacts, listingKinds, splitAfter, startParts, startsSmallerParts, type FactsStart } from '../../../domain/extract/factsParts.ts';
 import {
   TaskError, classify, codeOf, isStalled, plainFailure, spentOn, stepOfRun, STALL_MS, type FailureCode, type ReadingStep,
 } from '../../../domain/extract/failure.ts';
@@ -355,6 +355,9 @@ async function stageFactsPart(run: Run, token: string, part: string, retried: bo
     if (!children) throw e;
     const usage = spentOn(e);
     await putPart(run.id, `facts:${part}`, { splitInto: children, reason: codeOf(e), usage, ms: Date.now() - started }, usage);
+    // A run that has failed meanwhile (another step) starts nothing more.
+    const now: { status: string }[] = await rest(`extraction_runs?id=eq.${run.id}&select=status`);
+    if (!startsSmallerParts(now?.[0]?.status)) return;
     await Promise.all(children.map(c => trigger({ action: 'merge', ...stageBody(run, token, { which: 'facts', part: c }) })));
     return;
   }

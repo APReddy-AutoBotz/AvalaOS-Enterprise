@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  FACTS_ORDER, FACTS_PARTS, factsProgress, factsStartFor, isFactsPart, joinFacts, listingKinds, pick, splitAfter, startParts,
+  FACTS_ORDER, FACTS_PARTS, factsProgress, factsStartFor, isFactsPart, joinFacts, listingKinds, pick, splitAfter, startParts, startsSmallerParts,
 } from './factsParts.ts';
 import { FACTS_TASKS } from './tasks.ts';
 import type { MergeFactsOutput } from './assemble.ts';
@@ -118,6 +118,14 @@ test('a cut-off answer is split into its kinds; a time-out only on its second tr
   for (const code of ['REFUSED', 'INVALID_OUTPUT', 'PROVIDER_ERROR', 'UNREACHABLE', 'OTHER'] as const) {
     assert.equal(splitAfter('rules-exceptions', code, true), null, `${code} is not about length`);
   }
+});
+
+test('the smaller answers after a cut-off start only while the run is still going', () => {
+  for (const status of ['merging', 'running', 'reviewing', 'assembling', 'queued']) assert.equal(startsSmallerParts(status), true, status);
+  assert.equal(startsSmallerParts('failed'), false, 'another step failed meanwhile: start nothing');
+  assert.equal(startsSmallerParts('done'), false);
+  assert.equal(startsSmallerParts(undefined), false, 'a run that cannot be read starts nothing');
+  assert.equal(startsSmallerParts(null), false);
 });
 
 test('starting at one answer per kind is for the extraction check only (7c)', () => {
