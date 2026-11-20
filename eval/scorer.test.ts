@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import type { ProcessModel } from '../domain/processModel/types.ts';
 import { docxText, loadCase } from './run.ts';
-import { score, similarity } from './scorer.ts';
+import { matchByName, matchByNameOrText, score, similarity } from './scorer.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { gold, texts } = loadCase('ap-invoice');
@@ -77,4 +77,50 @@ test('docx text keeps body paragraphs and joins table cells', () => {
   assert.match(text, /Vendor Invoice Processing \(India\)/);
   assert.match(text, /Up to 2,00,000 \| Cost Centre Owner/);
   assert.match(text, /6\.6 Enter PO invoices/);
+});
+
+// Rules and exceptions (owner, 20 November 2026): the better of the name against the gold's name and
+// aliases, and the name with its trigger or condition against the gold's. The examples are answers of the
+// single facts merge (the code before the reading split), copied from stored check runs.
+const OLD_RULE = (goldItems: any[], cands: any[], extra: string) => {
+  const withText = (xs: any[]) => xs.map(x => ({ id: x.id, name: `${x.name} ${x[extra] ?? ''}`, aliases: [x.name, ...(x.aliases ?? [])] }));
+  return matchByName(withText(goldItems), withText(cands), 0.45);
+};
+const NEW_RULE = (goldItems: any[], cands: any[], extra: string) =>
+  matchByNameOrText(goldItems.map(x => ({ id: x.id, name: x.name, text: x[extra] ?? '', aliases: x.aliases })), cands.map(x => ({ id: x.id, name: x.name, text: x[extra] ?? '' })), 0.45);
+
+test('an exception named right is found however long its trigger (run 3304ce6c, 20 November 2026)', () => {
+  const cand = { ...clone().exceptions[0], id: 'x-c',
+    name: 'Missing or incorrect mandatory invoice fields',
+    trigger: 'Invoice is incomplete/incorrect or missing legal name/GSTIN, vendor GSTIN, invoice number/date, PO number, HSN/SAC codes, or tax breakup.' };
+  const goldItem = gold.exceptions.find(x => x.id === 'x-missing-field')!;
+  assert.equal(OLD_RULE([goldItem], [cand], 'trigger').size, 0, 'the rule before scored it a miss');
+  assert.equal(NEW_RULE([goldItem], [cand], 'trigger').get('x-missing-field'), 'x-c');
+  // In the whole scorecard: every gold exception kept as it is, the missing-field one replaced by this answer.
+  const m = clone();
+  m.exceptions = m.exceptions.map(x => (x.id === 'x-missing-field' ? cand : x));
+  assert.equal(score(gold, m, texts).exceptionRecall, 1);
+});
+
+test('the same holds for an exception whose name is a gold alias (run 3304ce6c: "Missing goods receipt")', () => {
+  const cand = { ...clone().exceptions[0], id: 'x-c', name: 'Missing goods receipt', trigger: 'Invoice arrives/entered before GR is posted in SAP.' };
+  const goldItem = gold.exceptions.find(x => x.id === 'x-no-gr')!;
+  assert.equal(NEW_RULE([goldItem], [cand], 'trigger').get('x-no-gr'), 'x-c');
+});
+
+test('a rule is found on its name with its condition (run 85799b5d: the goods receipt reminder)', () => {
+  const cand = { ...clone().rules[0], id: 'br-c', name: 'Missing goods receipt reminder', condition: 'No GR exists or nothing happens after requesting GR posting.' };
+  const goldItem = gold.rules.find(x => x.id === 'br-gr-followup')!;
+  assert.equal(OLD_RULE([goldItem], [cand], 'condition').size, 0, 'the rule before scored it a miss');
+  assert.equal(NEW_RULE([goldItem], [cand], 'condition').get('br-gr-followup'), 'br-c');
+});
+
+test('nothing else moves: the threshold, one-to-one matching, and an unrelated exception still a miss', () => {
+  const goldItems = gold.exceptions.filter(x => ['x-price', 'x-qty'].includes(x.id));
+  // One joined answer can stand for only one of the two gold exceptions (run 9d6899d3's join).
+  const joined = { id: 'x-c', name: 'Price or quantity variance outside tolerance', trigger: 'Invoice price or quantity differs from the PO or the goods receipt beyond tolerance.' };
+  assert.equal(NEW_RULE(goldItems, [joined], 'trigger').size, 1);
+  const unrelated = { id: 'x-d', name: 'Supplier invoice API not available', trigger: 'The API is not activated in S/4.' };
+  assert.equal(NEW_RULE(gold.exceptions, [unrelated], 'trigger').size, 0);
+  assert.equal(score(gold, gold, texts).ruleRecall, 1);
 });
