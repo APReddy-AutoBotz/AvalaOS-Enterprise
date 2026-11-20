@@ -124,7 +124,7 @@ function factsInstructions(kinds: readonly FactsKind[]): string {
       grouped.includes('interfaces') ? ' For interfaces, keep the most cautious access status among the members unless a member clearly states a newer confirmation.' : ''}`);
   }
   if (kinds.includes('conflicts')) lines.push('conflicts: where candidates give different values for the same thing (for example two different tolerances, or two different monthly volumes), add a conflict with a one-sentence summary naming both values and the candidate ids that disagree. Do not pick a winner.');
-  if (kinds.includes('questions')) lines.push('questions: what someone would still need to know to assess and automate this process: every "unknowns" candidate, plus missing volumes or handling times for a path, unclear owners or turnaround times, unconfirmed interfaces, and unhandled cases. One question each, with why it matters. "members" are the candidate ids it comes from (may be empty).');
+  if (kinds.includes('questions')) lines.push('questions: what someone would still need to know to assess and automate this process: every "unknowns" candidate, plus missing volumes or handling times for a path, unclear owners or turnaround times, unconfirmed interfaces, and unhandled cases. One question each, with why it matters. One question per matter, never two questions about the same thing. "members" are the candidate ids it comes from (may be empty).');
   lines.push('Use only the candidate ids given.');
   return lines.join('\n');
 }

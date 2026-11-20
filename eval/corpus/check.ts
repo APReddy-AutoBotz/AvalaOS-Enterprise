@@ -51,6 +51,22 @@ async function printFactsParts() {
   }
 }
 
+/**
+ * Counts tracked beside the scorecard, not judged (owner, 20 November 2026), with the ranges of the
+ * 15 scored checks before the facts merge was split.
+ */
+const TRACKED = [
+  { key: 'questions', label: 'Questions listed', before: '16 to 22' },
+  { key: 'conflicts', label: 'Conflicts listed', before: '5 to 8' },
+  { key: 'exceptions', label: 'Exception groups', before: '15 to 21' },
+] as const;
+async function printTracked() {
+  const r = await fetch(`${url}/rest/v1/extraction_run_parts?run_id=eq.${run.id}&part=eq.merge:facts&select=${TRACKED.map(t => `${t.key}:output->${t.key}`).join(',')}`, { headers });
+  const [row] = r.ok ? await r.json() : [];
+  console.log('Tracked, not judged (the 15 checks before):');
+  for (const t of TRACKED) console.log(`  ${t.label}: ${Array.isArray(row?.[t.key]) ? row[t.key].length : '—'} (${t.before})`);
+}
+
 const until = Date.now() + 12 * 60_000;
 for (;;) {
   await new Promise(r => setTimeout(r, 15_000));
@@ -66,6 +82,7 @@ for (;;) {
   if (row?.status === 'done') {
     console.log(`Done. Tokens: ${row.input_tokens} in, ${row.output_tokens} out.`);
     await printFactsParts();
+    await printTracked();
     console.log(JSON.stringify(row.score, null, 2));
     break;
   }

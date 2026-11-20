@@ -449,6 +449,12 @@ From the marketing chat's first piece of work (`claude/marketing-first-work-19-n
 - **One database change**, applied on the owner's yes on 20 November 2026 at 15:45 UTC after a rolled-back trial (test: ALL_TESTS_PASSED, 5 groups): `20261120154544_extraction_facts_parts.sql` allows the part names `facts:` and `failed:`; test `supabase/tests/extraction_facts_parts.sql` (5 groups), for the rolled-back trial before it is applied.
 - **Anthropic stays unavailable** (owner, 20 November 2026). Before it is offered: find why it writes about 0.83 tokens per stored character on the flow merge against about 0.21 on OpenAI, starting with thinking that the adapter does not switch off (`domain/ai/anthropic.ts` leaves `reasoning` out). On the owner's largest process the flow merge is estimated at about 15,700 of its 16,000 tokens on Anthropic.
 - **Azure OpenAI:** the OpenAI check stands for it for this package (owner, 20 November 2026); the reasoning-effort risk is in package 17's notes.
+- **Questions: one per matter** (owner, 20 November 2026): the first two checks on the parts listed 30 questions each against 16 to 22 before, so the questions instructions gain one line, "One question per matter, never two questions about the same thing."
+- **The pass line for this package** (owner, 20 November 2026, evening). The first line, "every published target in each run and the facts measures at or above the lowest recorded before", was wrong: the lowest recorded exceptions figure is 63.6%, not 81.8%, and only 3 of the 15 earlier scored checks met every target alone. From now on:
+  - Judge on the mean of two runs, which must meet every published target.
+  - Facts measures, mean of two: conflicts found 100%; rules at least 72.8%; exceptions at least 77.4%; figures at least 79.1%; open questions at least 85%. That is within 5 points of the earlier average.
+  - Any single run with quotes below 100% or a way in overclaimed is reported, whatever the mean.
+  - Questions listed, conflicts listed and exception groups are printed, not judged, beside 16 to 22, 5 to 8 and 15 to 21.
 
 
 **Why.** The first extraction check on Anthropic (below) stopped at the facts merge: its answer reached the merge's output ceiling and was cut off, so the reading had nothing to score. OpenAI never reached it on the sample, but a larger process could reach any ceiling on any provider. Anthropic stays unavailable until it passes the check after this package (owner).
