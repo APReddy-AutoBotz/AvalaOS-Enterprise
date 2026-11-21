@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { loadSample, keepInputOf, type SampleState } from './fixtures/keepSample.ts';
-import { buildKeptDocuments, fingerprintsOf, keptLook, keptSizes, keptTypes, KEPT_FORMAT, KeptFormatError, readKept, sectionFingerprint, type KeptDocuments, type KeptLook } from './keep.ts';
+import { buildKeptDocuments, fingerprintsOf, keptInputs, keptLook, keptSizes, keptTypes, KEPT_FORMAT, KeptFormatError, readKept, sectionFingerprint, type KeptDocuments, type KeptLook } from './keep.ts';
 import { versionChanges } from './versions.ts';
 import { changedSections } from './changes.ts';
 import { withCosts, withMapShape, withOverride, withRate } from '../assess/decisions.ts';
@@ -104,6 +104,19 @@ test('a section\'s fingerprint ignores its number and the map\'s PNG; it follows
   assert.equal(sectionFingerprint({ ...s, number: '9.9' }), sectionFingerprint(s));
   assert.equal(sectionFingerprint({ ...s, blocks: s.blocks.map(b => (b.kind === 'figure' ? { ...b, png: 'data:image/png;base64,AAAA' } : b)) }), sectionFingerprint(s));
   assert.notEqual(sectionFingerprint({ ...s, title: `${s.title}.` }), sectionFingerprint(s));
+});
+
+test('the inputs index: fingerprints of what the version was built from and the build, never a value or a name', () => {
+  const index = keptInputs(keepInputOf(sample), { build: 'abc1234', settings: sample.settings });
+  assert.equal(index.build, 'abc1234');
+  assert.deepEqual(Object.keys(index.inputs).sort(), ['decisions', 'edits', 'layouts', 'names', 'requirements', 'settings', 'sources', 'testEdits']);
+  assert.ok(Object.values(index.inputs).every(v => /^[0-9a-f]{16}$/.test(v)));
+  const s = structuredClone(sample);
+  s.edits.push({ docType: 'pdd', sectionKey: 's-1-1', html: '<p>Edited.</p>', baseHash: 'x' });
+  const other = keptInputs(keepInputOf(s), { build: 'abc1234', settings: sample.settings });
+  assert.notEqual(other.inputs.edits, index.inputs.edits);
+  assert.equal(other.inputs.decisions, index.inputs.decisions);
+  for (const name of Object.values(sample.names)) assert.ok(!JSON.stringify(index).includes(name));
 });
 
 test('a kept set in a format this release cannot read is refused, never guessed at', () => {

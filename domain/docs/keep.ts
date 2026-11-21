@@ -25,7 +25,8 @@ import { buildTests, testPack, type TestPack } from './tests.ts';
 import { buildEvidence, type EvidenceInput } from './evidence.ts';
 import { deliveryPlan } from '../plan/delivery.ts';
 import { offersDocument, whatFollows } from '../plan/purpose.ts';
-import { hashValue } from '../processModel/hash.ts';
+import { hashModel, hashValue } from '../processModel/hash.ts';
+import type { AssessmentSettings } from '../assess/settings.ts';
 
 /** The format of a kept version. Raised only together with a reader for the new format; never reused. */
 export const KEPT_FORMAT = 1;
@@ -129,6 +130,28 @@ export function readKept(stored: unknown): KeptDocuments {
   if (!s || typeof s.format !== 'number' || !READABLE_FORMATS.includes(s.format)) throw new KeptFormatError(`This approved version was kept in a format this release cannot read (${String(s?.format ?? 'none')}).`);
   if (!s.documents || typeof s.documents !== 'object') throw new KeptFormatError('This approved version holds no documents.');
   return { format: s.format, documents: s.documents, testPack: s.testPack ?? null };
+}
+
+/**
+ * What a version was built from, as fingerprints, with the build of Avala OS that built it: kept beside the
+ * documents so a later reader can tell what the copy rests on (part B). It names no value and no person.
+ */
+export interface KeptInputs {
+  format: number;
+  build: string;
+  modelHash: string;
+  inputs: Record<string, string>;
+}
+export function keptInputs(input: KeepInput, extra: { build: string; settings?: AssessmentSettings }): KeptInputs {
+  return {
+    format: KEPT_FORMAT, build: extra.build, modelHash: hashModel(input.model),
+    inputs: {
+      decisions: hashValue(input.decisions), settings: hashValue(extra.settings ?? null), layouts: hashValue(input.layouts),
+      edits: hashValue([...input.edits].map(e => [e.docType, e.sectionKey, e.html, e.baseHash]).sort()),
+      testEdits: hashValue([...input.testEdits].map(e => [e.caseCode, e.fields, e.setAside, e.baseHash ?? null]).sort((a, z) => String(a[0]).localeCompare(String(z[0])))),
+      requirements: hashValue(input.requirements ?? []), sources: hashValue(input.sources), names: hashValue(input.names ?? {}),
+    },
+  };
 }
 
 /** Sizes, for the limit the database checks and for the report: characters of JSON per document. */
