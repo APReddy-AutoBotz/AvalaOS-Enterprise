@@ -11,10 +11,11 @@ import { createMemoryStore } from '../store/memoryStore.ts';
 import type { JourneyStore } from '../store/types.ts';
 import { DEMO_BASE } from '../../domain/site/pages.ts';
 import { DEMO_START_STAGE } from '../../domain/site/demo.ts';
-import { TEARDOWN_INDEX_URL, teardownBase, teardownDataUrl, teardownSlug, type TeardownLink, type TeardownWords } from '../../domain/site/teardowns.ts';
+import { TEARDOWN_INDEX_URL, readTeardownIndex, readTeardownReply, teardownBase, teardownDataUrl, teardownSlug, type TeardownLink } from '../../domain/site/teardowns.ts';
 import { firstListCounts } from '../../domain/questions/counts.ts';
 import type { JourneyRoute } from '../../domain/workspace/route.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
+import type { RecordedAnswer } from '../../domain/assistant/recorded.ts';
 import { TeardownContext, TeardownListContext, type TeardownView } from '../teardown.tsx';
 import { Spinner } from '../ui.tsx';
 
@@ -34,28 +35,37 @@ export default function DemoApp() {
   React.useEffect(() => {
     document.title = 'Demo | Avala OS';
     let live = true;
-    fetch(TEARDOWN_INDEX_URL).then(r => (r.ok ? r.json() : [])).then(l => { if (live && Array.isArray(l)) setList(l); }).catch(() => undefined);
-    // The recorded answers are a nicety: without them the demo still runs, and Ask Avala says it needs the server.
-    // They are the sample's, so a teardown has none.
-    const answers = slug ? Promise.resolve([]) : fetch(DEMO_ANSWERS).then(r => (r.ok ? r.json() : [])).then(a => (Array.isArray(a) ? a : [])).catch(() => []);
-    fetch(slug ? teardownDataUrl(slug) : DEMO_DATA)
-      .then(r => (r.ok ? r.json() : Promise.reject(new Error(r.status === 404 ? 'missing' : `HTTP ${r.status}`))))
-      .then(async data => {
-        const recorded = await answers;
-        if (!live) return;
-        const first = Array.isArray(data?.processes) ? data.processes[0] : null;
-        if (first?.id) setStart({ page: 'process', processId: String(first.id), stage: DEMO_START_STAGE });
-        if (slug) {
-          const words = data?.teardown as TeardownWords | undefined;
-          if (!words) throw new Error('missing');
-          const model = data?.revisions?.[0]?.model as ProcessModel | undefined;
+    // The index is read as text: on the live site a missing file comes back as the homepage's HTML.
+    const index = fetch(TEARDOWN_INDEX_URL).then(r => (r.ok ? r.text() : '')).then(readTeardownIndex).catch(() => null);
+    void index.then(l => { if (live && l) setList(l); });
+    const open = (data: Record<string, unknown>, recorded: RecordedAnswer[]) => {
+      const first = Array.isArray(data?.processes) ? (data.processes as { id?: unknown }[])[0] : null;
+      if (first?.id) setStart({ page: 'process', processId: String(first.id), stage: DEMO_START_STAGE });
+      setStore(createMemoryStore({ demo: data, recorded: recorded.length ? recorded : undefined }));
+    };
+    if (slug) {
+      // A teardown: shown only when the demo holds it, whatever the server answers for an address it does not.
+      Promise.all([index, fetch(teardownDataUrl(slug)).then(async r => ({ status: r.status, text: await r.text() }))])
+        .then(([l, reply]) => {
+          if (!live) return;
+          const r = readTeardownReply(slug, reply, l);
+          if (r.kind !== 'ok') { setFailed(r.kind); return; }
+          const words = r.data.teardown;
+          const model = (r.data.revisions as { model?: ProcessModel }[] | undefined)?.[0]?.model;
           const c = firstListCounts(model);
           setTeardown({ words, openQuestions: c ? c.now + c.found + c.wait : 0 });
           document.title = `${words.short} · Demo | Avala OS`;
-        }
-        setStore(createMemoryStore({ demo: data, recorded: recorded.length ? recorded : undefined }));
-      })
-      .catch((e: Error) => { if (live) setFailed(e?.message === 'missing' ? 'missing' : 'failed'); });
+          open(r.data, []);
+        })
+        .catch(() => { if (live) setFailed('failed'); });
+    } else {
+      // The recorded answers are a nicety: without them the demo still runs, and Ask Avala says it needs the server.
+      const answers = fetch(DEMO_ANSWERS).then(r => (r.ok ? r.json() : [])).then(a => (Array.isArray(a) ? a : [])).catch(() => []);
+      fetch(DEMO_DATA)
+        .then(r => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+        .then(async data => { const recorded = await answers; if (live) open(data, recorded); })
+        .catch(() => { if (live) setFailed('failed'); });
+    }
     return () => { live = false; };
   }, [slug]);
 

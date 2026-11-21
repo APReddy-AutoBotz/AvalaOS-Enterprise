@@ -88,6 +88,29 @@ export function withTeardownComment(xml: string, w: TeardownWords): string {
   return decl ? `${decl[0].replace(/\n?$/, '\n')}${comment}\n${xml.slice(decl[0].length)}` : `${comment}\n${xml}`;
 }
 
+/**
+ * What the demo makes of the reply to a teardown's file (review of #219, 21 November 2026). The live site sends
+ * every unknown address to the homepage with status 200, so a missing file comes back as the homepage's HTML,
+ * not a 404. A teardown is shown only when its slug is in the demo's index (when the index could be read) and
+ * the reply is that teardown's own file; anything else is "not in the demo". Only a server error is a failure
+ * to load; a reply that never came is the caller's (`fetch` throws).
+ */
+export type TeardownReply = { kind: 'ok'; data: { teardown: TeardownWords } & Record<string, unknown> } | { kind: 'missing' } | { kind: 'failed' };
+export function readTeardownReply(slug: string, reply: { status: number; text: string }, index: unknown): TeardownReply {
+  if (Array.isArray(index) && !index.some(t => (t as { slug?: unknown } | null)?.slug === slug)) return { kind: 'missing' };
+  if (reply.status >= 500) return { kind: 'failed' };
+  if (reply.status < 200 || reply.status >= 300) return { kind: 'missing' };
+  let data: unknown;
+  try { data = JSON.parse(reply.text); } catch { return { kind: 'missing' }; }
+  const words = (data as { teardown?: { slug?: unknown } } | null)?.teardown;
+  if (!data || typeof data !== 'object' || Array.isArray(data) || words?.slug !== slug) return { kind: 'missing' };
+  return { kind: 'ok', data: data as { teardown: TeardownWords } & Record<string, unknown> };
+}
+/** The demo's index as read: an array of teardowns, or null when it could not be read (then it decides nothing). */
+export function readTeardownIndex(text: string): TeardownLink[] | null {
+  try { const v = JSON.parse(text); return Array.isArray(v) ? v.filter(t => t && typeof t.slug === 'string' && typeof t.short === 'string') : null; } catch { return null; }
+}
+
 /** The teardown's document settings: its organisation's name in the header, and its section first in every document. */
 export function teardownDocumentSettings(w: TeardownWords): DocumentSettings {
   const about: DocLayout = { sections: {}, custom: [{ id: 'teardown', after: 'start', title: ABOUT_TITLE, text: aboutText(w) }] };

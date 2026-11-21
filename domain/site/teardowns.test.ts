@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
+import { readTeardownIndex, readTeardownReply } from './teardowns.ts';
 import { ABOUT_TITLE, TEARDOWN_DOCS, TEARDOWN_PERSON, findContacts, isTeardownSlug, openQuestionsLine, removeContacts, teardownCanonical, teardownModel, teardownProblems, teardownSlug, type TeardownWords } from './teardowns.ts';
 import { stableId, teardownState, type TeardownRun } from './teardownState.ts';
 import type { ProcessModel } from '../processModel/types.ts';
@@ -146,4 +147,29 @@ test('every published teardown file passes the same checks, and each is in the i
     const state = JSON.parse(readFileSync(new URL(`${slug}.json`, pub), 'utf8'));
     assert.deepEqual(teardownProblems(state, run), [], slug);
   }
+});
+
+test('an address the demo does not hold says so, whatever the server answers (review of #219)', async () => {
+  const { state } = await built();
+  const file = JSON.stringify(state);
+  const index = [{ slug: 'fixture-teardown', short: 'Test fixture' }];
+  const html = '<!doctype html><html><head><title>Avala OS</title></head><body><div id="root"></div></body></html>';
+  // The live site sends an unknown address to the homepage with status 200.
+  assert.equal(readTeardownReply('not-here', { status: 200, text: html }, index).kind, 'missing', 'the homepage, slug not in the index');
+  assert.equal(readTeardownReply('not-here', { status: 200, text: html }, null).kind, 'missing', 'the homepage, no index to go by');
+  assert.equal(readTeardownReply('not-here', { status: 200, text: file }, index).kind, 'missing', 'a file, but the slug is not in the index');
+  assert.equal(readTeardownReply('other-teardown', { status: 200, text: file }, null).kind, 'missing', 'another teardown\'s file');
+  assert.equal(readTeardownReply('fixture-teardown', { status: 200, text: '{"processes":[]}' }, index).kind, 'missing', 'JSON that is not a teardown');
+  assert.equal(readTeardownReply('fixture-teardown', { status: 200, text: '[]' }, index).kind, 'missing');
+  assert.equal(readTeardownReply('fixture-teardown', { status: 404, text: '' }, null).kind, 'missing');
+  assert.equal(readTeardownReply('fixture-teardown', { status: 503, text: '' }, index).kind, 'failed', 'only a server error is a failure to load');
+  const ok = readTeardownReply('fixture-teardown', { status: 200, text: file }, index);
+  assert.equal(ok.kind, 'ok');
+  assert.equal(ok.kind === 'ok' && ok.data.teardown.slug, 'fixture-teardown');
+  assert.equal(readTeardownReply('fixture-teardown', { status: 200, text: file }, null).kind, 'ok', 'an index that could not be read decides nothing');
+  // The index, read as text.
+  assert.deepEqual(readTeardownIndex(JSON.stringify(index)), index);
+  assert.equal(readTeardownIndex(html), null);
+  assert.equal(readTeardownIndex('{}'), null);
+  assert.deepEqual(readTeardownIndex('[{"slug":"a"},null,{"slug":"b","short":"B"}]'), [{ slug: 'b', short: 'B' }]);
 });
