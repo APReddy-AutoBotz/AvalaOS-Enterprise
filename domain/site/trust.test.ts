@@ -62,10 +62,13 @@ test('the privacy notice names every AI provider a workspace may connect, and sa
   assert.match(text, /only to that provider/);
 });
 
-test('the privacy and security pages carry the release date, set with the coverage notice\'s date', () => {
-  assert.equal(UPDATED.privacy, COVERAGE_RULE.since);
+test('the privacy and security pages carry a release date: the security page the coverage notice\'s, the privacy page that date or later', () => {
   assert.equal(UPDATED.security, COVERAGE_RULE.since);
   if (COVERAGE_RULE.since === null) assert.equal(updatedText('privacy'), '[release date]');
+  // The privacy page changes again with a later release (the teardowns' counting): until that release's commit
+  // sets its date it shows "[release date]"; once set, it is never before the coverage notice's date.
+  if (UPDATED.privacy === null) assert.equal(updatedText('privacy'), '[release date]');
+  else if (COVERAGE_RULE.since !== null) assert.ok(Date.parse(UPDATED.privacy) >= Date.parse(COVERAGE_RULE.since), UPDATED.privacy);
 });
 
 test('the privacy notice lists what the browser keeps, what signing out removes, and the demo\'s copy', () => {
@@ -75,4 +78,11 @@ test('the privacy notice lists what the browser keeps, what signing out removes,
   assert.match(text, /except how you like lists and maps shown in general\. The demo has no sign-in/);
   assert.match(text, /title, the site you came from/);
   assert.match(text, /the kind of browser and device/);
+});
+
+test('the privacy notice says what is counted at a teardown, in the approved words (marketing package, 21 November 2026)', () => {
+  const text = pageText(TRUST.privacy);
+  assert.ok(text.includes('the opening of the demo and of each published-process teardown in it, without cookies'));
+  assert.ok(text.includes('picked a stage of the tour, or opened a teardown\'s documents. Never anything you type. Nothing else is counted inside the demo or the product,'));
+  assert.ok(text.includes('which is about the made-up sample or a published teardown only'));
 });
