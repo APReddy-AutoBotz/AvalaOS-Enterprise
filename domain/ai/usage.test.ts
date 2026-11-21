@@ -72,3 +72,48 @@ test('"Test this key" on a workspace\'s own key has its own small limit, not the
   assert.equal(keyTestLimited(10), true);
   assert.equal(WORK_OF_TASK.health, 'Testing the AI key', 'tests show in the usage panel under their own name');
 });
+
+test('voice: the token form as recorded, the duration form at 20 tokens a second, neither estimated from the size', async () => {
+  const { transcriptionUsage, VOICE_TOKENS_PER_SECOND, VOICE_TOKEN_CAP, VOICE_FALLBACK_BYTES_PER_SECOND } = await import('./usage.ts');
+  assert.equal(VOICE_TOKENS_PER_SECOND, 20);
+  assert.equal(VOICE_TOKEN_CAP, 12_000);
+  // The token form keeps today's figures (the two gpt-4o-transcribe rows of 20 November 2026).
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'tokens', input_tokens: 207, output_tokens: 32, total_tokens: 239 } }, 50_000), { input: 207, output: 32, form: 'tokens' });
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 259, output_tokens: 67 } }, 50_000), { input: 259, output: 67, form: 'tokens' });
+  // The duration form: 30 seconds count 600 in and 0 out; 0.4 seconds count as a whole second.
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'duration', seconds: 30 } }, 50_000), { input: 600, output: 0, form: 'duration' });
+  assert.deepEqual(transcriptionUsage({ usage: { type: 'duration', seconds: 0.4 } }, 50_000), { input: 20, output: 0, form: 'duration' });
+  // Neither form: estimated from the recording's size, never nothing.
+  const bytes = 60 * VOICE_FALLBACK_BYTES_PER_SECOND;
+  assert.deepEqual(transcriptionUsage({ text: 'x' }, bytes), { input: 1200, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'something-new' } }, bytes), { input: 1200, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage(null, 0), { input: 20, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage('not json', 10), { input: 20, output: 0, form: 'neither' });
+});
+
+test('voice: values that are not a real count are absent, and the cap holds', async () => {
+  const { transcriptionUsage, VOICE_TOKEN_CAP, VOICE_FALLBACK_BYTES_PER_SECOND } = await import('./usage.ts');
+  const bytes = 30 * VOICE_FALLBACK_BYTES_PER_SECOND;
+  for (const seconds of [-5, 0, '30', Number.NaN, Number.POSITIVE_INFINITY, 10 ** 9, null]) {
+    assert.deepEqual(transcriptionUsage({ usage: { type: 'duration', seconds } }, bytes), { input: 600, output: 0, form: 'neither' }, String(seconds));
+  }
+  for (const v of [-1, '207', Number.NaN]) {
+    assert.equal(transcriptionUsage({ usage: { input_tokens: v, output_tokens: v } }, bytes).form, 'neither', String(v));
+  }
+  // The cap: what ten minutes of audio count, whichever form.
+  assert.deepEqual(transcriptionUsage({ usage: { type: 'duration', seconds: 3000 } }, bytes), { input: VOICE_TOKEN_CAP, output: 0, form: 'duration' });
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 50_000, output_tokens: 9 } }, bytes), { input: VOICE_TOKEN_CAP, output: 0, form: 'tokens' });
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 11_990, output_tokens: 50 } }, bytes), { input: 11_990, output: 10, form: 'tokens' });
+  // The largest recording the server takes (about 14 million characters of encoded audio) is capped too.
+  assert.deepEqual(transcriptionUsage({}, Math.floor(14_000_000 * 3 / 4)), { input: VOICE_TOKEN_CAP, output: 0, form: 'neither' });
+});
+
+test('voice: the log line names only the form and the model; neither is a warning', async () => {
+  const { transcriptionLogLine, VOICE_COUNT_NOTE } = await import('./usage.ts');
+  assert.deepEqual(transcriptionLogLine('duration', 'gpt-transcribe'), { level: 'info', text: 'transcribe usage form: duration (gpt-transcribe)' });
+  assert.deepEqual(transcriptionLogLine('tokens', 'gpt-4o-transcribe'), { level: 'info', text: 'transcribe usage form: tokens (gpt-4o-transcribe)' });
+  assert.deepEqual(transcriptionLogLine('neither', 'gpt-transcribe'), { level: 'warn', text: "transcribe usage form: neither (gpt-transcribe), estimated from the recording's size" });
+  // Nothing but a model name gets in, whatever the setting holds.
+  assert.equal(transcriptionLogLine('tokens', 'gpt-transcribe\nsecret text {"usage":1}').text, 'transcribe usage form: tokens (gpt-transcribesecrettextusage1)');
+  assert.equal(VOICE_COUNT_NOTE, 'Spoken answers are counted at 20 tokens a second of audio.');
+});
