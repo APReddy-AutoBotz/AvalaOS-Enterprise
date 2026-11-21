@@ -4,10 +4,12 @@
 //    explicit metrics, stated unknowns) and `source_steps` (activities and decisions in order).
 //    Every item quotes the segment it came from; the server drops any quote it cannot find.
 // 2. Across sources: `merge_flow` (roles, systems, steps, decisions, events and the flow between
-//    them) and `merge_facts` (rules, exceptions, metrics, interfaces, conflicts, questions).
+//    them) and the facts merge (rules, exceptions, metrics, interfaces, conflicts, questions), asked in
+//    parts so each answer stays within the length of one reply (factsParts.ts).
 //    These see only the numbered candidates from pass 1, never source text, and may only group
 //    and order them: everything they return points at candidate ids.
 import type { TaskDefinition } from '../ai/gateway.ts';
+import { FACTS_PARTS, type FactsKind } from './factsParts.ts';
 
 const str = { type: 'string' } as const;
 const strArr = { type: 'array', items: str } as const;
@@ -99,26 +101,50 @@ Keys are short: r1, y1, s1, g1, e1. Use only the candidate ids given.`,
   }),
 };
 
-export const mergeFacts: TaskDefinition = {
-  id: 'merge_facts',
-  schemaName: 'merge_facts',
-  maxOutputTokens: 12000,
-  verifyArrays: [],
-  instructions: `You receive numbered candidates extracted from several sources about one business process. Merge duplicates and find disagreements.
-
-rules, exceptions, interfaces, metrics: group candidates that state the same thing; list their ids in "members". Keep different things apart. For metrics, "chosen" is the member whose value best represents the group. For interfaces, keep the most cautious access status among the members unless a member clearly states a newer confirmation.
-conflicts: where candidates give different values for the same thing (for example two different tolerances, or two different monthly volumes), add a conflict with a one-sentence summary naming both values and the candidate ids that disagree. Do not pick a winner.
-questions: what someone would still need to know to assess and automate this process: every "unknowns" candidate, plus missing volumes or handling times for a path, unclear owners or turnaround times, unconfirmed interfaces, and unhandled cases. One question each, with why it matters. "members" are the candidate ids it comes from (may be empty).
-Use only the candidate ids given.`,
-  schema: obj({
-    rules: list({ name: str, condition: str, action: str, members: strArr }),
-    exceptions: list({ name: str, kind: { type: 'string', enum: ['business', 'application'] }, trigger: str, handling: str, routedTo: str, members: strArr }),
-    interfaces: list({ system: str, method: { type: 'string', enum: ACCESS_METHODS }, name: str, operations: strArr, access: { type: 'string', enum: ACCESS_STATUSES }, members: strArr }),
-    metrics: list({ label: str, chosen: str, members: strArr }),
-    conflicts: list({ summary: str, about: { type: 'string', enum: ['rule', 'metric', 'interface', 'other'] }, members: strArr }),
-    questions: list({ question: str, whyItMatters: str, members: strArr }),
-  }),
+// The facts merge, asked in parts (factsParts.ts): each answer returns some of the six lists, with the
+// paragraphs of the instructions that concern them. The lists and their schemas are those of the
+// single answer they replace.
+const FACTS_SCHEMA: Record<FactsKind, unknown> = {
+  rules: list({ name: str, condition: str, action: str, members: strArr }),
+  exceptions: list({ name: str, kind: { type: 'string', enum: ['business', 'application'] }, trigger: str, handling: str, routedTo: str, members: strArr }),
+  interfaces: list({ system: str, method: { type: 'string', enum: ACCESS_METHODS }, name: str, operations: strArr, access: { type: 'string', enum: ACCESS_STATUSES }, members: strArr }),
+  metrics: list({ label: str, chosen: str, members: strArr }),
+  conflicts: list({ summary: str, about: { type: 'string', enum: ['rule', 'metric', 'interface', 'other'] }, members: strArr }),
+  questions: list({ question: str, whyItMatters: str, members: strArr }),
 };
+const GROUPED: readonly FactsKind[] = ['rules', 'exceptions', 'interfaces', 'metrics'];
+
+function factsInstructions(kinds: readonly FactsKind[]): string {
+  const grouped = kinds.filter(k => GROUPED.includes(k));
+  const finds = [kinds.includes('conflicts') && 'find disagreements', kinds.includes('questions') && 'find what is still unknown'].filter(Boolean).join(' and ');
+  const lines = [`You receive numbered candidates extracted from several sources about one business process. ${grouped.length ? 'Merge duplicates.' : `${finds[0].toUpperCase()}${finds.slice(1)}.`}`, ''];
+  if (grouped.length) {
+    lines.push(`${grouped.join(', ')}: group candidates that state the same thing; list their ids in "members". Keep different things apart.${
+      grouped.includes('metrics') ? ' For metrics, "chosen" is the member whose value best represents the group.' : ''}${
+      grouped.includes('interfaces') ? ' For interfaces, keep the most cautious access status among the members unless a member clearly states a newer confirmation.' : ''}`);
+  }
+  if (kinds.includes('conflicts')) lines.push('conflicts: where candidates give different values for the same thing (for example two different tolerances, or two different monthly volumes), add a conflict with a one-sentence summary naming both values and the candidate ids that disagree. Do not pick a winner.');
+  if (kinds.includes('questions')) lines.push('questions: what someone would still need to know to assess and automate this process: every "unknowns" candidate, plus missing volumes or handling times for a path, unclear owners or turnaround times, unconfirmed interfaces, and unhandled cases. One question each, with why it matters. "members" are the candidate ids it comes from (may be empty).');
+  lines.push('Use only the candidate ids given.');
+  return lines.join('\n');
+}
+
+/** The task for one part of the facts merge (`merge_facts_rules_exceptions`, …, `merge_facts_questions`). */
+function factsTask(part: string): TaskDefinition {
+  const id = `merge_facts_${part.replace(/-/g, '_')}`;
+  const kinds = FACTS_PARTS[part].kinds;
+  return {
+    id,
+    schemaName: id,
+    // Each part is well under this: the whole answer was about 8,000 tokens at most on OpenAI.
+    maxOutputTokens: 12000,
+    verifyArrays: [],
+    instructions: factsInstructions(kinds),
+    schema: obj(Object.fromEntries(kinds.map(k => [k, FACTS_SCHEMA[k]]))),
+  };
+}
+
+export const FACTS_TASKS: Readonly<Record<string, TaskDefinition>> = Object.fromEntries(Object.keys(FACTS_PARTS).map(p => [p, factsTask(p)]));
 
 export const reviewFlow: TaskDefinition = {
   id: 'review_flow',
@@ -144,4 +170,7 @@ Rules for corrections:
   }),
 };
 
-export const EXTRACTION_TASKS = { sourceFacts, sourceSteps, mergeFlow, mergeFacts, reviewFlow };
+export const EXTRACTION_TASKS: Readonly<Record<string, TaskDefinition>> = {
+  sourceFacts, sourceSteps, mergeFlow, reviewFlow,
+  ...Object.fromEntries(Object.entries(FACTS_TASKS).map(([part, task]) => [`facts:${part}`, task])),
+};

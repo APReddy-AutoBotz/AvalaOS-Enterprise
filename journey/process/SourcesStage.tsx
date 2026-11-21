@@ -3,6 +3,7 @@
 import { DemoFilesNote } from '../demo/DemoFilesNote.tsx';
 import React from 'react';
 import { applyChanges, proposeChanges, type ChangeSet, type ProposedChange } from '../../domain/extract/rebase.ts';
+import { failedLine, isStalled } from '../../domain/extract/failure.ts';
 import { deepEqual, type JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
@@ -58,11 +59,20 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
   }, [store, processId]);
   React.useEffect(() => { load(); }, [load]);
 
-  // Follow a running extraction.
+  // Follow a running extraction. One that has not changed for longer than any step can take was stopped
+  // from outside; the server is asked, at most once a minute, to end it with the step and the reason.
+  const lookedAt = React.useRef(0);
   React.useEffect(() => {
     if (!run || run.status === 'done' || run.status === 'failed') return;
     const t = setInterval(async () => {
-      try { setRun(await store.latestExtraction(processId)); } catch { /* keep polling */ }
+      try {
+        const latest = await store.latestExtraction(processId);
+        if (latest && isStalled(latest.status, latest.updatedAt, Date.now()) && Date.now() - lookedAt.current > 60_000) {
+          lookedAt.current = Date.now();
+          await store.lookAtExtraction(latest.id).catch(() => { /* asked again next minute */ });
+          setRun(await store.latestExtraction(processId));
+        } else setRun(latest);
+      } catch { /* keep polling */ }
     }, 4000);
     return () => clearInterval(t);
   }, [run?.id, run?.status, store, processId]);
@@ -217,7 +227,7 @@ function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onAppl
         ? <DemoFilesNote />
         : <p className="text-sm text-slate-500">Extraction runs on the server and is not available in local mode.</p>)}
       {running && <p role="status" className="text-sm text-slate-600">{STATUS_TEXT[run!.status]} This takes a few minutes; you can leave this page and come back.</p>}
-      {run?.status === 'failed' && <ErrorNote message={`The last extraction failed: ${run.error ?? 'unknown error'}. Try again.`} />}
+      {run?.status === 'failed' && <ErrorNote message={failedLine(run.error)} />}
       {run?.status === 'done' && run.model && <ChangeReview store={store} processId={processId} extracted={run.model} finishedAt={run.updatedAt} onApplied={onApplied} />}
     </section>
   );

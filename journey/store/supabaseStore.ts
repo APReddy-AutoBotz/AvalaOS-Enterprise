@@ -293,6 +293,9 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const r = await call('journey-extract', { action: 'create', workspaceId, processId, sourceIds });
       return { runId: r.runId };
     },
+    async lookAtExtraction(runId) {
+      await call('journey-extract', { action: 'look', runId });
+    },
     async runAiTask(workspaceId, task, segments) {
       const r = await call('journey-ai', { action: 'run', workspaceId, task, segments });
       const u = r.usage as { input?: number; output?: number } | undefined;

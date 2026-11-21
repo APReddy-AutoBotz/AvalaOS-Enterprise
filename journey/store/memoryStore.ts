@@ -374,6 +374,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     async transcribe() { throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`); },
     async startExtraction() { throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`); },
     async latestExtraction() { return null; },
+    async lookAtExtraction() { /* no extraction runs in the browser */ },
     async runAiTask(_workspaceId, task, segments) {
       // The demo answers its suggested questions from what was recorded on the sample case; nothing else.
       if (options.recorded) {
