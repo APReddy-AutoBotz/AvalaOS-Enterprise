@@ -75,6 +75,7 @@ test('change a: nothing a person gave: no answer, deferral, owner, resolution, o
     ['deferred', s => { m(s).openQuestions[0].status = 'deferred'; }, /deferred/],
     ['left with someone', s => { m(s).openQuestions[0].owner = 'A person'; }, /left with someone/],
     ['resolved', s => { m(s).conflicts.push({ id: 'c-1', target: { kind: 'meta' }, summary: 's', values: [], resolution: { chosen: 'x', by: TEARDOWN_PERSON.name, reason: 'r' } }); }, /resolved/],
+    ['purpose set', s => { m(s).meta.purpose = { value: 'as_is', by: s.me.id, at: s.edits[0].createdAt }; }, /What is wanted from the process is set/],
     ['decided', s => { m(s).meta.decidedApproach = { approach: 'rpa', reason: 'r', by: s.me.id, at: s.edits[0].createdAt }; }, /decided/],
     ['confirmed by a person', s => { m(s).steps[0].status = 'user-confirmed'; }, /given by a person/],
     ['assumed', s => { (m(s).meta as { objective: { value: string | null; status: string } }).objective = { value: 'x', status: 'assumed', sources: [] } as never; }, /given by a person/],
@@ -123,7 +124,9 @@ test('teardownModel replaces who decided or resolved with the teardown person an
   raw.meta.purpose = { value: 'assess', by: 'live-person-id', at: '2026-11-22T00:00:00Z' };
   raw.conflicts.push({ id: 'c-1', target: { kind: 'meta' }, summary: 's', values: [], resolution: { chosen: 'x', by: 'Real Name', byId: 'live-id', reason: 'r' } });
   const m = teardownModel(raw, 'teardown-id', '2026-11-21T06:02:30.000Z');
-  assert.deepEqual(m.meta.purpose, { value: 'assess', by: 'teardown-id', at: '2026-11-21T06:02:30.000Z' });
+  assert.equal(m.meta.purpose, undefined, '"assess" is the default: taken out, with who chose it');
+  const asIs = teardownModel({ ...raw, meta: { ...raw.meta, purpose: { value: 'as_is', by: 'live-person-id', at: 'x' } } } as ProcessModel, 'teardown-id', '2026-11-21T06:02:30.000Z');
+  assert.deepEqual(asIs.meta.purpose, { value: 'as_is', by: 'teardown-id', at: '2026-11-21T06:02:30.000Z' }, 'another answer is kept, with the teardown person, for the check to refuse');
   assert.deepEqual(m.conflicts[0].resolution, { chosen: 'x', by: TEARDOWN_PERSON.name, byId: 'teardown-id', reason: 'r' });
   assert.deepEqual(m.steps, f.model.steps);
   assert.equal(raw.meta.purpose.by, 'live-person-id', 'the input is not changed');

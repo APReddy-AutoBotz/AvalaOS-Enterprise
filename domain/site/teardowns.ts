@@ -110,7 +110,11 @@ export const NOT_ON_TEARDOWN = 'Not offered on a teardown: this download would n
  */
 export function teardownModel(raw: ProcessModel, personId: string, at: string): ProcessModel {
   const m: ProcessModel = structuredClone(raw);
-  if (m.meta.purpose) m.meta.purpose = { ...m.meta.purpose, by: personId, at };
+  // What a person wants from the process is asked when it is made. Unset reads as "assess" (purposeOf), so
+  // "assess" is taken out and nothing of the person who made it stays; any other answer is kept, with the
+  // teardown's person, for the check to refuse.
+  if (m.meta.purpose?.value === 'assess') delete m.meta.purpose;
+  else if (m.meta.purpose) m.meta.purpose = { ...m.meta.purpose, by: personId, at };
   if (m.meta.decidedApproach) m.meta.decidedApproach = { ...m.meta.decidedApproach, by: personId, at };
   for (const c of m.conflicts) if (c.resolution) c.resolution = { ...c.resolution, by: TEARDOWN_PERSON.name, byId: personId };
   return m;
@@ -201,6 +205,7 @@ export function teardownProblems(state: StateLike, live: { liveSegments: Record<
     }
     for (const c of m.conflicts) if (c.resolution) p.push(`Conflict ${c.id} is resolved: nobody resolves anything in a teardown.`);
     if (m.meta.decidedApproach) p.push('An approach is decided: nobody decides anything in a teardown.');
+    if (m.meta.purpose) p.push(`What is wanted from the process is set (${m.meta.purpose.value}): a teardown leaves it unset, so it is assessed and documented.`);
     const facts: Walked[] = [];
     walk(m, '$.model', facts);
     for (const x of facts) {
