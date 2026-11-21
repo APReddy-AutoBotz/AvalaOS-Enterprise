@@ -4,7 +4,7 @@
 // - an interface is only "confirmed" when every candidate behind it says so;
 // - missing information becomes open questions (merge questions plus the deterministic gap pass);
 // - the result must pass validateModel.
-import type { AccessMethod, AccessStatus, BusinessRule, Conflict, ElementTarget, ExceptionPath, Flow, Gateway, Metric, OpenQuestion, ProcessEvent, ProcessModel, Role, SourceRef, Step, SystemRef } from '../processModel/types.ts';
+import type { AccessMethod, AccessMethodKind, AccessStatus, BusinessRule, Conflict, ElementTarget, ExceptionPath, Flow, Gateway, Metric, OpenQuestion, ProcessEvent, ProcessModel, Role, SourceRef, Step, SystemRef } from '../processModel/types.ts';
 import { PROCESS_MODEL_SCHEMA_VERSION } from '../processModel/types.ts';
 import { validateModel, errorsOf } from '../processModel/validate.ts';
 import { gaps } from '../processModel/selectors.ts';
@@ -28,9 +28,24 @@ export interface MergeFactsOutput {
   questions: { question: string; whyItMatters: string; members: string[] }[];
 }
 
+/** A way in recorded as not available that one of its own passages says exists but is not switched on. */
+export interface AccessCorrection {
+  system: string;
+  /** The interface's name, else its method. */
+  interface: string;
+  method: AccessMethodKind;
+  before: AccessStatus;
+  after: AccessStatus;
+  /** The passage that decided it, as the source has it. */
+  passage: string;
+  sourceId: string;
+}
+
 export interface AssembleReport {
   dropped: string[];
   questionsFromGaps: number;
+  /** Ways in whose status assembly corrected (notSwitchedOn), each with the passage that decided it. */
+  corrected: AccessCorrection[];
 }
 
 // ---- small helpers --------------------------------------------------------------------------
@@ -57,6 +72,57 @@ export function cautiousAccess(statuses: AccessStatus[], proposed: AccessStatus)
   if (statuses.includes('confirmed_absent')) return 'unknown';
   const least = statuses.reduce((a, b) => (CAUTION.indexOf(a) <= CAUTION.indexOf(b) ? a : b));
   return CAUTION.indexOf(proposed) < CAUTION.indexOf(least) ? proposed : least;
+}
+
+// ---- a way in that exists but is not switched on -------------------------------------------------
+//
+// The instructions file "not activated" under "reported", but the reading of one source sometimes files it
+// under "confirmed_absent", the same status as an interface that does not exist (found on the sample's
+// supplier invoice API in 5 of 23 scored checks, 21 November 2026). The status cannot tell the two apart;
+// the quoted passages can. A machine way in recorded as not available is recorded as "reported" when one of
+// its own passages says it exists but is not switched on and none says it is a policy. Screens and the
+// email are left out: a screen route that is switched off is a policy the assessment reads (robots blocked).
+// A status of its own for this ("not_enabled") is a later item: it needs the instructions to set it.
+
+const MACHINE_WAYS: AccessMethodKind[] = ['api', 'file', 'database', 'event'];
+/** Words in a passage that say an interface exists but is not switched on. English only. */
+export const NOT_SWITCHED_ON = /\bnot (?:yet )?(?:been )?(?:activated|enabled|switched on|turned on|exposed|deployed|live|released|rolled out|set up)\b|\bdeactivated\b|\binactive\b|\bswitched off\b|\bturned off\b|\b(?:available|exists?|included) in the (?:standard )?(?:product|platform|package|suite)\b|\bnot available in (?:our|this|the) (?:landscape|environment|system|tenant|instance)\b/i;
+/** Words in a passage that make the matter a policy, not a switch. */
+export const BY_POLICY = /\b(?:by|per) policy\b|\bnot (?:allowed|permitted)\b|\bforbidden\b|\bprohibited\b/i;
+
+/** The passage that says this way in exists but is not switched on, when the status is to be corrected; else null. */
+export function notSwitchedOn(a: AccessMethod): SourceRef | null {
+  if (a.access !== 'confirmed_absent' || !MACHINE_WAYS.includes(a.method)) return null;
+  if (a.sources.some(s => BY_POLICY.test(s.excerpt ?? ''))) return null;
+  return a.sources.find(s => NOT_SWITCHED_ON.test(s.excerpt ?? '')) ?? null;
+}
+
+/** Records each such way in as "reported", in place; returns the corrections and the entries changed. */
+export function correctNotSwitchedOn(systems: SystemRef[]): { corrections: AccessCorrection[]; corrected: Set<AccessMethod> } {
+  const corrections: AccessCorrection[] = [];
+  const corrected = new Set<AccessMethod>();
+  for (const s of systems) {
+    for (const a of s.access) {
+      const passage = notSwitchedOn(a);
+      if (!passage) continue;
+      corrections.push({ system: s.name, interface: a.name ?? a.method, method: a.method, before: a.access, after: 'reported', passage: passage.excerpt, sourceId: passage.sourceId });
+      a.access = 'reported';
+      corrected.add(a);
+    }
+  }
+  return { corrections, corrected };
+}
+
+const IDENTIFIER = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
+const AVAILABILITY = /\b(?:available|availability|activ\w*|enabl\w*|expos\w*|live|usable|when)\b/i;
+/**
+ * Whether a question already asks if this interface can be used: it names the interface (its technical
+ * identifier when the name holds one, else the whole name) and asks about availability. Used only for a
+ * corrected way in, where a question that merely names it ("which interface if X is absent?") is not enough.
+ */
+export function asksAvailabilityOf(question: string, a: AccessMethod): boolean {
+  const name = a.name?.match(IDENTIFIER)?.[0] ?? a.name?.trim();
+  return !!name && question.toLowerCase().includes(name.toLowerCase()) && AVAILABILITY.test(question);
 }
 
 // ---- assemble -------------------------------------------------------------------------------
@@ -127,6 +193,8 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
     if (itf.name.trim()) m.name = itf.name.trim();
     sys.access.push(m);
   }
+  // A way in a passage says exists but is not switched on is "reported", not "not available".
+  const { corrections, corrected } = correctNotSwitchedOn(systems);
 
   // Steps, gateways and events.
   const nodeKey = new Map<string, string>();
@@ -273,7 +341,8 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
   for (const s of systems) {
     for (const a of s.access) {
       if (a.access !== 'unknown' && a.access !== 'reported') continue;
-      if (a.name && questions.some(q => q.question.toLowerCase().includes(a.name!.toLowerCase()))) continue;
+      if (corrected.has(a) ? questions.some(q => asksAvailabilityOf(q.question, a))
+        : a.name && questions.some(q => q.question.toLowerCase().includes(a.name!.toLowerCase()))) continue;
       const what = a.name ? `${a.name} (${a.operations.join(', ') || a.method})` : `${a.method} access to ${s.name}${a.operations.length ? ` to ${a.operations.join(', ')}` : ''}`;
       addQuestion({ kind: 'system', id: s.id, field: 'access' }, `Is ${what} available for use from ${s.name}, and when?`, a.access === 'reported' ? 'It is said to exist but is not confirmed for use; an API-first design depends on it.' : 'Nobody has confirmed it; the integration design depends on it.');
     }
@@ -288,7 +357,7 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
 
   const v = validateModel(model);
   if (!v.valid) throw new Error(`Assembled model is invalid: ${errorsOf(v).slice(0, 5).map(e => `${e.path} ${e.message}`).join('; ')}`);
-  return { model, report: { dropped, questionsFromGaps: questions.length - before } };
+  return { model, report: { dropped, questionsFromGaps: questions.length - before, corrected: corrections } };
 }
 
 /** An element supported only by sources read from images is "inferred", not "stated". */
