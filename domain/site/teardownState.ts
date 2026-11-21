@@ -7,10 +7,10 @@
 // which reads only the bytes it is given.
 import { parseFile } from '../ingest/parsers/index.ts';
 import { formatFromName, FORMAT_LABEL, sourceKey, titleFromFileName, type StoredFormat } from '../workspace/sources.ts';
-import { fnv1a64, hashModel } from '../processModel/hash.ts';
+import { hashModel } from '../processModel/hash.ts';
 import { validateModel } from '../processModel/validate.ts';
 import type { ProcessModel } from '../processModel/types.ts';
-import { TEARDOWN_ORGANISATION, TEARDOWN_PERSON, TEARDOWN_WORKSPACE, teardownDocumentSettings, teardownModel, type TeardownWords } from './teardowns.ts';
+import { TEARDOWN_ORGANISATION, TEARDOWN_PERSON, TEARDOWN_WORKSPACE, stableId, teardownDocumentSettings, teardownModel, type TeardownWords } from './teardowns.ts';
 
 /** What the live reading said, kept beside the model in run.json. */
 export interface TeardownRun {
@@ -31,11 +31,7 @@ export interface TeardownInput {
   files: Record<string, Uint8Array>;
 }
 
-/** A stable id in the form of a UUID, from the slug and what it is for. */
-export function stableId(slug: string, what: string): string {
-  const h = (fnv1a64(`${slug}:${what}`) + fnv1a64(`${what}:${slug}`)).slice(0, 32);
-  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
-}
+export { stableId } from './teardowns.ts';
 
 /** Only text formats the parser reads without the browser's PDF library: Markdown, plain text and Word. */
 const FORMATS: StoredFormat[] = ['md', 'txt', 'docx'];

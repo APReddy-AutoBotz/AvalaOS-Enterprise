@@ -11,9 +11,22 @@ import type { ProcessModel } from '../processModel/types.ts';
 import type { DocLayout, DocumentSettings } from '../docs/branding.ts';
 import { DEFAULT_BRANDING } from '../docs/branding.ts';
 import type { DocType } from '../docs/tree.ts';
+import { fnv1a64 } from '../processModel/hash.ts';
 
 // The addresses are in ./teardownPath.ts, which index.tsx loads on every page, so it stays small.
 export { TEARDOWN_BASE, TEARDOWN_INDEX_URL, isTeardownSlug, teardownBase, teardownCanonical, teardownDataUrl, teardownSlug } from './teardownPath.ts';
+
+/**
+ * A stable id in the form of a UUID, from the slug and what it is for: the file's own ids, the same at every
+ * build, and never an id from the live database (change c).
+ */
+export function stableId(slug: string, what: string): string {
+  const h = (fnv1a64(`${slug}:${what}`) + fnv1a64(`${what}:${slug}`)).slice(0, 32);
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-4${h.slice(13, 16)}-8${h.slice(17, 20)}-${h.slice(20, 32)}`;
+}
+/** What the file's ids are for (teardownState): any other id in the form of a UUID came from somewhere else. */
+export const STABLE_IDS = ['person', 'workspace', 'organization', 'process', 'revision'] as const;
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
 
 /** The words every teardown carries (owner-approved for teardown 1, 21 November 2026), from its teardown.json. */
 export interface TeardownWords {
@@ -172,6 +185,10 @@ export function teardownProblems(state: StateLike, live: { liveSegments: Record<
   for (const s of strings) if (JWT.test(s.value) || KEY.test(s.value)) p.push(`Something like a key or a sign-in token at ${s.path}.`);
   for (const x of all) if (PERSON_KEYS.has(x.key) && x.value !== null && x.value !== undefined && x.key !== 'by' && !ids.has(String(x.value))) p.push(`${x.path} names someone who is not in the file.`);
   for (const x of all) if (x.key === 'by' && x.value !== null && x.value !== undefined && !ids.has(String(x.value)) && x.value !== TEARDOWN_PERSON.name) p.push(`${x.path} names someone who is not in the file.`);
+
+  // No id from anywhere else (change c): every id in the form of a UUID is one the file makes from its slug.
+  const own = new Set([...STABLE_IDS, ...(state.sources ?? []).map(x => `source:${x.key}`)].map(what => stableId(w.slug, what)));
+  for (const s of strings) for (const u of s.value.match(UUID) ?? []) if (!own.has(u.toLowerCase())) p.push(`An id from outside the file at ${s.path}.`);
 
   // Nothing approved; nothing a person gave (change a).
   for (const r of state.revisions ?? []) {
