@@ -9,6 +9,7 @@ import { effectiveApproach, whoChose, type Decisions } from '../../domain/assess
 import { ChooserContext } from './widgets.tsx';
 import { paybackOf } from '../../domain/assess/payback.ts';
 import { Button, cx } from '../ui.tsx';
+import { TeardownLines, useTeardown } from '../teardown.tsx';
 import { EASE_BANDS, EASE_WEIGHTS, QUADRANT } from '../../domain/assess/priority.ts';
 import { EASE_LABEL, orList, people as asPeople, valueText } from './AssessmentPriority.tsx';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
@@ -38,6 +39,7 @@ const td = 'border-b border-slate-100 px-3 py-2 align-top text-sm text-slate-800
 
 /** `result` is the assessment with people's choices of approach; `scoring` the scoring alone, named when they differ. */
 export function AssessmentReport({ model, result, scoring, decisions, onBack }: { model: ProcessModel; result: ProcessAssessment; scoring?: ProcessAssessment; decisions: Decisions; onBack: () => void }) {
+  const teardown = useTeardown();
   const chooser = React.useContext(ChooserContext);
   const steps = orderedSteps(model);
   const byStep = new Map<string, StepScore>(result.steps.map(s => [s.stepId, s] as [string, StepScore]));
@@ -58,6 +60,7 @@ export function AssessmentReport({ model, result, scoring, decisions, onBack }: 
       </div>
 
       <article id="assessment-report" data-testid="assessment-report" className="mx-auto max-w-4xl rounded-xl border border-slate-200 bg-white px-8 py-10 sm:px-14">
+        {teardown && <section data-testid="report-teardown" aria-label="About this teardown" className="mb-6 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3"><TeardownLines view={teardown} compact /></section>}
         <header className="border-b-4 border-[#002C4B] pb-6">
           <p className="text-xs font-semibold text-[#B58500]">Automation assessment</p>
           <h1 className="mt-2 font-display text-3xl font-semibold tracking-tight text-slate-900">{model.meta.name}</h1>

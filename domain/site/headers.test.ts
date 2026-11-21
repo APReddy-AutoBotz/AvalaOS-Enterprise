@@ -21,5 +21,7 @@ test('robots.txt keeps search engines out of the signed-in product and names the
 
 test('the sitemap lists the public pages and nothing that needs signing in', () => {
   const locs = [...read('public/sitemap.xml').matchAll(/<loc>([^<]+)<\/loc>/g)].map(m => m[1]);
-  assert.deepEqual(locs, ['https://avalaos.com/', 'https://avalaos.com/demo', ...TRUST_PAGES.map(p => `https://avalaos.com${p.path}`)]);
+  // Teardowns in the demo follow, in the order of the demo's index.
+  const teardowns: { slug: string }[] = JSON.parse(read('public/demo-data/teardowns/index.json'));
+  assert.deepEqual(locs, ['https://avalaos.com/', 'https://avalaos.com/demo', ...TRUST_PAGES.map(p => `https://avalaos.com${p.path}`), ...teardowns.map(t => `https://avalaos.com/demo/teardowns/${t.slug}`)]);
 });

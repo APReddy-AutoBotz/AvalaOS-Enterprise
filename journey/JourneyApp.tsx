@@ -1,6 +1,9 @@
 // The process journey: sign in, pick a process, work through its stages.
 // Owns the paths /signin, /processes and /process/:id/:stage; everything else is the earlier app.
 import { DEMO_POINTER } from '../domain/site/demo.ts';
+import { DEMO_BASE } from '../domain/site/pages.ts';
+import { teardownBase } from '../domain/site/teardowns.ts';
+import { TeardownLines, useTeardown, useTeardownList } from './teardown.tsx';
 import React from 'react';
 import { journeyPath, parseJourneyPath, type JourneyRoute } from '../domain/workspace/route.ts';
 import { createJourneyStore } from './store/index.ts';
@@ -50,7 +53,8 @@ function useRoute(base: string, start?: JourneyRoute): Nav {
   const [route, setRoute] = React.useState<JourneyRoute>(current);
   // The opening route is written into the address, so a reload or a shared link opens the same screen.
   React.useEffect(() => {
-    if (start && !location.pathname.slice(base.length).replace(/\/+$/, '')) history.replaceState(null, '', base + journeyPath(start));
+    // What follows "?" (a link's campaign words) stays in the address.
+    if (start && !location.pathname.slice(base.length).replace(/\/+$/, '')) history.replaceState(null, '', base + journeyPath(start) + location.search);
   }, [base, start]);
   React.useEffect(() => {
     const onPop = () => setRoute(current());
@@ -92,6 +96,7 @@ const NAV_ICON = {
 } as const;
 
 export function Journey({ store, base = '', start }: { store: JourneyStore; base?: string; /** Where the journey opens when the address names nothing under `base`. */ start?: JourneyRoute }) {
+  const teardown = useTeardown();
   const nav = useRoute(base, start);
   const demo = store.kind === 'demo';
   const [me, setMe] = React.useState<Me | null | undefined>(undefined);
@@ -188,14 +193,22 @@ export function Journey({ store, base = '', start }: { store: JourneyStore; base
           {demo && <a href="/" className="hidden rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">Leave the demo</a>}
         </div>
       </header>
-      {demo && (
+      {demo && !teardown && (
         <div data-testid="demo-banner" role="note" className="border-b border-amber-200 bg-amber-50 px-6 py-2 text-center text-sm text-amber-950">
           Demo on a sample case: Kaveri Industrial Components is a made-up company. Try anything; nothing is saved, and reloading starts again.
           {/* On a phone the top bar has no room for it. */}
           <a href="/" className="ml-1 font-semibold underline sm:hidden">Leave the demo</a>
+          <DemoLinks />
         </div>
       )}
-      {demo && start && sameRoute(nav.route, start) && start.page === 'process' && (
+      {demo && teardown && (
+        <div data-testid="teardown-banner" role="note" className="border-b border-amber-200 bg-amber-50 px-6 py-3 text-center text-sm text-amber-950">
+          <TeardownLines view={teardown} />
+          <p className="mt-1">Try anything; nothing is saved, and reloading starts again. <a href="/" className="font-semibold underline sm:hidden">Leave the demo</a></p>
+          <DemoLinks current={teardown.words.slug} />
+        </div>
+      )}
+      {demo && !teardown && start && sameRoute(nav.route, start) && start.page === 'process' && (
         <p data-testid="demo-pointer" className="border-b border-slate-200 bg-white px-6 py-2.5 text-center text-sm text-slate-700">
           {DEMO_POINTER.before}
           <a href={nav.href({ ...start, stage: 'documents' })} onClick={e => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); nav.go({ ...start, stage: 'documents' }); }} className="font-semibold text-[#002C4B] underline decoration-[#E69F00] decoration-2 underline-offset-4">{DEMO_POINTER.link}</a>
@@ -219,5 +232,19 @@ export function Journey({ store, base = '', start }: { store: JourneyStore; base
             <React.Fragment key={nav.route.processId}><ProcessWorkspace store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} onWorkspace={ws.show} /></React.Fragment>}
       </main>
     </div>
+  );
+}
+
+/** The demo's links between the sample and each teardown (full page loads: each has its own store). */
+function DemoLinks({ current }: { current?: string }) {
+  const list = useTeardownList();
+  if (!list.length) return null;
+  return (
+    <nav aria-label="Demo cases" data-testid="demo-links" className="mt-1 flex flex-wrap justify-center gap-x-4 gap-y-1">
+      {current ? <a href={DEMO_BASE} className="font-semibold underline">Sample case</a> : <span className="font-semibold" aria-current="page">Sample case</span>}
+      {list.map(t => (t.slug === current
+        ? <span key={t.slug} className="font-semibold" aria-current="page">Teardown: {t.short}</span>
+        : <a key={t.slug} href={teardownBase(t.slug)} className="font-semibold underline">Teardown: {t.short}</a>))}
+    </nav>
   );
 }

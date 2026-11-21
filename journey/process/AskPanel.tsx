@@ -13,6 +13,9 @@ import type { StageId } from '../../domain/workspace/route.ts';
 import { AskMark, Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { SidePanel, SourceList } from './widgets.tsx';
 import { nextQuestion, submitQuestion, waitingNote } from '../../domain/assistant/queue.ts';
+import { TEARDOWN_ASK_NOTE } from '../../domain/site/teardowns.ts';
+import { DEMO_BASE } from '../../domain/site/pages.ts';
+import { useTeardown } from '../teardown.tsx';
 
 type Turn = { question: string; answer?: Answer; error?: string; recorded?: boolean };
 
@@ -26,6 +29,7 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
   stages?: StageId[];
   onOpen: (target: Target) => void; onClose: () => void;
 }) {
+  const teardown = useTeardown();
   const [record, setRecord] = React.useState<unknown>(null);
   const [loadError, setLoadError] = React.useState<string | null>(null);
   const [turns, setTurns] = React.useState<Turn[]>([]);
@@ -79,6 +83,7 @@ export function AskPanel({ store, workspaceId, subject, about, stages = STAGE_OR
       <div className="flex min-h-full flex-col" data-testid="ask-panel">
         {about}
         <p className="text-sm leading-6 text-slate-600">{subject.intro}</p>
+        {teardown && <p data-testid="ask-teardown-note" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950">{TEARDOWN_ASK_NOTE.text} <a href={DEMO_BASE} className="font-semibold underline">{TEARDOWN_ASK_NOTE.link}</a>.</p>}
         <ErrorNote message={loadError} />
         {!record && !loadError && <div className="mt-6"><Spinner /></div>}
         <div className="mt-5 flex-1 space-y-6" aria-live="polite">
