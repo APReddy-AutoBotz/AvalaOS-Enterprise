@@ -23,7 +23,7 @@ import {
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
 import {
-  KEY_TEST_LIMITED, keyTestLimited, RATE_LIMIT_UNAVAILABLE, admitArgs, rateLimitApplies, rateLimitedMessage, readAdmit, type AdmitAnswer,
+  KEY_TEST_LIMITED, keyTestLimited, RATE_LIMIT_UNAVAILABLE, admitArgs, rateLimitApplies, rateLimitedMessage, readAdmit, refusalOf, type AdmitAnswer,
 } from '../../../domain/ai/usage.ts';
 import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
 import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
@@ -275,10 +275,10 @@ Deno.serve(withCors(async (req: Request) => {
   const checkRate = async (): Promise<Response | null> => {
     if (!rateLimitApplies(request.action, serverCaller) || !userId) return null;
     try {
-      const answer = await admitCall(request.workspaceId, userId, usesPlatformAllowance(conn));
-      if (answer.admitted) return null;
-      const res = reply(429, { ok: false, error: { code: 'RATE_LIMITED', message: rateLimitedMessage(answer.scope, answer.retryAfterSeconds), retryAfterSeconds: answer.retryAfterSeconds } });
-      res.headers.set('Retry-After', String(answer.retryAfterSeconds));
+      const refused = refusalOf(await admitCall(request.workspaceId, userId, usesPlatformAllowance(conn)));
+      if (!refused) return null;
+      const res = reply(429, { ok: false, error: { code: 'RATE_LIMITED', message: rateLimitedMessage(refused.scope, refused.retryAfterSeconds), retryAfterSeconds: refused.retryAfterSeconds } });
+      res.headers.set('Retry-After', String(refused.retryAfterSeconds));
       return res;
     } catch (e) {
       // The detail goes to the log only; the caller gets a plain message (item 7).

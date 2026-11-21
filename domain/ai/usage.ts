@@ -73,7 +73,10 @@ export const workOf = (task: string) => WORK_OF_TASK[task] ?? 'Other AI work';
 export const AI_RATE_LIMIT = { windowSeconds: 60, perPerson: 30, perWorkspace: 90 } as const;
 
 export type RateScope = 'person' | 'workspace';
-export type AdmitAnswer = { admitted: true } | { admitted: false; scope: RateScope; retryAfterSeconds: number };
+export type Refused = { admitted: false; scope: RateScope; retryAfterSeconds: number };
+export type AdmitAnswer = { admitted: true } | Refused;
+/** The refusal in an answer, or null when the call was admitted. */
+export const refusalOf = (a: AdmitAnswer): Refused | null => (a.admitted === false ? a as Refused : null);
 
 /** Whether a request is checked against the minute limit: a provider call by anyone but the trusted server. */
 export const rateLimitApplies = (action: string, serverCaller: boolean): boolean =>
