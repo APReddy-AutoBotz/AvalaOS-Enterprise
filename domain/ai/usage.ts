@@ -227,7 +227,9 @@ export function transcriptionUsage(reply: unknown, audioBytes: number): { input:
     return { input: i, output: Math.min(VOICE_TOKEN_CAP - i, Math.round(output)) };
   };
   const inTokens = count(u.input_tokens), outTokens = count(u.output_tokens);
-  if (u.type !== 'duration' && (inTokens !== null || outTokens !== null)) return { ...capped(inTokens ?? 0, outTokens ?? 0), form: 'tokens' };
+  // A token form that adds up to nothing is absent: voice is never counted as nothing, and nobody has seen what
+  // gpt-transcribe sends, so it falls through to the duration form, else to the estimate (logged as a warning).
+  if (u.type !== 'duration' && (inTokens ?? 0) + (outTokens ?? 0) > 0) return { ...capped(inTokens ?? 0, outTokens ?? 0), form: 'tokens' };
   const secs = count(u.seconds);
   if (u.type === 'duration' && secs !== null && secs > 0 && secs <= VOICE_ABSURD_SECONDS) {
     return { ...capped(Math.ceil(secs) * VOICE_TOKENS_PER_SECOND, 0), form: 'duration' };

@@ -113,6 +113,11 @@ test('voice: the token form as recorded, the duration form at 20 tokens a second
   assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'something-new' } }, bytes), { input: 1200, output: 0, form: 'neither' });
   assert.deepEqual(transcriptionUsage(null, 0), { input: 20, output: 0, form: 'neither' });
   assert.deepEqual(transcriptionUsage('not json', 10), { input: 20, output: 0, form: 'neither' });
+  // A token form of 0 and 0 is absent: never counted as nothing.
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'tokens', input_tokens: 0, output_tokens: 0 } }, bytes), { input: 1200, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { input_tokens: 0, output_tokens: 0 } }, bytes), { input: 1200, output: 0, form: 'neither' });
+  // Zero tokens beside a duration: the duration counts.
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 0, output_tokens: 0, seconds: 30, type: 'duration' } }, bytes), { input: 600, output: 0, form: 'duration' });
 });
 
 test('voice: values that are not a real count are absent, and the cap holds', async () => {
