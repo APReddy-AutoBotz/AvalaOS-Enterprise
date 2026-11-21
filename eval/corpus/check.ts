@@ -67,10 +67,17 @@ async function printTracked() {
   for (const t of TRACKED) console.log(`  ${t.label}: ${Array.isArray(row?.[t.key]) ? row[t.key].length : '—'} (${t.before})`);
 }
 
+/** Ways in whose status assembly corrected (domain/extract/assemble.ts, notSwitchedOn), with the passage that decided each. */
+function printCorrected(list: { system: string; interface: string; before: string; after: string; passage: string; sourceId: string }[] | null | undefined) {
+  const rows = Array.isArray(list) ? list : [];
+  console.log(`Ways in corrected by assembly: ${rows.length}`);
+  for (const c of rows) console.log(`  ${c.system}: ${c.interface}, ${c.before} -> ${c.after} (${c.sourceId}: "${c.passage}")`);
+}
+
 const until = Date.now() + 12 * 60_000;
 for (;;) {
   await new Promise(r => setTimeout(r, 15_000));
-  const r = await fetch(`${url}/rest/v1/extraction_runs?id=eq.${run.id}&select=status,error,result->score,recorded:result->recorded,failure:result->failure,input_tokens,output_tokens,updated_at`, { headers });
+  const r = await fetch(`${url}/rest/v1/extraction_runs?id=eq.${run.id}&select=status,error,result->score,recorded:result->recorded,failure:result->failure,corrected:result->report->corrected,input_tokens,output_tokens,updated_at`, { headers });
   const [row] = r.ok ? await r.json() : [{}];
   if (row?.status === 'done' && flags.has('--record-cutoff')) {
     console.log(`Recorded. Tokens: ${row.input_tokens} in, ${row.output_tokens} out. Read as: ${row.recorded?.read}.`);
@@ -83,6 +90,7 @@ for (;;) {
     console.log(`Done. Tokens: ${row.input_tokens} in, ${row.output_tokens} out.`);
     await printFactsParts();
     await printTracked();
+    printCorrected(row.corrected);
     console.log(JSON.stringify(row.score, null, 2));
     break;
   }

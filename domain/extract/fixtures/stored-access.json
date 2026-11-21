@@ -1,0 +1,364 @@
+{
+  "about": "The sample's SAP S/4HANA supplier invoice interfaces as assembly recorded them in stored extraction runs (made-up sample company, eval/corpus/ap-invoice), with each run's facts-merge questions that name the interface or the supplier invoice (only such a question can stop the interface question: the skip needs the interface's name, and a question 0.8 alike would share its identifier). Read once from extraction_runs and extraction_run_parts, read only, 21 November 2026. 'confirmedAbsentInModel' is the run's stored status; 'ruleQuestions' is how many questions assembly's interface rule now asks about the supplier invoice API in that run (0 where a merge question already names it and the entry was not corrected; a356c63e's 1 is a near-repeat of its merge question, which has no identifier to match).",
+  "runs": [
+    {
+      "run": "cf28ca3e",
+      "date": "2026-11-11",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            },
+            {
+              "sourceId": "call-3",
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [
+        {
+          "question": "Can supplier invoice creation be automated despite API_SUPPLIERINVOICE_PROCESS_SRV being currently unavailable, and what interim approach is acceptable?",
+          "whyItMatters": "The core posting API is confirmed absent, so an automation design needs an approved alternative or change plan."
+        }
+      ],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "615b0479",
+      "date": "2026-11-11",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference",
+            "expose to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            },
+            {
+              "sourceId": "call-3",
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "b9b97ce8",
+      "date": "2026-11-11",
+      "kind": "eval",
+      "unchanged": true,
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "reported",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            }
+          ]
+        },
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV through API management layer",
+          "operations": [
+            "expose to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "even once it's activated in Gateway, nothing is exposed to other systems without going through our API management layer."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [
+        {
+          "question": "Can API_SUPPLIERINVOICE_PROCESS_SRV be used for posting, given it is only reported active and not exposed through the API management layer?",
+          "whyItMatters": "Supplier invoice posting automation depends on confirmed, governed API access rather than unverified reported availability."
+        }
+      ],
+      "ruleQuestions": 0
+    },
+    {
+      "run": "a356c63e",
+      "date": "2026-11-11",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "reported",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            }
+          ]
+        },
+        {
+          "method": "api",
+          "name": "API management exposure for supplier invoice API",
+          "operations": [
+            "expose supplier invoice API to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [
+        {
+          "question": "Is API_SUPPLIERINVOICE_PROCESS_SRV genuinely usable for automated posting, and when will API management exposure be available?",
+          "whyItMatters": "The supplier invoice API is only reported active and external exposure is confirmed absent, so end-to-end posting automation may be blocked."
+        }
+      ],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "d3ea1d06",
+      "date": "2026-11-12",
+      "kind": "process",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices with PO reference",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "doc-2",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            }
+          ]
+        },
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV via API management layer",
+          "operations": [
+            "expose supplier invoice API to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "doc-2",
+              "excerpt": "nothing is exposed to other systems without going through our API management layer. That's a change request, security review, a technical user with the right authorisations."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [
+        {
+          "question": "Is the Fiori Manage Supplier Invoices app actually used by AP, or merely available?",
+          "whyItMatters": "Confirmed availability does not establish process usage; automation and training choices differ for SAP GUI transactions versus Fiori app."
+        }
+      ],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "85799b5d",
+      "date": "2026-11-20",
+      "kind": "eval",
+      "unchanged": true,
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "unknown",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            },
+            {
+              "sourceId": "call-3",
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "ba4c3b6a",
+      "date": "2026-11-20",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices with PO reference",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "reported",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            }
+          ]
+        },
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV exposure through API management",
+          "operations": [
+            "expose supplier invoice API to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "9d6899d3",
+      "date": "2026-11-20",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "d714b013",
+      "date": "2026-11-20",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            }
+          ]
+        },
+        {
+          "method": "api",
+          "name": "API management layer exposure",
+          "operations": [
+            "expose APIs to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "nothing is exposed to other systems without going through our API management layer."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [],
+      "ruleQuestions": 1
+    },
+    {
+      "run": "f35d6983",
+      "date": "2026-11-21",
+      "kind": "eval",
+      "access": [
+        {
+          "method": "api",
+          "name": "API_SUPPLIERINVOICE_PROCESS_SRV",
+          "operations": [
+            "create supplier invoices",
+            "post supplier invoices with PO reference",
+            "expose to other systems"
+          ],
+          "access": "confirmed_absent",
+          "sources": [
+            {
+              "sourceId": "call-3",
+              "excerpt": "Standard S/4 has the supplier invoice OData API, API_SUPPLIERINVOICE_PROCESS_SRV. It can create and post supplier invoices with PO reference. But we have not activated it in our Gateway."
+            },
+            {
+              "sourceId": "call-3",
+              "excerpt": "Available in the product, not available in our landscape."
+            }
+          ]
+        }
+      ],
+      "mergeQuestions": [
+        {
+          "question": "Which interface should be used for invoice creation if API_SUPPLIERINVOICE_PROCESS_SRV is absent and SAP GUI scripting is also absent or needs CISO exception?",
+          "whyItMatters": "Without a confirmed API or approved UI automation route, automated posting in MIRO/FB60 may not be feasible."
+        },
+        {
+          "question": "Are Fiori Manage Supplier Invoices capabilities sufficient for the target posting, parking, attachment and exception process?",
+          "whyItMatters": "The Fiori app is confirmed, but its role in automation versus SAP GUI transactions is not defined."
+        }
+      ],
+      "ruleQuestions": 1
+    }
+  ]
+}
