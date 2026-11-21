@@ -2,7 +2,7 @@
 // allowance is left and when it starts again. Read-only, for every member. Rules in domain/ai/usage.ts.
 import React from 'react';
 import type { AiUsage, JourneyStore, Member, Workspace } from '../store/types.ts';
-import { summarizeUsage, tokenWords, type UsageSummary } from '../../domain/ai/usage.ts';
+import { summarizeUsage, tokenWords, VOICE_COUNT_NOTE, type UsageSummary } from '../../domain/ai/usage.ts';
 import { ErrorNote, messageOf, Spinner } from '../ui.tsx';
 
 const dateWords = (iso: string, opts: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long' }) =>
@@ -65,7 +65,7 @@ function UsageBody({ summary: s, usage, members, workspace }: { summary: UsageSu
       )}
 
       <p className="text-xs text-slate-500">
-        AI use is counted in tokens: short pieces of text, roughly three quarters of a word each, in what is sent and what comes back. Months run from the 1st in UTC.
+        AI use is counted in tokens: short pieces of text, roughly three quarters of a word each, in what is sent and what comes back. {VOICE_COUNT_NOTE} Months run from the 1st in UTC.
         {usage.partial ? ' This month has more requests than this page reads at once, so the breakdowns cover the most recent ones.' : ''}
       </p>
     </div>

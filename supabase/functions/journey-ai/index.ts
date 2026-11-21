@@ -28,6 +28,7 @@ import {
 import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
 import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
+import { transcriptionLogLine, transcriptionUsage } from '../../../domain/ai/usage.ts';
 import {
   decideConnection, isConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
   unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
@@ -340,7 +341,9 @@ Deno.serve(withCors(async (req: Request) => {
     const ext = ({ 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'mp4', 'audio/mpeg': 'mp3', 'audio/wav': 'wav', 'audio/x-m4a': 'm4a' } as Record<string, string>)[mime] ?? 'webm';
     const form = new FormData();
     form.append('file', new Blob([bytes], { type: mime }), `answer.${ext}`);
-    const tmodel = env('OPENAI_TRANSCRIBE_MODEL') || 'gpt-4o-transcribe';
+    // gpt-transcribe since the release that counts its use by the second (gpt-4o-transcribe ends 26 February 2027;
+    // the secret OPENAI_TRANSCRIBE_MODEL set to it puts voice back until then).
+    const tmodel = env('OPENAI_TRANSCRIBE_MODEL') || 'gpt-transcribe';
     const ttarget = transcriptionTarget(conn);
     form.append('model', tmodel);
     const started = Date.now();
@@ -352,7 +355,15 @@ Deno.serve(withCors(async (req: Request) => {
       const json = await res.json().catch(() => ({}));
       ok = res.ok && typeof json.text === 'string';
       text = ok ? json.text : '';
-      tokens = { input: Number(json?.usage?.input_tokens ?? 0) || 0, output: Number(json?.usage?.output_tokens ?? 0) || 0 };
+      // An answered request: its usage in tokens or in seconds, else estimated from the recording's size
+      // (domain/ai/usage.ts), with one log line naming the form read and the model, never the reply's content.
+      // A refused request (an error status) counts nothing, as before.
+      if (res.ok) {
+        const counted = transcriptionUsage(json, bytes.length);
+        tokens = { input: counted.input, output: counted.output };
+        const line = transcriptionLogLine(counted.form, tmodel);
+        if (line.level === 'warn') console.warn(line.text); else console.log(line.text);
+      }
       if (!ok) code = res.status === 401 ? 'PROVIDER_AUTH' : 'PROVIDER_ERROR';
     } catch { ok = false; } finally { clearTimeout(timer); }
     await usage({ workspace_id: request.workspaceId, user_id: userId, task: 'transcribe', model: tmodel, status: ok ? 'ok' : 'provider_error', input_tokens: tokens.input, output_tokens: tokens.output, attempts: 1, error_code: ok ? null : code, duration_ms: Date.now() - started });

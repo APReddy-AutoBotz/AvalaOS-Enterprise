@@ -195,3 +195,57 @@ export const USAGE_PAGES = { size: 1000, max: 20_000 } as const;
 
 /** Whether another page may hold more rows: only a full page can. */
 export const usageMorePages = (rowsInPage: number): boolean => rowsInPage >= USAGE_PAGES.size;
+
+/**
+ * Voice: how a transcription's use is counted (docs/next-plan.md, section 3g, dated items; plan of 20 November
+ * 2026, approved by the owner). OpenAI gives a transcription's `usage` in one of two forms: tokens
+ * (`input_tokens`, `output_tokens`), or, for models billed by the length of the audio (`gpt-transcribe`),
+ * `type: "duration"` with `seconds`. The allowance counts tokens, so a duration counts as
+ * `VOICE_TOKENS_PER_SECOND` (owner: an allowance rule, not a claim about cost), as input. A reply with neither
+ * is counted from the recording's size at a low rate, so it over-counts rather than counting nothing, and the
+ * log line says so as a warning. Everything is capped at what `VOICE_MAX_SECONDS` of audio counts: the server
+ * refuses a recording longer than about ten minutes (`LIMITS.maxAudioChars` in gateway.ts).
+ */
+export const VOICE_TOKENS_PER_SECOND = 20;
+/** 16 kbps: below what browsers record at, so an estimate from the size over-counts. */
+export const VOICE_FALLBACK_BYTES_PER_SECOND = 2_000;
+export const VOICE_MAX_SECONDS = 600;
+export const VOICE_TOKEN_CAP = VOICE_MAX_SECONDS * VOICE_TOKENS_PER_SECOND;
+/** A `seconds` beyond this is not a real recording's length: counted as absent. */
+const VOICE_ABSURD_SECONDS = 24 * 3600;
+
+export type TranscriptionForm = 'tokens' | 'duration' | 'neither';
+
+const count = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+
+/** The tokens a transcription counts as, and which form of usage its reply gave. */
+export function transcriptionUsage(reply: unknown, audioBytes: number): { input: number; output: number; form: TranscriptionForm } {
+  const usage = (reply as { usage?: Record<string, unknown> } | null)?.usage;
+  const u = usage && typeof usage === 'object' ? usage : {};
+  const capped = (input: number, output: number) => {
+    const i = Math.min(VOICE_TOKEN_CAP, Math.round(input));
+    return { input: i, output: Math.min(VOICE_TOKEN_CAP - i, Math.round(output)) };
+  };
+  const inTokens = count(u.input_tokens), outTokens = count(u.output_tokens);
+  // A token form that adds up to nothing is absent: voice is never counted as nothing, and nobody has seen what
+  // gpt-transcribe sends, so it falls through to the duration form, else to the estimate (logged as a warning).
+  if (u.type !== 'duration' && (inTokens ?? 0) + (outTokens ?? 0) > 0) return { ...capped(inTokens ?? 0, outTokens ?? 0), form: 'tokens' };
+  const secs = count(u.seconds);
+  if (u.type === 'duration' && secs !== null && secs > 0 && secs <= VOICE_ABSURD_SECONDS) {
+    return { ...capped(Math.ceil(secs) * VOICE_TOKENS_PER_SECOND, 0), form: 'duration' };
+  }
+  const bytes = Math.max(0, Number(audioBytes) || 0);
+  const estimated = Math.max(1, Math.ceil(bytes / VOICE_FALLBACK_BYTES_PER_SECOND));
+  return { ...capped(estimated * VOICE_TOKENS_PER_SECOND, 0), form: 'neither' };
+}
+
+/** The one log line a transcription writes: the form and the model, never the reply's text, values or the recording. */
+export function transcriptionLogLine(form: TranscriptionForm, model: string): { level: 'info' | 'warn'; text: string } {
+  const name = String(model).replace(/[^\w.-]/g, '').slice(0, 60);
+  return form === 'neither'
+    ? { level: 'warn', text: `transcribe usage form: neither (${name}), estimated from the recording's size` }
+    : { level: 'info', text: `transcribe usage form: ${form} (${name})` };
+}
+
+/** The sentence under "AI use this month". */
+export const VOICE_COUNT_NOTE = `Spoken answers are counted at ${VOICE_TOKENS_PER_SECOND} tokens a second of audio.`;
