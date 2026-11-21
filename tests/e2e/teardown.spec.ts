@@ -113,6 +113,21 @@ test('an address for a teardown the demo does not hold says so, with a way to th
   await expect(page.getByRole('link', { name: 'the demo' })).toHaveAttribute('href', '/demo');
 });
 
+test('on the live site an unknown teardown address gets the homepage back, with status 200: the page still says it is not in the demo', async ({ page }) => {
+  // netlify.toml sends every unknown address to index.html with status 200, so the request for the file
+  // comes back as the homepage's HTML (review of #219, 21 November 2026).
+  const home = await (await page.request.get('/')).text();
+  expect(home).toContain('<div id="root">');
+  await page.route('**/demo-data/teardowns/not-here.json', r => r.fulfill({ status: 200, contentType: 'text/html', body: home }));
+  await page.goto('/demo/teardowns/not-here');
+  await expect(page.getByRole('heading', { name: 'This teardown is not in the demo' })).toBeVisible();
+  await expect(page.getByText('The demo did not load')).toHaveCount(0);
+  // The same when the index cannot be read either.
+  await page.route('**/demo-data/teardowns/index.json', r => r.fulfill({ status: 200, contentType: 'text/html', body: home }));
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'This teardown is not in the demo' })).toBeVisible();
+});
+
 test('the sample is unchanged: its banner, its pointer, and no teardown lines', async ({ page }) => {
   await page.goto('/demo?utm_source=test');
   await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/assessment\?utm_source=test$/);
