@@ -3,7 +3,7 @@
 // changes nothing on the page. No script of Umami's is loaded, no cookie is set, nothing about a visitor
 // is kept in the browser. The one flag this file may keep is the owner's own "not counted in this
 // browser" (?count=off), which only that browser's owner sets.
-import { OPT_OUT, UMAMI, countable, eventBody, optOutChange, pageViewBody, type PageFacts, type VisitEvent } from '../../domain/site/visits.ts';
+import { OPT_OUT, UMAMI, countable, demoOpening, eventBody, optOutChange, pageViewBody, teardownDocumentsEvent, type PageFacts, type VisitEvent } from '../../domain/site/visits.ts';
 import type { PublicPage } from '../../domain/site/pages.ts';
 
 /** The local-storage key of the application's sign-in session (journey/store/supabaseStore.ts). */
@@ -15,6 +15,9 @@ export function hasSession(): boolean {
 }
 
 let current: PublicPage | null = null;
+/** The address the page was opened at: the demo moves it to its first stage before the count is sent. */
+let opened = { pathname: '', search: '' };
+let documentsCounted = false;
 
 /** Whether this browser's owner switched counting off here. */
 export function countingOff(): boolean {
@@ -30,9 +33,9 @@ function allowed(): boolean {
   });
 }
 
-function facts(pathname = window.location.pathname): PageFacts {
+function facts(pathname = window.location.pathname, search = window.location.search): PageFacts {
   return {
-    hostname: window.location.hostname, pathname, search: window.location.search, title: document.title,
+    hostname: window.location.hostname, pathname, search, title: document.title,
     referrer: document.referrer, language: navigator.language ?? '', screen: `${window.screen.width}x${window.screen.height}`,
   };
 }
@@ -52,6 +55,7 @@ function send(body: unknown) {
  */
 export function startCounting(page: PublicPage) {
   current = page;
+  opened = { pathname: window.location.pathname, search: window.location.search };
   const change = optOutChange(window.location.search);
   if (change) {
     try { if (change === 'off') window.localStorage.setItem(OPT_OUT.key, OPT_OUT.value); else window.localStorage.removeItem(OPT_OUT.key); } catch { /* storage may be off */ }
@@ -63,7 +67,12 @@ export function startCounting(page: PublicPage) {
   // After the page has drawn, so the count carries the page's own title; nothing on the page waits for it.
   const go = () => window.setTimeout(() => {
     if (!allowed()) return;
-    if (page === 'demo') { const b = eventBody(facts('/demo'), 'Demo opened'); if (b) send(b); return; }
+    if (page === 'demo') {
+      const o = demoOpening(opened.pathname);
+      const b = eventBody(facts(o.path, opened.search), o.name, o.slug);
+      if (b) send(b);
+      return;
+    }
     send(pageViewBody(facts()));
   }, 300);
   if (document.readyState === 'complete') go(); else window.addEventListener('load', go, { once: true });
@@ -74,4 +83,13 @@ export function countEvent(name: VisitEvent, detail?: string) {
   if (!allowed() || current === 'demo') return;
   const b = eventBody(facts(), name, detail);
   if (b) send(b);
+}
+
+/** A teardown's documents opened in the demo: counted once per load, the only count from inside the demo. */
+export function countTeardownDocuments(slug: string) {
+  if (documentsCounted || current !== 'demo' || !allowed()) return;
+  const b = teardownDocumentsEvent(facts(undefined, opened.search), slug);
+  if (!b) return;
+  documentsCounted = true;
+  send(b);
 }

@@ -28,6 +28,7 @@ import { useModelEditor } from './useModelEditor.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { NOT_ON_TEARDOWN } from '../../domain/site/teardowns.ts';
 import { useTeardown } from '../teardown.tsx';
+import { countTeardownDocuments } from '../home/visits.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
 import { buildFrd } from '../../domain/docs/frd.ts';
 import { buildSdd } from '../../domain/docs/sdd.ts';
@@ -204,6 +205,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   // A teardown does not offer the evidence pack: it takes no company section, so it could not carry the
   // teardown's source and licence lines (marketing package, change b).
   const teardown = useTeardown();
+  // A teardown's documents opening is counted once per load (domain/site/visits.ts).
+  React.useEffect(() => { if (teardown) countTeardownDocuments(teardown.words.slug); }, [teardown]);
   const types = React.useMemo(() => TYPES.filter(t => offersDocument(model, t.id) && (t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent')) && !(teardown && t.id === 'evidence')), [delivery, model, teardown]);
   const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
   const typeChosen = React.useRef(Boolean(asked.current));

@@ -3,24 +3,12 @@
 // would have. The checks of the file itself are domain/site/teardowns.test.ts; this proves the pages.
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { teardownState, type TeardownRun } from '../../domain/site/teardownState.ts';
-import { ABOUT_TITLE, NOT_ON_TEARDOWN, TEARDOWN_ASK_NOTE, openQuestionsLine, type TeardownWords } from '../../domain/site/teardowns.ts';
+import { ABOUT_TITLE, NOT_ON_TEARDOWN, TEARDOWN_ASK_NOTE, openQuestionsLine } from '../../domain/site/teardowns.ts';
 import { openZip } from '../../domain/ingest/zip.ts';
-import type { ProcessModel } from '../../domain/processModel/types.ts';
+import { serveTeardown as serve, teardownWords as words } from './teardownFixture.ts';
 import { shot } from './helpers.ts';
 
-const dir = new URL('../../domain/site/fixtures/teardown/', import.meta.url);
-const read = (name: string) => readFileSync(new URL(name, dir));
-const words: TeardownWords = JSON.parse(read('teardown.json').toString());
-const run: TeardownRun = JSON.parse(read('run.json').toString());
-const state = teardownState({ words, model: JSON.parse(read('model.json').toString()) as ProcessModel, run, files: Object.fromEntries(Object.values(run.files).map(f => [f, new Uint8Array(read(f))])) });
 const stage = (page: Page, name: string) => page.getByRole('navigation', { name: 'Stages' }).getByRole('link', { name }).click();
-
-async function serve(page: Page) {
-  const body = JSON.stringify(await state);
-  await page.route('**/demo-data/teardowns/index.json', r => r.fulfill({ contentType: 'application/json', body: JSON.stringify([{ slug: words.slug, short: words.short }]) }));
-  await page.route(`**/demo-data/teardowns/${words.slug}.json`, r => r.fulfill({ contentType: 'application/json', body }));
-}
 
 test('a teardown opens on its assessment with its lines, keeps the link words, and names its own address', async ({ page }) => {
   const outside: string[] = [];

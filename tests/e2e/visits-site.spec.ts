@@ -3,6 +3,7 @@
 // with Umami's address stood in for, so nothing leaves the test. tests/e2e/visits.spec.ts shows that the
 // test site itself, like a preview or a local build, sends nothing.
 import { test, expect, type Page, type Request } from '@playwright/test';
+import { serveTeardown, teardownWords } from './teardownFixture.ts';
 
 const UMAMI = 'https://gateway.umami.is/api/send';
 const bodies = (reqs: Request[]) => reqs.map(r => JSON.parse(r.postData() ?? '{}'));
@@ -75,6 +76,41 @@ test('the demo is counted once, and nothing inside it', async ({ page }) => {
   await page.waitForTimeout(1000);
   expect(seen.length).toBe(1);
   expect(bodies(seen)[0].payload).toMatchObject({ name: 'Demo opened', url: '/demo' });
+});
+
+test('the demo keeps the campaign words through its opening, in the address and in the count', async ({ page }) => {
+  const seen = await record(page);
+  await page.goto('/demo?utm_source=linkedin&utm_campaign=nov');
+  await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/assessment\?utm_source=linkedin&utm_campaign=nov$/);
+  await expect.poll(() => seen.length).toBe(1);
+  expect(bodies(seen)[0].payload).toMatchObject({ name: 'Demo opened', url: '/demo?utm_source=linkedin&utm_campaign=nov' });
+});
+
+test('a teardown is counted as "Teardown opened" and its documents once, its slug the only detail, and nothing else', async ({ page }) => {
+  const seen = await record(page);
+  await serveTeardown(page);
+  const slug = teardownWords.slug;
+  await page.goto(`/demo/teardowns/${slug}?utm_source=linkedin`);
+  await expect(page.getByTestId('teardown-banner')).toBeVisible();
+  await expect.poll(() => seen.length).toBe(1);
+  const nav = page.getByRole('navigation', { name: 'Stages' });
+  await nav.getByRole('link', { name: 'Documents' }).click();
+  await expect.poll(() => seen.length).toBe(2);
+  // Elsewhere and back: the documents are counted once per load; nothing else inside the demo is counted.
+  await nav.getByRole('link', { name: 'Flows' }).click();
+  await nav.getByRole('link', { name: 'Documents' }).click();
+  await page.getByRole('tab', { name: /^SDD/ }).click();
+  await nav.getByRole('link', { name: 'Process' }).click();
+  await page.waitForTimeout(1000);
+  expect(seen.length).toBe(2);
+  const [opened, docs] = bodies(seen);
+  expect(opened.payload).toMatchObject({ name: 'Teardown opened', url: `/demo/teardowns/${slug}?utm_source=linkedin`, data: { which: slug } });
+  expect(docs.payload).toMatchObject({ name: 'Teardown documents opened', url: `/demo/teardowns/${slug}?utm_source=linkedin`, data: { which: slug } });
+  for (const b of [opened, docs]) {
+    expect(Object.keys(b.payload).sort()).toEqual(['data', 'hostname', 'language', 'name', 'referrer', 'screen', 'title', 'url', 'website']);
+    expect(Object.keys(b.payload.data)).toEqual(['which']);
+  }
+  expect(bodies(seen).some(b => b.payload.name === 'Demo opened')).toBe(false);
 });
 
 test('nothing is sent signed in, with a privacy signal, or inside the product', async ({ page }) => {

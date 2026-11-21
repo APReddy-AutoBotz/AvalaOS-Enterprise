@@ -5,10 +5,11 @@
 // Umami's is loaded. Counts only, nothing about a person: no cookies, nothing kept in the browser, no
 // visitor identifier, no data beyond the fields and events below. Only the real site counts
 // (avalaos.com and www.avalaos.com), only signed out, only the homepage, the three trust pages and the
-// demo's opening, and never with "Do Not Track" or "Global Privacy Control", in a browser driven by test
+// demo's opening (or a teardown's, and its documents once), and never with "Do Not Track" or "Global Privacy Control", in a browser driven by test
 // tools, or in a browser its owner has switched off (OPT_OUT).
 
 import type { PublicPage } from './pages.ts';
+import { isTeardownSlug, teardownBase, teardownSlug } from './teardownPath.ts';
 
 /** Umami Cloud's collection address (docs.umami.is, "Sending stats") and our website's id (not a secret). */
 export const UMAMI = { endpoint: 'https://gateway.umami.is/api/send', website: '14ef4005-3173-46da-a837-efcc39cf1a48' } as const;
@@ -16,7 +17,11 @@ export const UMAMI = { endpoint: 'https://gateway.umami.is/api/send', website: '
 /** The only addresses that count: never a preview, a local build or the browser tests. */
 export const COUNTED_HOSTS = ['avalaos.com', 'www.avalaos.com'] as const;
 
-/** The pages that count. The demo is counted once, as "Demo opened", and nothing inside it. */
+/**
+ * The pages that count. The demo is counted once, as "Demo opened", or at a teardown's address as
+ * "Teardown opened" with its slug; inside it, only a teardown's documents opening, once (marketing
+ * package, owner's yes, 21 November 2026). Nothing else inside the demo.
+ */
 export const COUNTED_PAGES: readonly PublicPage[] = ['home', 'privacy', 'terms', 'security', 'demo'];
 
 /** The events, and no others: each with the one detail it may carry, if any. */
@@ -27,6 +32,8 @@ export const EVENTS = {
   'Walkthrough not sent': null,
   'Tour stage picked': 'stage',
   'Read more opened': 'which',
+  'Teardown opened': 'which',
+  'Teardown documents opened': 'which',
 } as const;
 export type VisitEvent = keyof typeof EVENTS;
 
@@ -101,4 +108,19 @@ export function eventBody(f: PageFacts, name: string, detail?: string): { type: 
   const value = typeof detail === 'string' ? detail.replace(/[^\w .-]/g, '').slice(0, 40) : '';
   const data = key && value ? { [key]: value } : undefined;
   return { type: 'event', payload: { ...base(f), name: name as VisitEvent, ...(data ? { data } : {}) } };
+}
+
+/**
+ * How the demo's opening is counted, from the address it was opened at (taken at load, before the journey
+ * moves it to the first stage): the sample as "Demo opened" at /demo, a teardown as "Teardown opened" at its
+ * own address, its slug the only detail. The campaign words are kept by `countedUrl`.
+ */
+export function demoOpening(pathname: string): { name: 'Demo opened' | 'Teardown opened'; path: string; slug?: string } {
+  const slug = teardownSlug(pathname);
+  return slug ? { name: 'Teardown opened', path: teardownBase(slug), slug } : { name: 'Demo opened', path: '/demo' };
+}
+
+/** The one event inside the demo: a teardown's documents opened, with its slug; null for anything else. */
+export function teardownDocumentsEvent(f: PageFacts, slug: string) {
+  return isTeardownSlug(slug) ? eventBody({ ...f, pathname: teardownBase(slug) }, 'Teardown documents opened', slug) : null;
 }
