@@ -1,0 +1,28 @@
+# The check "Release dates set" (owner, 21 November 2026): on a pull request into main only, it fails while a
+# date the release sets in its own commit is still empty (each trust page's "Last updated" date and the
+# coverage notice's date), and says which one in plain words. It never runs on a pull request into next.
+# Whether it blocks a merge into main is set in the repository's settings (the rule on main), not here.
+# Rules: domain/site/releaseDates.ts; the script: scripts/release-dates.ts.
+name: Release dates set
+
+on:
+  pull_request:
+    branches: [main]
+    # "edited" runs it again when a pull request's base is changed to main.
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  release-dates:
+    name: Release dates set
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check the dates the release sets
+        run: node scripts/release-dates.ts
