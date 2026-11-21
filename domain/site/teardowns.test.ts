@@ -59,6 +59,10 @@ test('B: a person, an email address or a stray id in the file is found', async (
   assert.ok(teardownProblems(b, f.run).some(p => /email address at/.test(p)));
   const c = clone(state); (c.processes[0] as { approverId: string | null }).approverId = '11111111-2222-4333-8444-555555555555';
   assert.ok(teardownProblems(c, f.run).some(p => /approverId names someone/.test(p)));
+  const e = clone(state); e.revisions[0].model.steps[0].name += ' (0b7c2a1e-5d4f-4a3b-9c2d-1e0f9a8b7c6d)';
+  assert.ok(teardownProblems(e, f.run).some(p => /An id from outside the file at \$\.revisions\[0\]\.model\.steps\[0\]\.name/.test(p)), 'change c: a live id is found');
+  const g = clone(state); (g.processes[0] as { architectId: string | null }).architectId = g.workspaces[0].id;
+  assert.ok(teardownProblems(g, f.run).some(p => /architectId names someone/.test(p)), 'an id of the file in a person field is still not a person');
   const d = clone(state); (d.revisions[0] as { state: string }).state = 'approved';
   assert.ok(teardownProblems(d, f.run).some(p => /approved/.test(p)));
 });
