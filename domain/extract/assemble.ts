@@ -85,8 +85,12 @@ export function cautiousAccess(statuses: AccessStatus[], proposed: AccessStatus)
 // A status of its own for this ("not_enabled") is a later item: it needs the instructions to set it.
 
 const MACHINE_WAYS: AccessMethodKind[] = ['api', 'file', 'database', 'event'];
-/** Words in a passage that say an interface exists but is not switched on. English only. */
-export const NOT_SWITCHED_ON = /\bnot (?:yet )?(?:been )?(?:activated|enabled|switched on|turned on|exposed|deployed|live|released|rolled out|set up)\b|\bdeactivated\b|\binactive\b|\bswitched off\b|\bturned off\b|\b(?:available|exists?|included) in the (?:standard )?(?:product|platform|package|suite)\b|\bnot available in (?:our|this|the) (?:landscape|environment|system|tenant|instance)\b/i;
+/**
+ * Words in a passage that say an interface exists but is not switched on. English only. "Not available in our
+ * landscape" alone is not enough (review, 21 November 2026): it can also mean the interface does not exist, so a
+ * passage counts only with words like these ("Available in the product, not available in our landscape." does).
+ */
+export const NOT_SWITCHED_ON = /\bnot (?:yet )?(?:been )?(?:activated|enabled|switched on|turned on|exposed|deployed|live|released|rolled out|set up)\b|\bdeactivated\b|\binactive\b|\bswitched off\b|\bturned off\b|\b(?:available|exists?|included) in the (?:standard )?(?:product|platform|package|suite)\b/i;
 /** Words in a passage that make the matter a policy, not a switch. */
 export const BY_POLICY = /\b(?:by|per) policy\b|\bnot (?:allowed|permitted)\b|\bforbidden\b|\bprohibited\b/i;
 
@@ -114,7 +118,8 @@ export function correctNotSwitchedOn(systems: SystemRef[]): { corrections: Acces
 }
 
 const IDENTIFIER = /\b[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+\b/;
-const AVAILABILITY = /\b(?:available|availability|activ\w*|enabl\w*|expos\w*|live|usable|when)\b/i;
+// "when" alone is not enough: "What should happen when X returns an error?" does not ask whether X can be used.
+const AVAILABILITY = /\b(?:available|availability|activ\w*|enabl\w*|expos\w*|live|usable)\b/i;
 /**
  * Whether a question already asks if this interface can be used: it names the interface (its technical
  * identifier when the name holds one, else the whole name) and asks about availability. Used only for a

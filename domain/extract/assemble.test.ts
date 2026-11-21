@@ -102,6 +102,10 @@ test('a corrected interface is not asked twice', () => {
     const r = STORED.find(x => x.run === id)!;
     assert.equal(invoiceQuestions(assemble(r.access, r.mergeQuestions).model.openQuestions).length, 1, id);
   }
+  // "when" alone does not make a question about availability (review, 21 November 2026).
+  const err = assemble(nine.access, [{ question: 'What should happen when API_SUPPLIERINVOICE_PROCESS_SRV returns an error?', whyItMatters: 'Exception handling.' }]);
+  assert.equal(invoiceQuestions(err.model.openQuestions).length, 1);
+  assert.match(invoiceQuestions(err.model.openQuestions)[0].question, /available for use from SAP S\/4HANA, and when\?$/);
   // Two corrected entries of one interface give one question.
   const twice = assemble([
     { method: 'api', name: 'API_X_SRV', operations: ['post invoices'], access: 'confirmed_absent', sources: [{ sourceId: 'call-3', excerpt: 'API_X_SRV is in the product but we have not activated it.' }] },
@@ -131,6 +135,7 @@ test('never corrected: screens, policies, interfaces that do not exist, and a ga
     ['an interface that does not exist (made up)', { method: 'api', name: 'Direct interface to the time system', operations: ['send hours'], access: 'confirmed_absent', sources: [{ sourceId: 'call-2', excerpt: 'No, not as an implemented interface; we send a reviewed file instead.' }] }],
     ['no such check (made up)', { method: 'api', name: 'Daily total check', operations: ['check totals'], access: 'confirmed_absent', sources: [{ sourceId: 'call-2', excerpt: 'There is no daily total check in that configuration.' }] }],
     ['a gate, not a switch (sample)', { method: 'api', name: 'API management layer exposure', operations: ['expose APIs to other systems'], access: 'confirmed_absent', sources: [{ sourceId: 'call-3', excerpt: 'nothing is exposed to other systems without going through our API management layer.' }] }],
+    ['only "not available in this system" (review)', { method: 'api', name: 'API_V_SRV', operations: ['post'], access: 'confirmed_absent', sources: [{ sourceId: 'call-3', excerpt: 'API access is not available in this system.' }] }],
     ['switched off and a policy', { method: 'api', name: 'API_Z_SRV', operations: ['post'], access: 'confirmed_absent', sources: [{ sourceId: 'call-3', excerpt: 'API_Z_SRV is not activated, and calls from outside are not allowed.' }] }],
   ];
   for (const [label, a] of cases) {
@@ -146,6 +151,9 @@ test('the words: which passages say an interface exists but is not switched on',
     assert.ok(notSwitchedOn(way(yes)), yes);
   for (const no of ['There is no API for that.', 'It does not exist.', 'Disabled on production by policy.', 'nothing is exposed to other systems without going through our API management layer.'])
     assert.equal(notSwitchedOn(way(no)), null, no);
+  // "Not available in this system" alone can mean it does not exist (review, 21 November 2026).
+  assert.equal(notSwitchedOn(way('API access is not available in this system.')), null);
+  assert.equal(notSwitchedOn(way('Not available in our landscape.')), null);
   assert.equal(notSwitchedOn(way('not activated', 'email')), null);
   assert.equal(notSwitchedOn({ ...way('not activated'), access: 'unknown' }), null);
   assert.equal(notSwitchedOn({ ...way('not activated'), sources: [] }), null, 'a person\'s answer with no passage');
