@@ -10,6 +10,8 @@
 // The caller's own token decides access (RLS). A caller presenting the project's secret key is a
 // trusted server (it already has full database access): membership is not checked and no user is
 // logged. The service key is otherwise used only to read the monthly budget and write the usage log.
+// Before every provider call a signed-in person starts (run, transcribe, health), the per-minute AI limit is
+// asked of the database (ai_call_admit, domain/ai/usage.ts AI_RATE_LIMIT); the trusted server is never limited.
 // Provider keys (the platform's OPENAI_API_KEY, or a workspace's own key read from the Vault by the
 // service role, see domain/ai/providers.ts) never leave this function. A workspace with its own key never
 // falls back to the platform key, and only calls on the platform key count against its monthly allowance.
@@ -20,7 +22,9 @@ import {
   validateRequest, buildOpenAIRequest, buildImageRequest, verifyExcerpts, missingListsMessage,
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
-import { KEY_TEST_LIMITED, keyTestLimited } from '../../../domain/ai/usage.ts';
+import {
+  KEY_TEST_LIMITED, keyTestLimited, RATE_LIMIT_UNAVAILABLE, admitArgs, rateLimitApplies, rateLimitedMessage, readAdmit, refusalOf, type AdmitAnswer,
+} from '../../../domain/ai/usage.ts';
 import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
 import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
@@ -95,6 +99,17 @@ async function tokensUsedThisMonth(workspaceId: string): Promise<number> {
   });
   if (!res.ok) throw new Error(`budget lookup failed (${res.status})`);
   return Number(await res.json());
+}
+
+/** The per-minute limit: whether this call may start, recorded as started when it may (ai_call_admit). */
+async function admitCall(workspaceId: string, userId: string, onPlatformKey: boolean): Promise<AdmitAnswer> {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/ai_call_admit`, {
+    method: 'POST', headers: serviceHeaders(), body: JSON.stringify(admitArgs(workspaceId, userId, onPlatformKey)),
+  });
+  if (!res.ok) throw new Error(`limit check failed (${res.status})`);
+  const answer = readAdmit(await res.json());
+  if (!answer) throw new Error('limit check gave no answer');
+  return answer;
 }
 
 async function logUsage(row: Record<string, unknown>): Promise<void> {
@@ -189,7 +204,8 @@ Deno.serve(withCors(async (req: Request) => {
 
   const authHeader = req.headers.get('Authorization') ?? '';
   let userId: string | null = null;
-  if (isServerCaller(req)) {
+  const serverCaller = isServerCaller(req);
+  if (serverCaller) {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/workspaces?id=eq.${request.workspaceId}&select=id`, { headers: serviceHeaders() });
     const rows = res.ok ? await res.json() : [];
     if (!Array.isArray(rows) || rows.length !== 1) return fail(404, 'WORKSPACE_NOT_FOUND', 'No such workspace.');
@@ -254,6 +270,23 @@ Deno.serve(withCors(async (req: Request) => {
     return null;
   };
 
+  // The per-minute limit, asked once per request just before its provider call, after the request's own checks
+  // (so a request refused for another reason is not counted). Never for the trusted server.
+  const checkRate = async (): Promise<Response | null> => {
+    if (!rateLimitApplies(request.action, serverCaller) || !userId) return null;
+    try {
+      const refused = refusalOf(await admitCall(request.workspaceId, userId, usesPlatformAllowance(conn)));
+      if (!refused) return null;
+      const res = reply(429, { ok: false, error: { code: 'RATE_LIMITED', message: rateLimitedMessage(refused.scope, refused.retryAfterSeconds), retryAfterSeconds: refused.retryAfterSeconds } });
+      res.headers.set('Retry-After', String(refused.retryAfterSeconds));
+      return res;
+    } catch (e) {
+      // The detail goes to the log only; the caller gets a plain message (item 7).
+      console.error('AI limit check failed', (e as Error).message);
+      return fail(500, 'RATE_LIMIT_UNAVAILABLE', RATE_LIMIT_UNAVAILABLE);
+    }
+  };
+
   // "Test this key": a tiny real request through the same address, key and model the workspace uses. On the
   // platform key it is checked against the allowance like any call; on the workspace's own key it has its own
   // small limit instead, so a workspace whose allowance is used up can still switch to its own key. Every
@@ -270,6 +303,8 @@ Deno.serve(withCors(async (req: Request) => {
       const over = await checkAllowance();
       if (over) return over;
     }
+    const limited = await checkRate();
+    if (limited) return limited;
     const target = providerRequest(conn, testRequestBody(conn));
     const started = Date.now();
     let status = 0, tokens = { input: 0, output: 0 };
@@ -297,6 +332,8 @@ Deno.serve(withCors(async (req: Request) => {
     if (off) return fail(422, 'NOT_SUPPORTED_BY_PROVIDER', off);
     const over = await checkAllowance();
     if (over) return over;
+    const limited = await checkRate();
+    if (limited) return limited;
     const [head, data] = request.audio!.split(',');
     const mime = head.slice(5).split(';')[0];
     const bytes = Uint8Array.from(atob(data), c => c.charCodeAt(0));
@@ -339,6 +376,8 @@ Deno.serve(withCors(async (req: Request) => {
     if (e instanceof ProviderRequestError) return fail(e.code === 'TOO_LARGE' ? 413 : 400, e.code, e.message);
     throw e;
   }
+  const limited = await checkRate();
+  if (limited) return limited;
 
   const started = Date.now();
   let { parsed, attempts } = await callResponses(conn, openaiBody);

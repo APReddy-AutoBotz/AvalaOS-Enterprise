@@ -65,6 +65,30 @@ test('a month is read page by page: only a full page can have more after it (F11
   assert.ok(USAGE_PAGES.max % USAGE_PAGES.size === 0 && USAGE_PAGES.max > USAGE_PAGES.size);
 });
 
+test('the per-minute limit: its figures, who and what it counts, and the words a person sees', async () => {
+  const { AI_RATE_LIMIT, rateLimitApplies, admitArgs, readAdmit, rateLimitedMessage, RATE_LIMIT_UNAVAILABLE } = await import('./usage.ts');
+  assert.deepEqual(AI_RATE_LIMIT, { windowSeconds: 60, perPerson: 30, perWorkspace: 90 });
+  // Every provider call by a person counts; the allowance lookup does not; the trusted server is never asked.
+  assert.deepEqual(['run', 'transcribe', 'health', 'allowance'].map(a => rateLimitApplies(a, false)), [true, true, true, false]);
+  assert.deepEqual(['run', 'transcribe', 'health', 'allowance'].map(a => rateLimitApplies(a, true)), [false, false, false, false]);
+  // The workspace's limit only on the platform key.
+  assert.equal(admitArgs('w', 'u', true).count_workspace, true);
+  assert.equal(admitArgs('w', 'u', false).count_workspace, false);
+  assert.deepEqual(admitArgs('w', 'u', true), { target_workspace: 'w', target_person: 'u', per_person: 30, per_workspace: 90, count_workspace: true, window_seconds: 60 });
+  // The database's answer.
+  assert.deepEqual(readAdmit({ admitted: true }), { admitted: true });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'person', retry_after: 40 }), { admitted: false, scope: 'person', retryAfterSeconds: 40 });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'workspace', retry_after: 0.2 }), { admitted: false, scope: 'workspace', retryAfterSeconds: 1 });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'person', retry_after: 'soon' }), { admitted: false, scope: 'person', retryAfterSeconds: 60 });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'person', retry_after: 9999 }), { admitted: false, scope: 'person', retryAfterSeconds: 60 });
+  for (const odd of [null, 'yes', 1, {}, { admitted: 'true' }, { admitted: false }, { admitted: false, scope: 'everyone' }]) assert.equal(readAdmit(odd), null, JSON.stringify(odd));
+  // The words.
+  assert.equal(rateLimitedMessage('person', 40), 'You have started 30 AI requests in the last minute, the most one person can. Wait about 40 seconds and try again.');
+  assert.equal(rateLimitedMessage('workspace', 40), 'This workspace has started 90 AI requests in the last minute, the most it can at once. Wait about 40 seconds and try again.');
+  assert.match(rateLimitedMessage('person', 1), /Wait about 1 second and try again\.$/);
+  assert.equal(RATE_LIMIT_UNAVAILABLE, 'The AI limit could not be checked just now. Try again in a minute.');
+});
+
 test('"Test this key" on a workspace\'s own key has its own small limit, not the monthly allowance', async () => {
   const { KEY_TEST_LIMIT, keyTestLimited, WORK_OF_TASK } = await import('./usage.ts');
   assert.equal(KEY_TEST_LIMIT.perHour, 10);
