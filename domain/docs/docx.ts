@@ -103,6 +103,18 @@ function block(b: Block, s: DocxStyle): (Paragraph | Table)[] {
   }
 }
 
+/**
+ * The Word file's own properties, the same for every workspace (marketing package, part 3): the author and the
+ * last editor are always "Avala OS", never a person or an account; the title and description name only the
+ * document and the process. Nothing else is set: no company, manager or keywords. Left unset, the docx library
+ * writes "Un-named" as the last editor, so it is set here. A company's Word template brings only its styles
+ * (readWordTemplate reads word/styles.xml), never its own properties.
+ */
+export const DOCX_AUTHOR = 'Avala OS';
+export function docxProperties(doc: DocTree) {
+  return { creator: DOCX_AUTHOR, lastModifiedBy: DOCX_AUTHOR, title: `${doc.title}: ${doc.subtitle}`, description: `${docShort(doc.type)} for ${doc.subtitle}` };
+}
+
 export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxStyle }): Document {
   const s = opts.style ?? DEFAULT_DOCX_STYLE;
   const kind = docShort(doc.type);
@@ -140,7 +152,7 @@ export function docxDocument(doc: DocTree, opts: { draft: boolean; style?: DocxS
   ]);
   const small = { size: PT(8), color: GREY };
   return new Document({
-    creator: 'Avala OS', title: `${doc.title}: ${doc.subtitle}`, description: `${kind} for ${doc.subtitle}`,
+    ...docxProperties(doc),
     features: { updateFields: true },
     // A company template's styles replace ours, so its fonts and heading look apply throughout.
     ...(s.stylesXml ? { externalStyles: s.stylesXml } : { styles }),
