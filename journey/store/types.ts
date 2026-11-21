@@ -109,7 +109,9 @@ export interface ExtractionRow { id: string; status: ExtractionStatus; error: st
 /** A failed request, with the HTTP-like status the server returned. */
 export class StoreError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) { super(message); this.status = status; }
+  /** The server function's own error code, when it gave one (for example BUDGET_EXCEEDED, RATE_LIMITED). */
+  readonly code?: string;
+  constructor(status: number, message: string, code?: string) { super(message); this.status = status; if (code) this.code = code; }
 }
 
 export interface JourneyStore {

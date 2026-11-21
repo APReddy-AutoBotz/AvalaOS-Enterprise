@@ -103,10 +103,18 @@ export function allowanceStopped(look: SourceLook | null, now: number): boolean 
   return a.getUTCFullYear() === b.getUTCFullYear() && a.getUTCMonth() === b.getUTCMonth();
 }
 
-/** Whether a failed call means the month's AI allowance is used up (`journey-ai`: 429, BUDGET_EXCEEDED). */
+/**
+ * Whether a failed call means the month's AI allowance is used up. Decided by the server's error code
+ * (`journey-ai`: BUDGET_EXCEEDED), carried by the store's error: any other code, the per-minute limit
+ * (RATE_LIMITED) and the key tests' limit (TEST_LIMIT) among them, is a call that failed, which the look tries
+ * once more after its wait. Not by the status: every limit answers 429. The words are only a fallback for an
+ * error without a code.
+ */
 export const allowanceUsedUp = (e: unknown): boolean => {
-  const x = e as { status?: number; message?: string } | null;
-  return Boolean(x && (x.status === 429 || /AI allowance for the month/i.test(String(x.message ?? ''))));
+  const x = e as { code?: unknown; message?: unknown } | null;
+  if (!x) return false;
+  if (typeof x.code === 'string' && x.code) return x.code === 'BUDGET_EXCEEDED';
+  return /AI allowance for the month/i.test(String(x.message ?? ''));
 };
 
 /** The look after one call: its questions marked as looked up, its answers kept (one per question), its cost added. */

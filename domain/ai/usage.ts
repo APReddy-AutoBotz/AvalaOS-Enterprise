@@ -57,6 +57,62 @@ export const keyTestLimited = (testsInLastHour: number): boolean => testsInLastH
 export const KEY_TEST_LIMITED = `The key has been tested ${KEY_TEST_LIMIT.perHour} times in the last hour. Try again later.`;
 export const workOf = (task: string) => WORK_OF_TASK[task] ?? 'Other AI work';
 
+/**
+ * The per-minute AI limit (docs/next-plan.md, section 3e), beside the monthly allowance. Before every call to a
+ * provider that a signed-in person starts (`run`, `transcribe` and `health`; `allowance` calls no provider),
+ * journey-ai asks the database (`ai_call_admit`, migration ai_call_admit) whether the person has started fewer
+ * than `perPerson` calls in the last `windowSeconds`, in any workspace, and, on the platform key only, whether the
+ * workspace has started fewer than `perWorkspace`. A request is one call however often it is retried inside.
+ * The trusted server (a caller with the project's secret key: the Ask Avala measure) is never asked.
+ * Working defaults (owner, 21 November 2026); change them here, with the test.
+ *
+ * What it does not do: it caps calls started, not tokens. The monthly allowance is checked when a call starts,
+ * so calls already started when it runs out still finish and count: the allowance can be overshot by up to one
+ * minute of calls. The hard spend limit set at OpenAI stays the backstop.
+ */
+export const AI_RATE_LIMIT = { windowSeconds: 60, perPerson: 30, perWorkspace: 90 } as const;
+
+export type RateScope = 'person' | 'workspace';
+export type Refused = { admitted: false; scope: RateScope; retryAfterSeconds: number };
+export type AdmitAnswer = { admitted: true } | Refused;
+/** The refusal in an answer, or null when the call was admitted. */
+export const refusalOf = (a: AdmitAnswer): Refused | null => (a.admitted === false ? a as Refused : null);
+
+/** Whether a request is checked against the minute limit: a provider call by anyone but the trusted server. */
+export const rateLimitApplies = (action: string, serverCaller: boolean): boolean =>
+  !serverCaller && (action === 'run' || action === 'transcribe' || action === 'health');
+
+/** The arguments of `ai_call_admit`: the workspace's limit is counted only on the platform key. */
+export const admitArgs = (workspaceId: string, userId: string, onPlatformKey: boolean) => ({
+  target_workspace: workspaceId, target_person: userId,
+  per_person: AI_RATE_LIMIT.perPerson, per_workspace: AI_RATE_LIMIT.perWorkspace,
+  count_workspace: onPlatformKey, window_seconds: AI_RATE_LIMIT.windowSeconds,
+});
+
+/** The database's answer, or null when it is not one (then the limit could not be checked). */
+export function readAdmit(json: unknown): AdmitAnswer | null {
+  const x = json as { admitted?: unknown; scope?: unknown; retry_after?: unknown } | null;
+  if (!x || typeof x !== 'object') return null;
+  if (x.admitted === true) return { admitted: true };
+  if (x.admitted !== false || (x.scope !== 'person' && x.scope !== 'workspace')) return null;
+  const s = Number(x.retry_after);
+  const retryAfterSeconds = Number.isFinite(s) ? Math.min(AI_RATE_LIMIT.windowSeconds, Math.max(1, Math.ceil(s))) : AI_RATE_LIMIT.windowSeconds;
+  return { admitted: false, scope: x.scope, retryAfterSeconds };
+}
+
+const seconds = (n: number) => `${n} ${n === 1 ? 'second' : 'seconds'}`;
+
+/** The words a person sees when the limit is reached. */
+export function rateLimitedMessage(scope: RateScope, retryAfterSeconds: number): string {
+  const wait = `Wait about ${seconds(retryAfterSeconds)} and try again.`;
+  return scope === 'person'
+    ? `You have started ${AI_RATE_LIMIT.perPerson} AI requests in the last minute, the most one person can. ${wait}`
+    : `This workspace has started ${AI_RATE_LIMIT.perWorkspace} AI requests in the last minute, the most it can at once. ${wait}`;
+}
+
+/** When the limit itself cannot be checked, the call is refused, as when the allowance cannot be read. */
+export const RATE_LIMIT_UNAVAILABLE = 'The AI limit could not be checked just now. Try again in a minute.';
+
 const tokensOf = (r: UsageRow) => Math.max(0, Number(r.inputTokens) || 0) + Math.max(0, Number(r.outputTokens) || 0);
 
 export const monthStart = (now: Date) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
