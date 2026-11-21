@@ -20,10 +20,11 @@ import {
   validateRequest, buildOpenAIRequest, buildImageRequest, verifyExcerpts, missingListsMessage,
   isRetryableStatus, monthlyBudgetExceeded, type ParsedResponse,
 } from '../../../domain/ai/gateway.ts';
-import { KEY_TEST_LIMITED, keyTestLimited, transcriptionLogLine, transcriptionUsage } from '../../../domain/ai/usage.ts';
+import { KEY_TEST_LIMITED, keyTestLimited } from '../../../domain/ai/usage.ts';
 import { ProviderRequestError } from '../../../domain/ai/anthropic.ts';
 import { EndpointError, assertPublicHost } from '../../../domain/ai/compatible.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
+import { transcriptionLogLine, transcriptionUsage } from '../../../domain/ai/usage.ts';
 import {
   decideConnection, isConnection, hostToCheck, parseProviderReply, providerRequest, takesReasoningEffort, taskNeed, testRequestBody, transcriptionTarget,
   unsupported, usesPlatformAllowance, validateAiChoice, type AiConnection,
