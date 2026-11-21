@@ -85,6 +85,9 @@ test('every document a teardown offers starts with its section; the downloads th
 
   // The SDD's first page (change e).
   await page.getByRole('tab', { name: /^SDD/ }).click();
+  // A teardown is never approved, so its SDD is the preview from the working draft, as for any draft.
+  await page.getByRole('button', { name: 'Preview the SDD from this draft' }).click();
+  await expect(page.getByTestId('sdd-preview')).toBeVisible();
   await expect(doc.getByRole('heading', { name: new RegExp(ABOUT_TITLE) })).toBeVisible();
   await page.screenshot({ path: 'test-results/screens/93-teardown-sdd.jpg', type: 'jpeg', quality: 70 });
 
