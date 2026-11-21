@@ -9,6 +9,8 @@ import { toMarkdown } from '../../domain/docs/markdown.ts';
 import type { Branding } from '../../domain/docs/branding.ts';
 import { parseFile } from '../../domain/ingest/parsers/index.ts';
 import { cx, messageOf } from '../ui.tsx';
+import { NOT_ON_TEARDOWN } from '../../domain/site/teardowns.ts';
+import { useTeardown } from '../teardown.tsx';
 
 export interface ImportedReply { label: string; notes: string; items: TriageItem[]; answered: number }
 
@@ -21,6 +23,7 @@ const today = () => new Date().toLocaleDateString('en-GB', { day: 'numeric', mon
 
 export function QuestionPacks({ model, t, plan, branding, onImported, canImport }: { model: ProcessModel; t: Triage; plan?: QuestionPlan; branding?: Branding; onImported: (r: ImportedReply) => void; canImport: boolean }) {
   const packs = React.useMemo(() => buildPacks(t, model, plan), [t, model, plan]);
+  const teardown = useTeardown();
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   if (!packs.length) return null;
@@ -64,8 +67,10 @@ export function QuestionPacks({ model, t, plan, branding, onImported, canImport 
             <p className="text-sm font-semibold text-slate-900">{p.label}</p>
             <p className="text-xs text-slate-600">{p.items.length} {p.items.length === 1 ? 'question' : 'questions'}{p.items.some(x => x.first) ? `, ${p.items.filter(x => x.first).length} to answer first` : ''}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              {teardown ? <span data-testid="pack-not-on-teardown" className="text-xs text-slate-500">{NOT_ON_TEARDOWN}</span> : <>
               <button type="button" disabled={busy === p.owner} onClick={() => word(p)} aria-label={`Word pack for ${p.label}`} className="rounded-lg bg-[#002C4B] px-3 py-1.5 font-semibold text-white hover:bg-[#073B60] disabled:opacity-60">{busy === p.owner ? 'Working…' : 'Word'}</button>
               <button type="button" onClick={() => markdown(p)} aria-label={`Markdown pack for ${p.label}`} className="rounded-lg px-3 py-1.5 font-semibold text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-white">Markdown</button>
+              </>}
               {canImport && <label className={cx('cursor-pointer rounded-lg px-3 py-1.5 font-semibold text-[#002C4B] hover:underline')}>Read replies<input type="file" accept=".docx,.md,.txt" className="sr-only" aria-label={`Read replies for ${p.label}`} onChange={e => { read(p, e.target.files?.[0]); e.target.value = ''; }} /></label>}
             </div>
           </li>

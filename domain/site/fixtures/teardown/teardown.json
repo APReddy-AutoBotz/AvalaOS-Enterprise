@@ -1,0 +1,19 @@
+{
+ "slug": "fixture-teardown",
+ "short": "Test fixture",
+ "label": "Teardown of published text: a made-up procedure for Avala OS's own tests. Avala OS read one document. Nobody who does this work was interviewed.",
+ "credit": {
+  "text": "This text is made up for Avala OS's own tests and carries no licence.",
+  "url": "https://avalaos.com/demo"
+ },
+ "source": {
+  "text": "Source: a made-up procedure written for Avala OS's own tests.",
+  "url": "https://avalaos.com/demo",
+  "retrieved": "21 November 2026"
+ },
+ "notReview": "This illustrates how Avala OS reads a process from published text. It is not a review of any organisation, and it is not endorsed by one.",
+ "removed": {
+  "email": 1,
+  "phone": 1
+ }
+}

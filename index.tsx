@@ -5,6 +5,7 @@ import './index.css';
 import ReactDOM from 'react-dom/client';
 import { parseJourneyPath } from './domain/workspace/route';
 import { canonicalUrl, publicPage } from './domain/site/pages';
+import { teardownCanonical } from './domain/site/teardownPath';
 import { startMonitoring } from './journey/monitoring';
 import { ErrorBoundary } from './journey/ErrorBoundary';
 import { startCounting } from './journey/home/visits';
@@ -22,8 +23,9 @@ if (!rootElement) {
 // /unsubscribe, which stops the weekday email from the link in it.
 const pub = publicPage(window.location.pathname);
 // One address per public page for search engines, whichever address it was opened at (www, a preview, a
-// link with campaign words, a page inside the demo): domain/site/pages.ts, `canonicalUrl`.
-const canonical = pub && canonicalUrl(pub);
+// link with campaign words, a page inside the demo): domain/site/pages.ts, `canonicalUrl`. A teardown in the
+// demo names its own address (domain/site/teardownPath.ts).
+const canonical = pub && (teardownCanonical(window.location.pathname) ?? canonicalUrl(pub));
 if (canonical) {
   const link = document.createElement('link');
   link.rel = 'canonical';

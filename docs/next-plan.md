@@ -437,6 +437,8 @@ From the marketing chat's first piece of work (`claude/marketing-first-work-19-n
 - **Counting on the teardown pages,** by the rules of package 12 (section 3e), with the events listed there and no others without asking.
 - **A partner page** with the design-partner offer in plain words, after the lawyer has read it.
 
+**Planned and approved (21 November 2026)** with five changes (`claude/marketing-package-plan-21-nov.md` in the project), in four pull requests, the partner page left out: (1) Word files name no one in their properties (`docxProperties`); (2) teardowns in the demo (`domain/site/teardowns.ts`, see "Teardowns in the demo" in `AGENTS.md`), with no teardown yet: the index is empty; (3) counting on the teardown pages; (4) the first teardown's data, after the owner's reading. No database change and no server function change in any of them.
+
 ### After this release: reading sources within the length of one answer (owner, 19 November 2026; built 20 November 2026, in review)
 
 **Built (20 November 2026), in review; not deployed, not released.** The plan was reviewed and approved with changes (`claude/reading-split-builder-plan-20-nov.md` in the project). What was built:
