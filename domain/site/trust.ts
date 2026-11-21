@@ -11,9 +11,10 @@ export const CONTACT_EMAIL = 'hello@avalaos.com';
  * When each page last changed, page by page. The privacy and security pages change with the next release
  * (the AI providers a workspace may connect, visit counting, what the browser keeps), so their date is the
  * release's, set in the release's own commit together with `COVERAGE_RULE.since` (owner, 18 November 2026);
- * until then they show "[release date]".
+ * until then they show "[release date]". The privacy page changes again with the release that carries the
+ * teardowns' counting (marketing package, 21 November 2026), so its date is null until that release's commit.
  */
-export const UPDATED: Record<TrustPageId, string | null> = { privacy: '20 November 2026', terms: '17 November 2026', security: '20 November 2026' };
+export const UPDATED: Record<TrustPageId, string | null> = { privacy: null, terms: '17 November 2026', security: '20 November 2026' };
 export const updatedText = (id: TrustPageId): string => UPDATED[id] ?? '[release date]';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
@@ -62,7 +63,7 @@ const privacy: TrustPage = {
             'Records of activity: who edited, approved or confirmed what and when, and changes to membership and roles.',
             'AI usage: for each request to the AI provider, the workspace, the person, the kind of task, the model, the number of tokens used and whether it succeeded. Not the content of the request.',
             'Technical data: our hosting and database providers keep standard request logs, such as IP address, browser and time.',
-            'Visits to our public pages: when you are not signed in, we count visits to the homepage, these legal pages and the opening of the demo, without cookies. A count holds the page and its title, the site you came from, the campaign words in the link, your browser\'s language and screen size, the kind of browser and device, and whether you opened or sent a walkthrough request, opened a "Read more" or picked a stage of the tour. Never anything you type. Nothing is counted inside the product, and nothing is sent when your browser asks not to be tracked.',
+            'Visits to our public pages: when you are not signed in, we count visits to the homepage, these legal pages, the opening of the demo and of each published-process teardown in it, without cookies. A count holds the page and its title, the site you came from, the campaign words in the link, your browser\'s language and screen size, the kind of browser and device, and whether you opened or sent a walkthrough request, opened a "Read more", picked a stage of the tour, or opened a teardown\'s documents. Never anything you type. Nothing else is counted inside the demo or the product, and nothing is sent when your browser asks not to be tracked.',
           ],
         },
         'We do not use advertising or tracking tools, and we count visits only as described above.',
@@ -71,7 +72,7 @@ const privacy: TrustPage = {
     {
       id: 'browser', title: 'Cookies and browser storage',
       body: [
-        'Avala OS sets no cookies of its own. In your browser\'s storage it keeps your sign-in session, the last workspace you opened, how you like lists and maps shown, and, for processes you have opened, a copy of what was found in their sources and what you set aside. These are needed for the service to work and none is used for tracking. Signing out removes all of them except how you like lists and maps shown in general. The demo has no sign-in, so its copy, which is about the made-up sample only, stays until you clear this site\'s data in your browser. Counting visits keeps nothing in your browser. Only if you open one of our pages with ?count=off does it keep a note that visits from that browser are not counted; ?count=on removes it.',
+        'Avala OS sets no cookies of its own. In your browser\'s storage it keeps your sign-in session, the last workspace you opened, how you like lists and maps shown, and, for processes you have opened, a copy of what was found in their sources and what you set aside. These are needed for the service to work and none is used for tracking. Signing out removes all of them except how you like lists and maps shown in general. The demo has no sign-in, so its copy, which is about the made-up sample or a published teardown only, stays until you clear this site\'s data in your browser. Counting visits keeps nothing in your browser. Only if you open one of our pages with ?count=off does it keep a note that visits from that browser are not counted; ?count=on removes it.',
       ],
     },
     {
