@@ -439,6 +439,16 @@ From the marketing chat's first piece of work (`claude/marketing-first-work-19-n
 
 **Planned and approved (21 November 2026)** with five changes (`claude/marketing-package-plan-21-nov.md` in the project), in four pull requests, the partner page left out: (1) Word files name no one in their properties (`docxProperties`); (2) teardowns in the demo (`domain/site/teardowns.ts`, see "Teardowns in the demo" in `AGENTS.md`), with no teardown yet: the index is empty; (3) counting on the teardown pages; (4) the first teardown's data, after the owner's reading. No database change and no server function change in any of them.
 
+**Built and in `next` (21 November 2026), going out with the next release:**
+- (1) Word files name no one in their properties (#218): Author and Last modified by "Avala OS" for every workspace, nothing in the extended or custom properties.
+- (2) The teardown mechanism in the demo (#219): `/demo/teardowns/<slug>`, its banner and lines, the checks on a teardown's file (`teardownProblems`), and "This teardown is not in the demo" for an address the demo does not hold, whatever the server answers. The index `public/demo-data/teardowns/index.json` is empty, so nothing shows on the site.
+- (3) Counting at a teardown and the privacy words (#220): "Teardown opened" and "Teardown documents opened", the slug as the only detail. The privacy page's date shows "[release date]" until the release's own commit sets it.
+- The check "Release dates set" (#221), on a pull request into `main` only (see "Before the release").
+
+**Parked (owner, 21 November 2026): teardown 1 and pull request 4, its data.** No source file is brought and pull request 4 is not built. Marketing uses the vendor invoice sample, the made-up case the demo and the homepage already show. The teardown mechanism stays in `next` as it is, with its index empty, ready for a real process later.
+
+**The next real example comes from a design partner, with their permission:** their own process, put in the demo only with their permission for what is shown and how they are named. It goes through the same folder, script and checks (`teardowns/<slug>/`, `scripts/teardown-data.ts`, `teardownProblems`); the words in its `teardown.json` (label, credit, source, "not a review") are written for that case and approved by the owner before it is built. Next in the order: package 14.
+
 ### After this release: reading sources within the length of one answer (owner, 19 November 2026; built 20 November 2026, in review)
 
 **Built (20 November 2026), in review; not deployed, not released.** The plan was reviewed and approved with changes (`claude/reading-split-builder-plan-20-nov.md` in the project). What was built:
