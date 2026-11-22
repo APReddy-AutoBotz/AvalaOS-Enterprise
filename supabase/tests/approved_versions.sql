@@ -1,5 +1,5 @@
 -- Behaviour checks for package 14, an approved document is final (migration approved_versions). Rolls back:
--- success ends with the error "ALL_TESTS_PASSED (13 groups)"; any other error names the failed check. It
+-- success ends with the error "ALL_TESTS_PASSED (16 groups)"; any other error names the failed check. It
 -- creates its own people, organisation and processes. Run it after the migration, in the same transaction
 -- as the trial does, or against a database where the migration is applied.
 
@@ -10,6 +10,10 @@ begin
   execute 'set local role authenticated';
 end $$;
 create function pg_temp.as_owner() returns void language plpgsql as $$ begin execute 'reset role'; end $$;
+-- What the caller's page would read before approving: how many rows of the change record it can see.
+create function pg_temp.seen(target uuid) returns bigint language sql as $$
+  select s.changes_seen from public.version_states((select workspace_id from public.processes where id = target), target) s
+$$;
 
 -- A kept set of format 1 with `n` sections of about 2 KB each in a PDD (domain/docs/keep.ts's shape). The text is
 -- made of hashes, which compress far less than real prose: the stored size measured is an upper bound.
@@ -33,7 +37,8 @@ declare
   editor_u uuid := gen_random_uuid();
   viewer_u uuid := gen_random_uuid();
   outsider_u uuid := gen_random_uuid();
-  ws uuid; ws2 uuid; p uuid; p2 uuid; p3 uuid; rev1 uuid; rev2 uuid; v1 uuid; r jsonb; n int; passed int := 0;
+  approver2_u uuid := gen_random_uuid();
+  ws uuid; rev3 uuid; c0 bigint; c1 bigint; ws2 uuid; p uuid; p2 uuid; p3 uuid; rev1 uuid; rev2 uuid; v1 uuid; r jsonb; n int; passed int := 0;
   big jsonb; big_look jsonb; t0 timestamptz; ms numeric; sizes text; msg text; st record;
   step jsonb := '{"op": "add", "path": "/steps/0", "value": {"id": "s-1", "name": "Receive invoice", "description": "", "roleIds": [], "systemIds": [], "taskType": "receive", "inputs": [], "outputs": [], "ruleIds": [], "exceptionIds": [], "status": "user-confirmed", "sources": []}}';
   rename jsonb := '[{"op": "replace", "path": "/steps/0/name", "value": "Receive the invoice"}]';
@@ -41,7 +46,11 @@ declare
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (approver_u, 'a-' || approver_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()),
-    (viewer_u, 'v-' || viewer_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
+    (viewer_u, 'v-' || viewer_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now()),
+    (approver2_u, 'a2-' || approver2_u || '@example.test', now(), now());
+  insert into public.profiles (id, display_name) values (approver_u, 'Priya Approver'), (editor_u, 'Eli Editor'), (viewer_u, 'Vera Viewer'),
+    (outsider_u, 'Omar Outsider'), (approver2_u, 'Sam Second')
+    on conflict (id) do update set display_name = excluded.display_name;
   delete from app_private.platform_owners;
   perform pg_temp.as_user(approver_u);
   ws := (public.create_organization('Versions test', 'AP') ->> 'workspaceId')::uuid;
@@ -53,7 +62,8 @@ begin
   perform pg_temp.as_owner();
   -- The organisation's creator is an admin; give the approver the right to approve, the editor none.
   update public.workspace_members set can_approve = true where workspace_id = ws and user_id = approver_u;
-  insert into public.workspace_members (workspace_id, user_id, role, can_approve) values (ws, editor_u, 'editor', false), (ws, viewer_u, 'viewer', false);
+  insert into public.workspace_members (workspace_id, user_id, role, can_approve) values (ws, editor_u, 'editor', false), (ws, viewer_u, 'viewer', false),
+    (ws, approver2_u, 'editor', true);
 
   -- A record with one step, as a working draft.
   perform pg_temp.as_user(editor_u);
@@ -91,19 +101,20 @@ begin
   big_look := jsonb_build_object('organisation', 'Versions test', 'font', 'Calibri', 'accent', '002C4B',
     'logo', 'data:image/png;base64,' || (select string_agg(md5(i::text), '') from generate_series(1, 12400) i), 'template', jsonb_build_object('name', 'Company.dotx', 'stylesXml', repeat('<w:style w:type="paragraph"/>', 20600)));
   perform pg_temp.as_user(editor_u);
-  begin perform public.approve_version(p, rev1, 1, 0, null, big, pg_temp.prints(620), big_look, null, '{}'); raise exception 'FAILED 2a'; exception when sqlstate 'PT403' then null; end;
+  begin perform public.approve_version(p, rev1, 1, 0, pg_temp.seen(p), null, big, pg_temp.prints(620), big_look, null, '{}'); raise exception 'FAILED 2a'; exception when sqlstate 'PT403' then null; end;
   perform pg_temp.as_user(viewer_u);
-  begin perform public.approve_version(p, rev1, 1, 0, null, big, pg_temp.prints(620), big_look, null, '{}'); raise exception 'FAILED 2b'; exception when sqlstate 'PT403' then null; end;
+  begin perform public.approve_version(p, rev1, 1, 0, pg_temp.seen(p), null, big, pg_temp.prints(620), big_look, null, '{}'); raise exception 'FAILED 2b'; exception when sqlstate 'PT403' then null; end;
   perform pg_temp.as_user(outsider_u);
-  begin perform public.approve_version(p, rev1, 1, 0, null, big, pg_temp.prints(620), big_look, null, '{}'); raise exception 'FAILED 2c'; exception when sqlstate 'PT404' then null; end;
+  begin perform public.approve_version(p, rev1, 1, 0, pg_temp.seen(p), null, big, pg_temp.prints(620), big_look, null, '{}'); raise exception 'FAILED 2c'; exception when sqlstate 'PT404' then null; end;
   perform pg_temp.as_user(approver_u);
   t0 := clock_timestamp();
-  r := public.approve_version(p, rev1, 1, 0, null, big, pg_temp.prints(620), big_look, null, '{"build": "test"}');
+  r := public.approve_version(p, rev1, 1, 0, pg_temp.seen(p), null, big, pg_temp.prints(620), big_look, null, '{"build": "test"}');
   ms := round(extract(epoch from clock_timestamp() - t0) * 1000);
   v1 := (r ->> 'versionId')::uuid;
   select count(*) into n from public.approved_versions v join public.process_model_revisions x on x.id = v.model_revision_id
    where v.id = v1 and v.number = 1 and v.reason is null and v.approved_by = approver_u and v.approved_at = now()
-     and x.id = rev1 and x.state = 'approved' and x.approved_by = approver_u and v.model_hash = x.model_hash and v.kept_by is null;
+     and x.id = rev1 and x.state = 'approved' and x.approved_by = approver_u and v.model_hash = x.model_hash and v.kept_by is null
+     and v.approved_by_name = 'Priya Approver';
   if n <> 1 then raise exception 'FAILED 2d: version 1 does not hold the approval'; end if;
   perform pg_temp.as_owner();
   select format('documents %s KB as text, %s KB stored; look %s KB as text, %s KB stored; %s ms',
@@ -115,14 +126,14 @@ begin
   -- 3. The reason: none for version 1; from version 2 required, at least three words. Without a draft of the
   --    record (only a section edit since), the version points at the same approved revision.
   perform pg_temp.as_user(approver_u);
-  begin perform public.approve_version(p, null, null, 1, null, pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 3a'; exception when sqlstate 'PT422' then null; end;
-  begin perform public.approve_version(p, null, null, 1, 'Fixed it', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 3b'; exception when sqlstate 'PT422' then null; end;
-  r := public.approve_version(p, null, null, 1, 'The approver limit changed.', pg_temp.kept(3, 'Second.'), pg_temp.prints(3), pg_temp.look(''), '{"sections": [{"doc": "pdd", "id": "s-1", "title": "Section 1", "kind": "changed"}], "documents": [], "look": ["organisation"]}', '{}');
+  begin perform public.approve_version(p, null, null, 1, pg_temp.seen(p), null, pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 3a'; exception when sqlstate 'PT422' then null; end;
+  begin perform public.approve_version(p, null, null, 1, pg_temp.seen(p), 'Fixed it', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 3b'; exception when sqlstate 'PT422' then null; end;
+  r := public.approve_version(p, null, null, 1, pg_temp.seen(p), 'The approver limit changed.', pg_temp.kept(3, 'Second.'), pg_temp.prints(3), pg_temp.look(''), '{"sections": [{"doc": "pdd", "id": "s-1", "title": "Section 1", "kind": "changed"}], "documents": [], "look": ["organisation"]}', '{}');
   if (r ->> 'number')::int <> 2 or (r ->> 'revisionId')::uuid <> rev1 then raise exception 'FAILED 3c: %', r; end if;
   perform pg_temp.as_user(approver_u);
-  rev2 := (public.model_start_draft(p3) ->> 'revisionId')::uuid;
-  perform public.model_save_patch(rev2, 0, jsonb_build_array(step), 'user', 'Added a step');
-  begin perform public.approve_version(p3, rev2, 1, 0, 'A reason for one.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}'); raise exception 'FAILED 3d'; exception when sqlstate 'PT422' then null; end;
+  rev3 := (public.model_start_draft(p3) ->> 'revisionId')::uuid;
+  perform public.model_save_patch(rev3, 0, jsonb_build_array(step), 'user', 'Added a step');
+  begin perform public.approve_version(p3, rev3, 1, 0, pg_temp.seen(p3), 'A reason for one.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}'); raise exception 'FAILED 3d'; exception when sqlstate 'PT422' then null; end;
   passed := passed + 1;
 
   -- 4. Two approvals at once: the second, made from the same view (expected version 2 is gone), is refused and
@@ -131,9 +142,9 @@ begin
   rev2 := (public.model_start_draft(p) ->> 'revisionId')::uuid;
   perform public.model_save_patch(rev2, 0, rename, 'user', 'Renamed');
   perform pg_temp.as_user(approver_u);
-  r := public.approve_version(p, rev2, 1, 2, 'The step was renamed.', pg_temp.kept(3, 'Third.'), pg_temp.prints(3), pg_temp.look(''), null, '{}');
+  r := public.approve_version(p, rev2, 1, 2, pg_temp.seen(p), 'The step was renamed.', pg_temp.kept(3, 'Third.'), pg_temp.prints(3), pg_temp.look(''), null, '{}');
   if (r ->> 'number')::int <> 3 then raise exception 'FAILED 4a: %', r; end if;
-  begin perform public.approve_version(p, null, null, 2, 'Approved at the same time.', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 4b'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
+  begin perform public.approve_version(p, null, null, 2, pg_temp.seen(p), 'Approved at the same time.', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 4b'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
   if msg not like 'VERSION_CONFLICT: approved version 3 exists%' then raise exception 'FAILED 4b: %', msg; end if;
   perform pg_temp.as_owner();
   begin
@@ -163,11 +174,11 @@ begin
   rev2 := (public.model_start_draft(p) ->> 'revisionId')::uuid;
   perform public.model_save_patch(rev2, 0, '[{"op": "replace", "path": "/steps/0/name", "value": "Receive and log the invoice"}]', 'user', 'Renamed again');
   perform pg_temp.as_user(approver_u);
-  begin perform public.approve_version(p, rev2, 1, 3, 'Renamed once more.', '{"format": 2, "documents": {}}', '{}', pg_temp.look(''), null, '{}'); raise exception 'FAILED 6a'; exception when sqlstate 'PT422' then null; end;
-  begin perform public.approve_version(p, rev2, 1, 1, 'Renamed once more.', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 6b'; exception when sqlstate 'PT409' then null; end;
+  begin perform public.approve_version(p, rev2, 1, 3, pg_temp.seen(p), 'Renamed once more.', '{"format": 2, "documents": {}}', '{}', pg_temp.look(''), null, '{}'); raise exception 'FAILED 6a'; exception when sqlstate 'PT422' then null; end;
+  begin perform public.approve_version(p, rev2, 1, 1, pg_temp.seen(p), 'Renamed once more.', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 6b'; exception when sqlstate 'PT409' then null; end;
   select count(*) into n from public.process_model_revisions where id = rev2 and state = 'working' and approved_at is null;
   if n <> 1 then raise exception 'FAILED 6c: the draft was approved without its version'; end if;
-  begin perform public.approve_version(p, null, null, 3, 'Without the draft.', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 6d'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
+  begin perform public.approve_version(p, null, null, 3, pg_temp.seen(p), 'Without the draft.', pg_temp.kept(3), pg_temp.prints(3), pg_temp.look(''), null, '{}'); raise exception 'FAILED 6d'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
   if msg not like 'DRAFT_EXISTS%' then raise exception 'FAILED 6d: %', msg; end if;
   passed := passed + 1;
 
@@ -269,7 +280,7 @@ begin
   if st.latest_number <> 3 or not st.process_changed or not st.approved_has_version or st.workspace_changes <> array['assessment_settings', 'layout', 'look'] then
     raise exception 'FAILED 10a: %', row_to_json(st);
   end if;
-  perform pg_temp.as_user(approver_u);
+  perform pg_temp.as_user(approver2_u);
   rev2 := (public.model_start_draft(p2) ->> 'revisionId')::uuid;
   perform public.model_save_patch(rev2, 0, jsonb_build_array(step), 'user', 'Added a step');
   perform public.model_approve(rev2, 1);
@@ -278,32 +289,99 @@ begin
   if (select count(*) from public.version_states(ws)) <> 3 then raise exception 'FAILED 10c'; end if;
   passed := passed + 1;
 
-  -- 11. "Keep it as it reads now": records the old approval and who kept it, and when; only once per revision.
-  perform pg_temp.as_user(editor_u);
-  begin perform public.keep_version_as_reads_now(p2, 0, null, pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}'); raise exception 'FAILED 11a'; exception when sqlstate 'PT403' then null; end;
-  perform pg_temp.as_user(approver_u);
-  r := public.keep_version_as_reads_now(p2, 0, null, pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
-  select count(*) into n from public.approved_versions v join public.process_model_revisions x on x.id = v.model_revision_id
-   where v.id = (r ->> 'versionId')::uuid and v.number = 1 and v.approved_at = x.approved_at and v.approved_by = x.approved_by and v.kept_by = approver_u and v.kept_at = now();
-  if n <> 1 then raise exception 'FAILED 11b: both facts are not recorded'; end if;
-  begin perform public.keep_version_as_reads_now(p2, 1, 'Kept a second time.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}'); raise exception 'FAILED 11c'; exception when sqlstate 'PT409' then null; end;
-  passed := passed + 1;
-
-  -- 12. Members of another workspace see none of it.
-  perform pg_temp.as_user(outsider_u);
-  if (select count(*) from public.approved_versions) + (select count(*) from public.document_looks) + (select count(*) from public.draft_changes where workspace_id = ws) + (select count(*) from public.version_states(ws)) <> 0 then
-    raise exception 'FAILED 12: another workspace''s member reads versions, looks, changes or states';
+  -- 11. The approver's name is kept with the version, as it read then: after the approver leaves the workspace,
+  --     the workspace can no longer read their profile, and the version still names them.
+  perform pg_temp.as_user(approver2_u);
+  r := public.approve_version(p3, rev3, 1, 0, pg_temp.seen(p3), null, pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
+  perform pg_temp.as_owner();
+  delete from public.workspace_members where workspace_id = ws and user_id = approver2_u;
+  perform pg_temp.as_user(viewer_u);
+  if (select count(*) from public.profiles where id = approver2_u) <> 0 then raise exception 'FAILED 11a: the viewer still reads the profile'; end if;
+  if (select approved_by_name from public.approved_versions where process_id = p3 and number = 1) is distinct from 'Sam Second'
+     or (select latest_approved_by_name from public.version_states(ws, p3)) is distinct from 'Sam Second' then
+    raise exception 'FAILED 11b: the version lost its approver''s name';
   end if;
   passed := passed + 1;
 
-  -- 13. Deleting the process (the owner, in the dashboard) removes its versions and its change record; deleting
+  -- 12. "Keep it as it reads now": records the old approval and who kept it, and when; only once per revision.
+  --     The revision's approver no longer has a name (a profile emptied, as a deleted account leaves none): the
+  --     copy is still kept, with no name stored, which the page shows as "Not recorded".
+  perform pg_temp.as_owner();
+  update public.profiles set display_name = '' where id = approver2_u;
+  perform pg_temp.as_user(editor_u);
+  begin perform public.keep_version_as_reads_now(p2, 0, pg_temp.seen(p2), null, pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}'); raise exception 'FAILED 12a'; exception when sqlstate 'PT403' then null; end;
+  perform pg_temp.as_user(approver_u);
+  r := public.keep_version_as_reads_now(p2, 0, pg_temp.seen(p2), null, pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
+  select count(*) into n from public.approved_versions v join public.process_model_revisions x on x.id = v.model_revision_id
+   where v.id = (r ->> 'versionId')::uuid and v.number = 1 and v.approved_at = x.approved_at and v.approved_by = x.approved_by and v.kept_by = approver_u and v.kept_at = now()
+     and v.approved_by = approver2_u and v.approved_by_name is null and v.kept_by_name = 'Priya Approver';
+  if n <> 1 then raise exception 'FAILED 12b: both facts are not recorded'; end if;
+  begin perform public.keep_version_as_reads_now(p2, 1, pg_temp.seen(p2), 'Kept a second time.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}'); raise exception 'FAILED 12c'; exception when sqlstate 'PT409' then null; end;
+  passed := passed + 1;
+
+  -- 13. An approval is refused when someone saved a change after the page read the documents: a colleague's
+  --     section edit, then a change to the workspace's look. After a reload the same approval is accepted, and
+  --     the version's mark leaves nothing "changed since". This whole test is one transaction, where saves of
+  --     one kind would join into one row; here each save stands for its own transaction, so each is given its
+  --     own start time for the group, and the start time goes back to the transaction's after it.
+  perform pg_temp.as_owner();
+  alter table public.draft_changes alter column started_at set default clock_timestamp();
+  perform pg_temp.as_user(viewer_u);
+  c0 := pg_temp.seen(p3);
+  perform pg_temp.as_user(editor_u);
+  insert into public.document_edits (workspace_id, process_id, doc_type, section_key, html, base_hash) values (ws, p3, 'pdd', 's-1', '<p>A colleague''s edit.</p>', 'h');
+  perform pg_temp.as_user(approver_u);
+  begin perform public.approve_version(p3, null, null, 1, c0, 'A colleague edited a section.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
+    raise exception 'FAILED 13a: approved past a colleague''s edit';
+  exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
+  if msg not like 'CHANGED_MEANWHILE:%' then raise exception 'FAILED 13a: %', msg; end if;
+  c1 := pg_temp.seen(p3);
+  if c1 <> c0 + 1 then raise exception 'FAILED 13b: % then %', c0, c1; end if;
+  r := public.approve_version(p3, null, null, 1, c1, 'A colleague edited a section.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
+  if (r ->> 'number')::int <> 2 then raise exception 'FAILED 13c: %', r; end if;
+  insert into public.document_settings (workspace_id, settings) values (ws, '{"branding": {"organisation": "Acme Group"}, "layouts": {"pdd": {"sections": {"2": {"title": "Ours"}}, "custom": []}}}')
+    on conflict (workspace_id) do update set settings = excluded.settings;
+  begin perform public.approve_version(p3, null, null, 2, c1, 'The look changed meanwhile.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
+    raise exception 'FAILED 13d: approved past a change to the workspace''s look';
+  exception when sqlstate 'PT409' then null; end;
+  r := public.approve_version(p3, null, null, 2, pg_temp.seen(p3), 'The look changed meanwhile.', pg_temp.kept(2), pg_temp.prints(2), pg_temp.look(''), null, '{}');
+  if (r ->> 'number')::int <> 3 then raise exception 'FAILED 13e: %', r; end if;
+  select * into st from public.version_states(ws, p3) s;
+  if st.process_changed or st.workspace_changes <> '{}'::text[] then raise exception 'FAILED 13f: %', row_to_json(st); end if;
+  perform pg_temp.as_owner();
+  alter table public.draft_changes alter column started_at set default now();
+  passed := passed + 1;
+
+  -- 14. One save, one row, after a restore too: an old row with the same transaction id (as a restored database
+  --     can hand out again) but another start time is never joined by a later save.
+  perform pg_temp.as_owner();
+  insert into public.draft_changes (workspace_id, process_id, kind, change, origin, items, item_count, actor, started_at)
+    values (ws, p3, 'test_edit', 'added', 'person', '["OLD-1"]', 1, outsider_u, now() - interval '1 day');
+  perform pg_temp.as_user(editor_u);
+  insert into public.test_case_edits (workspace_id, process_id, case_code, fields) values (ws, p3, 'FR-009.1', '{"expected": "Filed"}');
+  perform pg_temp.as_owner();
+  if (select count(*) from public.draft_changes where process_id = p3 and kind = 'test_edit' and txid = txid_current()) <> 2
+     or not exists (select 1 from public.draft_changes where process_id = p3 and kind = 'test_edit' and items = '["OLD-1"]' and item_count = 1 and actor = outsider_u)
+     or not exists (select 1 from public.draft_changes where process_id = p3 and kind = 'test_edit' and items = '["FR-009.1"]' and actor = editor_u and started_at = now()) then
+    raise exception 'FAILED 14: a later save was joined into an old row';
+  end if;
+  passed := passed + 1;
+
+  -- 15. Members of another workspace see none of it.
+  perform pg_temp.as_user(outsider_u);
+  if (select count(*) from public.approved_versions) + (select count(*) from public.document_looks) + (select count(*) from public.draft_changes where workspace_id = ws) + (select count(*) from public.version_states(ws)) <> 0 then
+    raise exception 'FAILED 15: another workspace''s member reads versions, looks, changes or states';
+  end if;
+  passed := passed + 1;
+
+  -- 16. Deleting the process (the owner, in the dashboard) removes its versions and its change record; deleting
   --     the workspace removes the rest, the looks included.
   perform pg_temp.as_owner();
   delete from public.processes where id = p;
-  if exists (select 1 from public.approved_versions where process_id = p) or exists (select 1 from public.draft_changes where process_id = p) then raise exception 'FAILED 13a'; end if;
-  if not exists (select 1 from public.approved_versions where process_id = p2) then raise exception 'FAILED 13b: another process lost its version'; end if;
+  if exists (select 1 from public.approved_versions where process_id = p) or exists (select 1 from public.draft_changes where process_id = p) then raise exception 'FAILED 16a'; end if;
+  if not exists (select 1 from public.approved_versions where process_id = p2) then raise exception 'FAILED 16b: another process lost its version'; end if;
   delete from public.workspaces where id = ws;
-  if exists (select 1 from public.approved_versions where workspace_id = ws) or exists (select 1 from public.document_looks where workspace_id = ws) or exists (select 1 from public.draft_changes where workspace_id = ws) then raise exception 'FAILED 13c'; end if;
+  if exists (select 1 from public.approved_versions where workspace_id = ws) or exists (select 1 from public.document_looks where workspace_id = ws) or exists (select 1 from public.draft_changes where workspace_id = ws) then raise exception 'FAILED 16c'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups) %', passed, sizes;

@@ -14,6 +14,14 @@
 -- the watched tables go on exactly as before: each trigger below records after the save, inside its own
 -- exception block, so a failure in the record never refuses the save (change e).
 --
+-- A kept version names its approver as the database read the name at approval (approved_by_name, and
+-- kept_by_name for a copy kept later): a person who leaves the workspace can no longer be read in profiles.
+--
+-- An approval is refused when anyone saved a change after the approver's page read the documents: the page
+-- passes how many rows of the change record it could see (version_states.changes_seen), and the approval
+-- counts again once every save already writing has finished (advisory locks below). Counting, not the newest
+-- id, because an id is handed out when a save writes, not when it commits.
+--
 -- Closing the old door later (change a): until the release, and afterwards in a tab opened before it,
 -- model_approve still approves the record without a kept copy. Such an approval shows as "Approved revision R
 -- (before copies were kept)" and can be kept with keep_version_as_reads_now. A later migration, asked for
@@ -120,13 +128,19 @@ create table public.approved_versions (
   reason text check (reason is null or char_length(reason) between 1 and 2000),
   -- What changed since the version before: { sections, documents, look } (domain/docs/versions.ts).
   changes jsonb not null default '{"sections": [], "documents": [], "look": []}'::jsonb check (jsonb_typeof(changes) = 'object' and octet_length(changes::text) <= 262144),
-  -- Who approved the record and when (the database's own time and the caller, never the browser's word).
+  -- Who approved the record and when (the database's own time and the caller, never the browser's word), with
+  -- the name as it read then. No name: the person had none, or no profile is left ("Not recorded" on screen).
   approved_by uuid not null,
+  approved_by_name text check (approved_by_name is null or char_length(approved_by_name) between 1 and 120),
   approved_at timestamptz not null,
-  -- A copy kept after approval ("Keep it as it reads now"): who kept it and when.
+  -- A copy kept after approval ("Keep it as it reads now"): who kept it, their name then, and when.
   kept_by uuid,
+  kept_by_name text check (kept_by_name is null or char_length(kept_by_name) between 1 and 120),
   kept_at timestamptz,
-  -- When the row was written (not when its transaction began), so later changes compare after it.
+  -- The newest row of the change record for this process or its workspace when the version was kept: a later
+  -- row is a change since. Every save that was writing then had finished (the approval waits for it).
+  change_mark bigint not null default 0,
+  -- When the row was written (not when its transaction began).
   created_at timestamptz not null default clock_timestamp(),
   foreign key (process_id, workspace_id) references public.processes (id, workspace_id) on delete cascade,
   foreign key (model_revision_id, workspace_id) references public.process_model_revisions (id, workspace_id) on delete cascade,
@@ -155,13 +169,16 @@ create table public.draft_changes (
   actor uuid default auth.uid(),
   -- When the change was written (not when its transaction began).
   created_at timestamptz not null default clock_timestamp(),
-  -- One row per save: rows of one transaction with the same kind are joined.
+  -- One row per save: rows of one transaction with the same kind are joined. The transaction's id starts again
+  -- after a restore into a new database, so its start time is part of the key too: a later save can never be
+  -- joined into an old row.
   txid bigint not null default txid_current(),
+  started_at timestamptz not null default now(),
   foreign key (process_id, workspace_id) references public.processes (id, workspace_id) on delete cascade,
-  constraint draft_changes_once unique nulls not distinct (txid, workspace_id, process_id, kind, change, origin)
+  constraint draft_changes_once unique nulls not distinct (txid, started_at, workspace_id, process_id, kind, change, origin)
 );
-create index draft_changes_process on public.draft_changes (process_id, created_at);
-create index draft_changes_workspace on public.draft_changes (workspace_id, created_at) where process_id is null;
+create index draft_changes_process on public.draft_changes (process_id, id);
+create index draft_changes_workspace on public.draft_changes (workspace_id, id) where process_id is null;
 
 -- ---- Never changed, never deleted on their own ---------------------------------------------------------
 
@@ -205,17 +222,29 @@ language sql immutable set search_path = '' as $$
   select coalesce((select jsonb_agg(e order by n) from jsonb_array_elements(items) with ordinality as x(e, n) where n <= 50), '[]'::jsonb)
 $$;
 
--- Adds the rows of one statement, joined with any of the same save. Called only by the triggers below.
+-- The key of the lock that makes an approval wait for saves already writing to the change record.
+create function app_private.change_lock_key(target uuid) returns bigint
+language sql immutable set search_path = '' as $$
+  select hashtextextended('draft_changes:' || target::text, 0)
+$$;
+
+-- Adds the rows of one statement, joined with any of the same save. Called only by the triggers below. Each save
+-- holds a shared lock on its process (or, for a workspace-wide change, its workspace) until it commits, so an
+-- approval, which takes the same lock exclusively, waits for it and then counts it.
 create function app_private.note_draft_changes(rows jsonb) returns void
-language sql security definer set search_path = '' as $$
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform pg_advisory_xact_lock_shared(app_private.change_lock_key(x.target))
+     from (select distinct coalesce((r ->> 'process')::uuid, (r ->> 'workspace')::uuid) as target
+             from jsonb_array_elements(rows) r where jsonb_array_length(r -> 'items') > 0 order by 1) x;
   insert into public.draft_changes as d (workspace_id, process_id, kind, change, origin, items, item_count)
   select (r ->> 'workspace')::uuid, (r ->> 'process')::uuid, r ->> 'kind', r ->> 'change', r ->> 'origin',
          app_private.first_items(r -> 'items'), jsonb_array_length(r -> 'items')
     from jsonb_array_elements(rows) r
    where jsonb_array_length(r -> 'items') > 0
   on conflict on constraint draft_changes_once do update
-     set items = app_private.first_items(d.items || excluded.items), item_count = d.item_count + excluded.item_count
-$$;
+     set items = app_private.first_items(d.items || excluded.items), item_count = d.item_count + excluded.item_count;
+end $$;
 
 -- A person's choices in assessments.overrides, of one kind, without the time or the id stamped with them,
 -- in a stable order: two saves of the same choices compare equal.
@@ -478,12 +507,40 @@ begin
   return fp;
 end $$;
 
+-- What the page could see of the change record for a process: a person's rows for it, and the workspace-wide
+-- rows. Rows are never deleted but with their process or workspace, so the count only grows.
+create function app_private.changes_seen(target_workspace uuid, target_process uuid) returns bigint
+language sql stable security definer set search_path = '' as $$
+  select count(*) from public.draft_changes d
+   where (d.process_id = target_process and d.origin = 'person') or (d.workspace_id = target_workspace and d.process_id is null)
+$$;
+
+-- Waits for every save already writing to this process's or this workspace's change record, then refuses the
+-- approval if the count differs from what the page saw, and returns the newest row (the version's change mark).
+create function app_private.settle_changes(target_workspace uuid, target_process uuid, expected_changes bigint) returns bigint
+language plpgsql security definer set search_path = '' as $$
+begin
+  perform pg_advisory_xact_lock(app_private.change_lock_key(target_process));
+  perform pg_advisory_xact_lock(app_private.change_lock_key(target_workspace));
+  if app_private.changes_seen(target_workspace, target_process) is distinct from expected_changes then
+    raise exception 'CHANGED_MEANWHILE: someone saved a change after this page read the documents; reload and approve again' using errcode = 'PT409';
+  end if;
+  return coalesce((select max(d.id) from public.draft_changes d
+                    where d.process_id = target_process or (d.workspace_id = target_workspace and d.process_id is null)), 0);
+end $$;
+
+-- A person's display name as it reads now, or none.
+create function app_private.name_now(person uuid) returns text
+language sql stable security definer set search_path = '' as $$
+  select nullif(btrim(p.display_name), '') from public.profiles p where p.id = person
+$$;
+
 -- Approves and keeps in one step: both happen or neither does. With a working draft of the record, it is
 -- approved through the shared body (as model_approve does); with none, the version keeps the documents of the
 -- approved revision as they read now (section edits, choices or settings changed, not the record). The number
 -- is the next for the process and must follow the one the approver saw (expected_version: 0 for none yet).
 create function public.approve_version(
-  target_process uuid, target_revision uuid, expected_seq bigint, expected_version integer,
+  target_process uuid, target_revision uuid, expected_seq bigint, expected_version integer, expected_changes bigint,
   reason text, documents jsonb, fingerprints jsonb, look jsonb, changes jsonb, inputs jsonb
 ) returns jsonb
 language plpgsql security definer set search_path = '' as $$
@@ -492,17 +549,21 @@ declare
   rev public.process_model_revisions;
   draft_process uuid;
   latest integer;
+  mark bigint;
   r text;
   fp text;
   v public.approved_versions;
 begin
-  -- The same order of locks as model_approve: the revision first, then the process.
+  -- The same order of locks as model_approve: the revision first, then the process. Without a draft to approve,
+  -- the working draft is still locked first, so a save to it that is under way finishes before the check below.
   if target_revision is not null then
     select x.process_id into draft_process from public.process_model_revisions x where x.id = target_revision;
     if draft_process is distinct from target_process then
       raise exception 'NOT_FOUND: revision' using errcode = 'PT404';
     end if;
     perform app_private.approve_revision(target_revision, expected_seq);
+  else
+    perform 1 from public.process_model_revisions w where w.process_id = target_process and w.state = 'working' for update;
   end if;
   select * into proc from public.processes where id = target_process for update;
   if not found then
@@ -521,13 +582,15 @@ begin
   if latest <> coalesce(expected_version, -1) then
     raise exception 'VERSION_CONFLICT: approved version % exists; reload to see what changed', latest using errcode = 'PT409';
   end if;
+  mark := app_private.settle_changes(proc.workspace_id, proc.id, expected_changes);
   r := app_private.check_version_payload(latest + 1, reason, documents, fingerprints, look);
   fp := app_private.keep_look(proc.workspace_id, look);
 
   insert into public.approved_versions (workspace_id, process_id, number, model_revision_id, model_hash, format, documents, fingerprints,
-                                        look_fingerprint, inputs, reason, changes, approved_by, approved_at)
+                                        look_fingerprint, inputs, reason, changes, approved_by, approved_by_name, approved_at, change_mark)
   values (proc.workspace_id, proc.id, latest + 1, rev.id, coalesce(rev.model_hash, ''), 1, documents, fingerprints, fp,
-          coalesce(inputs, '{}'::jsonb), r, coalesce(changes, '{"sections": [], "documents": [], "look": []}'::jsonb), auth.uid(), now())
+          coalesce(inputs, '{}'::jsonb), r, coalesce(changes, '{"sections": [], "documents": [], "look": []}'::jsonb),
+          auth.uid(), app_private.name_now(auth.uid()), now(), mark)
   returning * into v;
 
   return jsonb_build_object('versionId', v.id, 'number', v.number, 'revisionId', rev.id, 'revNo', rev.rev_no, 'approvedAt', v.approved_at);
@@ -537,13 +600,14 @@ end $$;
 -- were kept, or by a tab opened before the release). Records both facts: when and by whom the revision was
 -- approved, and when and by whom this copy was kept. Nothing is dated earlier than the day it is kept.
 create function public.keep_version_as_reads_now(
-  target_process uuid, expected_version integer, reason text, documents jsonb, fingerprints jsonb, look jsonb, changes jsonb, inputs jsonb
+  target_process uuid, expected_version integer, expected_changes bigint, reason text, documents jsonb, fingerprints jsonb, look jsonb, changes jsonb, inputs jsonb
 ) returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
   proc public.processes;
   rev public.process_model_revisions;
   latest integer;
+  mark bigint;
   r text;
   fp text;
   v public.approved_versions;
@@ -564,13 +628,18 @@ begin
   if latest <> coalesce(expected_version, -1) then
     raise exception 'VERSION_CONFLICT: approved version % exists; reload to see what changed', latest using errcode = 'PT409';
   end if;
+  mark := app_private.settle_changes(proc.workspace_id, proc.id, expected_changes);
   r := app_private.check_version_payload(latest + 1, reason, documents, fingerprints, look);
   fp := app_private.keep_look(proc.workspace_id, look);
 
+  -- The revision's approver is always recorded (a check on the revisions); their name is stored only if a
+  -- profile still holds one, else none, which the page shows as "Not recorded". Nothing is refused for it.
   insert into public.approved_versions (workspace_id, process_id, number, model_revision_id, model_hash, format, documents, fingerprints,
-                                        look_fingerprint, inputs, reason, changes, approved_by, approved_at, kept_by, kept_at)
+                                        look_fingerprint, inputs, reason, changes, approved_by, approved_by_name, approved_at,
+                                        kept_by, kept_by_name, kept_at, change_mark)
   values (proc.workspace_id, proc.id, latest + 1, rev.id, coalesce(rev.model_hash, ''), 1, documents, fingerprints, fp,
-          coalesce(inputs, '{}'::jsonb), r, coalesce(changes, '{"sections": [], "documents": [], "look": []}'::jsonb), rev.approved_by, rev.approved_at, auth.uid(), now())
+          coalesce(inputs, '{}'::jsonb), r, coalesce(changes, '{"sections": [], "documents": [], "look": []}'::jsonb),
+          rev.approved_by, app_private.name_now(rev.approved_by), rev.approved_at, auth.uid(), app_private.name_now(auth.uid()), now(), mark)
   returning * into v;
 
   return jsonb_build_object('versionId', v.id, 'number', v.number, 'revisionId', rev.id, 'revNo', rev.rev_no, 'approvedAt', v.approved_at, 'keptAt', v.kept_at);
@@ -578,45 +647,50 @@ end $$;
 
 -- ---- What a list or a page shows, in one call (change d) -----------------------------------------------
 
--- Per process of a workspace (or one process): the latest kept version, the approved revision and whether it
--- has a kept copy, whether this process was changed since the version (the record's own edits, or a person's
--- row in the change record), and which workspace-wide kinds changed since. Never the documents themselves.
--- Runs as the caller, so a person sees only what they may read.
+-- Per process of a workspace (or one process): the latest kept version and who approved it; the approved
+-- revision and whether it has a kept copy; whether this process was changed since the version (its working
+-- draft holds edits, or a person's row of the change record is newer than the version's mark); which
+-- workspace-wide kinds changed since; and how many rows of the change record the page can see, which an
+-- approval must pass back unchanged (changes_seen). Never the documents themselves. Runs as the caller, so a
+-- person sees only what they may read.
 create function public.version_states(target_workspace uuid, target_process uuid default null)
 returns table (process_id uuid, latest_number integer, latest_version_id uuid, latest_approved_at timestamptz, latest_approved_by uuid,
-               latest_kept_at timestamptz, approved_revision_id uuid, approved_rev_no integer, approved_has_version boolean,
-               process_changed boolean, workspace_changes text[])
+               latest_approved_by_name text, latest_kept_at timestamptz, approved_revision_id uuid, approved_rev_no integer,
+               approved_has_version boolean, process_changed boolean, workspace_changes text[], changes_seen bigint)
 language sql stable security invoker set search_path = '' as $$
   with p as (
     select id from public.processes where workspace_id = target_workspace and (target_process is null or id = target_process)
   ), v as (
-    select distinct on (x.process_id) x.process_id, x.id, x.number, x.approved_at, x.approved_by, x.kept_at, x.created_at
+    select distinct on (x.process_id) x.process_id, x.id, x.number, x.approved_at, x.approved_by, x.approved_by_name, x.kept_at, x.change_mark
       from public.approved_versions x where x.workspace_id = target_workspace
      order by x.process_id, x.number desc
   ), r as (
     select x.process_id, x.id, x.rev_no from public.process_model_revisions x where x.workspace_id = target_workspace and x.state = 'approved'
   )
-  select p.id, v.number, v.id, v.approved_at, v.approved_by, v.kept_at, r.id, r.rev_no,
+  select p.id, v.number, v.id, v.approved_at, v.approved_by, v.approved_by_name, v.kept_at, r.id, r.rev_no,
          r.id is not null and exists (select 1 from public.approved_versions k where k.model_revision_id = r.id),
          v.id is not null and (
-           exists (select 1 from public.process_model_edits e where e.process_id = p.id and e.created_at > v.created_at)
-           or exists (select 1 from public.draft_changes d where d.process_id = p.id and d.origin = 'person' and d.created_at > v.created_at)),
+           exists (select 1 from public.process_model_revisions w where w.process_id = p.id and w.state = 'working' and w.edit_seq > 0)
+           or exists (select 1 from public.draft_changes d where d.process_id = p.id and d.origin = 'person' and d.id > v.change_mark)),
          case when v.id is null then '{}'::text[] else array(
            select distinct d.kind from public.draft_changes d
-            where d.workspace_id = target_workspace and d.process_id is null and d.created_at > v.created_at order by 1) end
+            where d.workspace_id = target_workspace and d.process_id is null and d.id > v.change_mark order by 1) end,
+         (select count(*) from public.draft_changes d
+           where (d.process_id = p.id and d.origin = 'person') or (d.workspace_id = target_workspace and d.process_id is null))
     from p left join v on v.process_id = p.id left join r on r.process_id = p.id
 $$;
 
 revoke execute on function app_private.only_keys(jsonb, text[]), app_private.require_approver(uuid, text), app_private.approve_revision(uuid, bigint),
   app_private.first_items(jsonb), app_private.note_draft_changes(jsonb), app_private.override_part(jsonb, text),
   app_private.changed_steps(jsonb, jsonb), app_private.check_version_payload(integer, text, jsonb, jsonb, jsonb),
-  app_private.keep_look(uuid, jsonb), app_private.guard_kept(),
+  app_private.keep_look(uuid, jsonb), app_private.guard_kept(), app_private.change_lock_key(uuid),
+  app_private.changes_seen(uuid, uuid), app_private.settle_changes(uuid, uuid, bigint), app_private.name_now(uuid),
   app_private.record_document_edits(), app_private.record_test_case_edits(), app_private.record_requirements(),
   app_private.record_process_sources(), app_private.record_assessments(), app_private.record_workspace_settings(),
   app_private.record_document_settings() from public, anon, authenticated;
-revoke execute on function public.approve_version(uuid, uuid, bigint, integer, text, jsonb, jsonb, jsonb, jsonb, jsonb),
-  public.keep_version_as_reads_now(uuid, integer, text, jsonb, jsonb, jsonb, jsonb, jsonb),
+revoke execute on function public.approve_version(uuid, uuid, bigint, integer, bigint, text, jsonb, jsonb, jsonb, jsonb, jsonb),
+  public.keep_version_as_reads_now(uuid, integer, bigint, text, jsonb, jsonb, jsonb, jsonb, jsonb),
   public.version_states(uuid, uuid) from public, anon;
-grant execute on function public.approve_version(uuid, uuid, bigint, integer, text, jsonb, jsonb, jsonb, jsonb, jsonb),
-  public.keep_version_as_reads_now(uuid, integer, text, jsonb, jsonb, jsonb, jsonb, jsonb),
+grant execute on function public.approve_version(uuid, uuid, bigint, integer, bigint, text, jsonb, jsonb, jsonb, jsonb, jsonb),
+  public.keep_version_as_reads_now(uuid, integer, bigint, text, jsonb, jsonb, jsonb, jsonb, jsonb),
   public.version_states(uuid, uuid) to authenticated, service_role;
