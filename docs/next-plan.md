@@ -656,6 +656,25 @@ Added by the owner on 18 November 2026: every link between two rows that each be
 
 **Added for package 16 (owner, 20 November 2026).** The confirmation of approving says how many open questions could change the recommendation (the label "Changes the recommendation", repeats merged as Closing the gaps lists them) and how many of those are left with someone. For an approach already decided it says how many settle it ("Settles the decided approach"); for a process documented as it is it says nothing about them. One function returns both numbers, in a new file under `domain/questions/` (not `triage.ts` or `firstList.ts`), with its unit test; package 16 reuses it.
 
+**Planned and building (owner, 21 and 22 November 2026).** The plan is `claude/package-14-plan-21-nov.md` in the owner's project, approved with seven changes. It ships in two releases:
+
+- **The first release:** pull requests 1 to 4.
+  - 1, the rules: merged as #223.
+  - 2, the migration `approved_versions` and its test: #224, not applied.
+  - 3, approving, the tag, the comparison and the list of versions.
+  - 4, earlier approvals, "Keep it as it reads now" and the demo's refresh.
+- **The second release:** pull request 5 (the evidence pack's versions, History, the two numbers, Ask Avala's line).
+
+Recorded for later, on the owner's word (22 November 2026):
+
+- **Pull request 3: the line for a release.** "Avala OS now writes {k} sections differently" is shown only when the version's inputs index proves it: every input's fingerprint equal, the build different. Where sections differ and neither that nor a recorded change explains it, Documents says so in neutral words; the line is proposed to the owner first.
+- **Pull request 3: "Keep it as it reads now"** builds from the approved record, never from a working draft.
+- **Pull request 3: an edit saved and then undone.** The tag stays "unapproved changes", and Documents says "Changes were saved since approved version {N}, and the working draft now reads exactly as that version." That line is shown when the tag says "unapproved changes" and no section differs.
+- **Pull request 3: the order of reading when approving.** The page reads `version_states` (its `changes_seen`) before it reads the inputs it builds from, then passes `changes_seen` to the approval. A save in between makes the approval refuse and ask for a reload, never keep a copy without it.
+- **The notes of the first release say plainly** that versions approved between the two releases keep no evidence pack.
+- **A later hardening item, asked for separately:** the role `authenticated` holds TRUNCATE on `processes` and `workspaces` (the default grant). The API cannot use it; revoke it in a later migration.
+- **After the release, asked for separately:** a migration that replaces `model_approve` with a refusal to reload the page, so a tab opened before the release cannot approve without a kept copy.
+
 ## 3g. Packages 16 and 17, and two dated items (owner, 20 November 2026)
 
 From "Ask Avala discovery: work packages A and B" (the spec, in the owner's project: https://claude.ai/artifact/7cUj4mDoUgg8BvFuS3fngk), after the builder chat's check (`claude/discovery-step1-check-20-nov.md`) and plan (`claude/discovery-step2-plan-20-nov.md`), both reviewed by the review chat. Package B of the spec, guided discovery, gets its own chat later and is not planned here.
