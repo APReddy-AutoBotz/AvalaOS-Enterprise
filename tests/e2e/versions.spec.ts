@@ -168,3 +168,66 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
   await expect(page.getByTestId('document').getByTestId('chip-changed')).toHaveCount(0);
   await expect(status).toHaveText('Approved version 2');
 });
+
+// Package 14, pull request 4 (part J): a process approved before copies were kept shows so, and an approver keeps
+// it as it reads now. The approval is made the old way in the in-browser store's state (the released site's
+// model_approve: the revision approved, no copy), dated 3 November 2026.
+test('an approval from before copies were kept: the label, then "Keep it as it reads now" with both dates', async ({ page }) => {
+  test.setTimeout(180_000);
+  await buildProcess(page);
+  await page.evaluate(() => {
+    const KEY = 'avala.journey.memory.v1';
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    const rev = s.revisions.find((r: { state: string }) => r.state === 'working');
+    Object.assign(rev, { state: 'approved', approvedAt: '2026-11-03T10:00:00.000Z', approvedBy: s.me.id });
+    localStorage.setItem(KEY, JSON.stringify(s));
+  });
+  await page.reload();
+  const status = page.getByTestId('revision-status');
+  await expect(status).toHaveText('Approved revision 1 (before copies were kept)');
+  // Approve would keep it under whoever pressed it; the earlier approval is kept with its own approver and date.
+  await expect(page.getByTestId('approve')).toHaveCount(0);
+  await expect(page.getByTestId('keep-as-reads')).toHaveText('Keep it as it reads now');
+
+  // Documents say it is shown as built today; a section edit made now is in what is kept.
+  await stage(page, 'Documents');
+  await page.getByRole('tab', { name: /^PDD/ }).click();
+  await expect(page.getByTestId('legacy-line')).toHaveText('Approved before copies were kept: shown as built today');
+  const doc = page.getByTestId('document');
+  const section = doc.getByTestId('doc-section').filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).filter({ has: page.locator('p.leading-7') }).first();
+  await section.getByRole('button', { name: /^Edit section/ }).click();
+  await doc.getByRole('textbox').first().click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type(NEW_TEXT);
+  await doc.getByRole('button', { name: 'Save section' }).click();
+  await expect(doc.getByTestId('edited-text').first()).toContainText(NEW_TEXT);
+  await expect(status).toHaveText('Approved revision 1 (before copies were kept)');
+
+  // Keeping version 1 asks once, saying whose approval it records.
+  let asked = '';
+  page.once('dialog', d => { asked = d.message(); void d.accept(); });
+  await page.getByTestId('keep-as-reads').click();
+  await expect(status).toHaveText('Approved version 1');
+  expect(asked).toMatch(/^Keep approved revision 1 as its documents read now\? It becomes approved version 1, recorded as approved on 3 November 2026 by .+ and kept today by you, after approval\.$/);
+  await expect(page.getByTestId('keep-as-reads')).toHaveCount(0);
+  await expect(page.getByTestId('legacy-line')).toHaveCount(0);
+  await expect(page.getByTestId('version-line')).toHaveText('The working draft reads exactly as approved version 1.');
+
+  // The list and the version opened say it was kept after approval, with both dates.
+  await page.getByTestId('versions').getByRole('button', { name: 'Approved versions (1)' }).click();
+  const row = page.getByTestId('version-row');
+  await expect(row).toHaveCount(1);
+  await expect(row.getByTestId('version-kept-later')).toContainText('Kept after approval, as it read on');
+  await expect(row).toContainText('3 November 2026');
+  await expect(page.getByTestId('earlier-approval')).toHaveCount(0);
+  await shot(page, '83-kept-as-it-reads-now');
+  await row.getByTestId('version-open').click();
+  const band = page.getByTestId('version-band');
+  await expect(band).toContainText('Approved version 1, approved on 3 November 2026 by');
+  await expect(band).toContainText('Kept after approval, as it read on');
+  await expect(band).toContainText('the copy is not what was approved on 3 November 2026.');
+  const kept = page.getByTestId('kept-version');
+  await kept.getByRole('tab', { name: /^PDD/ }).click();
+  await expect(kept.getByTestId('document')).toContainText(NEW_TEXT);
+  await expect(kept.getByTestId('document')).toContainText('Approved version 1, kept after approval');
+});

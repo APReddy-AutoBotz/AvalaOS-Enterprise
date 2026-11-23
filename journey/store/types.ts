@@ -114,6 +114,8 @@ export interface VersionRow {
 export interface VersionPrints { fingerprints: Fingerprints; inputs: KeptInputs | null; lookFingerprint: string }
 /** A version opened: its kept documents and the look they are downloaded with. */
 export interface KeptVersion extends VersionRow { kept: KeptDocuments; look: KeptLook }
+/** What "Keep it as it reads now" sends: an approval's input without a draft to approve. */
+export type KeepVersionInput = Omit<ApproveVersionInput, 'revisionId' | 'expectedSeq'>;
 export interface ApproveVersionInput {
   processId: string;
   /** The working draft to approve with it, or null to keep the approved record as its documents read now. */
@@ -261,6 +263,12 @@ export interface JourneyStore {
   versionStates(workspaceId: string, processId?: string): Promise<VersionStateRow[]>;
   /** Approves and keeps the documents in one step: both happen or neither. Approvers only. 409 when someone saved or approved meanwhile. */
   approveVersion(input: ApproveVersionInput): Promise<{ versionId: string; number: number }>;
+  /**
+   * "Keep it as it reads now" (part J): keeps the approved revision that has no kept copy as its documents read
+   * now, recording who approved it and when, and who kept it and when. Approvers only. 409 when it is already
+   * kept, a version was kept meanwhile or someone saved meanwhile.
+   */
+  keepVersionAsReadsNow(input: KeepVersionInput): Promise<{ versionId: string; number: number }>;
   /** The approved versions of a process, newest first, without their documents. */
   listVersions(processId: string): Promise<VersionRow[]>;
   getVersionPrints(versionId: string): Promise<VersionPrints>;

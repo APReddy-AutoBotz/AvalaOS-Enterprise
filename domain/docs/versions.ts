@@ -115,14 +115,29 @@ export interface VersionState {
 
 /** Item 2 of part N, and the label of part J. Null: nothing is approved. A change made for the whole workspace never changes it (question 8). */
 export function versionTag(s: VersionState): string | null {
-  if (s.latest) return s.processChanged ? `Approved version ${s.latest.number} · unapproved changes` : `Approved version ${s.latest.number}`;
+  // The approved revision without a copy comes first: when a version exists it is older than what is approved
+  // (a page opened before copies were kept approved with the old button), so "Approved version N" would be wrong.
   if (s.legacyRevision !== null) return `Approved revision ${s.legacyRevision} (before copies were kept)`;
+  if (s.latest) return s.processChanged ? `Approved version ${s.latest.number} · unapproved changes` : `Approved version ${s.latest.number}`;
   return null;
 }
 
 /** Item 4 of part N. */
 export const LEGACY_LABEL = 'Approved before copies were kept: shown as built today';
+/** An earlier approval without a copy that is no longer the approved one: it is not shown, so not "shown as built today". */
+export const SUPERSEDED_LEGACY_LABEL = 'Approved before copies were kept';
 export const keptLaterLabel = (date: string) => `Kept after approval, as it read on ${date}`;
+/** Part J: what a copy kept later says when opened. Nothing is dated earlier than the day it was kept. */
+export const keptLaterLine = (kept: string, approved: string) => `Kept after approval, as it read on ${kept}; the copy is not what was approved on ${approved}.`;
+/** Proposed to the owner (pull request 4): the one question before keeping version 1 of an earlier approval. */
+export const keepFirstQuestion = (revision: number, date: string, approver: string) =>
+  `Keep approved revision ${revision} as its documents read now? It becomes approved version 1, recorded as approved on ${date} by ${approver} and kept today by you, after approval.`;
+/** Proposed to the owner (pull request 4): the window's title when a version exists before it, and its opening line. */
+export const keepTitle = (number: number) => `Keep version ${number} as it reads now`;
+export const keepIntro = (number: number, revision: number, date: string, approver: string) =>
+  `Approved revision ${revision} becomes approved version ${number} as its documents read now, recorded as approved on ${date} by ${approver} and kept today by you, after approval. Approved version ${number - 1} stays as it was.`;
+/** Who approved, when the record holds no name for them. */
+export const UNNAMED_APPROVER = 'an approver whose name was not recorded';
 
 /** The workspace-wide changes the Documents page names (question 8). */
 export type WorkspaceChange = 'assessment_settings' | 'layout' | 'look';
@@ -181,7 +196,8 @@ export function releaseProven(kept: { build: string; modelHash: string; inputs: 
 }
 
 /** Item 1 of part N, its first half, for the kept version's own band. */
-export const openedVersionLine = (number: number, date: string, approver: string) => `Approved version ${number}, approved on ${date} by ${approver}. As kept at approval.`;
+export const openedVersionLine = (number: number, date: string, approver: string, keptOn?: string | null) =>
+  keptOn ? `Approved version ${number}, approved on ${date} by ${approver}. ${keptLaterLine(keptOn, date)}` : `Approved version ${number}, approved on ${date} by ${approver}. As kept at approval.`;
 
 /** A Word or Markdown file name for a kept version. */
 export const versionFileName = (doc: KeptType, process: string, number: number, ext: 'docx' | 'md') => `${docShort(doc)} - ${process} - version ${number}.${ext}`;

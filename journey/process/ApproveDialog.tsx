@@ -2,7 +2,8 @@
 // version before, and the reason, required. A native modal dialog: Escape closes it, the page behind cannot be
 // reached while it is open.
 import React from 'react';
-import { changeLines, reasonHelp, reasonProblem, REASON_LABEL } from '../../domain/docs/versions.ts';
+import { changeLines, keepIntro, keepTitle, reasonHelp, reasonProblem, REASON_LABEL, UNNAMED_APPROVER } from '../../domain/docs/versions.ts';
+import { longDate } from './keepVersion.ts';
 import type { PreparedApproval } from './keepVersion.ts';
 import { Button } from '../ui.tsx';
 
@@ -19,15 +20,20 @@ export function ApproveDialog({ prepared, busy, error, onApprove, onClose, reaso
   const N = prepared.number;
   const problem = reasonProblem(N, reason);
   const lines = changeLines(prepared.changes);
+  // "Keep it as it reads now" from version 2 on (pull request 4): the same window, saying what is kept and whose approval it records.
+  const keep = prepared.mode === 'keep' ? prepared.approved : undefined;
+  const title = keep ? keepTitle(N) : `Approve version ${N}`;
   return (
     <dialog ref={ref} onClose={onClose} aria-labelledby="approve-h" data-testid="approve-dialog"
       className="w-[min(40rem,calc(100vw-2rem))] rounded-2xl bg-white p-0 text-slate-900 shadow-2xl backdrop:bg-[#001B2F]/70">
       <form className="max-h-[calc(100vh-2rem)] overflow-y-auto p-6" onSubmit={e => { e.preventDefault(); setTried(true); if (!problem) onApprove(reason); }}>
         <div className="flex items-start justify-between gap-4">
-          <h2 id="approve-h" className="font-display text-2xl font-semibold tracking-tight">Approve version {N}</h2>
+          <h2 id="approve-h" className="font-display text-2xl font-semibold tracking-tight">{title}</h2>
           <button type="button" onClick={() => ref.current?.close()} aria-label="Close" className="rounded-lg px-2 py-1 text-slate-500 hover:bg-slate-100">✕</button>
         </div>
-        <p className="mt-2 text-sm leading-6 text-slate-600">Approving keeps every document of this process exactly as it reads now, as version {N}. Approved version {N - 1} stays as it was.</p>
+        <p className="mt-2 text-sm leading-6 text-slate-600" data-testid="approve-intro">{keep
+          ? keepIntro(N, keep.revNo, longDate(keep.approvedAt), keep.approverName ?? UNNAMED_APPROVER)
+          : `Approving keeps every document of this process exactly as it reads now, as version ${N}. Approved version ${N - 1} stays as it was.`}</p>
         <section className="mt-4" aria-labelledby="approve-changes-h">
           <h3 id="approve-changes-h" className="text-sm font-semibold text-slate-900">What changed since approved version {N - 1}</h3>
           {lines.length
@@ -42,7 +48,7 @@ export function ApproveDialog({ prepared, busy, error, onApprove, onClose, reaso
         {error && <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="approve-error">{error}</p>}
         <div className="mt-5 flex flex-wrap justify-end gap-2">
           <Button type="button" variant="ghost" onClick={() => ref.current?.close()}>Cancel</Button>
-          <Button type="submit" disabled={busy || Boolean(problem)} data-testid="approve-confirm">{busy ? 'Approving…' : `Approve version ${N}`}</Button>
+          <Button type="submit" disabled={busy || Boolean(problem)} data-testid="approve-confirm">{busy ? (keep ? 'Keeping…' : 'Approving…') : keep ? `Keep version ${N}` : `Approve version ${N}`}</Button>
         </div>
       </form>
     </dialog>

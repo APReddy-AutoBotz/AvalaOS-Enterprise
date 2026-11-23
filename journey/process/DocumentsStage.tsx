@@ -49,9 +49,9 @@ import { shapeInEffect } from '../../domain/flowchart/shape.ts';
 import { viewDecisions } from './mapShape.ts';
 import { draftNarrative, draftToHtml, generatedText, groundingIssues, handoffChecklist, modelFacts, overlaps, SECTION_BRIEF } from '../../domain/docs/narrative.ts';
 import type { KeptVersion, VersionPrints, VersionRow, VersionStateRow } from '../store/types.ts';
-import { compareDraft, keepInputFrom, keptRevision } from '../../domain/docs/approving.ts';
+import { approvalsWithoutCopy, compareDraft, keepInputFrom, keptRevision } from '../../domain/docs/approving.ts';
 import { buildKeptDocuments, KEPT_TYPES, keptInputs, type KeptType } from '../../domain/docs/keep.ts';
-import { changeCount, changeLines, documentsLine, openedVersionLine, releaseProven, sectionDiff, versionFileName } from '../../domain/docs/versions.ts';
+import { changeCount, changeLines, documentsLine, keptLaterLabel, LEGACY_LABEL, openedVersionLine, releaseProven, sectionDiff, SUPERSEDED_LEGACY_LABEL, UNNAMED_APPROVER, versionFileName } from '../../domain/docs/versions.ts';
 import { longDate } from './keepVersion.ts';
 import { BUILD } from '../build.ts';
 
@@ -315,7 +315,16 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const changedIds = latest ? (comparison?.byDoc[type as KeptType] ?? new Set<string>()) : new Set(sinceApproved.map(c => c.id));
   // The list of approved versions, and one opened as kept.
   const [versions, setVersions] = React.useState<VersionRow[]>([]);
-  React.useEffect(() => { if (latest) store.listVersions(processId).then(setVersions).catch(e => setError(messageOf(e))); else setVersions([]); }, [store, processId, latest?.id]);
+  // With the versions, the record's revisions: earlier approvals without a kept copy are listed after them (part G).
+  const [approvedRevisions, setApprovedRevisions] = React.useState<RevisionRow[]>([]);
+  React.useEffect(() => {
+    if (!latest) { setVersions([]); setApprovedRevisions([]); return; }
+    Promise.all([store.listVersions(processId), store.listRevisions(processId)])
+      .then(([v, r]) => { setVersions(v); setApprovedRevisions(r); }).catch(e => setError(messageOf(e)));
+  }, [store, processId, latest?.id]);
+  const earlier = React.useMemo(() => approvalsWithoutCopy(approvedRevisions, versions.map(v => v.revisionId)), [approvedRevisions, versions]);
+  // Part J: an approved revision with no kept copy is shown as built today, and says so.
+  const withoutCopy = Boolean(versionState?.approvedRevisionId && !versionState.approvedHasVersion);
   const [showVersions, setShowVersions] = React.useState(false);
   const [opened, setOpened] = React.useState<string | null>(null);
   // All four documents, for the hand-over checklist, the overlap check and what counts as grounded.
@@ -404,6 +413,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           revisionId={working?.id ?? currentRevisionId} decisions={decisions} onDecisions={onDecisions} onAnswerQuestions={() => setAnswering(true)} />
       )}
       {documentsNote(model) && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="documents-note">{documentsNote(model)}</p>}
+      {withoutCopy && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="legacy-line">{LEGACY_LABEL}</p>}
       {versions.length > 0 && (
         <div className="rounded-xl border border-slate-200 bg-white" data-testid="versions">
           <button type="button" className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold text-[#002C4B]" aria-expanded={showVersions} onClick={() => setShowVersions(!showVersions)}>
@@ -412,6 +422,13 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           {showVersions && (
             <ol className="divide-y divide-slate-100 border-t border-slate-100" data-testid="versions-list">
               {versions.map(v => <VersionListRow key={v.id} v={v} names={nameById} onOpen={() => setOpened(v.id)} />)}
+              {earlier.map(r => (
+                <li key={r.id} className="px-4 py-3 text-sm" data-testid="earlier-approval" data-rev={r.revNo}>
+                  <span className="font-semibold text-slate-900">Revision {r.revNo}</span>
+                  <span className="text-slate-600"> · {longDate(r.approvedAt)} · {(r.approvedBy && nameById[r.approvedBy]) || 'Not recorded'}</span>
+                  <p className="mt-1 text-slate-700">{r.current ? LEGACY_LABEL : SUPERSEDED_LEGACY_LABEL}</p>
+                </li>
+              ))}
             </ol>
           )}
         </div>
@@ -611,6 +628,7 @@ function VersionListRow({ v, names, onOpen }: { v: VersionRow; names: Record<str
         <Button variant="secondary" onClick={onOpen} data-testid="version-open">Open</Button>
       </div>
       <p className="mt-1 text-slate-700" data-testid="version-reason">{v.number === 1 ? 'The first approved version.' : v.reason}</p>
+      {v.keptAt && <p className="mt-1 text-xs text-slate-600" data-testid="version-kept-later">{keptLaterLabel(longDate(v.keptAt))}{v.keptByName ? ` by ${v.keptByName}` : ''}</p>}
       {v.number > 1 && (n > 0
         ? <><button type="button" className="mt-1 text-xs font-semibold text-[#002C4B] hover:underline" aria-expanded={open} onClick={() => setOpen(!open)} data-testid="version-changes">What changed: {n}</button>
           {open && <ul className="mt-1 space-y-1 text-xs leading-5 text-slate-700">{changeLines(v.changes).map((l, i) => <li key={i}>{l}</li>)}</ul>}</>
@@ -650,7 +668,7 @@ function KeptVersionView({ store, versionId, processName, onBack }: { store: Jou
       <style>{PRINT_CSS}</style>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-950 ring-1 ring-inset ring-emerald-200">
         <div>
-          <p className="font-semibold" data-testid="version-band">{openedVersionLine(v.number, longDate(v.approvedAt), v.approvedByName ?? 'an approver whose name was not recorded')}</p>
+          <p className="font-semibold" data-testid="version-band">{openedVersionLine(v.number, longDate(v.approvedAt), v.approvedByName ?? UNNAMED_APPROVER, v.keptAt ? longDate(v.keptAt) : null)}</p>
           {v.reason && <p className="mt-0.5">Why: {v.reason}</p>}
         </div>
         {back}
