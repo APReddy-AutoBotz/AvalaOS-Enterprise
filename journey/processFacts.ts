@@ -60,6 +60,6 @@ export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, setti
 
 /** Where each process of a workspace stands with its approved versions, in one call; empty when it cannot be read. */
 export async function versionRows(store: JourneyStore, workspaceId: string): Promise<Map<string, VersionStateRow>> {
-  const rows = await store.versionStates(workspaceId).catch(() => []);
-  return new Map(rows.map(r => [r.processId, r]));
+  const rows: VersionStateRow[] = await store.versionStates(workspaceId).catch(() => []);
+  return new Map(rows.map((r): [string, VersionStateRow] => [r.processId, r]));
 }
