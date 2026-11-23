@@ -143,7 +143,7 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
             )}
             {scope === 'several' && ai ? (
               <>
-                <h4 className="font-display text-lg font-semibold text-slate-900">Answer any of the {list.length} questions listed</h4>
+                <h4 className="font-display text-lg font-semibold text-slate-900">{list.length === 1 ? 'Answer the question listed' : `Answer any of the ${list.length} questions listed`}</h4>
                 <p className="mb-4 mt-1 text-sm leading-6 text-slate-600">Speak or type freely, in any order. You will see which questions it answers, with your words for each, before anything is saved.</p>
                 <SeveralAnswers model={model} items={list} editor={editor} ctx={notes!} onSaved={setBefore} />
               </>
