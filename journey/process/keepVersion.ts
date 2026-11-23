@@ -6,7 +6,6 @@
 import type { JourneyStore, VersionStateRow } from '../store/types.ts';
 import { approvalChanges, approvalTarget, keepInputFrom, keptRevision, type ApprovalTarget, type KeepRecord } from '../../domain/docs/approving.ts';
 import { buildKeptDocuments, fingerprintsOf, keptInputs, keptLook, keptSizes, type KeptDocuments, type KeptLook, type Fingerprints, type KeptInputs } from '../../domain/docs/keep.ts';
-import { emptyDecisions } from '../../domain/assess/decisions.ts';
 import type { VersionChanges } from '../../domain/docs/versions.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { AssessmentSettings } from '../../domain/assess/settings.ts';
@@ -14,12 +13,23 @@ import { BUILD } from '../build.ts';
 
 export const longDate = (iso: string | Date) => new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 
+/**
+ * A read the approval could not make. A kept version can never be corrected, so it is never built from less than
+ * the whole record: nothing falls back to empty, and approve_version is not called.
+ */
+export class ApprovalReadError extends Error {
+  readonly what: string;
+  constructor(what: string, cause?: unknown) { super(`${what} could not be read`, { cause }); this.name = 'ApprovalReadError'; this.what = what; }
+}
+const read = <T,>(what: string, p: Promise<T>): Promise<T> => p.catch(e => { throw new ApprovalReadError(what, e); });
+
 /** Everything the documents of a process are built from, as stored (never a viewer's switch for the visit). */
 export async function loadRecord(store: JourneyStore, processId: string, workspaceId: string, model: ProcessModel): Promise<KeepRecord & { settings?: AssessmentSettings }> {
   const [decisions, settings, docSettings, stored, edits, testEdits, sources, members] = await Promise.all([
-    store.getAssessmentDecisions(processId).catch(() => emptyDecisions()), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId),
-    store.listRequirements(processId), store.listDocumentEdits(processId), store.listTestEdits(processId), store.listSources(processId),
-    store.listMembers(workspaceId).catch(() => []),
+    read("people's choices for this process", store.getAssessmentDecisions(processId)), read("the workspace's assessment settings", store.getSettings(workspaceId)),
+    read('how documents look', store.getDocumentSettings(workspaceId)), read('the requirements', store.listRequirements(processId)),
+    read('the section edits', store.listDocumentEdits(processId)), read("testers' edits", store.listTestEdits(processId)),
+    read('the sources', store.listSources(processId)), read("the people's names", store.listMembers(workspaceId)),
   ]);
   return {
     model, decisions, settings: settings.settings, stored, edits, testEdits, layouts: docSettings.layouts,
@@ -44,17 +54,19 @@ export interface PreparedApproval {
 
 /** Reads the version state first, then the record, and builds what approving would keep. Null: nothing to approve. */
 export async function prepareApproval(store: JourneyStore, processId: string, workspaceId: string): Promise<PreparedApproval | null> {
-  const [state] = await store.versionStates(workspaceId, processId);
+  const [state] = await read('where the process stands with its approved versions', store.versionStates(workspaceId, processId));
   if (!state) return null;
-  const revisions = await store.listRevisions(processId);
+  const revisions = await read('the revisions of the process record', store.listRevisions(processId));
   const target = approvalTarget(revisions);
   if (!target) return null;
   const revision = target.from === 'draft' ? revisions.find(r => r.id === target.revisionId) : revisions.find(r => r.state === 'approved');
-  const model = revision ? await store.getModel(revision.id) : null;
+  const model = revision ? await read('the process record', store.getModel(revision.id)) : null;
   if (!model) return null;
+  const latest = state.latest;
   const [record, docSettings, before] = await Promise.all([
-    loadRecord(store, processId, workspaceId, model), store.getDocumentSettings(workspaceId),
-    state.latest ? store.getVersionPrints(state.latest.id) : Promise.resolve(null),
+    loadRecord(store, processId, workspaceId, model), read('how documents look', store.getDocumentSettings(workspaceId)),
+    // The version before, for what changed: its fingerprints and its look (only here and when a version is opened).
+    latest ? read(`approved version ${latest.number}`, Promise.all([store.getVersionPrints(latest.id), store.getVersionLook(latest.id)])).then(([p, look]) => ({ fingerprints: p.fingerprints, look })) : Promise.resolve(null),
   ]);
   const number = (state.latest?.number ?? 0) + 1;
   const input = keepInputFrom(record, keptRevision(number, longDate(new Date())));

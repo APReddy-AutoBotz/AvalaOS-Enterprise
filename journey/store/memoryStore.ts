@@ -428,7 +428,13 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       const v = (state.versions ?? []).find(x => x.id === versionId);
       if (!v) throw new StoreError(404, 'Version not found.');
-      return structuredClone({ fingerprints: v.fingerprints, inputs: v.inputs, look: (state.keptLooks ?? []).find(l => l.workspaceId === v.workspaceId && l.fingerprint === v.lookFingerprint)!.look });
+      return structuredClone({ fingerprints: v.fingerprints, inputs: v.inputs, lookFingerprint: v.lookFingerprint });
+    },
+    async getVersionLook(versionId) {
+      requireMe();
+      const v = (state.versions ?? []).find(x => x.id === versionId);
+      if (!v) throw new StoreError(404, 'Version not found.');
+      return structuredClone((state.keptLooks ?? []).find(l => l.workspaceId === v.workspaceId && l.fingerprint === v.lookFingerprint)!.look);
     },
     async getVersion(versionId) {
       requireMe();

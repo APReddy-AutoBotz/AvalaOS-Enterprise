@@ -8,6 +8,7 @@ import { StoreError, type JourneyStore } from '../../journey/store/types.ts';
 import { approvalChanges, approvalTarget, keepInputFrom, keptRevision, type KeepRecord } from './approving.ts';
 import { buildKeptDocuments, fingerprintsOf, keptInputs, keptLook } from './keep.ts';
 import { makeEdit } from './edits.ts';
+import { ApprovalReadError, approvePrepared, prepareApproval } from '../../journey/process/keepVersion.ts';
 
 const demo = JSON.parse(fs.readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8'));
 
@@ -34,7 +35,7 @@ async function approve(store: JourneyStore, wsId: string, processId: string, rea
   const input = keepInputFrom(record, keptRevision(number, '23 November 2026'));
   const kept = buildKeptDocuments(input);
   const look = keptLook(docSettings.branding);
-  const before = st.latest ? await store.getVersionPrints(st.latest.id) : null;
+  const before = st.latest ? { fingerprints: (await store.getVersionPrints(st.latest.id)).fingerprints, look: await store.getVersionLook(st.latest.id) } : null;
   return store.approveVersion({
     processId, revisionId: target.revisionId, expectedSeq: target.expectedSeq, expectedVersion: tamper.version ?? st.latest?.number ?? 0, expectedChanges: tamper.changes ?? st.changesSeen,
     reason, documents: kept, fingerprints: fingerprintsOf(kept), look, changes: approvalChanges(before, kept, look), inputs: keptInputs(input, { build: 'test' }),
@@ -113,4 +114,58 @@ test('a version cannot be read in a format this release does not know', async ()
     changes: { sections: [], documents: [], look: [] }, inputs: { format: 1, build: 'test', modelHash: '', inputs: {} },
   }));
   assert.equal(bad.status, 422);
+});
+
+/** The store with one read failing, counting every call to approveVersion. */
+function failing(store: JourneyStore, method: 'getAssessmentDecisions' | 'listMembers') {
+  const calls = { approve: 0 };
+  const wrapped = new Proxy(store, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target);
+      if (key === method) return () => Promise.reject(new StoreError(503, 'The server did not answer.'));
+      if (key === 'approveVersion') return (...a: unknown[]) => { calls.approve++; return (value as Function).apply(target, a); };
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  return { store: wrapped, calls };
+}
+
+for (const [method, what] of [['getAssessmentDecisions', "people's choices for this process"], ['listMembers', "the people's names"]] as const) {
+  test(`a failed read of ${what} refuses the approval, and approve_version is never called`, async () => {
+    const { store, ws, p } = await open();
+    const { store: broken, calls } = failing(store, method);
+    await assert.rejects(prepareApproval(broken, p.id, ws.id), (e: unknown) => e instanceof ApprovalReadError && e.message === `${what} could not be read`);
+    assert.equal(calls.approve, 0);
+    assert.deepEqual(await store.listVersions(p.id), [], 'nothing was kept');
+    // With every read answered, the same page approves.
+    const ok = await prepareApproval(store, p.id, ws.id);
+    assert.ok(ok);
+    assert.equal((await approvePrepared(store, p.id, ok!, null)).number, 1);
+  });
+}
+
+test('the approval reads the look of the version before only to say what changed', async () => {
+  const { store, ws, p } = await open();
+  await approve(store, ws.id, p.id, null);
+  const [st] = await store.versionStates(ws.id, p.id);
+  const prints = await store.getVersionPrints(st.latest!.id);
+  assert.deepEqual(Object.keys(prints).sort(), ['fingerprints', 'inputs', 'lookFingerprint'], 'no logo or Word template on opening Documents');
+  assert.equal(typeof (await store.getVersionLook(st.latest!.id)).font, 'string');
+});
+
+test('the lists read where every process stands in one call for the workspace, and keep the revision\'s words when it fails', async () => {
+  const { loadProcessFacts, versionRows } = await import('../../journey/processFacts.ts');
+  const { store, ws, p } = await open();
+  await approve(store, ws.id, p.id, null);
+  let calls = 0;
+  const counted = new Proxy(store, { get(t, k) { const v = Reflect.get(t, k, t); if (k === 'versionStates') return (...a: unknown[]) => { calls++; return (v as Function).apply(t, a); }; return typeof v === 'function' ? v.bind(t) : v; } });
+  const processes = await store.listProcesses(ws.id);
+  const rows = await versionRows(counted, ws.id);
+  const facts = await Promise.all(processes.map(x => loadProcessFacts(counted, x, undefined, rows.get(x.id))));
+  assert.equal(calls, 1, 'one call for the whole workspace');
+  assert.equal(facts.find(f => f.id === p.id)!.statusLabel, 'Approved version 1');
+  // The read failed: the revision's own words, as before package 14.
+  const fallback = await loadProcessFacts(counted, processes.find(x => x.id === p.id)!, undefined, undefined);
+  assert.equal(fallback.statusLabel, 'Approved revision 1');
+  assert.equal(calls, 1);
 });

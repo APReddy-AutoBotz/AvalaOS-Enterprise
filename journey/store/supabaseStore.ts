@@ -299,7 +299,12 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('approved_versions').select('workspace_id, fingerprints, inputs, look_fingerprint').eq('id', versionId).single();
       if (error) fail(error);
       const v = data as any;
-      return { fingerprints: v.fingerprints ?? {}, inputs: v.inputs && Object.keys(v.inputs).length ? v.inputs : null, look: await lookOf(v.workspace_id, v.look_fingerprint) };
+      return { fingerprints: v.fingerprints ?? {}, inputs: v.inputs && Object.keys(v.inputs).length ? v.inputs : null, lookFingerprint: v.look_fingerprint };
+    },
+    async getVersionLook(versionId) {
+      const { data, error } = await db.from('approved_versions').select('workspace_id, look_fingerprint').eq('id', versionId).single();
+      if (error) fail(error);
+      return lookOf((data as any).workspace_id, (data as any).look_fingerprint);
     },
     async getVersion(versionId) {
       const { data, error } = await db.from('approved_versions').select(`${VERSION_COLUMNS}, workspace_id, documents, look_fingerprint`).eq('id', versionId).single();

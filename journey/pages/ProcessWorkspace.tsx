@@ -52,6 +52,9 @@ interface Loaded {
   versions: VersionStateRow | null;
 }
 
+/** The owner's words for an approval that did not happen: "Not approved: {why}. The page has been reloaded." */
+const notApproved = (e: unknown) => `Not approved: ${messageOf(e).replace(/[.\s]*$/, '')}. The page has been reloaded.`;
+
 // Saves that go into the documents (the change record's kinds): after each, where the process stands with its
 // approved versions is read again, so the tag says "unapproved changes" at once, whichever stage saved.
 const DOCUMENT_WRITES = new Set(['savePatch', 'saveDocumentEdit', 'removeDocumentEdit', 'saveTestEdit', 'removeTestEdit', 'saveRequirements', 'saveAssessment', 'addSource', 'archiveSource']);
@@ -146,6 +149,8 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
   // Approving keeps the documents (package 14): built first, then confirmed with a reason from version 2 on.
   const [approving, setApproving] = React.useState<PreparedApproval | null>(null);
   const [approveError, setApproveError] = React.useState<string | null>(null);
+  // The reason typed in the approval window outlives a refusal and the reload after it; it is cleared once approved.
+  const [reason, setReason] = React.useState('');
   const startApproval = async (processId: string, workspaceId: string) => {
     setBusy(true); setError(null); setApproveError(null);
     try {
@@ -153,15 +158,15 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
       if (!prepared) { await load(); return; }
       if (prepared.number === 1) { await approvePrepared(store, processId, prepared, null); await load(); return; }
       setApproving(prepared);
-    } catch (e) { setError(messageOf(e)); await load(); } finally { setBusy(false); }
+    } catch (e) { setError(notApproved(e)); await load(); } finally { setBusy(false); }
   };
   const confirmApproval = async (processId: string, reason: string) => {
     if (!approving) return;
     setBusy(true); setApproveError(null);
-    try { await approvePrepared(store, processId, approving, reason); setApproving(null); await load(); }
+    try { await approvePrepared(store, processId, approving, reason); setApproving(null); setReason(''); await load(); }
     catch (e) {
       // Someone saved or approved meanwhile: the page reads everything again, and nothing was approved.
-      if ((e as { status?: number }).status === 409) { setApproving(null); setError(`Not approved: ${messageOf(e).replace(/[.\s]*$/, '')}. The page has been reloaded.`); await load(); }
+      if ((e as { status?: number }).status === 409) { setApproving(null); setError(notApproved(e)); await load(); }
       else setApproveError(messageOf(e));
     } finally { setBusy(false); }
   };
@@ -280,7 +285,7 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
         </ChooserContext.Provider></SourceContext.Provider>}
       </section>
 
-      {approving && <ApproveDialog prepared={approving} busy={busy} error={approveError} onApprove={reason => confirmApproval(process.id, reason)} onClose={() => { setApproving(null); setApproveError(null); }} />}
+      {approving && <ApproveDialog prepared={approving} busy={busy} error={approveError} reason={reason} onReason={setReason} onApprove={r => confirmApproval(process.id, r)} onClose={() => { setApproving(null); setApproveError(null); }} />}
       {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
     </div>
   );

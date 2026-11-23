@@ -107,8 +107,11 @@ export interface VersionRow {
   keptAt: string | null;
   keptByName: string | null;
 }
-/** What the Documents page fetches of the latest version: its fingerprints, look and inputs index, never its documents. */
-export interface VersionPrints { fingerprints: Fingerprints; look: KeptLook; inputs: KeptInputs | null }
+/**
+ * What the Documents page fetches of the latest version: its fingerprints, inputs index and the look's fingerprint.
+ * Never its documents, and never the look itself (a logo and a Word template): getVersionLook reads that.
+ */
+export interface VersionPrints { fingerprints: Fingerprints; inputs: KeptInputs | null; lookFingerprint: string }
 /** A version opened: its kept documents and the look they are downloaded with. */
 export interface KeptVersion extends VersionRow { kept: KeptDocuments; look: KeptLook }
 export interface ApproveVersionInput {
@@ -261,6 +264,8 @@ export interface JourneyStore {
   /** The approved versions of a process, newest first, without their documents. */
   listVersions(processId: string): Promise<VersionRow[]>;
   getVersionPrints(versionId: string): Promise<VersionPrints>;
+  /** A version's look (logo, Word template), read only to approve again (what changed) and to open the version. */
+  getVersionLook(versionId: string): Promise<KeptLook>;
   /** A version's kept documents, refused when kept in a format this release cannot read. */
   getVersion(versionId: string): Promise<KeptVersion>;
   history(processId: string): Promise<{ revisions: RevisionRow[]; edits: EditRow[] }>;

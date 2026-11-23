@@ -6,12 +6,14 @@ import { changeLines, reasonHelp, reasonProblem, REASON_LABEL } from '../../doma
 import type { PreparedApproval } from './keepVersion.ts';
 import { Button } from '../ui.tsx';
 
-export function ApproveDialog({ prepared, busy, error, onApprove, onClose }: {
+export function ApproveDialog({ prepared, busy, error, onApprove, onClose, reason, onReason }: {
   prepared: PreparedApproval; busy: boolean; error: string | null;
   onApprove: (reason: string) => void; onClose: () => void;
+  /** Kept by the page, so a reason typed before a refusal (someone saved meanwhile) is there at the next Approve. */
+  reason: string; onReason: (reason: string) => void;
 }) {
   const ref = React.useRef<HTMLDialogElement>(null);
-  const [reason, setReason] = React.useState('');
+  const setReason = onReason;
   const [tried, setTried] = React.useState(false);
   React.useEffect(() => { const d = ref.current; if (d && !d.open) d.showModal?.(); }, []);
   const N = prepared.number;
