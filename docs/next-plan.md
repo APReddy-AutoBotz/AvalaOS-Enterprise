@@ -763,7 +763,20 @@ Six pull requests; `next` can be released after any one of them; the first relea
   A value a person confirmed with no quote of its own cannot be one side of a conflict, since each side cites its words and the released check requires it. So the difference is asked as an open question raised by the answer's words.
 
   `journey-ai`, `journey-extract` and `journey-notify` bundle the changed model files at the release; what they do does not change. The released site copes with the new keys: the proof of the plan's section 12 is kept as `domain/discovery/compat.test.ts`. Nothing changes on screen.
-- **Pull requests 2 to 6:** as the plan has them. Asked separately: the early deploy of `journey-ai` (with pull request 2), the `discovery_sessions` migration (pull request 3, after its trial), and the check of about 70,000 tokens on the preview (before pull request 4 merges).
+- **Pull request 2, the task and the replay (built 23 November 2026, in review).**
+  - `discoveryQuestions` in `domain/discovery/notice.ts`, registered in `domain/ai/tasks.ts`: at most 4,000 tokens out, low reasoning effort. It reads only a person's words (`n:`), with the draft's names (`m:draft`) and what was asked (`a:asked`) beside them.
+  - The rules after it (`readNotice`) drop:
+    - a quote not from a person's words, or one that repeats the question their answer was given to;
+    - a question that is too long, or carries a link, an address or a number to call;
+    - one already asked or settled;
+    - more than five questions or five wanted statements a call;
+    - a wanted statement without a wanting word.
+
+    The target is decided by rule (`targetFor`). Rules decide when an answer is worth noticing (`worthNoticing`).
+  - "AI use this month" names it "Discovery".
+  - The replay is `eval/discovery/`: two made-up transcripts, the hand-written answers, `replay.ts` with the five measures, `run.ts`, and the workflow "Discovery replay", run by hand with numbers only in its log.
+  - `journey-ai` gains the task at the release, or earlier if the owner decides the early deploy. No other task changes.
+- **Pull requests 3 to 6:** as the plan has them. Asked separately: the early deploy of `journey-ai` (with pull request 2), the `discovery_sessions` migration (pull request 3, after its trial), and the check of about 70,000 tokens on the preview (before pull request 4 merges).
 
 ### Dated items
 
