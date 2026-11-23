@@ -137,8 +137,9 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
   expect(wordBody).not.toContain(NEW_TEXT);
 
   // Version 2 holds the edit.
+  // Back to the working draft: the list is still open where the person left it.
   await page.getByTestId('version-back').click();
-  await page.getByTestId('versions').getByRole('button', { name: 'Approved versions (2)' }).click();
+  await expect(page.getByTestId('versions').getByRole('button', { name: 'Approved versions (2)' })).toHaveAttribute('aria-expanded', 'true');
   await page.getByTestId('version-row').nth(0).getByTestId('version-open').click();
   await page.getByTestId('kept-version').getByRole('tab', { name: /^PDD/ }).click();
   await expect(page.getByTestId('kept-version').getByTestId('document')).toContainText(NEW_TEXT);
