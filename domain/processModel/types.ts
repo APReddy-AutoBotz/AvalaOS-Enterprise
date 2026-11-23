@@ -143,6 +143,18 @@ export interface ProcessMeta {
    * `purpose`, so it stays in effect when the answer goes back to "assess" until a person removes it.
    */
   decidedApproach?: DecidedApproach;
+  /**
+   * What people said should happen in future, kept by a person in a discovery session (package B):
+   * never a step, rule or figure of the work done today, and in no document until a person makes one a
+   * requirement. Kept here, beside the brief, because the released site ignores a new entry of `meta`.
+   */
+  wanted?: WantedStatement[];
+}
+
+/** A statement of what should happen in future: in the person's words with its quote, or as a person edited it. */
+export interface WantedStatement extends Provenance {
+  id: string;
+  statement: string;
 }
 
 /** An approach decided for the whole process: who decided (the person's id, never an email address), when and why. */
@@ -337,6 +349,19 @@ export interface OpenQuestion {
   owner: string | null;
   status: 'open' | 'answered' | 'deferred';
   answer?: string;
+  /** What a person said that raised the question, in a discovery session (package B). Absent for every other question. */
+  raisedBy?: RaisedBy;
+}
+
+/**
+ * The words that raised a question, verbatim: in a source of the process (its key and place), or in an
+ * answer not yet kept as a source, with the question that answer was given to.
+ */
+export interface RaisedBy {
+  excerpt: string;
+  sourceId?: string;
+  locator?: SourceLocator;
+  answerTo?: string;
 }
 
 export interface Conflict {

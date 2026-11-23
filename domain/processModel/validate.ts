@@ -203,6 +203,23 @@ export function validateModel(model: ProcessModel): ValidationResult {
     else if (!(d.by === null || typeof d.by === 'string') || typeof d.at !== 'string' || !d.at) err('DECIDED', '/meta/decidedApproach', 'A decided approach records who decided and when.');
     else if (typeof d.by === 'string' && d.by.includes('@')) err('DECIDED', '/meta/decidedApproach/by', 'Who decided is recorded by the person\'s id, never an email address.');
   }
+  if (model.meta.wanted !== undefined) {
+    const w: any = model.meta.wanted;
+    if (!Array.isArray(w)) err('WANTED', '/meta/wanted', 'wanted must be a list.');
+    else {
+      const seen = new Set<string>();
+      w.forEach((x: any, i: number) => {
+        const p = `/meta/wanted/${i}`;
+        if (!x || typeof x !== 'object') return err('WANTED', p, 'A wanted statement must be an object.');
+        if (!isNonEmpty(x.id)) err('WANTED', `${p}/id`, 'A wanted statement needs an id.');
+        else if (seen.has(x.id)) err('DUPLICATE_ID', `${p}/id`, `Duplicate id ${x.id}.`);
+        else seen.add(x.id);
+        if (!isNonEmpty(x.statement)) err('WANTED', `${p}/statement`, 'A wanted statement needs its words.');
+        if (x.status !== 'stated' && x.status !== 'user-confirmed') err('WANTED', `${p}/status`, 'A wanted statement is as said (stated) or as a person kept it (user-confirmed).');
+        else provenance(x, p);
+      });
+    }
+  }
   if (model.meta.brief !== undefined) {
     const b: any = model.meta.brief;
     const one = (list: readonly string[]) => (v: unknown) => list.includes(v as string);
@@ -320,6 +337,12 @@ export function validateModel(model: ProcessModel): ValidationResult {
   model.openQuestions.forEach((q, i) => {
     const p = `/openQuestions/${i}`;
     target(q.target, `${p}/target`);
+    if (q.raisedBy !== undefined) {
+      const r: any = q.raisedBy;
+      if (!r || typeof r !== 'object' || !isNonEmpty(r.excerpt)) err('RAISED_BY', `${p}/raisedBy`, 'A question raised by what was said keeps the words, verbatim.');
+      else if (!isNonEmpty(r.sourceId) && !isNonEmpty(r.answerTo)) err('RAISED_BY', `${p}/raisedBy`, 'The words that raised a question name their source or the question they answered.');
+      else if (r.locator !== undefined && (!r.locator || typeof r.locator !== 'object' || Array.isArray(r.locator))) err('RAISED_BY', `${p}/raisedBy/locator`, 'The place of the words is an object.');
+    }
     if (!isNonEmpty(q.question)) err('TEXT', `${p}/question`, 'A question needs text.');
     if (!['open', 'answered', 'deferred'].includes(q.status)) err('ENUM', `${p}/status`, 'Status is open, answered or deferred.');
     if (q.status === 'answered' && !isNonEmpty(q.answer)) err('ANSWER_MISSING', `${p}/answer`, 'An answered question needs its answer.');
