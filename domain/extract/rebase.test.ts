@@ -6,6 +6,7 @@ import { answerQuestion, removeStep, updateFact } from '../processModel/patch.ts
 import { incoming, orderedSteps, outgoing } from '../processModel/selectors.ts';
 import { validateModel } from '../processModel/validate.ts';
 import { applyChanges, proposeChanges } from './rebase.ts';
+import { ownWordsEdits } from '../plan/start.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const empty = (name: string): ProcessModel => ({
@@ -21,6 +22,36 @@ test('the first extraction into an empty model is taken whole, keeping the proce
   const next = applyChanges(empty('Invoices'), gold(), defaults(cs));
   assert.equal(next.meta.name, 'Invoices');
   assert.deepEqual({ ...next, meta: { ...next.meta, name: gold().meta.name } }, gold());
+});
+
+// Found while planning package B (23 November 2026): "Tell us in your own words" writes whether the work is
+// done today and what the team has in mind into the brief before the first reading; with no application
+// typed the model is still empty, and the first reading used to replace the brief with nothing.
+test('the first reading keeps the brief lines given in "Tell us in your own words"', () => {
+  let before = empty('Invoices');
+  for (const op of ownWordsEdits({ doneToday: 'partly', inMind: ['rpa', 'ai'], apps: [] })) before = op(before).model;
+  assert.equal(before.steps.length, 0);
+  const cs = proposeChanges(before, gold());
+  assert.equal(cs.first, true);
+  const next = applyChanges(before, gold(), defaults(cs));
+  assert.deepEqual(next.meta.brief, before.meta.brief);
+  assert.equal(next.meta.brief?.doneToday?.value, 'partly');
+  assert.equal(next.meta.brief?.doneToday?.status, 'user-confirmed');
+  assert.deepEqual(next.meta.brief?.inMind?.value, ['rpa', 'ai']);
+  assert.equal(next.steps.length, gold().steps.length);
+  // Everything else is the reading's, as before.
+  assert.deepEqual({ ...next, meta: { ...next.meta, name: gold().meta.name, brief: undefined } }, { ...gold(), meta: { ...gold().meta, brief: undefined } });
+});
+
+test('on a first reading a line a person gave is not replaced by one the reading brings', () => {
+  let before = empty('Invoices');
+  for (const op of ownWordsEdits({ doneToday: 'no', inMind: [], apps: [] })) before = op(before).model;
+  const read = gold();
+  const passage = read.steps[0].sources.slice(0, 1);
+  read.meta.brief = { doneToday: { value: 'yes', status: 'stated', sources: passage }, kind: { value: 'existing_process', status: 'stated', sources: passage } };
+  const next = applyChanges(before, read, defaults(proposeChanges(before, read)));
+  assert.equal(next.meta.brief?.doneToday?.value, 'no');
+  assert.equal(next.meta.brief?.kind?.value, 'existing_process');
 });
 
 test('extracting the same sources again changes nothing', () => {
