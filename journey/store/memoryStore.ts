@@ -28,8 +28,16 @@ import { providerLabel } from '../../domain/auth/providers.ts';
 import { keyHint, validateAiChoice, validateApiKey } from '../../domain/ai/providers.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
+import { readKept, KeptFormatError, type Fingerprints, type KeptDocuments, type KeptInputs, type KeptLook } from '../../domain/docs/keep.ts';
+import { reasonProblem } from '../../domain/docs/versions.ts';
+import { hashValue } from '../../domain/processModel/hash.ts';
+import type { VersionRow, VersionStateRow } from './types.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
+/** A kept version (package 14), as the database's approved_versions holds it. */
+interface StoredVersion extends VersionRow { processId: string; workspaceId: string; kept: KeptDocuments; fingerprints: Fingerprints; lookFingerprint: string; inputs: KeptInputs | null; changeMark: number }
+/** One row of the change record (the database's draft_changes): a person's change, or one that follows another. */
+interface DraftChange { id: number; workspaceId: string; processId: string | null; kind: string; person: boolean }
 interface State {
   me: Me | null;
   workspaces: Workspace[];
@@ -61,6 +69,10 @@ interface State {
   walkthroughRequests?: WalkthroughRequest[];
   /** Set by a test that plays the platform owner: Settings then shows the walkthrough requests. */
   platformOwner?: boolean;
+  /** Package 14: kept versions, their looks (stored once per workspace), and the change record. */
+  versions?: StoredVersion[];
+  keptLooks?: { workspaceId: string; fingerprint: string; look: KeptLook }[];
+  draftChanges?: DraftChange[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -109,6 +121,14 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
   };
 
   const nameOf = () => requireMe().email.split('@')[0]!;
+  // The change record, as the database's recording triggers write it: one row per saved change, a person's
+  // own or one that follows another; never a value. The tag and the approval guard read it.
+  const noteChange = (workspaceId: string, processId: string | null, kind: string, person = true) => {
+    const rows = (state.draftChanges ??= []);
+    rows.push({ id: (rows[rows.length - 1]?.id ?? 0) + 1, workspaceId, processId, kind, person });
+  };
+  const changesSeen = (workspaceId: string, processId: string) => (state.draftChanges ?? []).filter(d => (d.processId === processId && d.person) || (d.workspaceId === workspaceId && d.processId === null)).length;
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
   /** The workspace of a board item, for the member rules. */
   const itemWorkspace = (workItemId: string) => {
     const item = (state.workItems ?? []).find(i => i.id === workItemId);
@@ -246,7 +266,9 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (!w) throw new StoreError(404, 'Workspace not found.');
       if (w.role !== 'admin') throw new StoreError(403, 'Only an admin can change the settings.');
       const valid = validateSettings(settings);
+      const before = (state.settings ?? []).find(x => x.workspaceId === workspaceId)?.assessment;
       state.settings = [...(state.settings ?? []).filter(x => x.workspaceId !== workspaceId), { workspaceId, assessment: valid, updatedBy: me.email, updatedAt: now() }];
+      if (!same(before, valid)) noteChange(workspaceId, null, 'assessment_settings');
       save();
     },
     async getDocumentSettings(workspaceId) {
@@ -259,7 +281,10 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (!w) throw new StoreError(404, 'Workspace not found.');
       if (w.role !== 'admin') throw new StoreError(403, 'Only an admin can change how documents look.');
       const valid = { branding: validateBranding(settings.branding), layouts: settings.layouts };
+      const before = (state.documentSettings ?? []).find(x => x.workspaceId === workspaceId)?.settings;
       state.documentSettings = [...(state.documentSettings ?? []).filter(x => x.workspaceId !== workspaceId), { workspaceId, settings: valid }];
+      if (!same(before?.layouts ?? {}, valid.layouts ?? {})) noteChange(workspaceId, null, 'layout');
+      if (before && !same(before.branding, valid.branding)) noteChange(workspaceId, null, 'look');
       save();
     },
     async listProcesses(workspaceId) {
@@ -336,6 +361,88 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       rev.approvedBy = state.me!.id;
       save();
     },
+    async versionStates(workspaceId, processId) {
+      requireMe();
+      return state.processes.filter(p => p.workspaceId === workspaceId && (!processId || p.id === processId)).map((p): VersionStateRow => {
+        const mine = (state.versions ?? []).filter(v => v.processId === p.id).sort((a, b) => b.number - a.number);
+        const latest = mine[0];
+        const approved = state.revisions.find(r => r.processId === p.id && r.state === 'approved');
+        const working = state.revisions.find(r => r.processId === p.id && r.state === 'working');
+        const after = (d: DraftChange) => Boolean(latest && d.id > latest.changeMark);
+        return {
+          processId: p.id,
+          latest: latest ? { id: latest.id, number: latest.number, approvedAt: latest.approvedAt, approvedBy: latest.approvedBy, approvedByName: latest.approvedByName, keptAt: latest.keptAt } : null,
+          approvedRevisionId: approved?.id ?? null, approvedRevNo: approved?.revNo ?? null,
+          approvedHasVersion: Boolean(approved && (state.versions ?? []).some(v => v.revisionId === approved.id)),
+          processChanged: Boolean(latest && ((working && working.seq > 0) || (state.draftChanges ?? []).some(d => d.processId === p.id && d.person && after(d)))),
+          workspaceChanges: latest ? [...new Set((state.draftChanges ?? []).filter(d => d.workspaceId === workspaceId && d.processId === null && after(d)).map(d => d.kind))].sort() as VersionStateRow['workspaceChanges'] : [],
+          changesSeen: changesSeen(workspaceId, p.id),
+        };
+      });
+    },
+    async approveVersion(i) {
+      const me = requireMe();
+      const { w } = workspaceOf(i.processId);
+      if (!w.canApprove) throw new StoreError(403, 'Approving needs approval rights.');
+      // The same checks, in the same order, as the database's approve_version; nothing changes until all pass.
+      const rev = i.revisionId ? state.revisions.find(r => r.id === i.revisionId) : null;
+      if (i.revisionId) {
+        if (!rev || rev.processId !== i.processId) throw new StoreError(404, 'Revision not found.');
+        if (rev.state !== 'working') throw new StoreError(409, 'Only the working draft can be approved.');
+        if (rev.seq !== i.expectedSeq) throw new StoreError(409, 'The draft changed since you opened it. Reload and try again.');
+      } else if (state.revisions.some(r => r.processId === i.processId && r.state === 'working' && r.seq > 0)) {
+        throw new StoreError(409, 'the process record has a working draft; approve it', 'DRAFT_EXISTS');
+      }
+      const record = rev ?? state.revisions.find(r => r.processId === i.processId && r.state === 'approved');
+      if (!record) throw new StoreError(409, 'the process has no record to approve', 'NOTHING_TO_APPROVE');
+      const latest = Math.max(0, ...(state.versions ?? []).filter(v => v.processId === i.processId).map(v => v.number));
+      if (latest !== i.expectedVersion) throw new StoreError(409, `approved version ${latest} exists; reload to see what changed`, 'VERSION_CONFLICT');
+      if (changesSeen(w.id, i.processId) !== i.expectedChanges) throw new StoreError(409, 'someone saved a change after this page read the documents; reload and approve again', 'CHANGED_MEANWHILE');
+      const problem = reasonProblem(latest + 1, i.reason);
+      if (problem) throw new StoreError(422, problem, latest + 1 === 1 ? 'REASON_NOT_TAKEN' : 'REASON_REQUIRED');
+      try { readKept(i.documents); } catch (e) { throw new StoreError(422, e instanceof KeptFormatError ? e.message : 'the documents are not a kept set of format 1', 'VERSION_INVALID'); }
+      if (rev) {
+        state.revisions.filter(r => r.processId === rev.processId && r.state === 'approved').forEach(r => { r.state = 'superseded'; });
+        rev.state = 'approved'; rev.approvedAt = now(); rev.approvedBy = me.id;
+      }
+      const fingerprint = hashValue(i.look);
+      if (!(state.keptLooks ?? []).some(l => l.workspaceId === w.id && l.fingerprint === fingerprint)) (state.keptLooks ??= []).push({ workspaceId: w.id, fingerprint, look: structuredClone(i.look) });
+      const mark = Math.max(0, ...(state.draftChanges ?? []).filter(d => d.processId === i.processId || (d.workspaceId === w.id && d.processId === null)).map(d => d.id));
+      const name = peopleOf(w.id).members.find(m => m.userId === me.id)?.name?.trim() || null;
+      const v: StoredVersion = {
+        id: uuid(), number: latest + 1, revisionId: record.id, approvedAt: now(), approvedBy: me.id, approvedByName: name, reason: i.reason?.trim() || null,
+        changes: structuredClone(i.changes), keptAt: null, keptByName: null, processId: i.processId, workspaceId: w.id, kept: structuredClone(i.documents),
+        fingerprints: structuredClone(i.fingerprints), lookFingerprint: fingerprint, inputs: structuredClone(i.inputs), changeMark: mark,
+      };
+      (state.versions ??= []).push(v);
+      save();
+      return { versionId: v.id, number: v.number };
+    },
+    async listVersions(processId) {
+      requireMe();
+      workspaceOf(processId);
+      return (state.versions ?? []).filter(v => v.processId === processId).sort((a, b) => b.number - a.number)
+        .map(({ processId: _p, workspaceId: _w, kept: _k, fingerprints: _f, lookFingerprint: _l, inputs: _i, changeMark: _m, ...row }) => structuredClone(row));
+    },
+    async getVersionPrints(versionId) {
+      requireMe();
+      const v = (state.versions ?? []).find(x => x.id === versionId);
+      if (!v) throw new StoreError(404, 'Version not found.');
+      return structuredClone({ fingerprints: v.fingerprints, inputs: v.inputs, lookFingerprint: v.lookFingerprint });
+    },
+    async getVersionLook(versionId) {
+      requireMe();
+      const v = (state.versions ?? []).find(x => x.id === versionId);
+      if (!v) throw new StoreError(404, 'Version not found.');
+      return structuredClone((state.keptLooks ?? []).find(l => l.workspaceId === v.workspaceId && l.fingerprint === v.lookFingerprint)!.look);
+    },
+    async getVersion(versionId) {
+      requireMe();
+      const v = (state.versions ?? []).find(x => x.id === versionId);
+      if (!v) throw new StoreError(404, 'Version not found.');
+      const { processId: _p, workspaceId: _w, kept, fingerprints: _f, lookFingerprint, inputs: _i, changeMark: _m, ...row } = v;
+      return structuredClone({ ...row, kept: readKept(kept), look: (state.keptLooks ?? []).find(l => l.workspaceId === v.workspaceId && l.fingerprint === lookFingerprint)!.look });
+    },
     async listSources(processId) {
       requireMe();
       workspaceOf(processId);
@@ -358,6 +465,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
         inferred: input.inferred, segmentCount: input.segments.length, warnings: input.warnings, createdAt: now(), archived: false,
       };
       state.sources.push({ ...row, processId, segments: input.segments });
+      noteChange(w.id, processId, 'source');
       save();
       return row;
     },
@@ -365,7 +473,9 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       const src = state.sources.find(x => x.id === sourceId);
       if (!src) throw new StoreError(404, 'Source not found.');
-      if (workspaceOf(src.processId).w.role === 'viewer') throw new StoreError(403, 'Archiving needs the editor or admin role.');
+      const { w: sw } = workspaceOf(src.processId);
+      if (sw.role === 'viewer') throw new StoreError(403, 'Archiving needs the editor or admin role.');
+      if (!src.archived) noteChange(sw.id, src.processId, 'source');
       src.archived = true;
       save();
     },
@@ -694,6 +804,8 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
       state.docEdits ??= {};
+      const was = (state.docEdits[processId] ?? []).find(e => e.docType === edit.docType && e.sectionKey === edit.sectionKey);
+      if (!was || was.html !== edit.html || was.baseHash !== edit.baseHash) noteChange(workspaceOf(processId).w.id, processId, 'section_edit');
       const list = (state.docEdits[processId] ?? []).filter(e => !(e.docType === edit.docType && e.sectionKey === edit.sectionKey));
       list.push({ ...structuredClone(edit), updatedBy: state.me?.email, updatedAt: new Date().toISOString() });
       state.docEdits[processId] = list;
@@ -703,6 +815,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
       state.docEdits ??= {};
+      if ((state.docEdits[processId] ?? []).some(e => e.docType === docType && e.sectionKey === sectionKey)) noteChange(workspaceOf(processId).w.id, processId, 'section_edit');
       state.docEdits[processId] = (state.docEdits[processId] ?? []).filter(e => !(e.docType === docType && e.sectionKey === sectionKey));
       save();
     },
@@ -755,6 +868,8 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing test cases needs the editor or admin role.');
       state.testEdits ??= {};
+      const was = (state.testEdits[processId] ?? []).find(e => e.caseCode === edit.caseCode);
+      if (!was || !same([was.fields, was.setAside, was.baseHash ?? null], [edit.fields, edit.setAside, edit.baseHash ?? null])) noteChange(workspaceOf(processId).w.id, processId, 'test_edit');
       state.testEdits[processId] = [...(state.testEdits[processId] ?? []).filter(e => e.caseCode !== edit.caseCode), { ...structuredClone(edit), updatedBy: state.me?.email, updatedAt: now() }];
       save();
     },
@@ -762,6 +877,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing test cases needs the editor or admin role.');
       state.testEdits ??= {};
+      if ((state.testEdits[processId] ?? []).some(e => e.caseCode === caseCode)) noteChange(workspaceOf(processId).w.id, processId, 'test_edit');
       state.testEdits[processId] = (state.testEdits[processId] ?? []).filter(e => e.caseCode !== caseCode);
       save();
     },
@@ -775,7 +891,17 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Saving requirements needs the editor or admin role.');
       state.requirements ??= {};
       const list = state.requirements[processId] ?? [];
-      for (const r of rows) { const i = list.findIndex(x => x.code === r.code); if (i >= 0) list[i] = structuredClone(r); else list.push(structuredClone(r)); }
+      // One row of the change record per save for a person's wording, one for a register that follows the process.
+      let person = false, follows = false;
+      for (const r of rows) {
+        const i = list.findIndex(x => x.code === r.code);
+        const old = i >= 0 ? list[i] : null;
+        if (!old || !same({ ...old, order: 0 }, { ...r, order: 0 })) { if (r.edited || old?.edited || r.category === 'user') person = true; else follows = true; }
+        if (i >= 0) list[i] = structuredClone(r); else list.push(structuredClone(r));
+      }
+      const rw = workspaceOf(processId).w.id;
+      if (person) noteChange(rw, processId, 'requirement');
+      if (follows) noteChange(rw, processId, 'requirement', false);
       state.requirements[processId] = list;
       save();
     },
@@ -806,6 +932,11 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     async saveAssessment(processId, input) {
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Saving the assessment needs the editor or admin role.');
+      // Only a change of people's choices, rate, costs or shape is recorded, not the computed result saved again.
+      const prior = (state.assessments ?? []).filter(a => a.processId === processId);
+      const before = prior.length ? prior[prior.length - 1].decisions : emptyDecisions();
+      const pick = (d: Decisions) => [d.overrides ?? {}, d.rate ?? null, d.costs ?? null, d.map ?? null];
+      if (!same(pick(before), pick(input.decisions))) noteChange(workspaceOf(processId).w.id, processId, 'choice');
       state.assessments = (state.assessments ?? []).filter(a => !(a.processId === processId && a.revisionId === input.revisionId));
       state.assessments.push({ processId, revisionId: input.revisionId, decisions: structuredClone(input.decisions), result: input.result });
       save();

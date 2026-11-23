@@ -25,6 +25,8 @@ import type { AiProvider } from '../../domain/ai/providers.ts';
 import type { Allowance, UsageRow } from '../../domain/ai/usage.ts';
 import type { Application, ApplicationInput } from '../../domain/workspace/applications.ts';
 import type { InquiryStatus, WalkthroughRequest } from '../../domain/site/inquiry.ts';
+import type { Fingerprints, KeptDocuments, KeptInputs, KeptLook } from '../../domain/docs/keep.ts';
+import type { VersionChanges, WorkspaceChange } from '../../domain/docs/versions.ts';
 
 export interface Me { id: string; email: string }
 /** A workspace's own AI provider. The key is never here: only its last four characters. */
@@ -71,6 +73,61 @@ export interface RevisionRow {
   approvedAt: string | null;
   /** Who approved it (a user id); null when not approved or not recorded. */
   approvedBy?: string | null;
+}
+
+/**
+ * Where a process stands with its approved versions (package 14), as the database's version_states says.
+ * Read before the inputs an approval is built from, and the count of changes it saw goes with the approval.
+ */
+export interface VersionStateRow {
+  processId: string;
+  latest: { id: string; number: number; approvedAt: string; approvedBy: string | null; approvedByName: string | null; keptAt: string | null } | null;
+  approvedRevisionId: string | null;
+  approvedRevNo: number | null;
+  /** The approved revision of the record has a kept version (false: approved before copies were kept). */
+  approvedHasVersion: boolean;
+  /** A person changed something of this process after the latest version (the tag's "unapproved changes"). */
+  processChanged: boolean;
+  /** Changes made for the whole workspace since the latest version. */
+  workspaceChanges: WorkspaceChange[];
+  /** The count of change-record rows the page saw: an approval is refused when it moved meanwhile. */
+  changesSeen: number;
+}
+/** One approved version in the list, without its documents. */
+export interface VersionRow {
+  id: string;
+  number: number;
+  revisionId: string;
+  approvedAt: string;
+  approvedBy: string | null;
+  /** The approver's name as it read at approval; null when the profile had none. */
+  approvedByName: string | null;
+  reason: string | null;
+  changes: VersionChanges;
+  keptAt: string | null;
+  keptByName: string | null;
+}
+/**
+ * What the Documents page fetches of the latest version: its fingerprints, inputs index and the look's fingerprint.
+ * Never its documents, and never the look itself (a logo and a Word template): getVersionLook reads that.
+ */
+export interface VersionPrints { fingerprints: Fingerprints; inputs: KeptInputs | null; lookFingerprint: string }
+/** A version opened: its kept documents and the look they are downloaded with. */
+export interface KeptVersion extends VersionRow { kept: KeptDocuments; look: KeptLook }
+export interface ApproveVersionInput {
+  processId: string;
+  /** The working draft to approve with it, or null to keep the approved record as its documents read now. */
+  revisionId: string | null;
+  expectedSeq: number | null;
+  /** The latest version's number the page saw, 0 for none. */
+  expectedVersion: number;
+  expectedChanges: number;
+  reason: string | null;
+  documents: KeptDocuments;
+  fingerprints: Fingerprints;
+  look: KeptLook;
+  changes: VersionChanges;
+  inputs: KeptInputs;
 }
 
 export interface EditRow { revisionId: string; seq: number; origin: string; summary: string; createdAt: string; operations: number }
@@ -200,6 +257,17 @@ export interface JourneyStore {
   /** Saves one edit to the working draft. 409 when the draft moved on or was approved: reload and redo. */
   savePatch(revisionId: string, expectedSeq: number, patch: JsonPatchOp[], origin: 'user' | 'extraction' | 'diagram' | 'import', summary: string): Promise<{ seq: number }>;
   approve(revisionId: string, expectedSeq: number): Promise<void>;
+  /** Package 14: where each process of a workspace (or one process) stands with its approved versions. */
+  versionStates(workspaceId: string, processId?: string): Promise<VersionStateRow[]>;
+  /** Approves and keeps the documents in one step: both happen or neither. Approvers only. 409 when someone saved or approved meanwhile. */
+  approveVersion(input: ApproveVersionInput): Promise<{ versionId: string; number: number }>;
+  /** The approved versions of a process, newest first, without their documents. */
+  listVersions(processId: string): Promise<VersionRow[]>;
+  getVersionPrints(versionId: string): Promise<VersionPrints>;
+  /** A version's look (logo, Word template), read only to approve again (what changed) and to open the version. */
+  getVersionLook(versionId: string): Promise<KeptLook>;
+  /** A version's kept documents, refused when kept in a format this release cannot read. */
+  getVersion(versionId: string): Promise<KeptVersion>;
   history(processId: string): Promise<{ revisions: RevisionRow[]; edits: EditRow[] }>;
 
   /** Sources of a process, oldest first, without their content. Archived ones are included and marked. */

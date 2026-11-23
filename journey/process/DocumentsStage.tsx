@@ -47,6 +47,12 @@ import { changedSections, type SectionChange } from '../../domain/docs/changes.t
 import { shapeInEffect } from '../../domain/flowchart/shape.ts';
 import { viewDecisions } from './mapShape.ts';
 import { draftNarrative, draftToHtml, generatedText, groundingIssues, handoffChecklist, modelFacts, overlaps, SECTION_BRIEF } from '../../domain/docs/narrative.ts';
+import type { KeptVersion, VersionPrints, VersionRow, VersionStateRow } from '../store/types.ts';
+import { compareDraft, keepInputFrom, keptRevision } from '../../domain/docs/approving.ts';
+import { buildKeptDocuments, KEPT_TYPES, keptInputs, type KeptType } from '../../domain/docs/keep.ts';
+import { changeCount, changeLines, documentsLine, openedVersionLine, releaseProven, sectionDiff, versionFileName } from '../../domain/docs/versions.ts';
+import { longDate } from './keepVersion.ts';
+import { BUILD } from '../build.ts';
 
 const SectionEditor = React.lazy(() => import('./SectionEditor.tsx'));
 
@@ -133,7 +139,9 @@ async function withPngFigures(doc: DocTree): Promise<DocTree> {
   return { ...doc, sections };
 }
 
-export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null, onFix, currentRevisionId = '' }: {
+export function DocumentsStage({ store, processId, workspaceId, model: loaded, working, onSaved, canEdit, revision, sources, me, onSourcesChanged, approvedRevision = null, approvedRevisionId = null, onFix, currentRevisionId = '', versionState = null }: {
+  /** Where the process stands with its approved versions (package 14): the draft is compared with the latest. */
+  versionState?: VersionStateRow | null;
   /** The revision shown (the working draft, else the approved one): a person's choice for a step is saved against it. */
   currentRevisionId?: string;
   /** The number of the latest approved revision, if any: the SDD is written once one exists. */
@@ -157,6 +165,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [type, setType] = React.useState<DocType>(() => (asked.current && ['brd', 'pdd', 'frd', 'sdd', 'agent', 'tests'].includes(asked.current) && offersDocument(model, asked.current as DocType) ? asked.current as DocType : 'pdd'));
   React.useEffect(() => { if (!offersDocument(model, type)) setType('pdd'); }, [model, type]);
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
+  // The stored choices, never a viewer's switch for the visit: what an approval keeps and is compared with.
+  const [storedDecisions, setStoredDecisions] = React.useState<Decisions | null>(null);
   const [settings, setSettings] = React.useState<AssessmentSettings | undefined>(undefined);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
   const [error, setError] = React.useState<string | null>(null);
@@ -172,7 +182,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [commenting, setCommenting] = React.useState<string | null>(null);
   React.useEffect(() => {
     Promise.all([store.getAssessmentDecisions(processId), store.getSettings(workspaceId), store.getDocumentSettings(workspaceId), store.listRequirements(processId), store.listDocumentEdits(processId)])
-      .then(([d, s, ds, r, ed]) => { setDecisions(viewDecisions(processId, d, canEdit)); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
+      .then(([d, s, ds, r, ed]) => { setStoredDecisions(d); setDecisions(viewDecisions(processId, d, canEdit)); setSettings(s.settings); setDocSettings(ds); setStored(r); setEdits(ed); }).catch(e => setError(messageOf(e)));
     Promise.all([store.listSectionComments(processId), store.listTestEdits(processId), store.listMembers(workspaceId), store.currentUser()])
       .then(([c, t, mem, u]) => { setComments(c); setTestEdits(t); setMembers(mem); setMyId(u?.id ?? ''); }).catch(e => setError(messageOf(e)));
   }, [store, processId, workspaceId]);
@@ -225,6 +235,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     const r = await store.listRequirements(processId).catch(() => null);
     if (r) setStored(r);
     setDecisions(d);
+    setStoredDecisions(d);
   };
   const saveRequirement = async (r: StoredRequirement) => {
     await store.saveRequirements(processId, [r]);
@@ -278,7 +289,31 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     const raw = type === 'brd' ? buildBrd(input) : type === 'pdd' ? buildPdd(input) : type === 'frd' ? buildFrd(input) : type === 'agent' ? buildAgent(input) : type === 'tests' ? buildTests(input, testEdits) : buildSdd(input);
     return changedSections(applyLayout(applyEdits(raw, edits).doc, docSettings.layouts[type]), doc);
   }, [approvedModel, doc, decisions, stored, settings, sources, revision, type, edits, docSettings, model]);
-  const changedIds = new Set(sinceApproved.map(c => c.id));
+  // Package 14: with a kept version, the working draft's documents (built from the stored record, as approval
+  // builds them) are compared with the latest version's fingerprints; its documents are fetched only to show lines.
+  const latest = versionState?.latest ?? null;
+  const [prints, setPrints] = React.useState<VersionPrints | null>(null);
+  React.useEffect(() => { setPrints(null); if (latest) store.getVersionPrints(latest.id).then(setPrints).catch(e => setError(messageOf(e))); }, [store, latest?.id]);
+  const draftInput = React.useMemo(() => {
+    if (!latest || !storedDecisions || !stored) return null;
+    return keepInputFrom({ model, decisions: storedDecisions, settings, stored, sources, names: nameById, edits, testEdits, layouts: docSettings.layouts }, keptRevision(latest.number + 1, ''));
+  }, [latest, model, storedDecisions, settings, stored, sources, nameById, edits, testEdits, docSettings]);
+  const draftKept = React.useMemo(() => (draftInput ? buildKeptDocuments(draftInput) : null), [draftInput]);
+  const comparison = React.useMemo(() => (draftKept && prints ? compareDraft(prints.fingerprints, draftKept) : null), [draftKept, prints]);
+  const versionLine = latest && comparison && draftInput ? documentsLine({
+    number: latest.number, approver: latest.approvedByName ?? (latest.approvedBy ? nameById[latest.approvedBy] : null) ?? 'an approver', date: longDate(latest.approvedAt),
+    differing: comparison.differing, processChanged: Boolean(versionState?.processChanged), workspaceChanged: versionState?.workspaceChanges ?? [],
+    releaseProven: releaseProven(prints?.inputs ?? null, keptInputs(draftInput, { build: BUILD, settings })),
+  }) : null;
+  // The line-by-line view: version N's own document, fetched once when a person asks for it.
+  const [keptForDiff, setKeptForDiff] = React.useState<KeptVersion | null>(null);
+  React.useEffect(() => { setKeptForDiff(null); }, [latest?.id]);
+  const changedIds = latest ? (comparison?.byDoc[type as KeptType] ?? new Set<string>()) : new Set(sinceApproved.map(c => c.id));
+  // The list of approved versions, and one opened as kept.
+  const [versions, setVersions] = React.useState<VersionRow[]>([]);
+  React.useEffect(() => { if (latest) store.listVersions(processId).then(setVersions).catch(e => setError(messageOf(e))); else setVersions([]); }, [store, processId, latest?.id]);
+  const [showVersions, setShowVersions] = React.useState(false);
+  const [opened, setOpened] = React.useState<string | null>(null);
   // All four documents, for the hand-over checklist, the overlap check and what counts as grounded.
   const all = React.useMemo(() => {
     if (!decisions || !assessment) return null;
@@ -346,6 +381,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   // The first list (part D): the banner counts only what people must answer now and answers to confirm.
   const { plan } = useQuestionPlan(processId, model);
   const toAnswer = decisions ? plan : null;
+  if (opened) return <KeptVersionView store={store} versionId={opened} processName={model.meta.name} onBack={() => setOpened(null)} />;
   if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant processId={processId} model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} branding={docSettings.branding} /></>;
 
   return (
@@ -364,6 +400,18 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           revisionId={working?.id ?? currentRevisionId} decisions={decisions} onDecisions={onDecisions} onAnswerQuestions={() => setAnswering(true)} />
       )}
       {documentsNote(model) && <p className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm text-slate-700" data-testid="documents-note">{documentsNote(model)}</p>}
+      {versions.length > 0 && (
+        <div className="rounded-xl border border-slate-200 bg-white" data-testid="versions">
+          <button type="button" className="flex w-full items-center justify-between px-4 py-2.5 text-left text-sm font-semibold text-[#002C4B]" aria-expanded={showVersions} onClick={() => setShowVersions(!showVersions)}>
+            <span>Approved versions ({versions.length})</span><span aria-hidden className="text-slate-500">{showVersions ? '−' : '+'}</span>
+          </button>
+          {showVersions && (
+            <ol className="divide-y divide-slate-100 border-t border-slate-100" data-testid="versions-list">
+              {versions.map(v => <VersionListRow key={v.id} v={v} names={nameById} onOpen={() => setOpened(v.id)} />)}
+            </ol>
+          )}
+        </div>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {/* The delivery plan's documents first (part B), marked with an amber dot; the others stay one click away. */}
@@ -417,7 +465,33 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
             <span className="font-semibold">Approved revision {approvedRevision} was approved as "{PURPOSE_LABEL[purposeOf(approvedModel)]}"</span>; this draft is "{PURPOSE_LABEL[purposeOf(model)]}". {approvedAnswerNote(approvedRevision ?? '')}
           </p>
         )}
-        {sinceApproved.length > 0 && (
+        {latest && versionLine && (
+          <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="version-line">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span>{versionLine}</span>
+              {comparison && comparison.differing > 0 && <button type="button" className="font-semibold text-[#002C4B] hover:underline" aria-expanded={showChanges}
+                onClick={() => { const next = !showChanges; setShowChanges(next); if (next && !keptForDiff) store.getVersion(latest.id).then(setKeptForDiff).catch(e => setError(messageOf(e))); }}>{showChanges ? 'Hide changes' : 'Review changes'}</button>}
+            </div>
+            {showChanges && comparison && (
+              <ul className="mt-3 space-y-3" data-testid="change-list">
+                {comparison.sections.filter(c => c.doc === type).map(c => {
+                  const diff = keptForDiff ? sectionDiff(keptForDiff.kept.documents[c.doc], draftKept?.documents[c.doc], c.id) : [];
+                  return (
+                    <li key={c.id} className="rounded-lg bg-white p-3 ring-1 ring-inset ring-slate-200">
+                      {c.kind === 'removed' ? <span className="text-sm font-semibold text-slate-900">{c.title}</span> : <a href={`#${c.id}`} className="text-sm font-semibold text-slate-900 hover:underline">{c.title}</a>}
+                      <span className="ml-2 text-xs text-slate-500">{c.kind === 'added' ? 'New section' : c.kind === 'removed' ? 'No longer in the document' : 'Changed'}</span>
+                      {keptForDiff ? <div className="mt-2 max-h-56 overflow-auto font-mono text-[11px] leading-5">
+                        {diff.filter(d => d.op !== 'same').slice(0, 40).map((d, i) => <div key={i} className={d.op === 'add' ? 'bg-emerald-50 text-emerald-900' : 'bg-red-50 text-red-900 line-through decoration-red-300'}>{d.op === 'add' ? '+ ' : '− '}{d.text}</div>)}
+                      </div> : <p className="mt-2 text-xs text-slate-500">Reading approved version {latest.number}…</p>}
+                    </li>
+                  );
+                })}
+                {comparison.sections.every(c => c.doc !== type) && <li className="text-sm text-slate-700">{comparison.documents.some(d => d.doc === type) ? `This document is new since approved version ${latest.number}.` : `Nothing in this document reads differently. The changes are in: ${[...new Set(comparison.sections.map(c => docShort(c.doc)))].join(', ')}.`}</li>}
+              </ul>
+            )}
+          </div>
+        )}
+        {!latest && sinceApproved.length > 0 && (
           <div className="rounded-xl bg-sky-50 px-4 py-2.5 text-sm text-sky-950 ring-1 ring-inset ring-sky-200" data-testid="since-approved">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span><span className="font-semibold">{sinceApproved.length} {sinceApproved.length === 1 ? 'section changed' : 'sections changed'} since approved revision {approvedRevision}</span>: the process was edited after approval. {approvedNote(approvedRevision ?? '')}</span>
@@ -468,7 +542,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
               const head = (
                 <span className="flex flex-wrap items-center gap-2">
                   <span><span className={cx('mr-2 tabular-nums', s.level === 2 && 'text-slate-500')} style={s.level === 1 ? { color: 'var(--doc-accent)' } : undefined}>{s.number}</span>{s.title}</span>
-                  {changedIds.has(s.id) && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-changed">Changed since revision {approvedRevision}</span>}
+                  {changedIds.has(s.id) && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-changed">{latest ? `Changed since version ${latest.number}` : `Changed since revision ${approvedRevision}`}</span>}
                   {st?.state === 'edited' && <span className="no-print rounded bg-sky-50 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-sky-800" data-testid="chip-edited">Edited by you</span>}
                   {st?.state === 'needs_review' && <span className="no-print rounded bg-amber-100 px-1.5 py-0.5 font-sans text-[11px] font-semibold text-amber-900" data-testid="chip-review">Needs review</span>}
                   {st && st.openItems > 0 && <span className="no-print rounded bg-amber-50 px-1.5 py-0.5 font-sans text-[11px] font-medium text-amber-800">{st.openItems} open</span>}
@@ -517,6 +591,97 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** One approved version in the list (package 14, part G): number, date, who, the reason, what changed. */
+function VersionListRow({ v, names, onOpen }: { v: VersionRow; names: Record<string, string>; onOpen: () => void; key?: React.Key }) {
+  const [open, setOpen] = React.useState(false);
+  const n = changeCount(v.changes);
+  const who = v.approvedByName ?? (v.approvedBy ? names[v.approvedBy] : null) ?? 'Not recorded';
+  return (
+    <li className="px-4 py-3 text-sm" data-testid="version-row" data-number={v.number}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <span><span className="font-semibold text-slate-900">Version {v.number}</span><span className="text-slate-600"> · {longDate(v.approvedAt)} · {who}</span></span>
+        <Button variant="secondary" onClick={onOpen} data-testid="version-open">Open</Button>
+      </div>
+      <p className="mt-1 text-slate-700" data-testid="version-reason">{v.number === 1 ? 'The first approved version.' : v.reason}</p>
+      {v.number > 1 && (n > 0
+        ? <><button type="button" className="mt-1 text-xs font-semibold text-[#002C4B] hover:underline" aria-expanded={open} onClick={() => setOpen(!open)} data-testid="version-changes">What changed: {n}</button>
+          {open && <ul className="mt-1 space-y-1 text-xs leading-5 text-slate-700">{changeLines(v.changes).map((l, i) => <li key={i}>{l}</li>)}</ul>}</>
+        : <p className="mt-1 text-xs text-slate-500" data-testid="version-changes">What changed: no section reads differently.</p>)}
+    </li>
+  );
+}
+
+/**
+ * An approved version as it was kept (package 14, part G): its own documents, read-only, with the look it was
+ * approved with; Word, Markdown, print and the test pack's spreadsheet all come from the kept copy. Nothing of
+ * today's draft, settings or code changes its words, tables, numbers or maps.
+ */
+function KeptVersionView({ store, versionId, processName, onBack }: { store: JourneyStore; versionId: string; processName: string; onBack: () => void }) {
+  const [v, setV] = React.useState<KeptVersion | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [chosen, setChosen] = React.useState<KeptType | null>(null);
+  const [wordBusy, setWordBusy] = React.useState(false);
+  React.useEffect(() => { setV(null); store.getVersion(versionId).then(setV).catch(e => setError(messageOf(e))); }, [store, versionId]);
+  const types = v ? KEPT_TYPES.filter(t => v.kept.documents[t]) : [];
+  const type = chosen && types.includes(chosen) ? chosen : types[0] ?? null;
+  const doc = v && type ? v.kept.documents[type]! : null;
+  const save = (blob: Blob, name: string) => { const url = URL.createObjectURL(blob); const a = Object.assign(document.createElement('a'), { href: url, download: name }); a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+  const downloadWord = async () => {
+    if (!doc || !v || !type) return;
+    setWordBusy(true);
+    try {
+      const { toDocxBlob, docxStyleFrom } = await import('../../domain/docs/docx.ts');
+      save(await toDocxBlob(await withPngFigures(doc), { draft: false, style: docxStyleFrom(v.look) }), versionFileName(type, processName, v.number, 'docx'));
+    } catch (e) { setError(messageOf(e)); } finally { setWordBusy(false); }
+  };
+  const back = <Button variant="secondary" onClick={onBack} data-testid="version-back">Back to the working draft</Button>;
+  if (error) return <div className="space-y-3"><ErrorNote message={error} />{back}</div>;
+  if (!v || !doc || !type) return <Spinner label="Opening the approved version" />;
+  return (
+    <div className="space-y-5" data-testid="kept-version" data-number={v.number}>
+      <style>{PRINT_CSS}</style>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-950 ring-1 ring-inset ring-emerald-200">
+        <div>
+          <p className="font-semibold" data-testid="version-band">{openedVersionLine(v.number, longDate(v.approvedAt), v.approvedByName ?? 'an approver whose name was not recorded')}</p>
+          {v.reason && <p className="mt-0.5">Why: {v.reason}</p>}
+        </div>
+        {back}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div role="tablist" aria-label="Documents of this version" className="inline-flex flex-wrap rounded-lg bg-slate-200/70 p-0.5">
+          {types.map(t => {
+            const meta = TYPES.find(x => x.id === t)!;
+            return <button key={t} type="button" role="tab" aria-selected={type === t} onClick={() => setChosen(t)} className={cx('rounded-md px-4 py-1.5 text-sm font-semibold transition', type === t ? 'bg-white text-[#002C4B] shadow-sm' : 'text-slate-600 hover:text-slate-900')}>{meta.short}<span className="ml-1.5 hidden font-normal text-slate-600 sm:inline">{meta.label}</span></button>;
+          })}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {type === 'tests' && v.kept.testPack && <Button onClick={() => save(new Blob([testPackCsv(v.kept.testPack!)], { type: 'text/csv;charset=utf-8' }), `${processName} - Test pack - version ${v.number}.csv`)}>Download for Excel</Button>}
+          <Button variant={type === 'tests' ? 'secondary' : undefined} onClick={downloadWord} disabled={wordBusy} data-testid="version-word">{wordBusy ? 'Preparing…' : 'Download Word'}</Button>
+          <Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button>
+          <Button variant="ghost" onClick={() => save(new Blob([toMarkdown(doc)], { type: 'text/markdown' }), versionFileName(type, processName, v.number, 'md'))} data-testid="version-markdown">Markdown</Button>
+        </div>
+      </div>
+      <article id="document-print" data-testid="document" className="min-w-0 rounded-xl border border-slate-200 bg-white px-6 py-8 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_16px_40px_-24px_rgba(15,23,42,0.18)] sm:px-12 sm:py-10" style={{ fontFamily: `${v.look.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${v.look.accent}` }}>
+        <header className="border-b-4 pb-5" style={{ borderColor: 'var(--doc-accent)' }}>
+          {v.look.logo && <img src={v.look.logo} alt="" className="mb-3 h-8 object-contain" />}
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">{v.look.organisation ? `${v.look.organisation} · ` : ''}{doc.title}</p>
+          <h2 className="mt-1.5 font-display text-2xl font-semibold tracking-tight text-slate-900">{doc.subtitle}</h2>
+          <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-500">{doc.control.slice(1).filter(c => c.key !== 'Typical content').map(c => <div key={c.key}><dt className="inline font-semibold">{c.key}: </dt><dd className="inline">{c.value}</dd></div>)}</dl>
+          {doc.control.filter(c => c.key === 'Typical content').map(c => <p key={c.key} className="mt-3 rounded-md bg-orange-50 px-3 py-2 text-sm leading-6 text-orange-950 ring-1 ring-inset ring-orange-200"><span className="font-semibold">Typical content.</span> {c.value}</p>)}
+        </header>
+        {doc.sections.map(s => (
+          <section key={s.id} id={s.id} className="scroll-mt-4" data-testid="doc-section">
+            {s.level === 1
+              ? <h3 className="mt-9 border-b border-slate-200 pb-2 font-display text-lg font-semibold text-slate-900"><span className="mr-2 tabular-nums" style={{ color: 'var(--doc-accent)' }}>{s.number}</span>{s.title}</h3>
+              : <h4 className="mt-6 font-display text-base font-semibold text-slate-900"><span className="mr-2 tabular-nums text-slate-500">{s.number}</span>{s.title}</h4>}
+            <div className="mt-3 space-y-3">{s.blocks.map((b, i) => <BlockView key={i} b={b} />)}</div>
+          </section>
+        ))}
+      </article>
     </div>
   );
 }

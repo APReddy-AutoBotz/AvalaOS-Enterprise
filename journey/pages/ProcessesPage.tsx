@@ -13,7 +13,7 @@ import { namedOn, openOn } from '../../domain/work/home.ts';
 import { cardTotals } from '../../domain/assess/portfolio.ts';
 import { DEFAULT_SETTINGS, type AssessmentSettings } from '../../domain/assess/settings.ts';
 import { initials } from '../../domain/workitems/board.ts';
-import { loadProcessFacts, STATUS_TONE, type LoadedFacts } from '../processFacts.ts';
+import { loadProcessFacts, STATUS_TONE, versionRows, type LoadedFacts } from '../processFacts.ts';
 import { DUTY, Figures, hrs, OpenChip, People, StatusPill, StepSplit } from '../processCard.tsx';
 import { Portfolio } from './Portfolio.tsx';
 import { has, offMessage } from '../../domain/workspace/modules.ts';
@@ -64,12 +64,12 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
     (async () => {
       // The lines the figures are measured against; the defaults apply when they cannot be read.
       const lines = await store.getSettings(workspace.id).then(r => r.settings).catch(() => DEFAULT_SETTINGS);
-      const list = await store.listProcesses(workspace.id);
+      const [list, versions] = await Promise.all([store.listProcesses(workspace.id), versionRows(store, workspace.id)]);
       if (!live) return;
       setSettings(lines);
       setProcesses(list);
       // Where each process stands, who is named, what is open and what its assessment says, read after the page shows.
-      list.forEach(p => loadProcessFacts(store, p, lines).then(f => { if (live) setFacts(cur => ({ ...cur, [p.id]: f })); }).catch(() => {}));
+      list.forEach(p => loadProcessFacts(store, p, lines, versions.get(p.id)).then(f => { if (live) setFacts(cur => ({ ...cur, [p.id]: f })); }).catch(() => {}));
     })().catch(e => { if (live) setError(messageOf(e)); });
     store.listMembers(workspace.id).then(m => { if (live) setMembers(m); }).catch(() => {});
     return () => { live = false; };

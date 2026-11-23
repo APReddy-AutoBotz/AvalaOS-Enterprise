@@ -25,12 +25,12 @@ test('a process has one workspace with one assessment stage, and internal labels
   await expect(page.getByRole('tab', { name: /^Steps/ })).toBeVisible();
   await shot(page, `03-process-started`);
   await page.getByRole('button', { name: 'Approve' }).click();
-  await expect(status).toHaveText('Approved revision 1');
+  await expect(status).toHaveText('Approved version 1');
   await expect(page.getByRole('button', { name: 'Approve' })).toHaveCount(0);
 
   // The route and the data survive a reload; Back returns to the previous stage.
   await page.reload();
-  await expect(status).toHaveText('Approved revision 1');
+  await expect(status).toHaveText('Approved version 1');
   await expect(page).toHaveURL(/\/process$/);
   await page.goBack();
   await expect(page).toHaveURL(/\/work-items$/);

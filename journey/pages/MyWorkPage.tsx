@@ -19,7 +19,7 @@ import { cardTotals } from '../../domain/assess/portfolio.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, CARD, cx, EmptyState, ErrorNote, messageOf, PageHead, Spinner, Tag, TypeGlyph } from '../ui.tsx';
 import { has } from '../../domain/workspace/modules.ts';
-import { loadProcessFacts, type LoadedFacts } from '../processFacts.ts';
+import { loadProcessFacts, versionRows, type LoadedFacts } from '../processFacts.ts';
 import { cardLine, DUTY, Figures, hrs, People, Pill, StatusPill } from '../processCard.tsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -58,7 +58,8 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
           assess ? store.getSettings(workspace.id).then(r => r.settings).catch(() => undefined) : Promise.resolve(undefined),
         ]);
         const items = (await Promise.all(projects.map(p => store.listWorkItems(p.id)))).flat();
-        const facts = await Promise.all(processes.map(p => loadProcessFacts(store, p, settings)));
+        const versions = assess ? await versionRows(store, workspace.id) : new Map();
+        const facts = await Promise.all(processes.map(p => loadProcessFacts(store, p, settings, versions.get(p.id))));
         if (live) setData({ facts, items, names: new Map(members.map(m => [m.userId, m.name])) });
       } catch (e) { if (live) setError(messageOf(e)); }
     })();

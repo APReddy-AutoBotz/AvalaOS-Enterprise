@@ -13,6 +13,9 @@ export default defineConfig({
   // this applies only to `vite preview` on a developer's or CI's machine, never to the built site.
   preview: { allowedHosts: ['avalaos.com'] },
   plugins: [react()],
+  // The build of Avala OS a kept version records beside its inputs (package 14): Netlify's commit, else "local".
+  // Not a secret. It lets the Documents page say a release changed the text only when the inputs prove it.
+  define: { __AVALA_BUILD__: JSON.stringify((process.env.COMMIT_REF ?? '').slice(0, 12) || 'local') },
   build: {
     rollupOptions: {
       output: {
