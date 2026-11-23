@@ -120,6 +120,7 @@ import { planQuestions } from '../questions/firstList.ts';
 import { foundFor, foundKeys } from '../assistant/sourceLook.ts';
 import { commentKey, commentLines, COMMENTS_SHOWN, digestFacts, type CommentLine } from './digest.ts';
 import { commentNeeds, needsFor, type OpenComment } from './home.ts';
+import { assessmentLine } from '../questions/result.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const servicenow = 'system:sys-servicenow';
@@ -151,6 +152,18 @@ test('the email counts the questions as My work does: the first list, from the s
   // A process with no steps, or a model that cannot be read, keeps the stored count.
   assert.equal(digestFacts({ ...proc('p3', { openQuestions: 2 }), model: null }).questions, undefined);
   assert.equal(digestFacts({ ...proc('p3', { openQuestions: 2 }), model: { steps: 'broken' } as never }).questions, undefined);
+});
+
+test('package 16 changes nothing the email counts: the demo\'s sample and the bare sample, beside the Assessment stage\'s line', () => {
+  // The demo's approved revision (public/demo-data/sample.json) and the hand-checked sample, with no look.
+  const demo = (JSON.parse(readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8')) as { revisions: { state: string; model: ProcessModel }[] })
+    .revisions.find(r => r.state === 'approved')!.model;
+  const counts = (m: ProcessModel) => digestFacts({ ...proc('p1'), model: m, look: null, dismissed: [] }).questions;
+  assert.deepEqual(counts(demo), { now: 2, found: 0, wait: 10 });
+  assert.deepEqual(counts(gold()), { now: 3, found: 0, wait: 9 });
+  // The line counts a different thing (questions that could change the recommendation, not left with someone), from the same triage.
+  assert.equal(assessmentLine(demo, assessProcess(demo))!.n, 2);
+  assert.equal(assessmentLine(gold(), assessProcess(gold()))!.n, 3);
 });
 
 const comment = (id: string, over: Partial<OpenComment & { processId: string }> = {}): OpenComment & { processId: string } => ({

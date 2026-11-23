@@ -48,6 +48,10 @@ jobs:
       - name: Production build
         run: npm run build
 
+      # The browser tests' stand-in for AI tasks is built only into their own build (package 16).
+      - name: The test stand-in is not in the released build
+        run: node scripts/check-no-stand-ins.mjs dist
+
   e2e:
     name: Browser tests (process journey)
     runs-on: ubuntu-latest
