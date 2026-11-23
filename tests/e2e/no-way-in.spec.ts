@@ -59,7 +59,8 @@ test('the scanner: words that name no way in save nothing; "No way in" says what
   const after = await kept(page);
   const scanner = after.model.systems.find((s: { id: string }) => s.id === 'sys-scanner');
   expect(scanner.access.map((a: { method: string; access: string }) => [a.method, a.access])).toEqual([['api', 'confirmed_absent'], ['ui', 'confirmed_absent']]);
-  expect(after.model.openQuestions.at(-1)).toMatchObject({ status: 'answered', answer: 'No way in: a person does this.' });
+  // The words said are kept with the choice, as with any answer.
+  expect(after.model.openQuestions.at(-1)).toMatchObject({ status: 'answered', answer: 'No way in: a person does this. Somebody scans them every morning.' });
 
   await assistant.getByRole('button', { name: 'Back to the assessment' }).click();
   await expect(page.getByTestId('questions-line')).toContainText('2 open questions could change the recommendation');
