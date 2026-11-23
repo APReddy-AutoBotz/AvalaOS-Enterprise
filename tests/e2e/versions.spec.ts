@@ -74,6 +74,9 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
   await stage(page, 'Assessment');
   await page.getByRole('button', { name: 'Assessment of Check invoice totals' }).click();
   const panel = page.getByRole('dialog', { name: 'Check invoice totals' });
+  // Facts first (as tests/e2e/assessment.spec.ts does), so the scoring recommends rules and a person can choose otherwise.
+  await panel.getByLabel('Rules stated in full and stable for Check invoice totals').selectOption({ label: 'Yes' });
+  await panel.getByLabel('Form of the input for Check invoice totals').selectOption({ label: 'Structured data' });
   await panel.getByLabel('Override recommendation').selectOption({ label: 'Keep with a person' });
   await panel.getByLabel('Rationale').fill('Auditors require a second person on totals checks.');
   await panel.getByRole('button', { name: 'Override' }).click();
