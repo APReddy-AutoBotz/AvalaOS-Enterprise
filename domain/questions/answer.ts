@@ -6,6 +6,7 @@ import type { AccessStatus, ProcessModel, RaisedBy } from '../processModel/types
 import { addQuestion, answerQuestion, closeQuestions, routeException, setAccessStatus, setStepTrait, setSystemUiStable, updateFact, type OpResult, type TraitName } from '../processModel/patch.ts';
 import type { JsonPatchOp } from '../processModel/jsonPatch.ts';
 import type { TriageItem } from './triage.ts';
+import { waysEdit, waysNote } from './ways.ts';
 
 export type Op = (m: ProcessModel) => OpResult;
 /** Runs operations in order as one edit. */
@@ -73,6 +74,13 @@ export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: s
       const write: Op = t.kind === 'system' ? m => setSystemUiStable(m, { systemId: t.id!, value: hit[0] === 'true' })
         : m => setStepTrait(m, { stepId: t.id!, trait: field.replace(/^traits\./, '') as TraitName, value: choiceValue(field.replace(/^traits\./, ''), hit[0]) });
       return { op: all(write, record(item, withSource(note ? `${hit[1]}. ${note}` : hit[1]))), summary: `Answered: ${item.question}` };
+    }
+    case 'ways': {
+      // A way in chosen per row, or "No way in"; words alone are never an answer here (domain/questions/ways.ts).
+      const ops = waysEdit(t.id!, a);
+      const said = waysNote(a);
+      if (!ops || !said) return null;
+      return { op: all(...ops, record(item, withSource(note ? `${said} ${note}` : said))), summary: `Ways in to ${model.systems.find(s => s.id === t.id)?.name ?? 'an application'}` };
     }
     case 'free':
       if (!note) return null;

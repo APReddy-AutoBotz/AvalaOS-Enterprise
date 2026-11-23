@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { AccessStatus, ChangeLevel, Conflict, ElementTarget, Fact, Flow, MetricKind, ProcessBrief, ProcessModel, ProcessProfile, RaisedBy, Role, SourceRef, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
+import type { AccessMethodKind, AccessStatus, ChangeLevel, Conflict, ElementTarget, Fact, Flow, MetricKind, ProcessBrief, ProcessModel, ProcessProfile, RaisedBy, Role, SourceRef, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
 import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 import { mergeApplication, type Application } from '../workspace/applications.ts';
@@ -493,6 +493,22 @@ export function setSystemApi(model: ProcessModel, args: { systemId: string; acce
     const apis = sys.access.filter(a => a.method === 'api');
     if (apis.length) for (const a of apis) { a.access = args.access; a.status = 'user-confirmed'; }
     else if (args.access !== 'unknown') sys.access.push({ method: 'api', operations: [], access: args.access, status: 'user-confirmed', sources: [] });
+  });
+}
+
+/**
+ * A person records one way into an application and its status (the plan "No way in", 23 November 2026):
+ * every way in of that kind takes the status, or one is added in the existing shape (no name, no operations),
+ * confirmed by a person. For the API alone this writes exactly what `setSystemApi` writes.
+ */
+export function addWayIn(model: ProcessModel, args: { systemId: string; method: AccessMethodKind; access: AccessStatus }): OpResult {
+  if (args.access === 'unknown') throw new ModelOpError('BAD_INPUT', 'Say whether the way in can be used, exists but is not confirmed, or is not available.');
+  return commit(model, m => {
+    const sys = m.systems.find(s => s.id === args.systemId);
+    if (!sys) throw new ModelOpError('NOT_FOUND', `No system with id ${args.systemId}.`);
+    const same = sys.access.filter(a => a.method === args.method);
+    if (same.length) for (const a of same) { a.access = args.access; a.status = 'user-confirmed'; }
+    else sys.access.push({ method: args.method, operations: [], access: args.access, status: 'user-confirmed', sources: [] });
   });
 }
 

@@ -49,10 +49,11 @@ export function notesSegments(model: ProcessModel, items: TriageItem[], notes: s
   const cards: Segment[] = items.map((it, i) => {
     const id = `${i + 1}`;
     ids.set(id, it.key);
-    const lines = [`Question ${id} (${it.kind}): ${it.question}`];
+    // The ways in are read as an application's interfaces are, so the task's instructions do not change.
+    const lines = [`Question ${id} (${it.kind === 'ways' ? 'access' : it.kind}): ${it.question}`];
     if (it.kind === 'role') lines.push(`Roles: ${model.roles.map(r => r.name).join('; ') || 'none recorded'}`);
     if (it.kind === 'system') lines.push(`Systems: ${model.systems.map(s => s.name).join('; ') || 'none recorded'}`);
-    if (it.kind === 'access') lines.push(...(it.interfaces ?? []).map(x => `Interface ${x.index}: ${x.label}`));
+    if (it.kind === 'access' || it.kind === 'ways') lines.push(...(it.interfaces ?? []).map(x => `Interface ${x.index}: ${x.label}`));
     return { id: `q:${id}`, text: lines.join('\n') };
   });
   const paras = notes.split(/\n\s*\n|\n(?=\s*[-*•\d]+[.)]?\s)/).map(p => p.trim()).filter(Boolean);
@@ -94,7 +95,7 @@ export function proposalsFrom(model: ProcessModel, items: TriageItem[], ids: Map
       const n = Number(v.replace(/[^0-9.]/g, ''));
       if (!v || !Number.isFinite(n) || out.has(item.key)) continue;
       out.set(item.key, { ...base, display: String(n), answer: { text: String(n) } });
-    } else if (item.kind === 'access') {
+    } else if (item.kind === 'access' || item.kind === 'ways') {
       const idx = Number(f.interface);
       const iface = item.interfaces?.find(x => x.index === idx);
       if (!iface || !ACCESS.includes(v as AccessStatus)) continue;

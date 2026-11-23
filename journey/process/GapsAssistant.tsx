@@ -21,6 +21,7 @@ import { messageOf } from '../ui.tsx';
 import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
 import type { Branding } from '../../domain/docs/branding.ts';
 import { couldChange, focusedLine, meetingResult } from '../../domain/questions/result.ts';
+import { earlierAnswers, NO_WAY_IN, NO_WAY_IN_LABEL, waysRecordLine } from '../../domain/questions/ways.ts';
 import type { GapsMode } from './openGaps.ts';
 
 const GROUP_TONE: Record<QGroup, string> = { decides: 'bg-[#002C4B] text-white', signoff: 'bg-sky-100 text-sky-900', detail: 'bg-slate-100 text-slate-700' };
@@ -237,9 +238,14 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
       const { segments, ids } = notesSegments(model, [item], said);
       const r = await notes.store.runAiTask(notes.workspaceId, answerFromNotes.id, segments);
       const [p] = proposalsFrom(model, [item], ids, ((r.data as { answers?: NoteFinding[] })?.answers) ?? []);
-      if (!p) { setFilling('Your answer does not settle this question. Choose below, or say it differently.'); return; }
+      if (!p) {
+        setFilling(item.kind === 'ways'
+          ? `Your words do not say how the automation reaches ${model.systems.find(x => x.id === item.target.id)?.name ?? 'it'}, so nothing is recorded yet. Choose a way in, or "${NO_WAY_IN_LABEL}".`
+          : 'Your answer does not settle this question. Choose below, or say it differently.');
+        return;
+      }
       if (p.answer.pick) setPick(p.answer.pick);
-      if (p.answer.statuses) setStatuses(p.answer.statuses);
+      if (p.answer.statuses) { setStatuses(p.answer.statuses); if (item.kind === 'ways') setPick(''); }
       if (item.kind === 'number' && p.answer.text) setText(p.answer.text);
       setFilling(`Filled in from “${p.quote}”. Check it, then save.`);
     } catch (e) { setFilling(messageOf(e)); }
@@ -259,6 +265,8 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
       <p className="mt-1 text-xs text-slate-500">Updates: {item.affects.join(' · ')}</p>
       {waits && <p className="mt-1 text-xs text-slate-500" data-testid="gap-waits">Why it can wait: {waits}</p>}
       {(item.also?.length ?? 0) > 0 && <p className="mt-1 text-xs text-slate-500">Also asked as: {item.also!.map(q => `“${q}”`).join('; ')}</p>}
+      {/* An earlier worded answer to this question, kept on the record though it settled nothing (plan "No way in"). */}
+      {earlierAnswers(model, item).map((a, i) => <p key={i} className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700" data-testid="earlier-answer">You answered earlier: “{a}”</p>)}
 
       {canEdit && mode === 'answer' && (
         <div className="mt-5 space-y-3">
@@ -274,18 +282,26 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
               {options.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           )}
-          {item.kind === 'access' && (
-            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+          {(item.kind === 'access' || item.kind === 'ways') && (
+            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200" aria-label={item.kind === 'ways' ? 'Ways in' : undefined}>
               {item.interfaces!.map(x => (
                 <li key={x.index} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                   <span className="text-sm text-slate-800">{x.label}</span>
-                  <select aria-label={`Status of ${x.label}`} value={statuses[x.index]} onChange={e => setStatuses({ ...statuses, [x.index]: e.target.value as AccessStatus })}
+                  <select aria-label={`Status of ${x.label}`} value={statuses[x.index]} onChange={e => { setStatuses({ ...statuses, [x.index]: e.target.value as AccessStatus }); if (item.kind === 'ways') setPick(''); }}
                     className={cx('rounded-md border px-2 py-1 text-xs', statuses[x.index] === 'unknown' ? 'border-amber-300 bg-amber-50' : 'border-slate-300 bg-white')}>
                     {ACCESS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                 </li>
               ))}
             </ul>
+          )}
+          {item.kind === 'ways' && (
+            <div className="space-y-2">
+              <button type="button" aria-pressed={pick === NO_WAY_IN} onClick={() => { if (pick === NO_WAY_IN) setPick(''); else { setPick(NO_WAY_IN); setStatuses(Object.fromEntries((item.interfaces ?? []).map(x => [x.index, x.access]))); } }}
+                className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 ring-inset', pick === NO_WAY_IN ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white text-slate-800 ring-slate-300 hover:bg-slate-50')}>{NO_WAY_IN_LABEL}</button>
+              {/* What Save will record, and for "No way in" what happens to the steps done in the application. */}
+              {waysRecordLine(model, item, { pick, statuses }) && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950 ring-1 ring-inset ring-sky-200" role="status" data-testid="ways-record">{waysRecordLine(model, item, { pick, statuses })}</p>}
+            </div>
           )}
           {item.kind === 'number' && <input aria-label="Answer" inputMode="decimal" value={text} onChange={e => setText(e.target.value)} placeholder="A number" className={input} />}
           {structured ? (
