@@ -159,7 +159,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
               // Closing the gaps on "Several at once": on the Assessment stage, or on Documents for a process without one (package 16).
               onClose();
               nav.go({ page: 'process', processId: proc.process.id, stage: gapsStage });
-              openGaps(proc.process.id, 'several');
+              openGaps(proc.process.id, gapsStage, 'several');
             } : undefined} />
           </React.Fragment>
         </div>

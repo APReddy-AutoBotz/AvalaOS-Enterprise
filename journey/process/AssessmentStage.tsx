@@ -79,7 +79,7 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   const firstQuestions = questionPlanNow.now.length;
   // Closing the gaps on this stage (package 16): from the line below, from Ask Avala, or from My work.
   const [gaps, setGaps] = React.useState<GapsMode | null>(null);
-  useOpenGaps(processId, setGaps);
+  useOpenGaps(processId, 'assessment', setGaps);
   // The open questions that could change the recommendation, read by the same triage Closing the gaps lists them with.
   const questionsLine = React.useMemo(() => assessmentLine(editor.model, assessProcess(editor.model)), [editor.model]);
   const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);

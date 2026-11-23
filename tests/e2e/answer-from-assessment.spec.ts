@@ -132,3 +132,36 @@ test('the Assessment stage counts the questions that could change the recommenda
   expect(log.filter(c => c.answered)).toEqual([{ task: 'answerFromNotes', answered: true }]);
   for (const c of log.filter(c => !c.answered)) expect(c.why).toMatch(/only what a person said, not passages of ans-1/);
 });
+
+// Found in review (23 November 2026): with both stages in use, the link pressed while on Documents opened
+// the Assessment stage without Closing the gaps, because Documents (still on screen when the request was
+// made) took it. A request now names its stage, and a stage takes only its own.
+test('with the full journey, Ask Avala\'s link pressed on Documents opens Closing the gaps on the Assessment stage', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.addInitScript(reply => { (window as unknown as { __avalaStandIns: unknown }).__avalaStandIns = { answerFromNotes: [reply] }; }, REPLY);
+  await signInAndCreateProcess(page);
+  const processUrl = page.url().replace(/\/sources$/, '');
+  await page.goto(`${processUrl}/process`);
+  await page.getByRole('button', { name: 'Start the process model' }).click();
+  await expect(page.getByTestId('save-state')).toBeVisible();
+  await page.evaluate(({ gold, KEY }) => {
+    const state = JSON.parse(localStorage.getItem(KEY)!);
+    state.revisions.find((r: { state: string }) => r.state === 'working').model = gold;
+    localStorage.setItem(KEY, JSON.stringify(state));
+  }, { gold, KEY });
+  await page.goto(`${processUrl}/documents`);
+  await expect(rail(page).getByRole('link')).toHaveCount(6);
+  await expect(page.getByTestId('document')).toBeVisible();
+
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  const panel = page.getByTestId('ask-panel');
+  await panel.getByRole('tab', { name: /^Questions/ }).click();
+  await panel.getByRole('button', { name: 'Answer several from notes or a transcript' }).click();
+  await expect(page).toHaveURL(/\/assessment$/);
+  const assistant = page.getByTestId('gaps-assistant');
+  await expect(assistant).toBeVisible();
+  await expect(assistant.getByRole('tab', { name: /^Several at once/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(assistant.getByRole('button', { name: 'Back to the assessment' })).toBeVisible();
+  // The words follow the set-up: this organisation has the documents.
+  await expect(assistant.getByTestId('gaps-summary')).toContainText('the assessment and the documents at once');
+});

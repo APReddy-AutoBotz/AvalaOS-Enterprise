@@ -247,7 +247,7 @@ function NeedsYou({ needs, groups, nav, stages }: { needs: Need[]; groups: Retur
     // (the "Assess" set-up), on the Assessment stage instead (package 16). The need itself is as the email counts it.
     if (n.kind !== 'comments' && n.stage === 'documents' && !stages.includes('documents') && stages.includes('assessment')) {
       nav.go({ page: 'process', processId: n.processId, stage: 'assessment' });
-      openGaps(n.processId, 'all');
+      openGaps(n.processId, 'assessment', 'all');
       return;
     }
     nav.go({ page: 'process', processId: n.processId, stage: n.stage });

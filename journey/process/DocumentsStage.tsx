@@ -159,7 +159,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [answering, setAnswering] = React.useState(false);
   // Closing the gaps asked for from Ask Avala, for a process with no Assessment stage (package 16).
   const [gapsMode, setGapsMode] = React.useState<GapsMode>('all');
-  useOpenGaps(processId, mode => { setGapsMode(mode); setAnswering(true); });
+  useOpenGaps(processId, 'documents', mode => { setGapsMode(mode); setAnswering(true); });
   const [previewSdd, setPreviewSdd] = React.useState(false);
   const sddReady = approvedRevision !== null || previewSdd;
   // A link from the weekday email opens the document it names (?doc=pdd) at the section it names (#s-2-4).
