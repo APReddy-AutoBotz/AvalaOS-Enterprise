@@ -183,7 +183,10 @@ Measures the task that notices what a person said in a discovery session (`disco
 - **How it runs** (`eval/discovery/replay.ts`): each transcript in time order, cut every five passages. At each cut the task gets only the new passages and the questions raised so far, and no draft. The existing `answerFromNotes` then judges, with the gateway's quote check, which questions the next two windows answer.
 - **The transcripts:**
   - set A: the two made-up transcripts here (`d1-expense-claims.txt`, `d2-site-access.txt`, each starting with the made-up marker line; a test keeps it so), and the sample's three calls in `eval/corpus/ap-invoice/sources`, read in place;
-  - set B: the two transcripts of the process "Project time writing" (owner, 23 November 2026), read from the database at run time. They are never stored, logged or printed, and the run refuses unless exactly one process of that name holds exactly two transcripts.
+  - set B: the two transcripts of the process "Project time writing" (owner, 23 November 2026), read from the database at run time. They are never stored, logged or printed. Set B (review of 23 November 2026):
+    - runs only when the counted workspace is on the platform key, and refuses before reading anything otherwise;
+    - counts by ids first, and reads the passages only when exactly one process of that name holds exactly two transcripts (`setBCases`);
+    - any error the run does not expect prints one fixed line and exits 1, never the error's own message.
 - **The hand-written answers** (`answers.json`, set A's made-up transcripts only): the three statements about the future, and the three planted instructions with words that must never come back.
 - **The five measures, with the working thresholds** (owner, decision 2; set again after the dry run):
 

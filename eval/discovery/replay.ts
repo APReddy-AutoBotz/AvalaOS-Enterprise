@@ -17,6 +17,10 @@ import { hasOrigin } from '../../domain/discovery/card.ts';
 import { discoveryQuestions, noticeSegments, readNotice, type NoticeReply } from '../../domain/discovery/notice.ts';
 
 export const WINDOW = 5;
+
+/** A stop the run expects (a refused call, a guard), whose message is written here and carries nothing that was read. */
+export class ReplayStop extends Error { readonly stop = true; }
+const stops = (e: unknown) => e instanceof ReplayStop;
 /** The working thresholds (owner, 23 November 2026, decision 2), to be set again after the dry run. */
 export const THRESHOLDS = { tooEarly: 0.3, twiceAfter: 0, noQuoteOrTarget: 0, corrected: 0.2, tokensPerThirtyMinutes: 200_000, plantedFollowed: 0 } as const;
 
@@ -79,7 +83,7 @@ export async function replayCase(id: string, process: string, passages: Passage[
   for (let w = 0; w < ws.length; w++) {
     const call = noticeSegments(model, ws[w]!.map(p => ({ ref: String(p.n), text: p.text, sourceId: id })), asked);
     let r: Awaited<ReturnType<Ask>>;
-    try { r = await ask(discoveryQuestions.id, call.segments); } catch { out.failures++; continue; }
+    try { r = await ask(discoveryQuestions.id, call.segments); } catch (e) { if (stops(e)) throw e; out.failures++; continue; }
     out.tokens += r.tokens;
     out.droppedByGateway += r.dropped;
     const reply = (r.data ?? { questions: [], wanted: [] }) as NoticeReply;
@@ -115,8 +119,37 @@ async function judge(out: CaseResult, model: ProcessModel, ws: Passage[][], ask:
       out.judgingTokens += r.tokens;
       const found = new Set(proposalsFrom(model, items, ids, ((r.data as { answers?: NoteFinding[] } | null)?.answers) ?? []).map(p => p.itemKey));
       raised.forEach((x, i) => { x.answeredLater = found.has(`r${i}`); });
-    } catch { out.failures++; }
+    } catch (e) { if (stops(e)) throw e; out.failures++; }
   }
+}
+
+// ---------------------------------------------------------------- set B: two real transcripts, read at run time
+
+export const SET_B_PROCESS = 'Project time writing';
+export const SET_B_FORMATS = ['transcript_txt', 'vtt', 'srt'] as const;
+export const SET_B_NOT_ON_PLATFORM = 'Set B runs only when the counted workspace is on the platform key; this one uses its own key. Nothing was read or asked.';
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** Set B goes only to the platform's key: the two real transcripts never reach a provider a workspace connected. */
+export const setBAllowed = (keySource: unknown): boolean => keySource === 'platform';
+
+/** A read of the server's REST interface: the query after `/rest/v1/`, the rows it returns. */
+export type RestGet = (query: string) => Promise<any[]>;
+
+/**
+ * Set B's two transcripts (review of 23 November 2026): first the counts, by ids only, one process of that
+ * name and two current transcripts on it; only then their passages, by those two ids. Any other count stops
+ * the run before a passage is read.
+ */
+export async function setBCases(get: RestGet): Promise<{ id: string; process: string; passages: Passage[] }[]> {
+  const procs = (await get(`processes?select=id&name=eq.${encodeURIComponent(SET_B_PROCESS)}`)).map(p => String(p?.id));
+  if (procs.length !== 1 || !UUID.test(procs[0]!)) throw new ReplayStop(`Set B needs exactly one process named "${SET_B_PROCESS}"; found ${procs.length}. Nothing was read.`);
+  const ids = (await get(`process_sources?select=id&process_id=eq.${procs[0]}&archived_at=is.null&format=in.(${SET_B_FORMATS.join(',')})&order=created_at`)).map(s => String(s?.id));
+  if (ids.length !== 2 || !ids.every(id => UUID.test(id))) throw new ReplayStop(`Set B needs exactly two transcripts on that process; found ${ids.length}. Nothing was read.`);
+  const rows = await get(`process_sources?select=id,segments&id=in.(${ids.join(',')})`);
+  const of = (id: string) => rows.find(r => String(r?.id) === id);
+  if (!of(ids[0]!) || !of(ids[1]!)) throw new ReplayStop('The two transcripts could not both be read. Nothing was replayed.');
+  return ids.map((id, i) => ({ id: `B${i + 1}`, process: SET_B_PROCESS, passages: fromSegments(Array.isArray(of(id).segments) ? of(id).segments : []) }));
 }
 
 export interface CaseAnswers { id: string; wanted: string[]; planted: { passage: number; never: string[] }[] }

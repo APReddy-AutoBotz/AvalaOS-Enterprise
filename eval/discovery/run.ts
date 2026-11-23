@@ -10,22 +10,24 @@
 // A live run calls journey-ai as a trusted server, as the Ask Avala measure does: REPLAY_URL
 // (https://<project-ref>.supabase.co), REPLAY_KEY (the project's server key, from the environment only, never
 // printed) and the workspace the AI use is counted against, REPLAY_WORKSPACE_NAME. It prints numbers only: never
-// a passage, a question, a quote or a source's title. Set B's text is read into memory for the run and never
-// stored, logged or printed; the run refuses unless exactly one process of that name holds exactly two
-// transcripts.
+// a passage, a question, a quote or a source's title. Set B (review of 23 November 2026):
+//   - runs only when the counted workspace is on the platform key, and refuses before reading anything otherwise;
+//   - counts first, by ids only, and reads the transcripts' text only when exactly one process of that name
+//     holds exactly two transcripts;
+//   - is held in memory for the run and never stored, logged or printed.
+// Any error the run does not expect prints one fixed line and exits 1, never the error's own message, which
+// could carry characters of what was read.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import { parseFile } from '../../domain/ingest/parsers/index.ts';
-import { fromSegments, readTranscript, renderScorecard, replayCase, scoreReplay, windows, type Ask, type CaseAnswers, type CaseResult, type Passage } from './replay.ts';
+import { fromSegments, readTranscript, renderScorecard, replayCase, ReplayStop, scoreReplay, SET_B_NOT_ON_PLATFORM, setBAllowed, setBCases, windows, type Ask, type CaseAnswers, type CaseResult, type Passage } from './replay.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
 const answers = (JSON.parse(fs.readFileSync(path.join(here, 'answers.json'), 'utf8')) as { cases: (CaseAnswers & { file: string; process: string })[] }).cases;
 const SAMPLE = ['01-discovery-call-2026-10-06.vtt', '02-exceptions-deep-dive-2026-10-09.srt', '03-sap-integration-call-2026-10-14.txt'];
-const SET_B_PROCESS = 'Project time writing';
-const SET_B_FORMATS = ['transcript_txt', 'vtt', 'srt'];
 
 interface Case { id: string; process: string; passages: Passage[] }
 
@@ -51,14 +53,14 @@ const headers = (key: string): Record<string, string> =>
 async function connect(): Promise<Server> {
   const url = (process.env.REPLAY_URL ?? '').replace(/\/+$/, '');
   const key = process.env.REPLAY_KEY ?? '';
-  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) throw new Error('REPLAY_URL must be the project address, https://<project-ref>.supabase.co.');
-  if (!key) throw new Error('REPLAY_KEY is not set, so the replay cannot sign in to the server.');
+  if (!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(url)) throw new ReplayStop('REPLAY_URL must be the project address, https://<project-ref>.supabase.co.');
+  if (!key) throw new ReplayStop('REPLAY_KEY is not set, so the replay cannot sign in to the server.');
   const name = (process.env.REPLAY_WORKSPACE_NAME ?? '').trim();
-  if (!name) throw new Error('Name the workspace the AI use counts against: REPLAY_WORKSPACE_NAME.');
+  if (!name) throw new ReplayStop('Name the workspace the AI use counts against: REPLAY_WORKSPACE_NAME.');
   const res = await fetch(`${url}/rest/v1/workspaces?select=id,name&name=ilike.${encodeURIComponent(name)}`, { headers: headers(key) });
-  if (!res.ok) throw new Error(`The server did not accept the sign-in (${res.status}).`);
+  if (!res.ok) throw new ReplayStop(`The server did not accept the sign-in (${res.status}).`);
   const rows = ((await res.json()) as { id: string; name: string }[]).filter(r => r.name.trim().toLowerCase() === name.toLowerCase());
-  if (rows.length !== 1) throw new Error(rows.length ? `More than one workspace is named "${name}".` : `There is no workspace named "${name}".`);
+  if (rows.length !== 1) throw new ReplayStop(rows.length ? 'More than one workspace has the name given.' : 'There is no workspace with the name given.');
   return { url, key, workspaceId: rows[0]!.id };
 }
 
@@ -71,21 +73,20 @@ const askVia = (server: Server): Ask => async (task: string, segments: Segment[]
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await gateway(server, { action: 'run', task, segments });
     if (r.status === 200 && r.json?.ok) return { data: r.json.data, dropped: (r.json.dropped ?? []).length, tokens: Number(r.json.usage?.input ?? 0) + Number(r.json.usage?.output ?? 0) };
-    // Asking again cannot help when the allowance is used up, the task is unknown or the request is refused.
-    if (r.status === 429 || (r.status >= 400 && r.status < 500)) throw new Error(`The gateway refused the call (${r.status} ${r.json?.error?.code ?? ''}).`);
+    // Asking again cannot help when the allowance is used up, the task is unknown or the request is refused:
+    // the run stops (a refusal names only the status and the server's code, never what was sent).
+    const code = /^[A-Z_]{2,40}$/.test(String(r.json?.error?.code ?? '')) ? ` ${r.json.error.code}` : '';
+    if (r.status === 429 || (r.status >= 400 && r.status < 500)) throw new ReplayStop(`The gateway refused the call (${r.status}${code}). The run stops.`);
   }
-  throw new Error('The gateway did not answer.');
+  throw new ReplayStop('The gateway did not answer twice running. The run stops.');
 };
 
-/** Set B: the two transcripts of "Project time writing", read at run time. Nothing of them is printed. */
-async function setB(server: Server): Promise<Case[]> {
-  const get = async (q: string) => { const r = await fetch(`${server.url}/rest/v1/${q}`, { headers: headers(server.key) }); if (!r.ok) throw new Error(`The server refused a read (${r.status}).`); return r.json() as Promise<any[]>; };
-  const procs = await get(`processes?select=id&name=eq.${encodeURIComponent(SET_B_PROCESS)}`);
-  if (procs.length !== 1) throw new Error(`Set B needs exactly one process named "${SET_B_PROCESS}"; found ${procs.length}. Nothing was read.`);
-  const sources = await get(`process_sources?select=key,format,segments&process_id=eq.${procs[0].id}&archived_at=is.null&format=in.(${SET_B_FORMATS.join(',')})&order=created_at`);
-  if (sources.length !== 2) throw new Error(`Set B needs exactly two transcripts on that process; found ${sources.length}. Nothing was replayed.`);
-  return sources.map((s, i) => ({ id: `B${i + 1}`, process: SET_B_PROCESS, passages: fromSegments(s.segments ?? []) }));
-}
+/** Set B through the server's REST reads (`setBCases` in replay.ts holds the order and the guards). */
+const setB = (server: Server): Promise<Case[]> => setBCases(async (q: string) => {
+  const r = await fetch(`${server.url}/rest/v1/${q}`, { headers: headers(server.key) });
+  if (!r.ok) throw new ReplayStop(`The server refused a read (${r.status}). Nothing was replayed.`);
+  return r.json() as Promise<any[]>;
+});
 
 async function main() {
   const args = process.argv.slice(2);
@@ -96,12 +97,14 @@ async function main() {
     console.log('Set B (the two transcripts of "Project time writing") is read only in a live run, in the workflow.');
     return;
   }
+  if (args.includes('--live') && !['dry', 'a', 'b', 'all'].includes(set)) throw new ReplayStop('--set is dry, a, b or all.');
   const server = await connect();
   const a = await gateway(server, { action: 'allowance' });
-  if (a.status !== 200 || !a.json?.ok) throw new Error(`The AI gateway did not answer (${a.status}).`);
+  if (a.status !== 200 || !a.json?.ok) throw new ReplayStop(`The AI gateway did not answer (${a.status}).`);
   console.log(`Signed in. AI use counts against the chosen workspace, on ${a.json.source === 'workspace' ? 'its own' : "the platform's"} ${a.json.provider} key${a.json.budget ? `: ${a.json.used} of ${a.json.budget} tokens used this month` : ''}.`);
   if (args.includes('--check')) return;
-  if (!['dry', 'a', 'b', 'all'].includes(set)) throw new Error('--set is dry, a, b or all.');
+  // Set B only on the platform's key: the two real transcripts never go to a provider a workspace connected.
+  if ((set === 'b' || set === 'all') && !setBAllowed(a.json.source)) throw new ReplayStop(SET_B_NOT_ON_PLATFORM);
   const ask = askVia(server);
   const results: CaseResult[] = [];
   const cases = [...(set === 'b' ? [] : madeUp()), ...(set === 'a' || set === 'all' ? await sample() : []), ...(set === 'b' || set === 'all' ? await setB(server) : [])];
@@ -117,4 +120,8 @@ async function main() {
   if (b.length) { console.log(''); console.log(renderScorecard(scoreReplay(b), 'set B alone')); }
 }
 
-main().catch(e => { console.error((e as Error).message); process.exit(1); });
+// A stop the run expects says why in its own fixed words; anything else prints one fixed line, never its message.
+main().catch(e => {
+  console.error(e instanceof ReplayStop ? e.message : 'The replay stopped on an unexpected error. Nothing of what was read is shown.');
+  process.exit(1);
+});

@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { verifyExcerpts, type Segment } from '../../domain/ai/gateway.ts';
 import { TASKS } from '../../domain/ai/tasks.ts';
-import { MADE_UP, readTranscript, renderScorecard, replayCase, scoreReplay, windows, type Ask, type CaseAnswers } from './replay.ts';
+import { MADE_UP, readTranscript, renderScorecard, replayCase, ReplayStop, scoreReplay, SET_B_NOT_ON_PLATFORM, setBAllowed, setBCases, windows, type Ask, type CaseAnswers, type RestGet } from './replay.ts';
 
 const dir = new URL('./', import.meta.url);
 const answers = (JSON.parse(readFileSync(new URL('answers.json', dir), 'utf8')) as { cases: (CaseAnswers & { file: string; process: string })[] }).cases;
@@ -106,4 +106,44 @@ test('a planted instruction followed is counted', async () => {
   const s = scoreReplay([await replayCase('D1', 'Expense claims', d1, ask)], answers);
   assert.equal(s.plantedFollowed, 1);
   assert.equal(s.passed.planted, false);
+});
+
+// Set B's hardenings (review of 23 November 2026).
+const P = '11111111-1111-4111-8111-111111111111', S1 = '22222222-2222-4222-8222-222222222222', S2 = '33333333-3333-4333-8333-333333333333';
+function server(sources: string[], processes = [P]) {
+  const queries: string[] = [];
+  const get: RestGet = async q => {
+    queries.push(q);
+    if (q.startsWith('processes?')) return processes.map(id => ({ id }));
+    if (q.startsWith('process_sources?select=id&')) return sources.map(id => ({ id }));
+    if (q.startsWith('process_sources?select=id,segments&')) return sources.map(id => ({ id, segments: [{ text: `secret words of ${id}`, locator: { timestamp: '00:00:01' } }] }));
+    throw new Error(`unexpected query ${q}`);
+  };
+  return { get, queries };
+}
+
+test('set B counts by ids first, and reads the passages only for one process with exactly two transcripts', async () => {
+  const ok = server([S1, S2]);
+  const cases = await setBCases(ok.get);
+  assert.deepEqual(cases.map(c => [c.id, c.passages.length]), [['B1', 1], ['B2', 1]]);
+  assert.match(ok.queries[0]!, /^processes\?select=id&name=eq\.Project%20time%20writing$/);
+  assert.match(ok.queries[1]!, /^process_sources\?select=id&process_id=eq\./, 'the transcripts are counted by id only');
+  assert.match(ok.queries[2]!, new RegExp(`^process_sources\\?select=id,segments&id=in\\.\\(${S1},${S2}\\)$`));
+  for (const [sources, processes] of [[[S1], [P]], [[S1, S2, S1], [P]], [[S1, S2], []], [[S1, S2], [P, P]]] as [string[], string[]][]) {
+    const s = server(sources, processes);
+    await assert.rejects(setBCases(s.get), (e: unknown) => e instanceof ReplayStop && /Nothing was read\./.test((e as Error).message));
+    assert.ok(!s.queries.some(q => q.includes('segments')), 'no passage is read when the counts are wrong');
+  }
+});
+
+test('set B only on the platform key; a stop the run expects ends it, any other error is only counted', async () => {
+  assert.equal(setBAllowed('platform'), true);
+  assert.equal(setBAllowed('workspace'), false);
+  assert.equal(setBAllowed(undefined), false);
+  assert.match(SET_B_NOT_ON_PLATFORM, /Nothing was read or asked\.$/);
+  const refused: Ask = async () => { throw new ReplayStop('The gateway refused the call (400 UNKNOWN_TASK). The run stops.'); };
+  await assert.rejects(replayCase('D1', 'Expense claims', d1, refused), /The run stops\./);
+  const broken: Ask = async () => { throw new Error('unexpected token in "secret words"'); };
+  const r = await replayCase('D1', 'Expense claims', d1, broken);
+  assert.equal(r.failures, windows(d1).length);
 });
