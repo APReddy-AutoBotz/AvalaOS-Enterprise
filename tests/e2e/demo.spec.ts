@@ -25,12 +25,17 @@ test('the demo opens the sample case at every stage, under /demo, without a serv
   await expect(page.getByTestId('why-switch')).toContainText('steps move to API integration');
   await expect(page.getByText('Confirming the API does this work would move 5 steps to API integration.')).toBeVisible();
   await expect(page.getByTestId('demo-banner')).toContainText('made-up company');
+  // The sample is kept as approved version 1 (package 14, pull request 4: the demo's refresh).
+  await expect(page.getByTestId('revision-status')).toHaveText('Approved version 1');
+  await expect(page.getByTestId('keep-as-reads')).toHaveCount(0);
   await expect(page.getByRole('link', { name: 'Leave the demo' })).toHaveAttribute('href', '/');
   await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
   await shot(page, '84-demo-opens');
   await page.getByTestId('demo-pointer').getByRole('link', { name: 'Documents' }).click();
   await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/documents$/);
   await expect(page.getByTestId('demo-pointer')).toHaveCount(0);
+  await expect(page.getByTestId('version-line')).toHaveText('The working draft reads exactly as approved version 1.');
+  await expect(page.getByTestId('versions')).toContainText('Approved versions (1)');
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'My work' }).click();
   await expect(page.getByRole('heading', { level: 1, name: /^(Welcome back|My work)/ })).toBeVisible();
 
