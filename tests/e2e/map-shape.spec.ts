@@ -27,18 +27,10 @@ test('the map shape: the switch changes the maps on Flows and in the PDD, is kep
   }, gold);
   await page.reload();
 
-  // An approved revision, then a working draft with the same content (a name changed and changed back).
+  // Approved version 1. Nothing else changes after it but the shape (a renamed step would be a change of its own:
+  // its name would then be confirmed by a person).
   await page.getByRole('button', { name: 'Approve', exact: true }).click();
   await expect(page.getByTestId('revision-status')).toHaveText('Approved version 1');
-  await page.getByRole('tab', { name: /^Steps/ }).click();
-  const name = page.getByLabel('Name of step 1', { exact: true });
-  const was = await name.inputValue();
-  await name.fill(`${was} today`);
-  await name.blur();
-  await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
-  await name.fill(was);
-  await name.blur();
-  await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
 
   // The sample (five roles) opens in swimlanes, with the reason.
   await stage(page, 'Flows');

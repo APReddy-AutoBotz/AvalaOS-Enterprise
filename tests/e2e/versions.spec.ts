@@ -52,9 +52,10 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
 
   // A section edit after approval: an unapproved change, and Documents lists that one section.
   const doc = page.getByTestId('document');
-  const section = doc.getByTestId('doc-section').filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).first();
-  const oldText = (await section.locator('p').first().innerText()).trim().slice(0, 30);
-  expect(oldText.length).toBeGreaterThan(10);
+  // The first section a person can edit that has generated text: a run of plain words from it, to look for later.
+  const section = doc.getByTestId('doc-section').filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).filter({ has: page.locator('p.leading-7') }).first();
+  const oldText = ((await section.locator('p.leading-7').first().innerText()).match(/[A-Za-z][A-Za-z ]{15,40}[A-Za-z]/)?.[0] ?? '').trim();
+  expect(oldText.length).toBeGreaterThan(15);
   await section.getByRole('button', { name: /^Edit section/ }).click();
   await doc.getByRole('textbox').first().click();
   await page.keyboard.press('ControlOrMeta+a');
