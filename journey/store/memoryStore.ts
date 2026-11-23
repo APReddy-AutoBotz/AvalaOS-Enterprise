@@ -32,6 +32,7 @@ import { readKept, KeptFormatError, type Fingerprints, type KeptDocuments, type 
 import { reasonProblem } from '../../domain/docs/versions.ts';
 import { hashValue } from '../../domain/processModel/hash.ts';
 import type { VersionRow, VersionStateRow } from './types.ts';
+import type { StandIn } from './standIns.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 /** A kept version (package 14), as the database's approved_versions holds it. */
@@ -101,6 +102,8 @@ export interface MemoryStoreOptions {
   demo?: unknown;
   /** The demo's recorded answers to the suggested questions, played back by runAiTask. */
   recorded?: RecordedAnswer[];
+  /** Browser tests only (journey/store/standIns.ts): replies a test gave, by task name. With it the store reads with AI. */
+  standIn?: StandIn;
 }
 
 export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStore {
@@ -507,13 +510,14 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       src.archived = true;
       save();
     },
-    aiAvailable: false,
+    aiAvailable: Boolean(options.standIn),
     async readFlowchartImage() { throw new StoreError(501, `Reading images needs the server; it is not available ${where}.`); },
     async transcribe() { throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`); },
     async startExtraction() { throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`); },
     async latestExtraction() { return null; },
     async lookAtExtraction() { /* no extraction runs in the browser */ },
     async runAiTask(_workspaceId, task, segments) {
+      if (options.standIn) return options.standIn.run(task, segments);
       // The demo answers its suggested questions from what was recorded on the sample case; nothing else.
       if (options.recorded) {
         const question = segments.find(s => s.id === 'question')?.text ?? '';

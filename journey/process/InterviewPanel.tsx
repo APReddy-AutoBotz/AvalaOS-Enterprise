@@ -33,10 +33,12 @@ type Phase =
 const SERVER = 'Reading answers needs the server. Sign in to Avala OS to answer questions here; in the demo they can be read but not answered.';
 
 /** The open questions of one process, asked one at a time. */
-export function InterviewPanel({ store, process, workspace, model, working, start }: {
+export function InterviewPanel({ store, process, workspace, model, working, start, onAnswerSeveral }: {
   store: JourneyStore; process: ProcessRow; workspace: Workspace; model: ProcessModel; working: { id: string; seq: number } | null;
   /** An answer Ask Avala found in a source (a suggestion): opened on its question, ready to review and Save. */
   start?: { itemKey: string; proposal: import('../../domain/questions/notes.ts').Proposal; source: string } | null;
+  /** Opens Closing the gaps on "Several at once" (package 16); absent where the process has no stage for it. */
+  onAnswerSeveral?: () => void;
 }) {
   const canEdit = workspace.role !== 'viewer';
   const editor = useModelEditor(store, process.id, { model, working }, () => announceProcessChanged(process.id));
@@ -76,6 +78,10 @@ export function InterviewPanel({ store, process, workspace, model, working, star
         </Button>
       )}
       {showFound && <div className="mt-3"><FoundAnswers processId={process.id} model={editor.model} items={t.items} found={found} canEdit={canEdit} onApply={(op, summary) => editor.apply(op, summary)} /></div>}
+      {canEdit && store.aiAvailable && onAnswerSeveral && (
+        <button type="button" onClick={onAnswerSeveral} data-testid="interview-several"
+          className="mt-2 block text-sm font-semibold text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4">Answer several from notes or a transcript</button>
+      )}
     </div>
   );
   // A new question starts clean (after Save, Skip, or the answer closing it).

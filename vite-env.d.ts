@@ -13,3 +13,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
     readonly env: ImportMetaEnv
 }
+
+/** True only in a test build (VITE_JOURNEY_STORE=memory when built; vite.config.ts): the browser tests' stand-in for AI tasks is built in. */
+declare const __AVALA_STAND_INS__: boolean
