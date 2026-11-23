@@ -100,7 +100,11 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
 }
 
 /** Answers to several questions at once: the AI proposes which of the listed questions the text answers, with the words that answer each; only ticked ones are written. */
-export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '' }: { model: ProcessModel; items: TriageItem[]; editor: ModelEditor; ctx: NotesContext; initialNotes?: string }) {
+export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '', onSaved }: {
+  model: ProcessModel; items: TriageItem[]; editor: ModelEditor; ctx: NotesContext; initialNotes?: string;
+  /** After the answers are saved, with the process as it was before them (package 16: the result shows what they closed). */
+  onSaved?: (before: ProcessModel) => void;
+}) {
   const [notes, setNotes] = React.useState(initialNotes);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -124,11 +128,12 @@ export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '' }:
     if (!proposals) return;
     setBusy('Saving the answers…'); setError(null);
     try {
+      const before = model;
       const key = await saveNotesSource(ctx, notes);
       const picked = proposals.filter(p => chosen.has(p.itemKey));
       const ops = picked.map(p => buildAnswer(items.find(i => i.key === p.itemKey)!, model, p.answer, `from ${key}: "${p.quote.slice(0, 160)}"`)).filter((x): x is NonNullable<typeof x> => Boolean(x));
       const ok = await editor.apply(m => ops.reduce<{ model: ProcessModel; patch: JsonPatchOp[] }>((cur, x) => { const r: OpResult = x.op(cur.model); return { model: r.model, patch: [...cur.patch, ...r.patch] }; }, { model: m, patch: [] }), `Answered ${ops.length} questions (${key})`);
-      if (ok) { setDone(`${ops.length} ${ops.length === 1 ? 'answer' : 'answers'} saved. What you said is kept as source ${key}.`); setProposals(null); setNotes(''); }
+      if (ok) { setDone(`${ops.length} ${ops.length === 1 ? 'answer' : 'answers'} saved. What you said is kept as source ${key}.`); setProposals(null); setNotes(''); onSaved?.(before); }
     } catch (e) { setError(messageOf(e)); }
     finally { setBusy(null); }
   };

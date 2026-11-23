@@ -4,7 +4,7 @@ import React from 'react';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { ProcessAssessment } from '../../domain/assess/process.ts';
 import { EASE_BANDS, QUADRANT, type Quadrant, type ReadinessState } from '../../domain/assess/priority.ts';
-import { cx } from '../ui.tsx';
+import { Button, cx } from '../ui.tsx';
 
 const BASIS = { step_times: 'From the time and share of each step.', time_per_case: 'From the volume and the time per case. Step times would say how much of it automation can take.', people: 'From the people doing the work today. Volume and times would narrow it.', by_hand: 'Nothing of this work is done today, so no hours are saved: this is what it would take by hand, from the expected volume and time per case entered.' } as const;
 const hrs = (n: number) => Math.round(n).toLocaleString('en');
@@ -36,7 +36,11 @@ const NotYet = ({ reason, onInputs }: { reason: string; onInputs: () => void }) 
   </>
 );
 
-export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { model: ProcessModel; result: ProcessAssessment; onInputs: () => void; onOpenStep: (id: string) => void }) {
+export function AssessmentPriority({ model, result, onInputs, onOpenStep, questions }: {
+  model: ProcessModel; result: ProcessAssessment; onInputs: () => void; onOpenStep: (id: string) => void;
+  /** The open questions that could change the recommendation (package 16, domain/questions/result.ts); absent when none. */
+  questions?: { text: string; onAnswer?: () => void } | null;
+}) {
   const p = result.priority;
   const [details, setDetails] = React.useState(false);
   const nameOf = (id: string) => model.steps.find(s => s.id === id)?.name ?? id;
@@ -130,6 +134,13 @@ export function AssessmentPriority({ model, result, onInputs, onOpenStep }: { mo
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {questions && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3.5" data-testid="questions-line">
+          <p className="text-sm font-semibold text-amber-950">{questions.text}</p>
+          {questions.onAnswer && <Button onClick={questions.onAnswer}>Answer them</Button>}
         </div>
       )}
 
