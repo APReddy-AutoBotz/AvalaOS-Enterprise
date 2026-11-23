@@ -12,8 +12,12 @@ import { ApprovalReadError, approvePrepared, prepareApproval } from '../../journ
 
 const demo = JSON.parse(fs.readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8'));
 
+/**
+ * The sample as a process approved before copies were kept: its approved revision with no kept version. The demo
+ * itself keeps version 1 since pull request 4's refresh, so its versions and kept looks are left out here.
+ */
 async function open() {
-  const store = createMemoryStore({ demo });
+  const store = createMemoryStore({ demo: { ...demo, versions: [], keptLooks: [] } });
   const ws = (await store.listWorkspaces())[0]!;
   const p = (await store.listProcesses(ws.id))[0]!;
   return { store, ws, p };
@@ -168,4 +172,74 @@ test('the lists read where every process stands in one call for the workspace, a
   const fallback = await loadProcessFacts(counted, processes.find(x => x.id === p.id)!, undefined, undefined);
   assert.equal(fallback.statusLabel, 'Approved revision 1');
   assert.equal(calls, 1);
+});
+
+// ---- Pull request 4: "Keep it as it reads now" (part J) --------------------------------------------------
+
+test('"Keep it as it reads now" keeps an earlier approval as version 1, with who approved it and when, and who kept it and when', async () => {
+  const { store, ws, p } = await open();
+  const [s0] = await store.versionStates(ws.id, p.id);
+  const approvedRev = (await store.listRevisions(p.id)).find(r => r.state === 'approved')!;
+  assert.equal(s0.approvedHasVersion, false);
+  const prepared = (await prepareApproval(store, p.id, ws.id, 'keep'))!;
+  assert.equal(prepared.mode, 'keep');
+  assert.equal(prepared.number, 1);
+  assert.equal(prepared.approved?.revNo, approvedRev.revNo);
+  assert.equal(prepared.approved?.approvedAt, approvedRev.approvedAt);
+  assert.equal(prepared.kept.documents.pdd!.control.find(c => c.key === 'Revision')?.value, 'Approved version 1, kept after approval', 'the documents say they were kept after approval');
+
+  assert.deepEqual(await refusal(approvePrepared(store, p.id, prepared, 'A reason in words')), { status: 422, code: 'REASON_NOT_TAKEN' });
+  const v1 = await approvePrepared(store, p.id, prepared, null);
+  assert.equal(v1.number, 1);
+  const [row] = await store.listVersions(p.id);
+  assert.equal(row.revisionId, approvedRev.id);
+  assert.equal(row.approvedAt, approvedRev.approvedAt, 'the approval keeps its own date: nothing is dated earlier than the day it was kept');
+  assert.equal(row.approvedBy, approvedRev.approvedBy ?? null, 'and its own approver');
+  assert.ok(row.keptAt, 'who kept it and when are recorded apart');
+  assert.ok(row.keptAt! >= row.approvedAt);
+  const [s1] = await store.versionStates(ws.id, p.id);
+  assert.equal(s1.approvedHasVersion, true);
+  assert.equal(s1.latest?.keptAt, row.keptAt);
+
+  // Kept once only, and no longer offered.
+  assert.equal(await prepareApproval(store, p.id, ws.id, 'keep'), null);
+  assert.deepEqual(await refusal(approvePrepared(store, p.id, prepared, null)), { status: 409, code: 'ALREADY_KEPT' });
+});
+
+test('"Keep it as it reads now" builds from the approved record, never from the working draft', async () => {
+  const { store, ws, p } = await open();
+  const draft = await store.startDraft(p.id);
+  await store.savePatch(draft.revisionId, draft.seq, [{ op: 'replace', path: '/meta/name', value: 'Renamed in the working draft' }], 'user', 'Renamed');
+  const prepared = (await prepareApproval(store, p.id, ws.id, 'keep'))!;
+  assert.doesNotMatch(JSON.stringify(prepared.kept), /Renamed in the working draft/);
+  const approve = (await prepareApproval(store, p.id, ws.id))!;
+  assert.match(JSON.stringify(approve.kept), /Renamed in the working draft/, 'Approve keeps the draft, as before');
+});
+
+test('"Keep it as it reads now" after a newer approval without a copy needs a reason, and is refused when anything moved meanwhile', async () => {
+  const { store, ws, p } = await open();
+  await approve(store, ws.id, p.id, null);
+  // A page opened before copies were kept approves a new draft with the old button: no copy of it is kept.
+  const draft = await store.startDraft(p.id);
+  const { seq } = await store.savePatch(draft.revisionId, draft.seq, [{ op: 'replace', path: '/meta/name', value: 'Approved the old way' }], 'user', 'Renamed');
+  await store.approve(draft.revisionId, seq);
+  const [st] = await store.versionStates(ws.id, p.id);
+  assert.equal(st.latest?.number, 1);
+  assert.equal(st.approvedHasVersion, false);
+
+  const prepared = (await prepareApproval(store, p.id, ws.id, 'keep'))!;
+  assert.equal(prepared.number, 2);
+  assert.match(JSON.stringify(prepared.kept), /Approved the old way/);
+  assert.deepEqual(await refusal(approvePrepared(store, p.id, prepared, null)), { status: 422, code: 'REASON_REQUIRED' });
+
+  await store.saveDocumentEdit(p.id, makeEdit('brd', 's-1', '<p>Saved meanwhile.</p>', 'none'));
+  assert.deepEqual(await refusal(approvePrepared(store, p.id, prepared, 'Kept as it reads now')), { status: 409, code: 'CHANGED_MEANWHILE' });
+  const again = (await prepareApproval(store, p.id, ws.id, 'keep'))!;
+  const send = { processId: p.id, expectedChanges: again.state.changesSeen, reason: 'Kept as it reads now', documents: again.kept, fingerprints: again.fingerprints, look: again.look, changes: again.changes, inputs: again.inputs };
+  assert.deepEqual(await refusal(store.keepVersionAsReadsNow({ ...send, expectedVersion: 0 })), { status: 409, code: 'VERSION_CONFLICT' });
+  assert.deepEqual((await store.listVersions(p.id)).map(v => v.number), [1], 'the refused keeps made nothing');
+  assert.equal((await approvePrepared(store, p.id, again, 'Kept as it reads now')).number, 2);
+  const [v2] = await store.listVersions(p.id);
+  assert.equal(v2.reason, 'Kept as it reads now');
+  assert.ok(v2.keptAt);
 });

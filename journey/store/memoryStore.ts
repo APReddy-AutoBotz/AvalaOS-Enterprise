@@ -418,6 +418,34 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       save();
       return { versionId: v.id, number: v.number };
     },
+    async keepVersionAsReadsNow(i) {
+      const me = requireMe();
+      const { w } = workspaceOf(i.processId);
+      if (!w.canApprove) throw new StoreError(403, 'Approving needs approval rights.');
+      // The same checks, in the same order, as the database's keep_version_as_reads_now; nothing changes until all pass.
+      const rev = state.revisions.find(r => r.processId === i.processId && r.state === 'approved');
+      if (!rev) throw new StoreError(409, 'the process has no approved record', 'NOTHING_TO_APPROVE');
+      if ((state.versions ?? []).some(v => v.revisionId === rev.id)) throw new StoreError(409, `approved revision ${rev.revNo} already has a kept version`, 'ALREADY_KEPT');
+      const latest = Math.max(0, ...(state.versions ?? []).filter(v => v.processId === i.processId).map(v => v.number));
+      if (latest !== i.expectedVersion) throw new StoreError(409, `approved version ${latest} exists; reload to see what changed`, 'VERSION_CONFLICT');
+      if (changesSeen(w.id, i.processId) !== i.expectedChanges) throw new StoreError(409, 'someone saved a change after this page read the documents; reload and approve again', 'CHANGED_MEANWHILE');
+      const problem = reasonProblem(latest + 1, i.reason);
+      if (problem) throw new StoreError(422, problem, latest + 1 === 1 ? 'REASON_NOT_TAKEN' : 'REASON_REQUIRED');
+      try { readKept(i.documents); } catch (e) { throw new StoreError(422, e instanceof KeptFormatError ? e.message : 'the documents are not a kept set of format 1', 'VERSION_INVALID'); }
+      const fingerprint = hashValue(i.look);
+      if (!(state.keptLooks ?? []).some(l => l.workspaceId === w.id && l.fingerprint === fingerprint)) (state.keptLooks ??= []).push({ workspaceId: w.id, fingerprint, look: structuredClone(i.look) });
+      const mark = Math.max(0, ...(state.draftChanges ?? []).filter(d => d.processId === i.processId || (d.workspaceId === w.id && d.processId === null)).map(d => d.id));
+      const nameNow = (id: string | null | undefined) => (id ? peopleOf(w.id).members.find(m => m.userId === id)?.name?.trim() || null : null);
+      // Both facts: who approved the revision and when (as recorded with it), and who kept this copy and when.
+      const v: StoredVersion = {
+        id: uuid(), number: latest + 1, revisionId: rev.id, approvedAt: rev.approvedAt ?? now(), approvedBy: rev.approvedBy ?? null, approvedByName: nameNow(rev.approvedBy),
+        reason: i.reason?.trim() || null, changes: structuredClone(i.changes), keptAt: now(), keptByName: nameNow(me.id), processId: i.processId, workspaceId: w.id,
+        kept: structuredClone(i.documents), fingerprints: structuredClone(i.fingerprints), lookFingerprint: fingerprint, inputs: structuredClone(i.inputs), changeMark: mark,
+      };
+      (state.versions ??= []).push(v);
+      save();
+      return { versionId: v.id, number: v.number };
+    },
     async listVersions(processId) {
       requireMe();
       workspaceOf(processId);

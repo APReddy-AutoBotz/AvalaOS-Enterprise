@@ -290,6 +290,14 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return { versionId: (data as any).versionId, number: Number((data as any).number) };
     },
+    async keepVersionAsReadsNow(i) {
+      const { data, error } = await db.rpc('keep_version_as_reads_now', {
+        target_process: i.processId, expected_version: i.expectedVersion, expected_changes: i.expectedChanges,
+        reason: i.reason, documents: i.documents, fingerprints: i.fingerprints, look: i.look, changes: i.changes, inputs: i.inputs,
+      });
+      if (error) fail(error);
+      return { versionId: (data as any).versionId, number: Number((data as any).number) };
+    },
     async listVersions(processId) {
       const { data, error } = await db.from('approved_versions').select(VERSION_COLUMNS).eq('process_id', processId).order('number', { ascending: false });
       if (error) fail(error);

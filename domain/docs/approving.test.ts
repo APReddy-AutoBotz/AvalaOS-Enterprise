@@ -2,7 +2,7 @@
 // draft is compared with the latest version. On the demo's sample, built as the Documents page builds it.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { approvalChanges, approvalTarget, compareDraft, keepInputFrom, keptRevision, offersApproval, type KeepRecord } from './approving.ts';
+import { approvalChanges, approvalsWithoutCopy, approvalTarget, compareDraft, keepInputFrom, keptRevision, offersApproval, offersKeep, type KeepRecord } from './approving.ts';
 import { buildKeptDocuments, fingerprintsOf, keptLook } from './keep.ts';
 import { makeEdit } from './edits.ts';
 import { loadSample } from './fixtures/keepSample.ts';
@@ -33,6 +33,26 @@ test('Approve is offered for a draft, or after a change saved since the latest v
   assert.equal(offersApproval({ ...base, target: fromApproved, workspaceChanges: ['layout'] }), true, 'a change for the whole workspace');
   assert.equal(offersApproval({ ...base, target: fromApproved, latest: null, processChanged: true }), false, 'approved before copies were kept: kept as it reads, in pull request 4');
   assert.equal(offersApproval({ ...base, target: null }), false);
+  // Pull request 4: an approved revision without a copy is kept with its own approver, never approved again in someone else's name.
+  assert.equal(offersApproval({ ...base, target: fromApproved, processChanged: true, approvedWithoutCopy: true }), false);
+  assert.equal(offersApproval({ ...base, target: fromDraft, approvedWithoutCopy: true }), true, 'a working draft with edits is still approved as usual');
+});
+
+test('"Keep it as it reads now" is offered to an approver for an approved revision with no kept copy, and only then', () => {
+  assert.equal(offersKeep({ canApprove: true, approvedRevisionId: 'a', approvedHasVersion: false }), true);
+  assert.equal(offersKeep({ canApprove: false, approvedRevisionId: 'a', approvedHasVersion: false }), false, 'only an approver');
+  assert.equal(offersKeep({ canApprove: true, approvedRevisionId: 'a', approvedHasVersion: true }), false, 'already kept');
+  assert.equal(offersKeep({ canApprove: true, approvedRevisionId: null, approvedHasVersion: false }), false, 'nothing approved; a superseded revision is never offered');
+});
+
+test('earlier approvals without a copy are listed by revision, newest first, the approved one marked', () => {
+  const revs = [
+    { id: 'r1', revNo: 1, state: 'superseded', approvedAt: '2026-11-01T00:00:00Z', approvedBy: 'u1' },
+    { id: 'r2', revNo: 2, state: 'superseded', approvedAt: '2026-11-05T00:00:00Z', approvedBy: 'u1' },
+    { id: 'r3', revNo: 3, state: 'approved', approvedAt: '2026-11-20T00:00:00Z', approvedBy: null },
+    { id: 'r4', revNo: 4, state: 'working', approvedAt: null },
+  ];
+  assert.deepEqual(approvalsWithoutCopy(revs, ['r2']).map(r => [r.revNo, r.current]), [[3, true], [1, false]], 'a revision with a version is a version; a draft is not an approval');
 });
 
 test('the version number and date in the document control never mark a section changed', () => {

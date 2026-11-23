@@ -35,9 +35,9 @@ import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { SourceRow } from '../store/types.ts';
 import { ProcessPeople } from '../process/ProcessPeople.tsx';
 import type { VersionStateRow } from '../store/types.ts';
-import { versionTag } from '../../domain/docs/versions.ts';
-import { approvalTarget, offersApproval } from '../../domain/docs/approving.ts';
-import { approvePrepared, prepareApproval, type PreparedApproval } from '../process/keepVersion.ts';
+import { keepFirstQuestion, UNNAMED_APPROVER, versionTag } from '../../domain/docs/versions.ts';
+import { approvalTarget, offersApproval, offersKeep } from '../../domain/docs/approving.ts';
+import { approvePrepared, longDate, prepareApproval, type PreparedApproval } from '../process/keepVersion.ts';
 import { ApproveDialog } from '../process/ApproveDialog.tsx';
 
 const TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
@@ -151,12 +151,17 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
   const [approveError, setApproveError] = React.useState<string | null>(null);
   // The reason typed in the approval window outlives a refusal and the reload after it; it is cleared once approved.
   const [reason, setReason] = React.useState('');
-  const startApproval = async (processId: string, workspaceId: string) => {
+  const startApproval = async (processId: string, workspaceId: string, mode: 'approve' | 'keep' = 'approve') => {
     setBusy(true); setError(null); setApproveError(null);
     try {
-      const prepared = await prepareApproval(store, processId, workspaceId);
+      const prepared = await prepareApproval(store, processId, workspaceId, mode);
       if (!prepared) { await load(); return; }
-      if (prepared.number === 1) { await approvePrepared(store, processId, prepared, null); await load(); return; }
+      if (prepared.number === 1) {
+        // Keeping an earlier approval as version 1 asks once, saying whose approval it records (pull request 4).
+        const a = prepared.approved;
+        if (prepared.mode === 'keep' && a && !window.confirm(keepFirstQuestion(a.revNo, longDate(a.approvedAt), a.approverName ?? UNNAMED_APPROVER))) return;
+        await approvePrepared(store, processId, prepared, null); await load(); return;
+      }
       setApproving(prepared);
     } catch (e) { setError(notApproved(e)); await load(); } finally { setBusy(false); }
   };
@@ -193,7 +198,10 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
   const shownStages = stagesForProcess(workspace?.modules, model);
   const purposeOff = stagesFor(workspace?.modules).includes(stage) ? purposeOffMessage(stage, model) : null;
   const stageOff = !shownStages.includes(stage);
-  const canApprove = offersApproval({ canApprove: Boolean(workspace?.canApprove), target: approvalTarget(revisions), latest: versions?.latest?.number ?? null, processChanged: Boolean(versions?.processChanged), workspaceChanges: versions?.workspaceChanges ?? [] });
+  const approvedWithoutCopy = Boolean(versions?.approvedRevisionId && !versions.approvedHasVersion);
+  const canApprove = offersApproval({ canApprove: Boolean(workspace?.canApprove), target: approvalTarget(revisions), latest: versions?.latest?.number ?? null, processChanged: Boolean(versions?.processChanged), workspaceChanges: versions?.workspaceChanges ?? [], approvedWithoutCopy });
+  // "Keep it as it reads now" (part J): an approval from before copies were kept, kept with its own approver and date.
+  const canKeep = offersKeep({ canApprove: Boolean(workspace?.canApprove), approvedRevisionId: versions?.approvedRevisionId ?? null, approvedHasVersion: Boolean(versions?.approvedHasVersion) });
   const hasSteps = Boolean(model && model.steps.length > 0);
 
   return (
@@ -223,6 +231,9 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
               if (n > 0 && !window.confirm(`${n} typical ${n === 1 ? 'item has' : 'items have'} not been confirmed by your people. Approving keeps ${n === 1 ? 'it' : 'them'} marked "Typical, not confirmed" in the approved documents, and an approved version cannot be changed. Approve anyway?`)) return;
               startApproval(process.id, process.workspaceId);
             }}>{busy && !approving ? 'Keeping the documents…' : 'Approve'}</Button>
+          )}
+          {canKeep && (
+            <Button variant="secondary" disabled={busy} data-testid="keep-as-reads" onClick={() => startApproval(process.id, process.workspaceId, 'keep')}>Keep it as it reads now</Button>
           )}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>

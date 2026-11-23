@@ -30,6 +30,8 @@ export interface KeepRecord {
 
 /** The revision line a kept version's documents carry in their document control (never part of a section). */
 export const keptRevision = (number: number, date: string): KeepInput['revision'] => ({ label: `Approved version ${number}`, state: 'approved', date });
+/** A copy kept after approval says so in its documents' control block, dated the day it was kept (part J). */
+export const keptLaterRevision = (number: number, date: string): KeepInput['revision'] => ({ label: `Approved version ${number}, kept after approval`, state: 'approved', date });
 
 /**
  * The input the Documents page builds from, out of the stored record: the assessment with the stored choices
@@ -65,10 +67,29 @@ export function approvalTarget(revisions: { id: string; state: string; seq: numb
  * process, or for the whole workspace. An approval from before copies were kept is kept as it reads with its
  * own action (pull request 4), not through Approve.
  */
-export function offersApproval(i: { canApprove: boolean; target: ApprovalTarget | null; latest: number | null; processChanged: boolean; workspaceChanges: readonly string[] }): boolean {
+export function offersApproval(i: { canApprove: boolean; target: ApprovalTarget | null; latest: number | null; processChanged: boolean; workspaceChanges: readonly string[]; approvedWithoutCopy?: boolean }): boolean {
   if (!i.canApprove || !i.target) return false;
   if (i.target.from === 'draft') return true;
+  // An approved revision without a copy is kept with its own approver and date ("Keep it as it reads now"),
+  // never approved again under the name of whoever presses Approve (pull request 4).
+  if (i.approvedWithoutCopy) return false;
   return i.latest !== null && (i.processChanged || i.workspaceChanges.length > 0);
+}
+
+/**
+ * Whether "Keep it as it reads now" is offered (part J): to an approver, for the approved revision of the record
+ * when it has no kept copy. Never for a superseded revision: what reads now is not what it was.
+ */
+export function offersKeep(i: { canApprove: boolean; approvedRevisionId: string | null; approvedHasVersion: boolean }): boolean {
+  return i.canApprove && i.approvedRevisionId !== null && !i.approvedHasVersion;
+}
+
+/** Earlier approvals without a kept copy, newest first, for the list of versions (part G): by revision, no number. */
+export function approvalsWithoutCopy(revisions: readonly { id: string; revNo: number; state: string; approvedAt: string | null; approvedBy?: string | null }[], keptRevisionIds: readonly string[]) {
+  const kept = new Set(keptRevisionIds);
+  return revisions.filter(r => (r.state === 'approved' || r.state === 'superseded') && r.approvedAt && !kept.has(r.id))
+    .sort((a, b) => b.revNo - a.revNo)
+    .map(r => ({ id: r.id, revNo: r.revNo, approvedAt: r.approvedAt!, approvedBy: r.approvedBy ?? null, current: r.state === 'approved' }));
 }
 
 /** What changed since the version before, as stored with the new version. Version 1 has nothing before it. */
