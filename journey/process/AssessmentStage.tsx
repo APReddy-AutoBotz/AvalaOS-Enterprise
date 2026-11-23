@@ -34,6 +34,10 @@ import { AbsentOperations, ApiCoverageAnswer } from './ApiCoverageAnswer.tsx';
 import { AssessmentInputs } from './AssessmentInputs.tsx';
 import { LastChangeImpact, useImpactContext } from './ImpactNote.tsx';
 import { AssessmentPriority } from './AssessmentPriority.tsx';
+import { GapsAssistant } from './GapsAssistant.tsx';
+import { useOpenGaps, type GapsMode } from './openGaps.ts';
+import { assessmentLine } from '../../domain/questions/result.ts';
+import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
 import { APPROACH_TONE, CONFIDENCE_LABEL, HUMAN_LABEL, RANK_LABEL, ScoreBar, pct, range, stepLabel } from './assessmentShared.tsx';
 
 const APPROACHES = Object.keys(APPROACH_LABEL) as Approach[];
@@ -49,9 +53,13 @@ function AiBadge({ s, approach }: { s: StepScore; approach: Approach }) {
   return <span data-testid="ai-badge" className={cx(cls, 'bg-slate-100 text-slate-600')}>No AI</span>;
 }
 
-export function AssessmentStage({ store, processId, workspaceId, model, working, revisionId, canEdit, me, sources, onSaved }: {
+export function AssessmentStage({ store, processId, workspaceId, model, working, revisionId, canEdit, me, sources, onSaved, onSourcesChanged, documents = true }: {
   store: JourneyStore; processId: string; workspaceId: string; model: ProcessModel; working: { id: string; seq: number } | null;
   revisionId: string; canEdit: boolean; me: string; sources: SourceRow[]; onSaved: () => void;
+  /** Answers from notes are kept as a source of the process (package 16): the page reloads its sources. */
+  onSourcesChanged?: () => void;
+  /** Whether the organisation uses the documents (Closing the gaps says nothing of them otherwise). */
+  documents?: boolean;
 }) {
   const editor = useModelEditor(store, processId, { model, working }, onSaved);
   const [decisions, setDecisions] = React.useState<Decisions | null>(null);
@@ -69,6 +77,13 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   const chooser = React.useContext(ChooserContext);
   const questionPlanNow = useQuestionPlan(processId, editor.model).plan;
   const firstQuestions = questionPlanNow.now.length;
+  // Closing the gaps on this stage (package 16): from the line below, from Ask Avala, or from My work.
+  const [gaps, setGaps] = React.useState<GapsMode | null>(null);
+  useOpenGaps(processId, setGaps);
+  // The open questions that could change the recommendation, read by the same triage Closing the gaps lists them with.
+  const questionsLine = React.useMemo(() => assessmentLine(editor.model, assessProcess(editor.model)), [editor.model]);
+  const [docSettings, setDocSettings] = React.useState<DocumentSettings>(DEFAULT_DOCUMENT_SETTINGS);
+  React.useEffect(() => { if (gaps) store.getDocumentSettings(workspaceId).then(setDocSettings).catch(() => { /* the question files keep the plain look */ }); }, [store, workspaceId, gaps]);
   // The same assessment with people's choices of approach: what the documents, flows and work items follow.
   // `result` stays the scoring alone, for the step rows and the ranking, so its own answer stays visible.
   const chosen = React.useMemo(() => assessProcess(editor.model, { rate: decisions?.rate ?? null, settings, decisions: d }), [editor.model, decisions, settings, d]);
@@ -151,6 +166,13 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
   const byStep = new Map<string, StepScore>(result.steps.map(r => [r.stepId, r] as [string, StepScore]));
   const current = open ? byStep.get(open) : undefined;
 
+  if (gaps) return (
+    <>
+      <ErrorNote message={editor.error} />
+      <React.Fragment key={gaps}><GapsAssistant processId={processId} model={editor.model} editor={editor} canEdit={canEdit} onClose={() => setGaps(null)} opening={gaps} backLabel="Back to the assessment" documents={documents}
+        notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged: onSourcesChanged ?? (() => {}), aiAvailable: store.aiAvailable }} branding={docSettings.branding} /></React.Fragment>
+    </>
+  );
   if (view === 'report') return <AssessmentReport model={editor.model} result={chosen} scoring={result} decisions={d} onBack={() => setView('assessment')} />;
 
   // How many of the Inputs view's lines have a value. Not the same figure as "N% of the facts are known"
@@ -194,7 +216,8 @@ export function AssessmentStage({ store, processId, workspaceId, model, working,
       {/* What it took to get here, counted from what is recorded (part H). */}
       <EffortCard store={store} processId={processId} model={editor.model} sources={sources} plan={{ now: questionPlanNow.now.length, found: questionPlanNow.found.length, wait: questionPlanNow.wait.length, deferred: questionPlanNow.deferred.length }} documents={readyDocuments(deliveryPlan(editor.model, chosen).docs)} />
       {result.assessed > 0 && <Ranking result={result} />}
-      {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen} />}
+      {result.assessed > 0 && <AssessmentPriority model={editor.model} result={result} onInputs={() => setView('inputs')} onOpenStep={setOpen}
+        questions={questionsLine && { text: questionsLine.text, onAnswer: canEdit ? () => setGaps('focused') : undefined }} />}
       {result.assessed > 0 && (
         <AssessmentWhy model={editor.model} result={result} onOpenStep={setOpen} canEdit={canEdit} aiAvailable={store.aiAvailable} reading={reading} onRead={readTraits}
           newApiQuestions={newApiQuestions.length} onAddQuestions={addApiQuestions} onAnswerApi={answerApi} />

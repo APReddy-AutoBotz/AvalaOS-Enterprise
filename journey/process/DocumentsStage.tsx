@@ -19,6 +19,7 @@ import { buildEvidence } from '../../domain/docs/evidence.ts';
 import { Button, cx, ErrorNote, messageOf, Spinner } from '../ui.tsx';
 import { StatusBadge } from './widgets.tsx';
 import { GapsAssistant } from './GapsAssistant.tsx';
+import { useOpenGaps, type GapsMode } from './openGaps.ts';
 import { useQuestionPlan } from './sourceLook.ts';
 import { nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { deliveryPlan } from '../../domain/plan/delivery.ts';
@@ -156,6 +157,9 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const editor = useModelEditor(store, processId, { model: loaded, working }, onSaved);
   const model = editor.model;
   const [answering, setAnswering] = React.useState(false);
+  // Closing the gaps asked for from Ask Avala, for a process with no Assessment stage (package 16).
+  const [gapsMode, setGapsMode] = React.useState<GapsMode>('all');
+  useOpenGaps(processId, mode => { setGapsMode(mode); setAnswering(true); });
   const [previewSdd, setPreviewSdd] = React.useState(false);
   const sddReady = approvedRevision !== null || previewSdd;
   // A link from the weekday email opens the document it names (?doc=pdd) at the section it names (#s-2-4).
@@ -382,7 +386,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const { plan } = useQuestionPlan(processId, model);
   const toAnswer = decisions ? plan : null;
   if (opened) return <KeptVersionView store={store} versionId={opened} processName={model.meta.name} onBack={() => setOpened(null)} />;
-  if (answering) return <><ErrorNote message={editor.error} /><GapsAssistant processId={processId} model={model} editor={editor} canEdit={canEdit} onClose={() => setAnswering(false)} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} branding={docSettings.branding} /></>;
+  if (answering) return <><ErrorNote message={editor.error} /><React.Fragment key={gapsMode}><GapsAssistant processId={processId} model={model} editor={editor} canEdit={canEdit} onClose={() => { setAnswering(false); setGapsMode('all'); }} notes={{ store, workspaceId, processId, me, sourceKeys: sources.map(s => s.key), onSourcesChanged, aiAvailable: store.aiAvailable }} branding={docSettings.branding} opening={gapsMode} /></React.Fragment></>;
 
   return (
     <div className="space-y-5">

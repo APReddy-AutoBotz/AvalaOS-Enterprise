@@ -20,12 +20,26 @@ import { answerFromNotes, notesSegments, proposalsFrom, type NoteFinding } from 
 import { messageOf } from '../ui.tsx';
 import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
 import type { Branding } from '../../domain/docs/branding.ts';
+import { couldChange, focusedLine, meetingResult } from '../../domain/questions/result.ts';
+import type { GapsMode } from './openGaps.ts';
 
 const GROUP_TONE: Record<QGroup, string> = { decides: 'bg-[#002C4B] text-white', signoff: 'bg-sky-100 text-sky-900', detail: 'bg-slate-100 text-slate-700' };
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
-export function GapsAssistant({ processId, model, editor, canEdit, onClose, notes, branding }: { processId: string; model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean }; branding?: Branding }) {
-  const [scope, setScope] = React.useState<'one' | 'several'>('one');
+export function GapsAssistant({ processId, model, editor, canEdit, onClose, notes, branding, opening = 'all', backLabel = 'Back to the document', documents = true }: {
+  processId: string; model: ProcessModel; editor: ModelEditor; canEdit: boolean; onClose?: () => void; notes?: NotesContext & { aiAvailable: boolean }; branding?: Branding;
+  /** How it opens (package 16): only the questions that could change the recommendation, on "Several at once", or as from Documents. */
+  opening?: GapsMode;
+  backLabel?: string;
+  /** Whether the organisation uses the documents; without them no line speaks of them. */
+  documents?: boolean;
+}) {
+  const [scope, setScope] = React.useState<'one' | 'several'>(opening === 'several' ? 'several' : 'one');
+  // Only the questions the Assessment stage's line counts, until the person asks for all (package 16).
+  const [focus, setFocus] = React.useState(opening === 'focused');
+  // What was open before answers from notes, a transcript or a returned file were saved: the result shows against it.
+  const [before, setBefore] = React.useState<ProcessModel | null>(null);
+  const sendRef = React.useRef<HTMLDivElement>(null);
   const [reply, setReply] = React.useState<ImportedReply | null>(null);
   const ai = Boolean(notes?.aiAvailable && canEdit);
   // The first list (part D): only what people must answer is asked first; answers found in the sources are confirmed; the rest waits.
@@ -35,7 +49,8 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
   const [owner, setOwner] = React.useState<QOwner | 'all'>('all');
   const [showDeferred, setShowDeferred] = React.useState(false);
   const inView = shown === 'now' ? plan.now : shown === 'found' ? [] : plan.wait;
-  const list = [...inView, ...(showDeferred && shown === 'wait' ? plan.deferred : [])].filter(i => owner === 'all' || i.owner === owner);
+  const focused = t.items.filter(couldChange);
+  const list = (focus ? focused : [...inView, ...(showDeferred && shown === 'wait' ? plan.deferred : [])]).filter(i => owner === 'all' || i.owner === owner);
   const [index, setIndex] = React.useState(0);
   const at = Math.min(index, Math.max(0, list.length - 1));
   const item = list[at];
@@ -50,21 +65,28 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           <div>
             <p className="text-xs font-semibold text-[#FFBC03]">Close the gaps</p>
             <h3 className="mt-1.5 font-display text-2xl font-semibold" data-testid="gaps-count">{nowHeading(plan)}</h3>
-            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} {whatFollows(model).assessed ? 'Each answer updates the model, the assessment and the documents at once.' : 'Each answer updates the process and its document at once.'}</p>
+            <p className="mt-1 text-sm text-slate-200" data-testid="gaps-summary">{planSummary(plan)} {whatFollows(model).assessed ? (documents ? 'Each answer updates the model, the assessment and the documents at once.' : 'Each answer updates the model and the assessment at once.') : 'Each answer updates the process and its document at once.'}</p>
             {lookLine && <p className="mt-1 text-xs text-slate-300" role="status" data-testid="source-look">{lookLine}</p>}
           </div>
-          {onClose && <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/10">Back to the document</button>}
+          {onClose && <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-sm font-semibold text-white ring-1 ring-white/30 hover:bg-white/10">{backLabel}</button>}
         </div>
         <div className="mt-5 grid gap-3 sm:grid-cols-3">
           {tiles.map(([v, n, label]) => (
-            <button key={v} type="button" onClick={() => { setView(v); setIndex(0); }} aria-pressed={shown === v} data-testid={`gaps-view-${v}`}
-              className={cx('rounded-xl p-4 text-left ring-1 ring-inset transition', shown === v ? 'bg-white text-[#002C4B] ring-white' : 'bg-white/[0.07] ring-white/10 hover:bg-white/[0.12]')}>
+            <button key={v} type="button" onClick={() => { setView(v); setIndex(0); setFocus(false); }} aria-pressed={!focus && shown === v} data-testid={`gaps-view-${v}`}
+              className={cx('rounded-xl p-4 text-left ring-1 ring-inset transition', !focus && shown === v ? 'bg-white text-[#002C4B] ring-white' : 'bg-white/[0.07] ring-white/10 hover:bg-white/[0.12]')}>
               <span className="font-display text-2xl font-semibold tabular-nums">{n}</span>
               <span className="mt-0.5 block text-sm">{label}</span>
             </button>
           ))}
         </div>
+        {focus && (
+          <p className="mt-4 text-sm text-slate-100" data-testid="gaps-focused">
+            {focusedLine(focused.length)} · <button type="button" onClick={() => { setFocus(false); setIndex(0); }} className="font-semibold text-white underline decoration-[#FFBC03] decoration-2 underline-offset-4">Show all</button>
+          </p>
+        )}
       </section>
+
+      {before && <MeetingResultPanel before={before} after={model} onSend={() => sendRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} onClose={() => setBefore(null)} />}
 
       {t.alreadyKnown.length > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-3.5" data-testid="already-known">
@@ -73,7 +95,7 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
         </div>
       )}
 
-      <QuestionPacks model={model} t={t} plan={plan} branding={branding} canImport={canEdit} onImported={r => setReply(r)} />
+      <div ref={sendRef} className="scroll-mt-4"><QuestionPacks model={model} t={t} plan={plan} branding={branding} canImport={canEdit} onImported={r => setReply(r)} /></div>
 
       {reply && (
         <section className="rounded-xl border border-[#B58500]/40 bg-white p-6" aria-label="Replies read" data-testid="pack-reply">
@@ -84,7 +106,7 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
             </div>
             <button type="button" className="text-sm text-slate-600 hover:underline" onClick={() => setReply(null)}>Close</button>
           </div>
-          {ai ? <div className="mt-4" key={reply.label}><SeveralAnswers model={model} items={reply.items.length ? reply.items : list} editor={editor} ctx={notes!} initialNotes={reply.notes} /></div>
+          {ai ? <div className="mt-4" key={reply.label}><SeveralAnswers model={model} items={reply.items.length ? reply.items : list} editor={editor} ctx={notes!} initialNotes={reply.notes} onSaved={setBefore} /></div>
             : <pre className="mt-4 max-h-64 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-3 text-sm text-slate-800">{reply.notes}</pre>}
         </section>
       )}
@@ -105,8 +127,8 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           : <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600" data-testid="found-none">{looking ? 'Looking in your sources…' : 'No answers found in your sources to confirm.'}</p>
       ) : !item ? (
         <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-center" data-testid="gaps-done">
-          <p className="font-display text-lg font-semibold text-slate-900">{open.length === 0 ? 'No open questions left' : shown === 'now' ? 'Nothing only your people can tell us right now' : 'Nothing left in this view'}</p>
-          <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : shown === 'now' ? `What is left can wait until sign-off (${plan.wait.length}).` : 'Change the filters to see the rest.'}</p>
+          <p className="font-display text-lg font-semibold text-slate-900">{open.length === 0 ? 'No open questions left' : focus ? 'No open question could change the recommendation' : shown === 'now' ? 'Nothing only your people can tell us right now' : 'Nothing left in this view'}</p>
+          <p className="mt-1 text-sm text-slate-600">{open.length === 0 ? (documents ? 'The documents now rest on answered facts. Questions set aside stay listed in each document until someone answers them.' : 'The assessment now rests on answered facts. Questions set aside stay listed until someone answers them.') : focus ? 'Show all to answer the rest.' : shown === 'now' ? `What is left can wait until sign-off (${plan.wait.length}).` : 'Change the filters to see the rest.'}</p>
         </div>
       ) : (
         <div className="grid gap-5 grid-cols-[minmax(0,1fr)] lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -123,7 +145,7 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
               <>
                 <h4 className="font-display text-lg font-semibold text-slate-900">Answer any of the {list.length} questions listed</h4>
                 <p className="mb-4 mt-1 text-sm leading-6 text-slate-600">Speak or type freely, in any order. You will see which questions it answers, with your words for each, before anything is saved.</p>
-                <SeveralAnswers model={model} items={list} editor={editor} ctx={notes!} />
+                <SeveralAnswers model={model} items={list} editor={editor} ctx={notes!} onSaved={setBefore} />
               </>
             ) : (
               <QuestionCard key={item.key} item={item} model={model} canEdit={canEdit} position={`${at + 1} of ${list.length}`} notes={ai ? notes : undefined} waits={shown === 'wait' ? holdReason(plan.held[item.key]) : ''}
@@ -148,6 +170,47 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * After answers from notes, a transcript or a returned question file are saved: how many of the open
+ * questions they closed, and what is left, grouped by who to ask as the question files are, the most
+ * decisive first, with the name a question is left with (domain/questions/result.ts).
+ */
+function MeetingResultPanel({ before, after, onSend, onClose }: { before: ProcessModel; after: ProcessModel; onSend: () => void; onClose: () => void }) {
+  const r = React.useMemo(() => meetingResult(before, after), [before, after]);
+  return (
+    <section className="rounded-xl border border-emerald-200 bg-white p-6" aria-labelledby="meeting-result" data-testid="meeting-result">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 id="meeting-result" className="font-display text-lg font-semibold text-slate-900" data-testid="meeting-result-count">{r.text}</h4>
+          <p className="mt-1 text-sm text-slate-600">{r.left.length ? 'What is left, by who can answer it:' : 'Nothing is left open.'}</p>
+        </div>
+        <button type="button" className="text-sm text-slate-600 hover:underline" onClick={onClose}>Close</button>
+      </div>
+      {r.left.length > 0 && (
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          {r.left.map(g => (
+            <div key={g.owner} data-testid="meeting-result-group">
+              <p className="text-xs font-semibold text-slate-500">{g.label} ({g.items.length})</p>
+              <ul className="mt-2 space-y-2 text-sm">
+                {g.items.map(i => (
+                  <li key={i.key} className="leading-6 text-slate-800">
+                    {i.question}
+                    <span className="mt-0.5 flex flex-wrap gap-1.5">
+                      {i.decisive && <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-semibold', GROUP_TONE.decides)}>{i.group}</span>}
+                      {i.leftWith && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-inset ring-amber-200">Ask: {i.leftWith}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+      {r.left.length > 0 && <button type="button" onClick={onSend} className="mt-4 text-sm font-semibold text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4">Send questions to the people who know</button>}
+    </section>
   );
 }
 

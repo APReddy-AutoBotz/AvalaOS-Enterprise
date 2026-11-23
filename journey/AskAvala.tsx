@@ -17,6 +17,7 @@ import { InterviewPanel } from './process/InterviewPanel.tsx';
 import { SuggestionsPanel } from './process/SuggestionsPanel.tsx';
 import type { Suggestion } from '../domain/assistant/suggest.ts';
 import { useProcessChanged } from './processChanged.ts';
+import { openGaps } from './process/openGaps.ts';
 import { questionPlan, useSharedLook, useSourceLook } from './process/sourceLook.ts';
 import { SidePanel } from './process/widgets.tsx';
 import { AskAvalaButton, AskMark, ErrorNote, messageOf, Spinner } from './ui.tsx';
@@ -147,13 +148,19 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
       ))}
     </div>
   );
+  const gapsStage = procStages.includes('assessment') ? 'assessment' as const : procStages.includes('documents') ? 'documents' as const : null;
   if (proc && view === 'interview') {
     return (
       <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
         <div data-testid="ask-panel">
           {about}{tabs}
           <React.Fragment key={`${proc.process.id}:${start?.itemKey ?? ''}`}>
-            <InterviewPanel store={store} process={proc.process} workspace={workspace} model={proc.model!} working={proc.working} start={start} />
+            <InterviewPanel store={store} process={proc.process} workspace={workspace} model={proc.model!} working={proc.working} start={start} onAnswerSeveral={gapsStage ? () => {
+              // Closing the gaps on "Several at once": on the Assessment stage, or on Documents for a process without one (package 16).
+              onClose();
+              nav.go({ page: 'process', processId: proc.process.id, stage: gapsStage });
+              openGaps(proc.process.id, 'several');
+            } : undefined} />
           </React.Fragment>
         </div>
       </SidePanel>
