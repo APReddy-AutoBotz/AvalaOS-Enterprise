@@ -141,16 +141,25 @@ export interface DocumentsLineInput {
   processChanged: boolean;
   /** Changes made for the whole workspace since the version. */
   workspaceChanged: WorkspaceChange[];
+  /**
+   * The inputs index proves that only a release of Avala OS changed the documents: every input's fingerprint
+   * equals the version's and the build differs (keptInputs, releaseProven). Only then is item 5 said.
+   */
+  releaseProven?: boolean;
 }
 
+/** Recorded for pull request 3 (owner, 22 November 2026): an edit saved and then undone. */
+export const savedThenUndoneLine = (N: number) => `Changes were saved since approved version ${N}, and the working draft now reads exactly as that version.`;
+
 /**
- * The line above the documents of a process that has a kept version. In order: nothing differs; this
- * process was changed (item 1 of part N); only the workspace's settings changed (question 8); otherwise
- * only a release of Avala OS writes sections differently (item 5).
+ * The line above the documents of a process that has a kept version. In order: nothing differs (and, when a
+ * change was saved since, that it was undone); this process was changed (item 1 of part N); only the
+ * workspace's settings changed (question 8); a release of Avala OS writes sections differently, said only
+ * when the inputs index proves it (item 5); otherwise neutral words that blame nothing (proposed to the owner).
  */
 export function documentsLine(i: DocumentsLineInput): string {
   const N = i.number;
-  if (i.differing === 0 && !i.workspaceChanged.includes('look')) return `The working draft reads exactly as approved version ${N}.`;
+  if (i.differing === 0 && !i.workspaceChanged.includes('look')) return i.processChanged ? savedThenUndoneLine(N) : `The working draft reads exactly as approved version ${N}.`;
   if (i.processChanged && i.differing > 0) {
     return `Approved version ${N} is kept exactly as it read when ${i.approver} approved it on ${i.date}. You are looking at the working draft: ${sectionsRead(i.differing)} differently. Approve again to make ${i.differing === 1 ? 'it' : 'them'} version ${N + 1}.`;
   }
@@ -160,7 +169,15 @@ export function documentsLine(i: DocumentsLineInput): string {
       ? `Since approved version ${N}, ${what}, so ${sectionsRead(i.differing)} differently today. Approved version ${N} is unchanged.`
       : `Since approved version ${N}, ${what}. Approved version ${N} is unchanged and downloads with the look it was approved with.`;
   }
-  return `Avala OS now writes ${i.differing} ${i.differing === 1 ? 'section' : 'sections'} differently from approved version ${N}. The approved version is unchanged.`;
+  if (i.releaseProven) return `Avala OS now writes ${i.differing} ${i.differing === 1 ? 'section' : 'sections'} differently from approved version ${N}. The approved version is unchanged.`;
+  return `${sectionsRead(i.differing)} differently from approved version ${N} today. Approved version ${N} is unchanged.`;
+}
+
+/** Whether only a release of Avala OS can explain a difference: every input the same, the build not. */
+export function releaseProven(kept: { build: string; modelHash: string; inputs: Record<string, string> } | null, now: { build: string; modelHash: string; inputs: Record<string, string> }): boolean {
+  if (!kept || kept.build === now.build || kept.modelHash !== now.modelHash) return false;
+  const keys = new Set([...Object.keys(kept.inputs), ...Object.keys(now.inputs)]);
+  return [...keys].every(k => kept.inputs[k] === now.inputs[k]);
 }
 
 /** Item 1 of part N, its first half, for the kept version's own band. */

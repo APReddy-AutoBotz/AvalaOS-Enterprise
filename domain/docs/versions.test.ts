@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { loadSample, keepInputOf } from './fixtures/keepSample.ts';
 import { buildKeptDocuments, fingerprintsOf, keptLook, keptSizes } from './keep.ts';
-import { changeCount, changeLines, documentsLine, fingerprintChanges, keptLaterLabel, LEGACY_LABEL, openedVersionLine, REASON_LABEL, reasonHelp, reasonProblem, sectionDiff, sectionsDifferingFrom, versionChanges, versionFileName, versionTag } from './versions.ts';
+import { changeCount, changeLines, documentsLine, releaseProven, fingerprintChanges, keptLaterLabel, LEGACY_LABEL, openedVersionLine, REASON_LABEL, reasonHelp, reasonProblem, sectionDiff, sectionsDifferingFrom, versionChanges, versionFileName, versionTag } from './versions.ts';
 
 const sample = await loadSample();
 const v1 = buildKeptDocuments(keepInputOf(sample));
@@ -91,11 +91,26 @@ test('the Documents line, in each case', () => {
     'Approved version 2 is kept exactly as it read when Priya Shah approved it on 21 November 2026. You are looking at the working draft: 3 sections read differently. Approve again to make them version 3.');
   assert.equal(documentsLine({ ...base, differing: 1, processChanged: true }),
     'Approved version 2 is kept exactly as it read when Priya Shah approved it on 21 November 2026. You are looking at the working draft: 1 section reads differently. Approve again to make it version 3.');
-  assert.equal(documentsLine({ ...base, differing: 4 }), 'Avala OS now writes 4 sections differently from approved version 2. The approved version is unchanged.');
-  assert.equal(documentsLine({ ...base, differing: 1 }), 'Avala OS now writes 1 section differently from approved version 2. The approved version is unchanged.');
+  // Item 5 only when the inputs index proves a release (recorded for pull request 3); otherwise neutral words.
+  assert.equal(documentsLine({ ...base, differing: 4, releaseProven: true }), 'Avala OS now writes 4 sections differently from approved version 2. The approved version is unchanged.');
+  assert.equal(documentsLine({ ...base, differing: 1, releaseProven: true }), 'Avala OS now writes 1 section differently from approved version 2. The approved version is unchanged.');
+  assert.equal(documentsLine({ ...base, differing: 4 }), '4 sections read differently from approved version 2 today. Approved version 2 is unchanged.');
+  assert.equal(documentsLine({ ...base, differing: 1 }), '1 section reads differently from approved version 2 today. Approved version 2 is unchanged.');
+  // An edit saved and then undone (recorded for pull request 3): the tag says "unapproved changes", nothing differs.
+  assert.equal(documentsLine({ ...base, differing: 0, processChanged: true }), 'Changes were saved since approved version 2, and the working draft now reads exactly as that version.');
   assert.equal(documentsLine({ ...base, differing: 2, workspaceChanged: ['layout'] }), 'Since approved version 2, the workspace\'s document sections changed, so 2 sections read differently today. Approved version 2 is unchanged.');
   assert.equal(documentsLine({ ...base, differing: 1, workspaceChanged: ['assessment_settings', 'layout'] }), 'Since approved version 2, the workspace\'s assessment settings and document sections changed, so 1 section reads differently today. Approved version 2 is unchanged.');
   assert.equal(documentsLine({ ...base, differing: 0, workspaceChanged: ['look'] }), 'Since approved version 2, the workspace\'s look changed. Approved version 2 is unchanged and downloads with the look it was approved with.');
   assert.equal(openedVersionLine(1, '21 November 2026', 'Priya Shah'), 'Approved version 1, approved on 21 November 2026 by Priya Shah. As kept at approval.');
   assert.equal(versionFileName('pdd', 'Vendor invoice processing', 2, 'docx'), 'PDD - Vendor invoice processing - version 2.docx');
+});
+
+test('a release is proven only when every input is the same and the build is not', () => {
+  const kept = { build: 'aaa1111', modelHash: 'm', inputs: { edits: 'e', decisions: 'd' } };
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222' }), true);
+  assert.equal(releaseProven(kept, kept), false, 'the same build explains nothing');
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222', inputs: { edits: 'e2', decisions: 'd' } }), false, 'an input changed');
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222', modelHash: 'm2' }), false, 'the record changed');
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222', inputs: { edits: 'e' } }), false, 'an input went missing');
+  assert.equal(releaseProven(null, kept), false);
 });

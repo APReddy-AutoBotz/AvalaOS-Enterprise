@@ -4,6 +4,7 @@
 import type { JourneyStore, ProcessRow } from './store/types.ts';
 import type { ProcessFacts } from '../domain/work/home.ts';
 import { revisionStatus } from '../domain/workspace/route.ts';
+import { versionTag } from '../domain/docs/versions.ts';
 import { assessProcess } from '../domain/assess/process.ts';
 import { processCard, type ProcessCard } from '../domain/assess/portfolio.ts';
 import type { AssessmentSettings } from '../domain/assess/settings.ts';
@@ -25,8 +26,12 @@ export type LoadedFacts = ProcessFacts & {
 export const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
 export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, settings?: AssessmentSettings): Promise<LoadedFacts> {
-  const revisions = await store.listRevisions(p.id);
-  const status = revisionStatus(revisions);
+  const [revisions, versions] = await Promise.all([store.listRevisions(p.id), store.versionStates(p.workspaceId, p.id).catch(() => [])]);
+  // With a kept version (package 14) the list says what the process page's tag says.
+  const v = versions[0] ?? null;
+  const tag = v ? versionTag({ latest: v.latest, processChanged: v.processChanged, legacyRevision: v.approvedHasVersion ? null : v.approvedRevNo }) : null;
+  const byRevision = revisionStatus(revisions);
+  const status: { label: string; tone: typeof byRevision.tone } = v?.latest && tag ? { label: tag, tone: v.processChanged ? 'changed' : 'approved' } : tag ? { label: tag, tone: byRevision.tone } : byRevision;
   const current = revisions.find(r => r.state === 'working') ?? revisions.find(r => r.state === 'approved');
   // The look in the sources as the server shares it, so every page and the weekday email count the same.
   const [model, proposals, decisions, shared, comments] = await Promise.all([current ? store.getModel(current.id) : Promise.resolve(null), store.listProposals(p.id), store.getAssessmentDecisions(p.id).catch(() => null), sharedLookOf(store, p.id), store.listSectionComments(p.id).catch(() => [])]);
