@@ -109,7 +109,9 @@ export interface ExtractionRow { id: string; status: ExtractionStatus; error: st
 /** A failed request, with the HTTP-like status the server returned. */
 export class StoreError extends Error {
   readonly status: number;
-  constructor(status: number, message: string) { super(message); this.status = status; }
+  /** The server function's own error code, when it gave one (for example BUDGET_EXCEEDED, RATE_LIMITED). */
+  readonly code?: string;
+  constructor(status: number, message: string, code?: string) { super(message); this.status = status; if (code) this.code = code; }
 }
 
 export interface JourneyStore {
@@ -215,6 +217,8 @@ export interface JourneyStore {
   startExtraction(workspaceId: string, processId: string, sourceIds: string[]): Promise<{ runId: string }>;
   /** The latest extraction of a process, with its model once done. */
   latestExtraction(processId: string): Promise<ExtractionRow | null>;
+  /** Asks the server to end a reading whose step was stopped from outside (it decides; see domain/extract/failure.ts). */
+  lookAtExtraction(runId: string): Promise<void>;
   /** Runs a registered AI task on segments; quotes in the result are already checked against them. */
   /** `recorded`: the demo's recorded reply on the sample case, not a live answer (domain/assistant/recorded.ts). */
   runAiTask(workspaceId: string, task: string, segments: Segment[]): Promise<{ data: unknown; recorded?: boolean; /** Tokens the call used, as the server reports them. */ usage?: { input: number; output: number } }>;

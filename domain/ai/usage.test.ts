@@ -65,10 +65,84 @@ test('a month is read page by page: only a full page can have more after it (F11
   assert.ok(USAGE_PAGES.max % USAGE_PAGES.size === 0 && USAGE_PAGES.max > USAGE_PAGES.size);
 });
 
+test('the per-minute limit: its figures, who and what it counts, and the words a person sees', async () => {
+  const { AI_RATE_LIMIT, rateLimitApplies, admitArgs, readAdmit, rateLimitedMessage, RATE_LIMIT_UNAVAILABLE } = await import('./usage.ts');
+  assert.deepEqual(AI_RATE_LIMIT, { windowSeconds: 60, perPerson: 30, perWorkspace: 90 });
+  // Every provider call by a person counts; the allowance lookup does not; the trusted server is never asked.
+  assert.deepEqual(['run', 'transcribe', 'health', 'allowance'].map(a => rateLimitApplies(a, false)), [true, true, true, false]);
+  assert.deepEqual(['run', 'transcribe', 'health', 'allowance'].map(a => rateLimitApplies(a, true)), [false, false, false, false]);
+  // The workspace's limit only on the platform key.
+  assert.equal(admitArgs('w', 'u', true).count_workspace, true);
+  assert.equal(admitArgs('w', 'u', false).count_workspace, false);
+  assert.deepEqual(admitArgs('w', 'u', true), { target_workspace: 'w', target_person: 'u', per_person: 30, per_workspace: 90, count_workspace: true, window_seconds: 60 });
+  // The database's answer.
+  assert.deepEqual(readAdmit({ admitted: true }), { admitted: true });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'person', retry_after: 40 }), { admitted: false, scope: 'person', retryAfterSeconds: 40 });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'workspace', retry_after: 0.2 }), { admitted: false, scope: 'workspace', retryAfterSeconds: 1 });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'person', retry_after: 'soon' }), { admitted: false, scope: 'person', retryAfterSeconds: 60 });
+  assert.deepEqual(readAdmit({ admitted: false, scope: 'person', retry_after: 9999 }), { admitted: false, scope: 'person', retryAfterSeconds: 60 });
+  for (const odd of [null, 'yes', 1, {}, { admitted: 'true' }, { admitted: false }, { admitted: false, scope: 'everyone' }]) assert.equal(readAdmit(odd), null, JSON.stringify(odd));
+  // The words.
+  assert.equal(rateLimitedMessage('person', 40), 'You have started 30 AI requests in the last minute, the most one person can. Wait about 40 seconds and try again.');
+  assert.equal(rateLimitedMessage('workspace', 40), 'This workspace has started 90 AI requests in the last minute, the most it can at once. Wait about 40 seconds and try again.');
+  assert.match(rateLimitedMessage('person', 1), /Wait about 1 second and try again\.$/);
+  assert.equal(RATE_LIMIT_UNAVAILABLE, 'The AI limit could not be checked just now. Try again in a minute.');
+});
+
 test('"Test this key" on a workspace\'s own key has its own small limit, not the monthly allowance', async () => {
   const { KEY_TEST_LIMIT, keyTestLimited, WORK_OF_TASK } = await import('./usage.ts');
   assert.equal(KEY_TEST_LIMIT.perHour, 10);
   assert.equal(keyTestLimited(9), false);
   assert.equal(keyTestLimited(10), true);
   assert.equal(WORK_OF_TASK.health, 'Testing the AI key', 'tests show in the usage panel under their own name');
+});
+
+test('voice: the token form as recorded, the duration form at 20 tokens a second, neither estimated from the size', async () => {
+  const { transcriptionUsage, VOICE_TOKENS_PER_SECOND, VOICE_TOKEN_CAP, VOICE_FALLBACK_BYTES_PER_SECOND } = await import('./usage.ts');
+  assert.equal(VOICE_TOKENS_PER_SECOND, 20);
+  assert.equal(VOICE_TOKEN_CAP, 12_000);
+  // The token form keeps today's figures (the two gpt-4o-transcribe rows of 20 November 2026).
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'tokens', input_tokens: 207, output_tokens: 32, total_tokens: 239 } }, 50_000), { input: 207, output: 32, form: 'tokens' });
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 259, output_tokens: 67 } }, 50_000), { input: 259, output: 67, form: 'tokens' });
+  // The duration form: 30 seconds count 600 in and 0 out; 0.4 seconds count as a whole second.
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'duration', seconds: 30 } }, 50_000), { input: 600, output: 0, form: 'duration' });
+  assert.deepEqual(transcriptionUsage({ usage: { type: 'duration', seconds: 0.4 } }, 50_000), { input: 20, output: 0, form: 'duration' });
+  // Neither form: estimated from the recording's size, never nothing.
+  const bytes = 60 * VOICE_FALLBACK_BYTES_PER_SECOND;
+  assert.deepEqual(transcriptionUsage({ text: 'x' }, bytes), { input: 1200, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'something-new' } }, bytes), { input: 1200, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage(null, 0), { input: 20, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage('not json', 10), { input: 20, output: 0, form: 'neither' });
+  // A token form of 0 and 0 is absent: never counted as nothing.
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { type: 'tokens', input_tokens: 0, output_tokens: 0 } }, bytes), { input: 1200, output: 0, form: 'neither' });
+  assert.deepEqual(transcriptionUsage({ text: 'x', usage: { input_tokens: 0, output_tokens: 0 } }, bytes), { input: 1200, output: 0, form: 'neither' });
+  // Zero tokens beside a duration: the duration counts.
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 0, output_tokens: 0, seconds: 30, type: 'duration' } }, bytes), { input: 600, output: 0, form: 'duration' });
+});
+
+test('voice: values that are not a real count are absent, and the cap holds', async () => {
+  const { transcriptionUsage, VOICE_TOKEN_CAP, VOICE_FALLBACK_BYTES_PER_SECOND } = await import('./usage.ts');
+  const bytes = 30 * VOICE_FALLBACK_BYTES_PER_SECOND;
+  for (const seconds of [-5, 0, '30', Number.NaN, Number.POSITIVE_INFINITY, 10 ** 9, null]) {
+    assert.deepEqual(transcriptionUsage({ usage: { type: 'duration', seconds } }, bytes), { input: 600, output: 0, form: 'neither' }, String(seconds));
+  }
+  for (const v of [-1, '207', Number.NaN]) {
+    assert.equal(transcriptionUsage({ usage: { input_tokens: v, output_tokens: v } }, bytes).form, 'neither', String(v));
+  }
+  // The cap: what ten minutes of audio count, whichever form.
+  assert.deepEqual(transcriptionUsage({ usage: { type: 'duration', seconds: 3000 } }, bytes), { input: VOICE_TOKEN_CAP, output: 0, form: 'duration' });
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 50_000, output_tokens: 9 } }, bytes), { input: VOICE_TOKEN_CAP, output: 0, form: 'tokens' });
+  assert.deepEqual(transcriptionUsage({ usage: { input_tokens: 11_990, output_tokens: 50 } }, bytes), { input: 11_990, output: 10, form: 'tokens' });
+  // The largest recording the server takes (about 14 million characters of encoded audio) is capped too.
+  assert.deepEqual(transcriptionUsage({}, Math.floor(14_000_000 * 3 / 4)), { input: VOICE_TOKEN_CAP, output: 0, form: 'neither' });
+});
+
+test('voice: the log line names only the form and the model; neither is a warning', async () => {
+  const { transcriptionLogLine, VOICE_COUNT_NOTE } = await import('./usage.ts');
+  assert.deepEqual(transcriptionLogLine('duration', 'gpt-transcribe'), { level: 'info', text: 'transcribe usage form: duration (gpt-transcribe)' });
+  assert.deepEqual(transcriptionLogLine('tokens', 'gpt-4o-transcribe'), { level: 'info', text: 'transcribe usage form: tokens (gpt-4o-transcribe)' });
+  assert.deepEqual(transcriptionLogLine('neither', 'gpt-transcribe'), { level: 'warn', text: "transcribe usage form: neither (gpt-transcribe), estimated from the recording's size" });
+  // Nothing but a model name gets in, whatever the setting holds.
+  assert.equal(transcriptionLogLine('tokens', 'gpt-transcribe\nsecret text {"usage":1}').text, 'transcribe usage form: tokens (gpt-transcribesecrettextusage1)');
+  assert.equal(VOICE_COUNT_NOTE, 'Spoken answers are counted at 20 tokens a second of audio.');
 });

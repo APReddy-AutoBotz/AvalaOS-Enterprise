@@ -1,0 +1,10 @@
+{
+ "startedAt": "2026-11-21T06:00:00.000Z",
+ "finishedAt": "2026-11-21T06:02:30.000Z",
+ "liveSegments": {
+  "doc-1": 9
+ },
+ "files": {
+  "doc-1": "source.md"
+ }
+}

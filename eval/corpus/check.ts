@@ -1,4 +1,8 @@
-// Starts one extraction check and prints its scorecard: node eval/corpus/check.ts <case> [workspace id]
+// Starts one extraction check and prints its scorecard: node eval/corpus/check.ts <case> [workspace id] [--start-at-kinds | --record-cutoff]
+//   --start-at-kinds  the facts merge starts at one answer per kind (domain/extract/factsParts.ts), to show
+//                     that path on a real provider; refused for any reading that is not a check.
+//   --record-cutoff   no reading: one tiny call cut off on purpose, whose reply is printed as it came, for
+//                     domain/ai/fixtures/ (well under 1,000 tokens).
 // Run by the "Extraction check" workflow (.github/workflows/extraction-check.yml), which supplies
 // EXTRACT_URL (the project's address) and EXTRACT_KEY (the project's secret key, read with the access
 // GitHub already holds for deploying the functions; never printed). Only a holder of that key, or of
@@ -8,7 +12,11 @@ import fs from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
 import { CASES, filesOf } from './cases.ts';
 
-const [caseId, workspaceId = ''] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const flags = new Set(args.filter(a => a.startsWith('--')));
+const [caseId, workspaceId = ''] = args.filter(a => !a.startsWith('--'));
+for (const f of flags) if (!['--start-at-kinds', '--record-cutoff'].includes(f)) { console.error(`Unknown option ${f}.`); process.exit(1); }
+if (flags.size > 1) { console.error('Give at most one option.'); process.exit(1); }
 const url = process.env.EXTRACT_URL ?? '', key = process.env.EXTRACT_KEY ?? '';
 if (!url || !key) { console.error('EXTRACT_URL and EXTRACT_KEY are needed.'); process.exit(1); }
 if (!Object.hasOwn(CASES, caseId)) { console.error(`Unknown case. Cases: ${Object.keys(CASES).join(', ')}.`); process.exit(1); }
@@ -25,21 +33,78 @@ if (!res.ok) { console.error(`The check could not be made (${res.status}).`); pr
 const [run] = await res.json();
 console.log(`Check ${run.id}: case ${caseId}${workspaceId ? `, on workspace ${workspaceId}'s AI connection` : ', on the platform key'}.`);
 
-const files = Object.fromEntries(filesOf(c).map(f => [f, fs.readFileSync(new URL(`./${c.dir}/${f}`, import.meta.url)).toString('base64')]));
-const start = await fetch(`${url}/functions/v1/journey-extract`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start', runId: run.id, token, files }) });
+const fn = `${url}/functions/v1/journey-extract`;
+const files = flags.has('--record-cutoff') ? {} : Object.fromEntries(filesOf(c).map(f => [f, fs.readFileSync(new URL(`./${c.dir}/${f}`, import.meta.url)).toString('base64')]));
+const startBody = flags.has('--record-cutoff') ? { action: 'record-cutoff', runId: run.id, token }
+  : { action: 'start', runId: run.id, token, files, ...(flags.has('--start-at-kinds') ? { startAtKinds: true } : {}) };
+const start = await fetch(fn, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(startBody) });
 if (start.status !== 202) { console.error(`The check did not start (${start.status}): ${(await start.text()).slice(0, 300)}`); process.exit(1); }
+
+/** Tokens and time of each part of the facts merge, split notes included. */
+async function printFactsParts() {
+  const r = await fetch(`${url}/rest/v1/extraction_run_parts?run_id=eq.${run.id}&part=like.facts:*&select=part,usage:output->usage,ms:output->ms,splitInto:output->splitInto,reason:output->reason&order=part`, { headers });
+  const rows: any[] = r.ok ? await r.json() : [];
+  console.log('Facts merge, per part (tokens in / out, seconds):');
+  for (const p of rows) {
+    const t = p.usage ? `${p.usage.input} / ${p.usage.output}` : '—';
+    console.log(`  ${p.part}: ${t}, ${p.ms ? (p.ms / 1000).toFixed(1) : '—'} s${p.splitInto ? `, split into ${p.splitInto.join(', ')} (${p.reason})` : ''}`);
+  }
+}
+
+/**
+ * Counts tracked beside the scorecard, not judged (owner, 20 November 2026), with the ranges of the
+ * 15 scored checks before the facts merge was split.
+ */
+const TRACKED = [
+  { key: 'questions', label: 'Questions listed', before: '16 to 22' },
+  { key: 'conflicts', label: 'Conflicts listed', before: '5 to 8' },
+  { key: 'exceptions', label: 'Exception groups', before: '15 to 21' },
+] as const;
+async function printTracked() {
+  const r = await fetch(`${url}/rest/v1/extraction_run_parts?run_id=eq.${run.id}&part=eq.merge:facts&select=${TRACKED.map(t => `${t.key}:output->${t.key}`).join(',')}`, { headers });
+  const [row] = r.ok ? await r.json() : [];
+  console.log('Tracked, not judged (the 15 checks before):');
+  for (const t of TRACKED) console.log(`  ${t.label}: ${Array.isArray(row?.[t.key]) ? row[t.key].length : '—'} (${t.before})`);
+}
+
+/** Ways in whose status assembly corrected (domain/extract/assemble.ts, notSwitchedOn), with the passage that decided each. */
+function printCorrected(list: { system: string; interface: string; before: string; after: string; passage: string; sourceId: string }[] | null | undefined) {
+  const rows = Array.isArray(list) ? list : [];
+  console.log(`Ways in corrected by assembly: ${rows.length}`);
+  for (const c of rows) console.log(`  ${c.system}: ${c.interface}, ${c.before} -> ${c.after} (${c.sourceId}: "${c.passage}")`);
+}
 
 const until = Date.now() + 12 * 60_000;
 for (;;) {
   await new Promise(r => setTimeout(r, 15_000));
-  const r = await fetch(`${url}/rest/v1/extraction_runs?id=eq.${run.id}&select=status,error,result->score,input_tokens,output_tokens`, { headers });
+  const r = await fetch(`${url}/rest/v1/extraction_runs?id=eq.${run.id}&select=status,error,result->score,recorded:result->recorded,failure:result->failure,corrected:result->report->corrected,input_tokens,output_tokens,updated_at`, { headers });
   const [row] = r.ok ? await r.json() : [{}];
+  if (row?.status === 'done' && flags.has('--record-cutoff')) {
+    console.log(`Recorded. Tokens: ${row.input_tokens} in, ${row.output_tokens} out. Read as: ${row.recorded?.read}.`);
+    console.log('BEGIN_CUTOFF_REPLY');
+    console.log(JSON.stringify(row.recorded, null, 2));
+    console.log('END_CUTOFF_REPLY');
+    break;
+  }
   if (row?.status === 'done') {
     console.log(`Done. Tokens: ${row.input_tokens} in, ${row.output_tokens} out.`);
+    await printFactsParts();
+    await printTracked();
+    printCorrected(row.corrected);
     console.log(JSON.stringify(row.score, null, 2));
     break;
   }
-  if (row?.status === 'failed') { console.error(`The check failed: ${String(row.error).slice(0, 500)}`); process.exit(1); }
+  if (row?.status === 'failed') {
+    console.error(`The check failed: ${String(row.error).slice(0, 500)}`);
+    if (row.failure) console.error(`Detail: ${JSON.stringify(row.failure).slice(0, 1000)}`);
+    console.error(`Tokens: ${row.input_tokens} in, ${row.output_tokens} out.`);
+    await printFactsParts();
+    process.exit(1);
+  }
+  // A step stopped from outside leaves the run unchanged; the function ends it once it has sat too long.
+  if (row?.updated_at && Date.now() - Date.parse(row.updated_at) > 7 * 60_000) {
+    await fetch(fn, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'look', runId: run.id, token }) }).catch(() => {});
+  }
   if (Date.now() > until) { console.error(`Still ${row?.status ?? 'unknown'} after 12 minutes; read it later with: select status, error, result->'score' from public.extraction_runs where id = '${run.id}';`); process.exit(1); }
   console.log(`… ${row?.status ?? 'waiting'}`);
 }

@@ -77,3 +77,9 @@ test('a visitor with a sign-in session sees "Open my work" on the public pages',
     await expect(page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Open my work' })).toHaveAttribute('href', '/work');
   }
 });
+
+test('the privacy page says what is counted at a teardown', async ({ page }) => {
+  await page.goto('/privacy');
+  await expect(page.getByText(/the opening of the demo and of each published-process teardown in it, without cookies/)).toBeVisible();
+  await expect(page.getByText(/or opened a teardown's documents\. Never anything you type\. Nothing else is counted inside the demo or the product/)).toBeVisible();
+});

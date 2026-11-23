@@ -23,6 +23,8 @@ import { hashModel } from '../../domain/processModel/hash.ts';
 import { MODEL_VERSION } from '../../domain/assess/scoring.ts';
 import { readAcross, setVisitShape, visitShape, writeAcross } from './mapShape.ts';
 import { ChooserContext, chosenBy } from './widgets.tsx';
+import { withTeardownComment } from '../../domain/site/teardowns.ts';
+import { useTeardown } from '../teardown.tsx';
 
 const BpmnCanvas = React.lazy(() => import('./BpmnCanvas.tsx'));
 type View = 'asis' | 'tobe' | 'edit';
@@ -106,7 +108,9 @@ export function FlowsStage({ store, processId, workspaceId, model: loaded, worki
   // The editor shows the flow top to bottom like the maps; the download is the standard left-to-right
   // layout, which every BPMN tool reads.
   const xml = React.useMemo(() => modelToBpmnVertical(model), [model]);
-  const downloadXml = React.useMemo(() => modelToBpmn(model), [model]);
+  // On a teardown the file carries the source and licence lines as a comment (marketing package, change b).
+  const teardown = useTeardown();
+  const downloadXml = React.useMemo(() => (teardown ? withTeardownComment(modelToBpmn(model), teardown.words) : modelToBpmn(model)), [model, teardown]);
 
   const review = async () => {
     if (!api.current) return;

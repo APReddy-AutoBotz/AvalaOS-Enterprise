@@ -26,6 +26,9 @@ import { DecidedPanel } from './DecidedPanel.tsx';
 import { documentsNote, offersDocument, PURPOSE_LABEL, purposeOf, whatFollows } from '../../domain/plan/purpose.ts';
 import { useModelEditor } from './useModelEditor.ts';
 import { DEFAULT_DOCUMENT_SETTINGS, type DocumentSettings } from '../../domain/docs/branding.ts';
+import { NOT_ON_TEARDOWN } from '../../domain/site/teardowns.ts';
+import { useTeardown } from '../teardown.tsx';
+import { countTeardownDocuments } from '../home/visits.ts';
 import { applyLayout } from '../../domain/docs/layout.ts';
 import { buildFrd } from '../../domain/docs/frd.ts';
 import { buildSdd } from '../../domain/docs/sdd.ts';
@@ -199,7 +202,12 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const delivery = React.useMemo(() => (assessment && follows.future ? deliveryPlan(model, assessment) : null), [model, assessment, follows.future]);
   const planned = React.useMemo(() => (follows.future ? new Set<DocType>((delivery?.docs ?? []).filter(d => d.planned && d.available).map(d => d.doc as DocType)) : new Set<DocType>(['pdd'])), [delivery, follows.future]);
   // The agent document is a tab only when the delivery plan lists it, planned or one click away (part E).
-  const types = React.useMemo(() => TYPES.filter(t => offersDocument(model, t.id) && (t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent'))), [delivery, model]);
+  // A teardown does not offer the evidence pack: it takes no company section, so it could not carry the
+  // teardown's source and licence lines (marketing package, change b).
+  const teardown = useTeardown();
+  // A teardown's documents opening is counted once per load (domain/site/visits.ts).
+  React.useEffect(() => { if (teardown) countTeardownDocuments(teardown.words.slug); }, [teardown]);
+  const types = React.useMemo(() => TYPES.filter(t => offersDocument(model, t.id) && (t.id !== 'agent' || (delivery?.docs ?? []).some(d => d.doc === 'agent')) && !(teardown && t.id === 'evidence')), [delivery, model, teardown]);
   const orderedTypes = React.useMemo(() => [...types.filter(t => planned.has(t.id)), ...types.filter(t => !planned.has(t.id))], [planned, types]);
   const typeChosen = React.useRef(Boolean(asked.current));
   React.useEffect(() => { if (!typeChosen.current && planned.size && !planned.has(type)) setType(orderedTypes[0].id); }, [planned, orderedTypes, type]);
@@ -371,7 +379,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
           </div>
           {plannedLine && <span className="text-xs text-slate-500" data-testid="planned-docs">{plannedLine}</span>}
         </div>
-        {doc && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setShowChecks(!showChecks)} aria-expanded={showChecks}>{failing ? `Ready to hand over? ${failing} to fix` : 'Ready to hand over ✓'}</Button>{type === 'tests' && <Button onClick={downloadExcel}>Download for Excel</Button>}<Button variant={type === 'tests' ? 'secondary' : undefined} onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
+        {doc && <div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => setShowChecks(!showChecks)} aria-expanded={showChecks}>{failing ? `Ready to hand over? ${failing} to fix` : 'Ready to hand over ✓'}</Button>{type === 'tests' && !teardown && <Button onClick={downloadExcel}>Download for Excel</Button>}{type === 'tests' && teardown && <span data-testid="not-on-teardown" className="self-center text-xs text-slate-500">Download for Excel: {NOT_ON_TEARDOWN}</span>}<Button variant={type === 'tests' ? 'secondary' : undefined} onClick={downloadWord} disabled={wordBusy}>{wordBusy ? 'Preparing…' : 'Download Word'}</Button><Button variant="secondary" onClick={() => window.print()}>Print or save as PDF</Button><Button variant="ghost" onClick={download}>Markdown</Button></div>}
       </div>
 
       {!decisions ? (error ? null : <Spinner label="Writing the document" />) : !doc ? (

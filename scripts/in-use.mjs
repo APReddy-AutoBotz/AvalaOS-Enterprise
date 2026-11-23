@@ -33,6 +33,8 @@ const KEPT_WHOLE = [
   /^eval\/ask\/.*\.json$/, /^tsconfig(\.[a-z]+)?\.json$/,
   // Files the fast tests read from disk (documents, spreadsheets, PDFs) rather than import.
   /^(domain|eval)\/.*\/fixtures\//,
+  // What each teardown's demo file is built from (domain/site/teardowns.ts; scripts/teardown-data.ts reads it).
+  /^teardowns\//,
 ];
 
 // Where the walk starts.

@@ -8,6 +8,7 @@ import { triage } from '../questions/triage.ts';
 import { decisive, planQuestions } from '../questions/firstList.ts';
 import type { Suggestion } from './suggest.ts';
 import { addLook, allowanceStopped, allowanceUsedUp, AUTO_LOOK, foundFor, foundKeys, lookSummary, noteSent, noteStopped, sourcesKey, toLookUp, waitingUntil, type SourceLook } from './sourceLook.ts';
+import { StoreError } from '../../journey/store/types.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 function many(): ProcessModel {
@@ -146,6 +147,15 @@ test('when the month\'s AI allowance is used up the look stops and says so in pl
   assert.ok(allowanceUsedUp({ status: 429, message: 'This workspace has used its AI allowance for the month.' }));
   assert.ok(allowanceUsedUp(new Error('This workspace has used its AI allowance for the month.')));
   assert.ok(!allowanceUsedUp({ status: 500, message: 'The AI provider did not answer.' }));
+  // Decided by the server's code, which the store's error carries: only BUDGET_EXCEEDED stops the look for the month.
+  assert.ok(allowanceUsedUp({ status: 429, code: 'BUDGET_EXCEEDED', message: 'This workspace has used its AI allowance for the month.' }));
+  assert.ok(allowanceUsedUp(new StoreError(429, 'This workspace has used its AI allowance for the month.', 'BUDGET_EXCEEDED')));
+  assert.ok(!allowanceUsedUp(new StoreError(429, 'You have started 30 AI requests in the last minute, the most one person can. Wait about 40 seconds and try again.', 'RATE_LIMITED')), 'a busy minute does not stop the look for the month');
+  assert.ok(!allowanceUsedUp(new StoreError(429, 'This workspace has started 90 AI requests in the last minute, the most it can at once. Wait about 40 seconds and try again.', 'RATE_LIMITED')));
+  assert.ok(!allowanceUsedUp(new StoreError(429, 'The key has been tested 10 times in the last hour. Try again later.', 'TEST_LIMIT')));
+  assert.ok(!allowanceUsedUp({ status: 429, message: 'You have started 30 AI requests in the last minute, the most one person can.' }), 'a 429 without a code is not the allowance unless its words say so');
+  // A code decides even when the words would say otherwise.
+  assert.ok(!allowanceUsedUp(new StoreError(429, 'This workspace has used its AI allowance for the month.', 'RATE_LIMITED')));
   const look = noteStopped(null, 'a,b', now);
   assert.ok(allowanceStopped(look, now + 3_600_000));
   assert.ok(!allowanceStopped(look, Date.parse('2026-12-01T00:00:00Z')), 'a new month starts again');

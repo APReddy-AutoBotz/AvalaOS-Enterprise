@@ -69,17 +69,21 @@ const toMe = (u: { id: string; email?: string | null } | null | undefined): Me |
 export function createSupabaseStore(url: string, publishableKey: string): JourneyStore {
   const db: SupabaseClient = createClient(url, publishableKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'avala.journey.auth' } });
 
-  /** Calls an edge function with the user's session; errors carry the function's own message. */
+  /** Calls an edge function with the user's session; errors carry the function's own message and code. */
   async function call(name: string, body: Record<string, unknown>): Promise<any> {
     const { data, error } = await db.functions.invoke(name, { body });
     if (!error) return data;
     const res: Response | undefined = (error as any).context;
-    let message = error.message, status = 500;
+    let message = error.message, status = 500, code: string | undefined;
     if (res && typeof res.json === 'function') {
       status = res.status;
-      try { const j = await res.json(); message = j?.error?.message ?? j?.message ?? message; } catch { /* keep the generic message */ }
+      try {
+        const j = await res.json();
+        message = j?.error?.message ?? j?.message ?? message;
+        if (typeof j?.error?.code === 'string') code = j.error.code;
+      } catch { /* keep the generic message */ }
     }
-    throw new StoreError(status, message);
+    throw new StoreError(status, message, code);
   }
 
   return {
@@ -292,6 +296,9 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async startExtraction(workspaceId, processId, sourceIds) {
       const r = await call('journey-extract', { action: 'create', workspaceId, processId, sourceIds });
       return { runId: r.runId };
+    },
+    async lookAtExtraction(runId) {
+      await call('journey-extract', { action: 'look', runId });
     },
     async runAiTask(workspaceId, task, segments) {
       const r = await call('journey-ai', { action: 'run', workspaceId, task, segments });

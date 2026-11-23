@@ -89,6 +89,26 @@ export function matchByName(gold: Named[], candidate: { id: string; name: string
   return out;
 }
 
+type WithText = { id: string; name: string; text: string; aliases?: string[] };
+/**
+ * Rules and exceptions (owner, 20 November 2026): a candidate's score against a gold item is the better
+ * of its name against the gold's name and aliases, and its name with its condition or trigger against the
+ * gold's name with its condition or trigger. So a right name is not lost behind a long trigger. One-to-one
+ * greedy matching, highest score first, as matchByName.
+ */
+export function matchByNameOrText(gold: WithText[], candidate: WithText[], threshold = 0.45): Map<string, string> {
+  const pairs: [number, string, string][] = [];
+  for (const g of gold) for (const c of candidate) {
+    const s = Math.max(...names(g).map(n => similarity(c.name, n)), similarity(`${c.name} ${c.text}`, `${g.name} ${g.text}`));
+    if (s >= threshold) pairs.push([s, g.id, c.id]);
+  }
+  pairs.sort((p, q) => q[0] - p[0]);
+  const out = new Map<string, string>();
+  const used = new Set<string>();
+  for (const [, g, c] of pairs) if (!out.has(g) && !used.has(c)) { out.set(g, c); used.add(c); }
+  return out;
+}
+
 const ratio = (n: number, d: number) => (d === 0 ? 1 : n / d);
 const normalize = (s: string) => s.replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/\s+/g, ' ').trim();
 
@@ -121,11 +141,12 @@ export function score(gold: ProcessModel, candidate: ProcessModel, sourceTexts: 
     systemScore += union.size === 0 ? 1 : [...gSys].filter(s => cSys.has(s)).length / union.size;
   }
 
-  // Rules and exceptions match on name plus condition or trigger, or on a gold alias.
+  // Rules and exceptions match on the name (with the gold's aliases), or on the name with the condition or
+  // trigger, whichever is closer (matchByNameOrText).
   const withText = <T extends { id: string; name: string; aliases?: string[] }>(xs: T[], extra: (x: T) => string) =>
-    xs.map(x => ({ id: x.id, name: `${x.name} ${extra(x)}`, aliases: [x.name, ...(x.aliases ?? [])] }));
-  const ruleMap = matchByName(withText<any>(g.rules, r => r.condition), withText(candidate.rules, r => r.condition), 0.45);
-  const excMap = matchByName(withText<any>(g.exceptions, x => x.trigger), withText(candidate.exceptions, x => x.trigger), 0.45);
+    xs.map(x => ({ id: x.id, name: x.name, text: extra(x) ?? '', aliases: x.aliases }));
+  const ruleMap = matchByNameOrText(withText<any>(g.rules, r => r.condition), withText(candidate.rules, r => r.condition), 0.45);
+  const excMap = matchByNameOrText(withText<any>(g.exceptions, x => x.trigger), withText(candidate.exceptions, x => x.trigger), 0.45);
 
   // Metrics: same kind and a value inside the gold value or range (5% slack).
   let metricHits = 0;

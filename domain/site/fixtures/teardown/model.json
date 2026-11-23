@@ -1,0 +1,311 @@
+{
+ "schemaVersion": 1,
+ "meta": {
+  "name": "Checking and paying a claim (test fixture)",
+  "objective": {
+   "value": null,
+   "status": "unknown",
+   "sources": []
+  },
+  "owner": {
+   "value": null,
+   "status": "unknown",
+   "sources": []
+  },
+  "scopeIn": [],
+  "scopeOut": [],
+  "metrics": []
+ },
+ "roles": [
+  {
+   "id": "r-claims",
+   "name": "Claims officer",
+   "kind": "person_role",
+   "inScope": true,
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 7,
+      "lineEnd": 7,
+      "heading": "Receive the claim"
+     },
+     "excerpt": "The claims officer receives the claim form"
+    }
+   ]
+  },
+  {
+   "id": "r-pay",
+   "name": "Payments officer",
+   "kind": "person_role",
+   "inScope": true,
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 13,
+      "lineEnd": 13,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "the payments officer pays it"
+    }
+   ]
+  }
+ ],
+ "systems": [],
+ "events": [
+  {
+   "id": "e-start",
+   "kind": "start",
+   "name": "Claim form received",
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 7,
+      "lineEnd": 7,
+      "heading": "Receive the claim"
+     },
+     "excerpt": "receives the claim form by post or online"
+    }
+   ]
+  },
+  {
+   "id": "e-end",
+   "kind": "end",
+   "name": "Claim paid",
+   "status": "inferred",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 13,
+      "lineEnd": 13,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "pays it within 10 working days"
+    }
+   ]
+  },
+  {
+   "id": "e-asked",
+   "kind": "end",
+   "name": "Person asked for what is missing",
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 15,
+      "lineEnd": 15,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "asks for what is missing"
+    }
+   ]
+  }
+ ],
+ "steps": [
+  {
+   "id": "s-receive",
+   "name": "Receive claim form",
+   "description": "Receive the claim form by post or online.",
+   "roleIds": [
+    "r-claims"
+   ],
+   "systemIds": [],
+   "taskType": "manual",
+   "inputs": [],
+   "outputs": [],
+   "ruleIds": [],
+   "exceptionIds": [],
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 7,
+      "lineEnd": 7,
+      "heading": "Receive the claim"
+     },
+     "excerpt": "The claims officer receives the claim form by post or online."
+    }
+   ]
+  },
+  {
+   "id": "s-check",
+   "name": "Check form is signed and dated",
+   "description": "Check that the form is signed and dated.",
+   "roleIds": [
+    "r-claims"
+   ],
+   "systemIds": [],
+   "taskType": "manual",
+   "inputs": [],
+   "outputs": [],
+   "ruleIds": [],
+   "exceptionIds": [
+    "x-incomplete"
+   ],
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 9,
+      "lineEnd": 9,
+      "heading": "Receive the claim"
+     },
+     "excerpt": "checks that the form is signed and dated"
+    }
+   ]
+  },
+  {
+   "id": "s-pay",
+   "name": "Pay claim",
+   "description": "Pay a complete claim within 10 working days.",
+   "roleIds": [
+    "r-pay"
+   ],
+   "systemIds": [],
+   "taskType": "manual",
+   "inputs": [],
+   "outputs": [],
+   "ruleIds": [
+    "br-ten-days"
+   ],
+   "exceptionIds": [],
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 13,
+      "lineEnd": 13,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "the payments officer pays it within 10 working days"
+    }
+   ]
+  }
+ ],
+ "gateways": [
+  {
+   "id": "g-complete",
+   "type": "exclusive",
+   "question": "Is the claim complete?",
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 13,
+      "lineEnd": 13,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "If the claim is complete"
+    }
+   ]
+  }
+ ],
+ "flows": [
+  {
+   "id": "f-1",
+   "from": "e-start",
+   "to": "s-receive"
+  },
+  {
+   "id": "f-2",
+   "from": "s-receive",
+   "to": "s-check"
+  },
+  {
+   "id": "f-3",
+   "from": "s-check",
+   "to": "g-complete"
+  },
+  {
+   "id": "f-4",
+   "from": "g-complete",
+   "to": "s-pay",
+   "label": "Complete"
+  },
+  {
+   "id": "f-5",
+   "from": "s-pay",
+   "to": "e-end"
+  },
+  {
+   "id": "f-6",
+   "from": "g-complete",
+   "to": "e-asked",
+   "label": "Not complete"
+  }
+ ],
+ "rules": [
+  {
+   "id": "br-ten-days",
+   "name": "Payment time",
+   "condition": "The claim is complete",
+   "action": "Pay it within 10 working days",
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 13,
+      "lineEnd": 13,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "If the claim is complete, the payments officer pays it within 10 working days."
+    }
+   ]
+  }
+ ],
+ "exceptions": [
+  {
+   "id": "x-incomplete",
+   "kind": "business",
+   "name": "Claim not complete",
+   "trigger": "The claim is not complete",
+   "stepIds": [
+    "s-check"
+   ],
+   "handling": "Write to the person and ask for what is missing",
+   "routedToRoleId": "r-claims",
+   "status": "stated",
+   "sources": [
+    {
+     "sourceId": "doc-1",
+     "locator": {
+      "lineStart": 15,
+      "lineEnd": 15,
+      "heading": "Pay the claim"
+     },
+     "excerpt": "writes to the person and asks for what is missing"
+    }
+   ]
+  }
+ ],
+ "dataObjects": [],
+ "painPoints": [],
+ "controls": [],
+ "risks": [],
+ "openQuestions": [
+  {
+   "id": "q-1",
+   "target": {
+    "kind": "step",
+    "id": "s-pay"
+   },
+   "question": "How is the claim paid, and from which system?",
+   "whyItMatters": "The assessment depends on it.",
+   "owner": null,
+   "status": "open"
+  }
+ ],
+ "conflicts": []
+}

@@ -28,6 +28,11 @@ export interface Allowance {
 /** Kinds of AI work, in the words the screens use. Tasks not listed are "Other AI work". */
 export const WORK_OF_TASK: Record<string, string> = {
   source_facts: 'Reading sources', source_steps: 'Reading sources', merge_facts: 'Reading sources', merge_flow: 'Reading sources',
+  // The facts merge in parts (domain/extract/factsParts.ts); `merge_facts` is its single answer, kept for earlier months.
+  merge_facts_rules_exceptions: 'Reading sources', merge_facts_interfaces_metrics: 'Reading sources', merge_facts_conflicts_questions: 'Reading sources',
+  merge_facts_rules: 'Reading sources', merge_facts_exceptions: 'Reading sources', merge_facts_interfaces: 'Reading sources',
+  merge_facts_metrics: 'Reading sources', merge_facts_conflicts: 'Reading sources', merge_facts_questions: 'Reading sources',
+  record_cutoff: 'Reading sources',
   review_flow: 'Reading sources', participants: 'Reading sources',
   readFlowchart: 'Reading flowchart pictures',
   stepTraits: 'Finding facts for the assessment', profileFacts: 'Finding facts for the assessment',
@@ -51,6 +56,62 @@ export const KEY_TEST_LIMIT = { perHour: 10 } as const;
 export const keyTestLimited = (testsInLastHour: number): boolean => testsInLastHour >= KEY_TEST_LIMIT.perHour;
 export const KEY_TEST_LIMITED = `The key has been tested ${KEY_TEST_LIMIT.perHour} times in the last hour. Try again later.`;
 export const workOf = (task: string) => WORK_OF_TASK[task] ?? 'Other AI work';
+
+/**
+ * The per-minute AI limit (docs/next-plan.md, section 3e), beside the monthly allowance. Before every call to a
+ * provider that a signed-in person starts (`run`, `transcribe` and `health`; `allowance` calls no provider),
+ * journey-ai asks the database (`ai_call_admit`, migration ai_call_admit) whether the person has started fewer
+ * than `perPerson` calls in the last `windowSeconds`, in any workspace, and, on the platform key only, whether the
+ * workspace has started fewer than `perWorkspace`. A request is one call however often it is retried inside.
+ * The trusted server (a caller with the project's secret key: the Ask Avala measure) is never asked.
+ * Working defaults (owner, 21 November 2026); change them here, with the test.
+ *
+ * What it does not do: it caps calls started, not tokens. The monthly allowance is checked when a call starts,
+ * so calls already started when it runs out still finish and count: the allowance can be overshot by up to one
+ * minute of calls. The hard spend limit set at OpenAI stays the backstop.
+ */
+export const AI_RATE_LIMIT = { windowSeconds: 60, perPerson: 30, perWorkspace: 90 } as const;
+
+export type RateScope = 'person' | 'workspace';
+export type Refused = { admitted: false; scope: RateScope; retryAfterSeconds: number };
+export type AdmitAnswer = { admitted: true } | Refused;
+/** The refusal in an answer, or null when the call was admitted. */
+export const refusalOf = (a: AdmitAnswer): Refused | null => (a.admitted === false ? a as Refused : null);
+
+/** Whether a request is checked against the minute limit: a provider call by anyone but the trusted server. */
+export const rateLimitApplies = (action: string, serverCaller: boolean): boolean =>
+  !serverCaller && (action === 'run' || action === 'transcribe' || action === 'health');
+
+/** The arguments of `ai_call_admit`: the workspace's limit is counted only on the platform key. */
+export const admitArgs = (workspaceId: string, userId: string, onPlatformKey: boolean) => ({
+  target_workspace: workspaceId, target_person: userId,
+  per_person: AI_RATE_LIMIT.perPerson, per_workspace: AI_RATE_LIMIT.perWorkspace,
+  count_workspace: onPlatformKey, window_seconds: AI_RATE_LIMIT.windowSeconds,
+});
+
+/** The database's answer, or null when it is not one (then the limit could not be checked). */
+export function readAdmit(json: unknown): AdmitAnswer | null {
+  const x = json as { admitted?: unknown; scope?: unknown; retry_after?: unknown } | null;
+  if (!x || typeof x !== 'object') return null;
+  if (x.admitted === true) return { admitted: true };
+  if (x.admitted !== false || (x.scope !== 'person' && x.scope !== 'workspace')) return null;
+  const s = Number(x.retry_after);
+  const retryAfterSeconds = Number.isFinite(s) ? Math.min(AI_RATE_LIMIT.windowSeconds, Math.max(1, Math.ceil(s))) : AI_RATE_LIMIT.windowSeconds;
+  return { admitted: false, scope: x.scope, retryAfterSeconds };
+}
+
+const seconds = (n: number) => `${n} ${n === 1 ? 'second' : 'seconds'}`;
+
+/** The words a person sees when the limit is reached. */
+export function rateLimitedMessage(scope: RateScope, retryAfterSeconds: number): string {
+  const wait = `Wait about ${seconds(retryAfterSeconds)} and try again.`;
+  return scope === 'person'
+    ? `You have started ${AI_RATE_LIMIT.perPerson} AI requests in the last minute, the most one person can. ${wait}`
+    : `This workspace has started ${AI_RATE_LIMIT.perWorkspace} AI requests in the last minute, the most it can at once. ${wait}`;
+}
+
+/** When the limit itself cannot be checked, the call is refused, as when the allowance cannot be read. */
+export const RATE_LIMIT_UNAVAILABLE = 'The AI limit could not be checked just now. Try again in a minute.';
 
 const tokensOf = (r: UsageRow) => Math.max(0, Number(r.inputTokens) || 0) + Math.max(0, Number(r.outputTokens) || 0);
 
@@ -134,3 +195,57 @@ export const USAGE_PAGES = { size: 1000, max: 20_000 } as const;
 
 /** Whether another page may hold more rows: only a full page can. */
 export const usageMorePages = (rowsInPage: number): boolean => rowsInPage >= USAGE_PAGES.size;
+
+/**
+ * Voice: how a transcription's use is counted (docs/next-plan.md, section 3g, dated items; plan of 20 November
+ * 2026, approved by the owner). OpenAI gives a transcription's `usage` in one of two forms: tokens
+ * (`input_tokens`, `output_tokens`), or, for models billed by the length of the audio (`gpt-transcribe`),
+ * `type: "duration"` with `seconds`. The allowance counts tokens, so a duration counts as
+ * `VOICE_TOKENS_PER_SECOND` (owner: an allowance rule, not a claim about cost), as input. A reply with neither
+ * is counted from the recording's size at a low rate, so it over-counts rather than counting nothing, and the
+ * log line says so as a warning. Everything is capped at what `VOICE_MAX_SECONDS` of audio counts: the server
+ * refuses a recording longer than about ten minutes (`LIMITS.maxAudioChars` in gateway.ts).
+ */
+export const VOICE_TOKENS_PER_SECOND = 20;
+/** 16 kbps: below what browsers record at, so an estimate from the size over-counts. */
+export const VOICE_FALLBACK_BYTES_PER_SECOND = 2_000;
+export const VOICE_MAX_SECONDS = 600;
+export const VOICE_TOKEN_CAP = VOICE_MAX_SECONDS * VOICE_TOKENS_PER_SECOND;
+/** A `seconds` beyond this is not a real recording's length: counted as absent. */
+const VOICE_ABSURD_SECONDS = 24 * 3600;
+
+export type TranscriptionForm = 'tokens' | 'duration' | 'neither';
+
+const count = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+
+/** The tokens a transcription counts as, and which form of usage its reply gave. */
+export function transcriptionUsage(reply: unknown, audioBytes: number): { input: number; output: number; form: TranscriptionForm } {
+  const usage = (reply as { usage?: Record<string, unknown> } | null)?.usage;
+  const u = usage && typeof usage === 'object' ? usage : {};
+  const capped = (input: number, output: number) => {
+    const i = Math.min(VOICE_TOKEN_CAP, Math.round(input));
+    return { input: i, output: Math.min(VOICE_TOKEN_CAP - i, Math.round(output)) };
+  };
+  const inTokens = count(u.input_tokens), outTokens = count(u.output_tokens);
+  // A token form that adds up to nothing is absent: voice is never counted as nothing, and nobody has seen what
+  // gpt-transcribe sends, so it falls through to the duration form, else to the estimate (logged as a warning).
+  if (u.type !== 'duration' && (inTokens ?? 0) + (outTokens ?? 0) > 0) return { ...capped(inTokens ?? 0, outTokens ?? 0), form: 'tokens' };
+  const secs = count(u.seconds);
+  if (u.type === 'duration' && secs !== null && secs > 0 && secs <= VOICE_ABSURD_SECONDS) {
+    return { ...capped(Math.ceil(secs) * VOICE_TOKENS_PER_SECOND, 0), form: 'duration' };
+  }
+  const bytes = Math.max(0, Number(audioBytes) || 0);
+  const estimated = Math.max(1, Math.ceil(bytes / VOICE_FALLBACK_BYTES_PER_SECOND));
+  return { ...capped(estimated * VOICE_TOKENS_PER_SECOND, 0), form: 'neither' };
+}
+
+/** The one log line a transcription writes: the form and the model, never the reply's text, values or the recording. */
+export function transcriptionLogLine(form: TranscriptionForm, model: string): { level: 'info' | 'warn'; text: string } {
+  const name = String(model).replace(/[^\w.-]/g, '').slice(0, 60);
+  return form === 'neither'
+    ? { level: 'warn', text: `transcribe usage form: neither (${name}), estimated from the recording's size` }
+    : { level: 'info', text: `transcribe usage form: ${form} (${name})` };
+}
+
+/** The sentence under "AI use this month". */
+export const VOICE_COUNT_NOTE = `Spoken answers are counted at ${VOICE_TOKENS_PER_SECOND} tokens a second of audio.`;
