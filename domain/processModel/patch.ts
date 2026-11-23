@@ -5,7 +5,7 @@
 // Edits made through these operations are a person's decisions: the element they touch becomes
 // 'user-confirmed' and keeps the sources it already had.
 import { applyPatch, diff, type JsonPatchOp } from './jsonPatch.ts';
-import type { AccessStatus, ChangeLevel, ElementTarget, Fact, Flow, MetricKind, ProcessBrief, ProcessModel, ProcessProfile, Role, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
+import type { AccessStatus, ChangeLevel, Conflict, ElementTarget, Fact, Flow, MetricKind, ProcessBrief, ProcessModel, ProcessProfile, RaisedBy, Role, SourceRef, Step, StepTraits, SystemRef, TypicalTraits } from './types.ts';
 import { isProcessLevel, metricNumber, processMetricSlot } from './selectors.ts';
 import { errorsOf, validateModel, type ValidationIssue } from './validate.ts';
 import { mergeApplication, type Application } from '../workspace/applications.ts';
@@ -330,7 +330,7 @@ export function removeElement(model: ProcessModel, args: { kind: 'role' | 'syste
 }
 
 /** Records an open question about one element or field, for example a gap someone wants tracked. */
-export function addQuestion(model: ProcessModel, args: { target: ElementTarget; question: string; whyItMatters?: string; owner?: string | null }): OpResult & { questionId: string } {
+export function addQuestion(model: ProcessModel, args: { target: ElementTarget; question: string; whyItMatters?: string; owner?: string | null; /** The words that raised it, in a discovery session (package B). */ raisedBy?: RaisedBy }): OpResult & { questionId: string } {
   const question = args.question.trim();
   if (!question) throw new ModelOpError('EMPTY', 'Write the question.');
   const same = (t: ElementTarget) => t.kind === args.target.kind && t.id === args.target.id && t.field === args.target.field;
@@ -338,9 +338,63 @@ export function addQuestion(model: ProcessModel, args: { target: ElementTarget; 
   let questionId = '';
   const result = commit(model, m => {
     questionId = newId(m, 'q');
-    m.openQuestions.push({ id: questionId, target: args.target, question, whyItMatters: (args.whyItMatters ?? '').trim(), owner: args.owner ?? null, status: 'open' });
+    m.openQuestions.push({ id: questionId, target: args.target, question, whyItMatters: (args.whyItMatters ?? '').trim(), owner: args.owner ?? null, status: 'open', ...(args.raisedBy ? { raisedBy: { ...args.raisedBy } } : {}) });
   });
   return { ...result, questionId };
+}
+
+// ---------------------------------------------------------------- discovery (package B)
+
+/**
+ * A person keeps a statement of what should happen in future (`meta.wanted`). With its quote it stays
+ * "stated"; a person's own wording, or an edit of a kept one (`id`), is "user-confirmed" and keeps the quote.
+ * It is never a step, rule or figure: nothing that builds the process or its documents reads it.
+ */
+export function keepWanted(model: ProcessModel, args: { statement: string; sources?: SourceRef[]; id?: string }): OpResult & { wantedId: string } {
+  const statement = args.statement.trim();
+  if (!statement) throw new ModelOpError('EMPTY', 'Write what should change.');
+  let wantedId = args.id ?? '';
+  const result = commit(model, m => {
+    const list = m.meta.wanted ?? [];
+    if (args.id) {
+      const w = list.find(x => x.id === args.id);
+      if (!w) throw new ModelOpError('NOT_FOUND', `No wanted statement with id ${args.id}.`);
+      if (w.statement !== statement) { w.statement = statement; w.status = 'user-confirmed'; }
+    } else {
+      const sources = (args.sources ?? []).map(x => ({ ...x, locator: { ...x.locator } }));
+      wantedId = newId(m, 'w', new Set([...allIds(m), ...list.map(x => x.id)]));
+      list.push({ id: wantedId, statement, status: sources.length ? 'stated' : 'user-confirmed', sources });
+    }
+    m.meta.wanted = list;
+  });
+  return { ...result, wantedId };
+}
+
+/** A person removes a statement of what should change. */
+export function dropWanted(model: ProcessModel, args: { id: string }): OpResult {
+  return commit(model, m => {
+    const list = m.meta.wanted ?? [];
+    if (!list.some(x => x.id === args.id)) throw new ModelOpError('NOT_FOUND', `No wanted statement with id ${args.id}.`);
+    m.meta.wanted = list.filter(x => x.id !== args.id);
+  });
+}
+
+/**
+ * Records that two values of one fact disagree, for a person to resolve on the Process stage, as a
+ * reading records it. Nothing is overwritten: the value in the model stays as it is. Every value cites
+ * its words, so the record says where each came from.
+ */
+export function raiseConflict(model: ProcessModel, args: { target: ElementTarget; summary: string; values: Conflict['values'] }): OpResult & { conflictId: string } {
+  const summary = args.summary.trim();
+  if (!summary) throw new ModelOpError('EMPTY', 'Say what the conflict is about.');
+  if (args.values.length < 2) throw new ModelOpError('BAD_INPUT', 'A conflict needs at least two values.');
+  if (args.values.some(v => !v.sources.length)) throw new ModelOpError('UNSOURCED', 'Each value of a conflict cites its words.');
+  let conflictId = '';
+  const result = commit(model, m => {
+    conflictId = newId(m, 'conflict');
+    m.conflicts.push({ id: conflictId, target: { ...args.target }, summary, values: args.values.map(v => ({ value: v.value, sources: v.sources.map(x => ({ ...x, locator: { ...x.locator } })) })), resolution: null });
+  });
+  return { ...result, conflictId };
 }
 
 // ---------------------------------------------------------------- assessment facts
@@ -767,12 +821,12 @@ export function closeQuestions(model: ProcessModel, args: { questionIds: string[
 }
 
 /** Sets questions aside for someone to answer later. A gap without a stored question is recorded as one first. */
-export function deferQuestion(model: ProcessModel, args: { questionIds: string[]; owner: string | null; gap?: { target: ElementTarget; question: string } }): OpResult {
+export function deferQuestion(model: ProcessModel, args: { questionIds: string[]; owner: string | null; gap?: { target: ElementTarget; question: string; /** The words that raised it, in a discovery session (package B). */ raisedBy?: RaisedBy } }): OpResult {
   return commit(model, m => {
     const ids = [...args.questionIds];
     if (args.gap && ids.length === 0) {
       const id = newId(m, 'q');
-      m.openQuestions.push({ id, target: args.gap.target, question: args.gap.question, whyItMatters: '', owner: null, status: 'open' });
+      m.openQuestions.push({ id, target: args.gap.target, question: args.gap.question, whyItMatters: '', owner: null, status: 'open', ...(args.gap.raisedBy ? { raisedBy: { ...args.gap.raisedBy } } : {}) });
       ids.push(id);
     }
     for (const id of ids) {

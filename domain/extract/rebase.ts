@@ -250,6 +250,8 @@ export function applyChanges(current: ProcessModel, extracted: ProcessModel, sel
     // today, what the team has in mind) or read when a person asked. A reading brings no brief of its own
     // today; if one ever does, the lines already there win, as adoptBrief keeps a person's lines.
     if (current.meta.brief) next.meta.brief = { ...(next.meta.brief ?? {}), ...clone(current.meta.brief) };
+    // And what a person kept as wanted in future, in a discovery session (package B): a reading never brings it.
+    if (current.meta.wanted?.length) next.meta.wanted = clone(current.meta.wanted);
     return checked(next);
   }
   let next = clone(current);

@@ -744,6 +744,27 @@ What it needs on Azure: one resource holding a text deployment and a speech depl
 
 **Done when.** An Azure workspace with the field filled records an answer and sees its text; with it empty it sees the line, and no call is made; a workspace on the platform key and one on an OpenAI key behave as before; the usage row names the workspace's key as its source. Unit tests for the address and the choice of deployment; the database test for the column and who may write it; a browser test for the line.
 
+### Package B: guided discovery (plan `claude/package-b-plan-23-nov.md`, revision 2, approved 23 November 2026)
+
+Six pull requests; `next` can be released after any one of them; the first release advised is pull requests 1 to 5, once the replay has passed.
+
+- **Pull request 1, the rules with no screen (built 23 November 2026, in review).** `domain/discovery/`:
+  - `card.ts`: a card shows a quote, a named gap or a conflict, and a target, or it is not built;
+  - `checklist.ts`: the first cards, the shape of the process, a card per open conflict;
+  - `queue.ts`: the order, by rules only;
+  - `inputs.ts`: the assessment's next inputs as fields written with the Inputs view's operations, and the period of a figure read from words by a rule;
+  - `answers.ts`: the "Discovery answers" source, the person's words alone with "Answer to: …" as each passage's place; an answer never overwrites a value a person confirmed;
+  - `wanted.ts`: the cue words and the held-back rule;
+  - `limits.ts`: the cap of 250,000 tokens, 60 calls, three readings;
+  - `summary.ts`: when a session ends, and its counts.
+
+  The Process Model gains `meta.wanted` and `raisedBy` on a question (`types.ts`, `validate.ts`; `keepWanted`, `dropWanted`, `raiseConflict` and `raisedBy` on `addQuestion` and `deferQuestion` in `patch.ts`; `record` in `answer.ts`). A first reading keeps `meta.wanted` (`rebase.ts`).
+
+  A value a person confirmed with no quote of its own cannot be one side of a conflict, since each side cites its words and the released check requires it. So the difference is asked as an open question raised by the answer's words.
+
+  `journey-ai`, `journey-extract` and `journey-notify` bundle the changed model files at the release; what they do does not change. The released site copes with the new keys: the proof of the plan's section 12 is kept as `domain/discovery/compat.test.ts`. Nothing changes on screen.
+- **Pull requests 2 to 6:** as the plan has them. Asked separately: the early deploy of `journey-ai` (with pull request 2), the `discovery_sessions` migration (pull request 3, after its trial), and the check of about 70,000 tokens on the preview (before pull request 4 merges).
+
 ### Dated items
 
 - **The platform key's speech model, any time before 15 January 2027. Closed 23 November 2026:** released with the tenth release (`journey-ai` version 77); the owner's check on avalaos.com straight after, confirmed by the review chat from the database and the function's log (06:02 to 06:06 UTC): one spoken answer on `gpt-transcribe` counted 460 tokens in and 0 out, and the log line reads "transcribe usage form: duration (gpt-transcribe)", so `gpt-transcribe` sends the duration form, counted at 20 tokens a second. The 15 December 2026 backstop is not needed. OpenAI shuts down `gpt-4o-transcribe` on 26 February 2027 and names `gpt-transcribe` for audio files.
