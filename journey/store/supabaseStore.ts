@@ -33,7 +33,7 @@ const sectionCommentFrom = (r: any): SectionComment => ({ id: r.id, docType: r.d
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
 import { readKept } from '../../domain/docs/keep.ts';
-import { StoreError, type VersionRow, type VersionStateRow, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { DRAFT_CHANGES_SHOWN, StoreError, type VersionRow, type VersionStateRow, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
@@ -302,6 +302,18 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('approved_versions').select(VERSION_COLUMNS).eq('process_id', processId).order('number', { ascending: false });
       if (error) fail(error);
       return ((data as any[]) ?? []).map(versionFrom);
+    },
+    async listDraftChanges(processId) {
+      const { data: proc, error: pe } = await db.from('processes').select('workspace_id').eq('id', processId).single();
+      if (pe) fail(pe);
+      const { data, error } = await db.from('draft_changes').select('id, process_id, kind, change, origin, items, item_count, actor, created_at')
+        .eq('workspace_id', (proc as any).workspace_id).or(`process_id.eq.${processId},process_id.is.null`)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(DRAFT_CHANGES_SHOWN);
+      if (error) fail(error);
+      return ((data as any[]) ?? []).map(r => ({
+        id: Number(r.id), processId: r.process_id ?? null, kind: r.kind, change: r.change, origin: r.origin,
+        items: Array.isArray(r.items) ? r.items : [], itemCount: Number(r.item_count ?? 1), actor: r.actor ?? null, createdAt: r.created_at,
+      }));
     },
     async getVersionPrints(versionId) {
       const { data, error } = await db.from('approved_versions').select('workspace_id, fingerprints, inputs, look_fingerprint').eq('id', versionId).single();

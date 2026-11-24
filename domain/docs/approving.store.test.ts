@@ -9,6 +9,11 @@ import { approvalChanges, approvalTarget, keepInputFrom, keptRevision, type Keep
 import { buildKeptDocuments, fingerprintsOf, keptInputs, keptLook } from './keep.ts';
 import { makeEdit } from './edits.ts';
 import { ApprovalReadError, approvePrepared, prepareApproval } from '../../journey/process/keepVersion.ts';
+import { toMarkdown } from './markdown.ts';
+import { changeLine } from './changeRecord.ts';
+import { assessProcess } from '../assess/process.ts';
+import { approvalCounts } from '../questions/approvalCounts.ts';
+import { assessmentLine } from '../questions/result.ts';
 
 const demo = JSON.parse(fs.readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8'));
 
@@ -121,7 +126,7 @@ test('a version cannot be read in a format this release does not know', async ()
 });
 
 /** The store with one read failing, counting every call to approveVersion. */
-function failing(store: JourneyStore, method: 'getAssessmentDecisions' | 'listMembers') {
+function failing(store: JourneyStore, method: 'getAssessmentDecisions' | 'listMembers' | 'listProposals' | 'listSectionComments') {
   const calls = { approve: 0 };
   const wrapped = new Proxy(store, {
     get(target, key) {
@@ -134,7 +139,7 @@ function failing(store: JourneyStore, method: 'getAssessmentDecisions' | 'listMe
   return { store: wrapped, calls };
 }
 
-for (const [method, what] of [['getAssessmentDecisions', "people's choices for this process"], ['listMembers', "the people's names"]] as const) {
+for (const [method, what] of [['getAssessmentDecisions', "people's choices for this process"], ['listMembers', "the people's names"], ['listProposals', 'the work proposals'], ['listSectionComments', 'the review comments']] as const) {
   test(`a failed read of ${what} refuses the approval, and approve_version is never called`, async () => {
     const { store, ws, p } = await open();
     const { store: broken, calls } = failing(store, method);
@@ -242,4 +247,53 @@ test('"Keep it as it reads now" after a newer approval without a copy needs a re
   const [v2] = await store.listVersions(p.id);
   assert.equal(v2.reason, 'Kept as it reads now');
   assert.ok(v2.keptAt);
+});
+
+// ---- Pull request 5: the evidence pack kept with each version, the change record, the two numbers ------------
+
+test('each version keeps its evidence pack, which lists the versions with the reason and is never counted in what changed', async () => {
+  const { store, ws, p } = await open();
+  const v1 = (await prepareApproval(store, p.id, ws.id))!;
+  assert.ok(v1.kept.documents.evidence, 'the evidence pack is kept with version 1');
+  await approvePrepared(store, p.id, v1, null);
+  const kept1 = await store.getVersion((await store.listVersions(p.id))[0]!.id);
+  const first = kept1.kept.documents.evidence!.sections[0]!.blocks[0] as { kind: string; text: string };
+  assert.match(first.text, /^Approved version 1, approved by .+ on \d{1,2} [A-Z][a-z]+ 2026$/);
+
+  await store.saveDocumentEdit(p.id, makeEdit('brd', 's-1', '<p>Changed after version 1.</p>', 'none'));
+  const v2 = (await prepareApproval(store, p.id, ws.id))!;
+  assert.ok(!v2.changes.sections.some(c => c.doc === 'evidence') && !v2.changes.documents.some(d => d.doc === 'evidence'), 'the evidence pack is never compared');
+  await approvePrepared(store, p.id, v2, 'Wording of the introduction');
+  const kept2 = await store.getVersion((await store.listVersions(p.id))[0]!.id);
+  const md = toMarkdown(kept2.kept.documents.evidence!);
+  assert.match(md, /Version 2[^\n]*Wording of the introduction[^\n]*At approval/);
+  assert.match(md, /Version 1[^\n]*The first approved version\./);
+  // The reason went into the pack only; everything else kept is as the window showed it.
+  assert.deepEqual(Object.keys(kept2.kept.documents).sort(), Object.keys(v2.kept.documents).sort());
+  assert.equal(JSON.stringify(kept2.kept.documents.brd), JSON.stringify(v2.kept.documents.brd));
+});
+
+test('the in-browser change record keeps what changed, the items, who and when, as History lists them', async () => {
+  const { store, p } = await open();
+  const before = (await store.listDraftChanges(p.id)).length;
+  await store.saveDocumentEdit(p.id, makeEdit('pdd', 's-2-1', '<p>A new opening.</p>', 'none'));
+  await store.removeDocumentEdit(p.id, 'pdd', 's-2-1');
+  const rows = await store.listDraftChanges(p.id);
+  assert.equal(rows.length, before + 2);
+  const me = await store.currentUser();
+  assert.deepEqual(rows.slice(0, 2).map(r => [r.kind, r.change, r.items, r.origin, r.actor]), [['section_edit', 'removed', ['pdd:s-2-1'], 'person', me!.id], ['section_edit', 'added', ['pdd:s-2-1'], 'person', me!.id]]);
+  assert.ok(rows[0]!.createdAt);
+  assert.equal(changeLine(rows[1]!, { names: {} }), 'Section edit added: PDD, section 2.1');
+});
+
+test('the two numbers in the window are the ones package 16 counts', async () => {
+  const { store, ws, p } = await open();
+  const prepared = (await prepareApproval(store, p.id, ws.id))!;
+  const rev = (await store.listRevisions(p.id)).find(r => r.state === 'approved')!;
+  const model = (await store.getModel(rev.id))!;
+  const decisions = await store.getAssessmentDecisions(p.id);
+  const assessment = assessProcess(model, { rate: decisions.rate, settings: (await store.getSettings(ws.id)).settings, decisions });
+  assert.deepEqual(prepared.counts, approvalCounts(model, assessment));
+  const line = assessmentLine(model, assessment);
+  assert.equal(line?.n ?? 0, prepared.counts!.open - prepared.counts!.leftWithSomeone);
 });

@@ -136,6 +136,14 @@ export const keepFirstQuestion = (revision: number, date: string, approver: stri
 export const keepTitle = (number: number) => `Keep version ${number} as it reads now`;
 export const keepIntro = (number: number, revision: number, date: string, approver: string) =>
   `Approved revision ${revision} becomes approved version ${number} as its documents read now, recorded as approved on ${date} by ${approver} and kept today by you, after approval. Approved version ${number - 1} stays as it was.`;
+/**
+ * The day evidence packs are first kept with a version (package 14, pull request 5): set by the release's own
+ * commit, checked by "Release dates set" (domain/site/releaseDates.ts). Until then the line shows "[release date]".
+ */
+export const EVIDENCE_KEPT_SINCE: string | null = null;
+/** Owner-approved (24 November 2026): an opened version kept before evidence packs were kept with versions. */
+export const noEvidenceLine = (since: string | null = EVIDENCE_KEPT_SINCE) =>
+  `No evidence pack was kept with this version: packs are kept from ${since ?? '[release date]'} on.`;
 /** Who approved, when the record holds no name for them. */
 export const UNNAMED_APPROVER = 'an approver whose name was not recorded';
 

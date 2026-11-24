@@ -94,6 +94,24 @@ export interface VersionStateRow {
   changesSeen: number;
 }
 /** One approved version in the list, without its documents. */
+/** How many rows of the change record History reads. */
+export const DRAFT_CHANGES_SHOWN = 200;
+export type DraftChangeKind = 'section_edit' | 'choice' | 'rate' | 'costs' | 'map_shape' | 'requirement' | 'test_edit' | 'source' | 'assessment_settings' | 'layout' | 'look';
+/** One row of the change record (`draft_changes`), as the database's triggers write it. */
+export interface DraftChangeRow {
+  id: number;
+  /** Null: a change made for the whole workspace. */
+  processId: string | null;
+  kind: DraftChangeKind;
+  change: 'added' | 'changed' | 'removed';
+  /** 'follows': saved because something else changed (requirements re-derived). */
+  origin: 'person' | 'follows';
+  /** The first items by their names in the product; null where the kind has none. */
+  items: (string | null)[];
+  itemCount: number;
+  actor: string | null;
+  createdAt: string;
+}
 export interface VersionRow {
   id: string;
   number: number;
@@ -271,6 +289,11 @@ export interface JourneyStore {
   keepVersionAsReadsNow(input: KeepVersionInput): Promise<{ versionId: string; number: number }>;
   /** The approved versions of a process, newest first, without their documents. */
   listVersions(processId: string): Promise<VersionRow[]>;
+  /**
+   * The change record of a process (pull request 5): its rows and its workspace's workspace-wide rows, newest
+   * first, at most `DRAFT_CHANGES_SHOWN`. Members read it. No values, only what changed, who and when.
+   */
+  listDraftChanges(processId: string): Promise<DraftChangeRow[]>;
   getVersionPrints(versionId: string): Promise<VersionPrints>;
   /** A version's look (logo, Word template), read only to approve again (what changed) and to open the version. */
   getVersionLook(versionId: string): Promise<KeptLook>;

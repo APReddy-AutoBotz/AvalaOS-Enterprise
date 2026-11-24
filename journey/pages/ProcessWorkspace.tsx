@@ -297,7 +297,7 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
       </section>
 
       {approving && <ApproveDialog prepared={approving} busy={busy} error={approveError} reason={reason} onReason={setReason} onApprove={r => confirmApproval(process.id, r)} onClose={() => { setApproving(null); setApproveError(null); }} />}
-      {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
+      {historyOpen && <HistoryDrawer store={store} processId={process.id} workspaceId={process.workspaceId} onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }

@@ -92,6 +92,8 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
   await expect(dialog).toBeVisible();
   await expect(dialog.getByRole('heading', { name: 'Approve version 2' })).toBeVisible();
   await expect(dialog.getByTestId('approve-changes')).toContainText('PDD: changed:');
+  // The two numbers (part L, pull request 5): open questions that could still change the recommendation.
+  await expect(dialog.getByTestId('approve-counts')).toContainText(/open question/);
   await expect(dialog.getByTestId('approve-confirm')).toBeDisabled();
   await dialog.getByTestId('approve-reason').fill('Too short');
   await expect(dialog.getByTestId('approve-problem')).toHaveText('Say why in at least 3 words.');
@@ -119,7 +121,9 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
   await expect(kept).toHaveAttribute('data-number', '1');
   await expect(page.getByTestId('version-band')).toContainText('Approved version 1, approved on');
   await expect(page.getByTestId('version-band')).toContainText('As kept at approval.');
-  await expect(kept.getByRole('tab', { name: /Evidence pack/ })).toHaveCount(0);
+  // Pull request 5: each version keeps its evidence pack.
+  await expect(kept.getByRole('tab', { name: /Evidence pack/ })).toHaveCount(1);
+  await expect(page.getByTestId('version-no-evidence')).toHaveCount(0);
   await kept.getByRole('tab', { name: /^PDD/ }).click();
   await expect(kept.getByTestId('document')).not.toContainText(NEW_TEXT);
   await expect(kept.getByTestId('document')).toContainText(oldText);
@@ -146,7 +150,25 @@ test('approving keeps the documents: versions 1 and 2, what changed, and version
   const md2 = await download(page, page.getByTestId('version-markdown'));
   expect(md2.name).toBe('PDD - Vendor invoice processing - version 2.md');
   expect(Buffer.from(md2.bytes).toString('utf8')).toContain(NEW_TEXT);
+  // Version 2's evidence pack lists both versions, with the reason given for version 2.
+  await page.getByTestId('kept-version').getByRole('tab', { name: /Evidence pack/ }).click();
+  const pack = page.getByTestId('kept-version').getByTestId('document');
+  await expect(pack).toContainText(/Approved version 2, approved by .+ on/);
+  await expect(pack).toContainText('Objectives reworded and the totals check kept with a person');
+  await expect(pack).toContainText('The first approved version.');
+  await shot(page, '84-version-2-evidence-pack');
   await page.getByTestId('version-back').click();
+
+  // History: the change record's lines with who and when, and which revision each version kept.
+  await page.getByRole('button', { name: 'History' }).click();
+  const changes = page.getByTestId('history-changes');
+  await expect(changes).toContainText('Changes to documents and choices');
+  await expect(changes).toContainText('Recorded since 22 November 2026.');
+  await expect(changes.getByTestId('history-change').filter({ hasText: /^Section edit (added|changed): PDD, section / })).not.toHaveCount(0);
+  await expect(changes.getByTestId('history-change').filter({ hasText: /^Choice of approach changed: step \d+, / })).not.toHaveCount(0);
+  await expect(page.getByTestId('history-kept-as').first()).toContainText(/Kept as approved version [12]/);
+  await shot(page, '85-history-changes');
+  await page.getByTestId('history').getByRole('button', { name: 'Close' }).click();
 
   // A viewer's switch of the maps' shape lasts for the visit, is not saved, and marks nothing.
   await page.evaluate(() => {
@@ -230,4 +252,21 @@ test('an approval from before copies were kept: the label, then "Keep it as it r
   await kept.getByRole('tab', { name: /^PDD/ }).click();
   await expect(kept.getByTestId('document')).toContainText(NEW_TEXT);
   await expect(kept.getByTestId('document')).toContainText('Approved version 1, kept after approval');
+  // Its evidence pack says whose approval it records and who kept it.
+  await kept.getByRole('tab', { name: /Evidence pack/ }).click();
+  await expect(kept.getByTestId('document')).toContainText(/Approved version 1, approved by .+ on 3 November 2026; kept after approval on .+ by /);
+
+  // A version kept before packs were kept with versions (the tenth release's) says so instead of a tab.
+  await page.evaluate(() => {
+    const KEY = 'avala.journey.memory.v1';
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    for (const v of s.versions) delete v.kept.documents.evidence;
+    localStorage.setItem(KEY, JSON.stringify(s));
+  });
+  await page.reload();
+  await stage(page, 'Documents');
+  await page.getByTestId('versions').getByRole('button', { name: 'Approved versions (1)' }).click();
+  await page.getByTestId('version-row').getByTestId('version-open').click();
+  await expect(page.getByTestId('kept-version').getByRole('tab', { name: /Evidence pack/ })).toHaveCount(0);
+  await expect(page.getByTestId('version-no-evidence')).toHaveText(/^No evidence pack was kept with this version: packs are kept from .+ on\.$/);
 });
