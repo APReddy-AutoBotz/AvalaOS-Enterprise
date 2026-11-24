@@ -11,6 +11,7 @@ import { DONE_TODAY_LABEL, IN_MIND_LABEL } from '../../domain/plan/delivery.ts';
 import { applicationNames, ownWordsEdits, OWN_WORDS_LIMIT } from '../../domain/plan/start.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
+import { useVoice, voiceProps } from './voice.ts';
 import { Button, ErrorNote, messageOf } from '../ui.tsx';
 
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
@@ -18,6 +19,7 @@ const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text
 export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksInMind = true }: { store: JourneyStore; processId: string; workspaceId: string; me?: string; onSaved: () => void;
   /** Whether to ask what the team has in mind: not when the process is documented as it is (domain/plan/purpose.ts). */
   asksInMind?: boolean }) {
+  const voice = useVoice(store, workspaceId);
   const [doneToday, setDoneToday] = React.useState<DoneToday | ''>('');
   const [apps, setApps] = React.useState('');
   const [inMind, setInMind] = React.useState<InMind[]>([]);
@@ -81,7 +83,7 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksIn
       <div className="mt-4">
         <AnswerBox label="In your own words" value={words} onChange={setWords} rows={7}
           placeholder="For example: Supplier invoices arrive by email. Someone in accounts payable checks them against the purchase order in SAP…"
-          transcribe={store.aiAvailable ? audio => store.transcribe(workspaceId, audio) : undefined} />
+          {...voiceProps(voice, store, workspaceId)} />
       </div>
       <ErrorNote message={error} />
       <div className="mt-2 flex flex-wrap items-center gap-2">
