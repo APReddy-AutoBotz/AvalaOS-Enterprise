@@ -1,11 +1,19 @@
 // Rich-text editing of a section's narrative with TipTap: paragraphs, bold, italic, lists and
 // sub-headings, the tags the documents render. Loaded on demand, only when someone edits.
-// Tiptap 3 (24 November 2026): StarterKit's additions in version 3 (links, underline, the list keys and the
-// empty paragraph it adds after a closing list or sub-heading) are off, so the editor allows and writes what
-// it did on Tiptap 2 (tests/e2e/editor-roundtrip.spec.ts compares every case with Tiptap 2's results).
+// Tiptap 3 (24 November 2026): built from its parts, the ones it uses, rather than StarterKit, whose version 3
+// brings links (with linkifyjs) and underline into the built script even when they are turned off. It allows
+// and writes what it did on Tiptap 2 (tests/e2e/editor-roundtrip.spec.ts compares every case with Tiptap 2's).
 import React from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
-import StarterKit from '@tiptap/starter-kit';
+import Bold from '@tiptap/extension-bold';
+import Document from '@tiptap/extension-document';
+import HardBreak from '@tiptap/extension-hard-break';
+import Heading from '@tiptap/extension-heading';
+import Italic from '@tiptap/extension-italic';
+import { BulletList, ListItem, OrderedList } from '@tiptap/extension-list';
+import Paragraph from '@tiptap/extension-paragraph';
+import Text from '@tiptap/extension-text';
+import { UndoRedo } from '@tiptap/extensions';
 import { Button, cx } from '../ui.tsx';
 import type { GroundingIssue } from '../../domain/docs/narrative.ts';
 
@@ -22,7 +30,7 @@ export default function SectionEditor({ initial, title, onSave, onCancel, busy, 
   const [drafting, setDrafting] = React.useState(false);
   const [note, setNote] = React.useState<string | null>(null);
   const editor = useEditor({
-    extensions: [StarterKit.configure({ heading: { levels: [3, 4] }, code: false, codeBlock: false, blockquote: false, horizontalRule: false, strike: false, link: false, underline: false, listKeymap: false, trailingNode: false })],
+    extensions: [Document, Paragraph, Text, Bold, Italic, BulletList, OrderedList, ListItem, Heading.configure({ levels: [3, 4] }), HardBreak, UndoRedo],
     content: initial || '<p></p>',
     // Version 3 no longer draws the editor again on every change; the toolbar shows Bold and the rest as pressed.
     shouldRerenderOnTransaction: true,

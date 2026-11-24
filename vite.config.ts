@@ -41,7 +41,7 @@ function policyReports(): Plugin {
 // What the section editor's script carries (the Tiptap upgrade, 24 November 2026): its size, and which
 // packages are built into it or into any other script, among those Tiptap brings that the editor does not
 // use (links, underline, the menus' positioning). Printed by the build, read in CI's log.
-const WATCHED = ['@tiptap/extension-link', 'linkifyjs', 'tippy.js', '@tiptap/extension-underline', '@floating-ui/dom', '@floating-ui/core', '@tiptap/extension-bubble-menu', '@tiptap/extension-floating-menu'];
+const WATCHED = ['@tiptap/starter-kit', '@tiptap/extension-link', 'linkifyjs', 'tippy.js', '@tiptap/extension-underline', '@floating-ui/dom', '@floating-ui/core', '@tiptap/extension-bubble-menu', '@tiptap/extension-floating-menu'];
 function editorReport(): Plugin {
   return {
     name: 'avala-editor-report',
