@@ -115,6 +115,12 @@ jobs:
             gzip -9 -c test-results/demo/sample.json | base64 -w0; echo
             echo "END_DEMO_DATA"
           fi
+          # What the section editor gave back for each case (tests/e2e/editor-roundtrip.spec.ts), for its fixture.
+          if [ -f test-results/editor/roundtrip.json ]; then
+            echo "BEGIN_EDITOR_ROUNDTRIP roundtrip.json.gz"
+            gzip -9 -c test-results/editor/roundtrip.json | base64 -w0; echo
+            echo "END_EDITOR_ROUNDTRIP"
+          fi
 
       - name: Keep screenshots and the report
         if: always() && steps.scope.outputs.needed == 'true'

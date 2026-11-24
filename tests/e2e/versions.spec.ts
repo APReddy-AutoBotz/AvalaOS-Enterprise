@@ -270,3 +270,44 @@ test('an approval from before copies were kept: the label, then "Keep it as it r
   await expect(page.getByTestId('kept-version').getByRole('tab', { name: /Evidence pack/ })).toHaveCount(0);
   await expect(page.getByTestId('version-no-evidence')).toHaveText(/^No evidence pack was kept with this version: packs are kept from .+ on\.$/);
 });
+
+test('Save with no change saves nothing: an untouched section and an edited one stay as approved', async ({ page }) => {
+  test.setTimeout(120_000);
+  await buildProcess(page);
+  const status = page.getByTestId('revision-status');
+  await stage(page, 'Documents');
+  await page.getByRole('tab', { name: /^PDD/ }).click();
+  const doc = page.getByTestId('document');
+  const editable = () => doc.getByTestId('doc-section').filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).filter({ has: page.locator('p.leading-7') });
+
+  // An edited section first, then version 1.
+  await editable().first().getByRole('button', { name: /^Edit section/ }).click();
+  await doc.getByRole('textbox').first().click();
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('Checked twice, ');
+  await doc.getByRole('button', { name: 'Bold' }).click();
+  await page.keyboard.type('always.');
+  await doc.getByRole('button', { name: 'Save section' }).click();
+  await expect(doc.getByTestId('chip-edited')).toHaveCount(1);
+  await page.getByTestId('approve').click();
+  await expect(status).toHaveText('Approved version 1');
+
+  // The edited section, opened and saved without a change.
+  await doc.getByTestId('doc-section').filter({ has: doc.getByTestId('chip-edited') }).getByRole('button', { name: /^Edit section/ }).click();
+  await expect(page.getByTestId('section-editor')).toBeVisible();
+  await doc.getByRole('button', { name: 'Save section' }).click();
+  await expect(page.getByTestId('section-editor')).toHaveCount(0);
+  // An untouched section, opened and saved without a change: it stays generated.
+  const untouched = doc.getByTestId('doc-section').filter({ hasNot: doc.getByTestId('chip-edited') }).filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).filter({ has: page.locator('p.leading-7') }).first();
+  await untouched.getByRole('button', { name: /^Edit section/ }).click();
+  await expect(page.getByTestId('section-editor')).toBeVisible();
+  await doc.getByRole('button', { name: 'Save section' }).click();
+  await expect(page.getByTestId('section-editor')).toHaveCount(0);
+
+  await expect(doc.getByTestId('chip-edited')).toHaveCount(1);
+  await expect(doc.getByTestId('chip-changed')).toHaveCount(0);
+  await expect(status).toHaveText('Approved version 1');
+  await expect(page.getByTestId('version-line')).toHaveText('The working draft reads exactly as approved version 1.');
+  await page.reload();
+  await expect(status).toHaveText('Approved version 1');
+});
