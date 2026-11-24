@@ -185,6 +185,19 @@ export const tookIntoSource = (taken: readonly KeptAnswer[]): SessionStep => s =
   waiting: s.waiting.filter(w => !taken.some(t => t.key === w.key && t.at === w.at && t.words === w.words)),
 });
 
+/**
+ * Answers taken out for a source that could not be added go back as they were (review, 24 November 2026: the
+ * answers leave the session first, so a refused second write can never leave them in a source and still waiting).
+ * An answer given again to the same card since is newer and stays; nothing is added twice.
+ */
+export const putBack = (taken: readonly KeptAnswer[]): SessionStep => s => ({
+  ...s,
+  waiting: [...taken.filter(t => !s.waiting.some(w => w.key === t.key)), ...s.waiting],
+});
+
+/** The words kept to read later for a card, if any. */
+export const laterFor = (s: SessionState, key: string): LaterWords | undefined => s.later.find(l => l.key === key);
+
 // ---- Whether a session is in use ----------------------------------------------------------------
 
 /**

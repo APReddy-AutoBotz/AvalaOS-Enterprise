@@ -27,11 +27,11 @@ import { answersSource, ANSWER_TO } from '../../domain/discovery/answers.ts';
 import { CAP_LINE, canReadWords, canUpdateDraft } from '../../domain/discovery/limits.ts';
 import { sessionSummary } from '../../domain/discovery/summary.ts';
 import {
-  BUSY_LINE, commitSessionStep, countedReading, countSaved, emptyState, FULL_LINE, keepAnswer, keepLater, readingsReviewed, readingsStarted,
-  readState, reviewedReading, savedCount, skip, startedLine, startedReading, tookIntoSource, usedCall, type SessionStep, type StoredSession,
+  BUSY_LINE, commitSessionStep, countedReading, countSaved, dropLater, emptyState, FULL_LINE, keepAnswer, keepLater, laterFor, putBack, readingsReviewed, readingsStarted,
+  readState, reviewedReading, savedCount, skip, startedLine, startedReading, tookIntoSource, usedCall, type LaterWords, type SessionStep, type StoredSession,
 } from '../../domain/discovery/session.ts';
 import {
-  cardItem, chooseEdit, keptLine, leaveWith, notApplicable, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
+  cardItem, chooseEdit, keptLine, laterLine, leaveWith, notApplicable, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
 } from '../../domain/discovery/flow.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
 import { ChangeReview, coarsePatch } from './SourcesStage.tsx';
@@ -60,6 +60,9 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
   const [session, setSession] = React.useState<StoredSession | null | undefined>(undefined);
   const [run, setRun] = React.useState<ExtractionRow | null | undefined>(undefined);
   const [names, setNames] = React.useState<Record<string, string>>({});
+  // Who chooses, kept with every choice as the other screens keep it (review, 24 November 2026).
+  const [me, setMe] = React.useState<string | null>(null);
+  const who = { me, name: me && names[me] && names[me] !== 'Unnamed member' ? names[me]! : '' };
   const [error, setError] = React.useState<string | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -73,6 +76,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
   React.useEffect(() => { load().catch(e => setError(messageOf(e))); }, [load]);
   React.useEffect(() => {
     store.listMembers(workspace.id).then(ms => setNames(Object.fromEntries(ms.map(m => [m.userId, m.name])))).catch(() => {});
+    store.currentUser().then(u => setMe(u?.id ?? null)).catch(() => {});
   }, [store, workspace.id]);
 
   // Follow a running reading; once it is done, count it against the session's cap (once).
@@ -159,26 +163,39 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
       <span>{startedLine(session.startedBy ? names[session.startedBy] : null, sourceDate(new Date(session.startedAt)))}</span>
       <FinishButton store={store} process={process} session={session} waiting={state.waiting.length} busy={busy}
         onDone={() => { setSession(null); setNotice('The session is finished. Start a new one whenever you like.'); }}
-        keepAsSource={async () => keepWaiting()} onError={setError} />
+        keepAsSource={async () => (await keepWaiting()) !== 'failed'} onError={setError} />
     </div>
   );
 
-  /** The waiting answers become one "Discovery answers" source, and leave the session in the same step. */
-  async function keepWaiting(): Promise<SourceRow | null> {
+  /**
+   * The waiting answers become one "Discovery answers" source. They leave the session first, so a refused write can
+   * never leave them both in a source and still waiting (review, 24 November 2026); if the source cannot be added,
+   * they go back as they were (`putBack`), and the person's words are never lost.
+   */
+  async function keepWaiting(): Promise<SourceRow | 'none' | 'failed'> {
     const s = readState((await store.getDiscoverySession(process.id))?.state);
-    const src = answersSource(s.waiting, sources.map(x => x.key), sourceDate());
-    if (!src) return null;
-    const row = await store.addSource(process.id, { key: src.key, title: src.title, fileName: '', format: 'txt', kind: src.kind, segments: src.segments, inferred: false, warnings: [], byteSize: new TextEncoder().encode(src.segments.map(x => x.text).join('\n')).length });
-    await commit(tookIntoSource(s.waiting));
-    announceProcessChanged(process.id);
-    return row;
+    const taken = s.waiting;
+    const src = answersSource(taken, sources.map(x => x.key), sourceDate());
+    if (!src) return 'none';
+    // Refused (full or busy): the line is shown and nothing was taken out.
+    if (!(await commit(tookIntoSource(taken)))) return 'failed';
+    try {
+      const row = await store.addSource(process.id, { key: src.key, title: src.title, fileName: '', format: 'txt', kind: src.kind, segments: src.segments, inferred: false, warnings: [], byteSize: new TextEncoder().encode(src.segments.map(x => x.text).join('\n')).length });
+      announceProcessChanged(process.id);
+      return row;
+    } catch (e) {
+      if (!(await commit(putBack(taken)).catch(() => false))) {
+        throw new Error(`The answers could not be kept as a source, nor kept with the session. Copy them before you leave: ${taken.map(t => `${t.question} ${t.words}`).join(' | ')}`);
+      }
+      throw e;
+    }
   }
 
   const update = async () => {
     setBusy(true); setError(null); setNotice(null);
     try {
       const row = await keepWaiting();
-      if (!row) return;
+      if (typeof row === 'string') return;
       const latest = await store.listSources(process.id);
       await read(updateSources(run?.sourceIds ?? [], latest.filter(s => !s.archived), row.id));
     } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
@@ -198,10 +215,14 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
       {stage === 'describe' && (
         <Describe store={store} process={process} m={m} asksPurpose={asksPurpose} boxVoice={boxVoice} capped={!canUpdateDraft(state.use)} busy={busy}
-          onChoose={(card, pick) => { const e = chooseEdit(card, m, pick, { me: null, at: new Date().toISOString() }); if (e) void saveOp(e.op, e.summary); else if (pick === 'decided') setNotice(WORDS.decided); }}
-          onSave={async words => {
+          onSave={async (words, picks) => {
             setBusy(true); setError(null);
             try {
+              // The first cards' choices join the process with this Save, never on a click (review, 24 November 2026).
+              for (const [card, pick] of picks) {
+                const e = chooseEdit(card, m, pick, { ...who, at: new Date().toISOString() });
+                if (e && !(await saveOp(e.op, e.summary))) return;
+              }
               const row = await store.addSource(process.id, ownWordsSource(words, sources.map(s => s.key), sourceDate()));
               announceProcessChanged(process.id);
               await read([row.id]);
@@ -245,7 +266,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
             </div>
           )}
           <Cards store={store} process={process} model={m} asksPurpose={asksPurpose} skipped={state.skipped} waitingKeys={state.waiting.map(w => w.key)} keys={sources.map(s => s.key)}
-            capped={capped || allowanceGone} boxVoice={boxVoice} saved={savedCount(state)} callAi={callAi} saveOp={saveOp} commit={commit}
+            capped={capped || allowanceGone} boxVoice={boxVoice} saved={savedCount(state)} later={state.later} who={who} callAi={callAi} saveOp={saveOp} commit={commit}
             onAllowance={() => setAllowanceGone(true)} onNotice={setNotice} onError={setError} onOpenStage={onOpenStage}
             addWords={async (key, question, words) => {
               await store.addSource(process.id, { key, title: `Discovery answers, ${sourceDate()}`, fileName: '', format: 'txt', kind: 'Discovery answers', inferred: false, warnings: [], byteSize: words.length,
@@ -258,6 +279,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 }
 
 type BoxVoice = { transcribe?: (audio: string) => Promise<string>; voiceLine?: string };
+type Who = { me: string | null; name: string };
 
 function Choices({ card, value, onChange }: { card: Card; value: string; onChange: (v: string) => void }) {
   return (
@@ -272,9 +294,9 @@ function Choices({ card, value, onChange }: { card: Card; value: string; onChang
   );
 }
 
-function Describe({ m, asksPurpose, boxVoice, capped, busy, onChoose, onSave, onSources }: {
+function Describe({ m, asksPurpose, boxVoice, capped, busy, onSave, onSources }: {
   store: JourneyStore; process: ProcessRow; m: ProcessModel; asksPurpose: boolean; boxVoice: BoxVoice; capped: boolean; busy: boolean;
-  onChoose: (card: Card, pick: string) => void; onSave: (words: string) => void; onSources: () => void;
+  onSave: (words: string, picks: [Card, string][]) => void; onSources: () => void;
 }) {
   const [words, setWords] = React.useState('');
   const first = startCards(m, { asksPurpose });
@@ -288,13 +310,14 @@ function Describe({ m, asksPurpose, boxVoice, capped, busy, onChoose, onSave, on
       {first.map(card => (
         <div key={card.key} className="rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-sm font-semibold text-slate-900">{card.question}</p>
-          <div className="mt-2"><Choices card={card} value={picks[card.key] ?? ''} onChange={v => { setPicks(p => ({ ...p, [card.key]: v })); onChoose(card, v); }} /></div>
+          <div className="mt-2"><Choices card={card} value={picks[card.key] ?? ''} onChange={v => setPicks(p => ({ ...p, [card.key]: v }))} /></div>
+          {card.key === 'start:purpose' && picks[card.key] === 'decided' && <p className="mt-2 text-sm text-slate-600" data-testid="discovery-decided">{WORDS.decided}</p>}
         </div>
       ))}
       <AnswerBox label="In your own words" value={words} onChange={setWords} rows={7} placeholder="For example: Supplier invoices arrive by email. Someone in accounts payable checks them against the purchase order…" {...boxVoice} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="accent" disabled={busy || capped || words.trim().length < MIN_WORDS} onClick={() => onSave(words)}>{busy ? 'Saving…' : 'Save and read it'}</Button>
-        <span className="text-xs text-slate-500">{words.trim().length < MIN_WORDS ? 'A few sentences at least.' : WORDS.kept}</span>
+        <Button variant="accent" disabled={busy || capped || words.trim().length < MIN_WORDS} onClick={() => onSave(words, first.filter(c => picks[c.key]).map(c => [c, picks[c.key]!] as [Card, string]))}>{busy ? 'Saving…' : 'Save and read it'}</Button>
+        <span className="text-xs text-slate-500">{words.trim().length < MIN_WORDS ? 'A few sentences at least. Your choices above are saved with it.' : `${WORDS.kept} Your choices above are saved with it.`}</span>
       </div>
       <button type="button" onClick={onSources} className="text-sm font-medium text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4">Have documents too? Add them on the Sources stage.</button>
     </div>
@@ -366,9 +389,9 @@ function FirstReading({ store, process, run, boxVoice, busy, active, onRead, onA
   );
 }
 
-function Cards({ model, asksPurpose, skipped, waitingKeys, keys, capped, boxVoice, saved, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
+function Cards({ model, asksPurpose, skipped, waitingKeys, keys, capped, boxVoice, saved, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
   store: JourneyStore; process: ProcessRow; model: ProcessModel; asksPurpose: boolean; skipped: string[]; waitingKeys: string[]; keys: string[];
-  capped: boolean; boxVoice: BoxVoice; saved: number;
+  capped: boolean; boxVoice: BoxVoice; saved: number; later: LaterWords[]; who: Who;
   callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string) => Promise<boolean>; commit: (step: SessionStep) => Promise<boolean>;
   addWords: (key: string, question: string, words: string) => Promise<void>;
   onAllowance: () => void; onNotice: (n: string | null) => void; onError: (e: string | null) => void; onOpenStage: (stage: 'sources' | 'process' | 'gaps') => void;
@@ -376,13 +399,13 @@ function Cards({ model, asksPurpose, skipped, waitingKeys, keys, capped, boxVoic
   const assessment = React.useMemo(() => assessProcess(model), [model]);
   const t = React.useMemo(() => triage(model, assessment), [model, assessment]);
   const queue = React.useMemo(() => discoveryQueue({ model, assessment, asksPurpose, skipped, triage: t }).filter(c => !waitingKeys.includes(c.key)), [model, assessment, asksPurpose, skipped, t, waitingKeys]);
-  const summary = sessionSummary(model, assessment, saved);
+  const summary = sessionSummary(model, assessment, saved, later.length);
   const [showSummary, setShowSummary] = React.useState(false);
   const card = queue[0];
   return (
     <>
       {card && !showSummary ? (
-        <React.Fragment key={card.key}><CardView card={card} item={cardItem(card, t)} model={model} n={1} of={queue.length} keys={keys} capped={capped} boxVoice={boxVoice}
+        <React.Fragment key={card.key}><CardView card={card} item={cardItem(card, t)} model={model} n={1} of={queue.length} keys={keys} capped={capped} boxVoice={boxVoice} later={laterFor({ ...emptyState(), later }, card.key)} who={who}
           callAi={callAi} saveOp={saveOp} commit={commit} addWords={addWords} onAllowance={onAllowance} onNotice={onNotice} onError={onError} onOpenStage={onOpenStage} waiting={waitingKeys.length} /></React.Fragment>
       ) : (
         <Summary summary={summary} onOpenStage={onOpenStage} />
@@ -405,19 +428,21 @@ function Summary({ summary, onOpenStage }: { summary: ReturnType<typeof sessionS
   );
 }
 
-function CardView({ card, item, model, n, of, keys, capped, boxVoice, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage, waiting }: {
+function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage, waiting }: {
   card: Card; item: TriageItem | undefined; model: ProcessModel; n: number; of: number; keys: string[]; capped: boolean; boxVoice: BoxVoice; waiting: number;
+  /** Words kept on this card to read later: shown again in the box. */
+  later: LaterWords | undefined; who: Who;
   callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string) => Promise<boolean>; commit: (step: SessionStep) => Promise<boolean>;
   addWords: (key: string, question: string, words: string) => Promise<void>;
   onAllowance: () => void; onNotice: (n: string | null) => void; onError: (e: string | null) => void; onOpenStage: (stage: 'sources' | 'process' | 'gaps') => void;
 }) {
-  const [text, setText] = React.useState('');
+  const [text, setText] = React.useState(later?.words ?? '');
   const [pick, setPick] = React.useState('');
   const [statuses, setStatuses] = React.useState<Record<number, AccessStatus>>(() => Object.fromEntries((item?.interfaces ?? []).map(x => [x.index, x.access])));
   const [reading, setReading] = React.useState<{ r: Reading; said: string; attempt: 1 | 2; first: string } | null>(null);
   const [followUp, setFollowUp] = React.useState<{ question: string; first: string } | null>(null);
   const [asking, setAsking] = React.useState(false);
-  const [who, setWho] = React.useState('');
+  const [asked, setAsked] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [field, setField] = React.useState<InputValue>({});
   const ways = item && (item.kind === 'ways' || item.kind === 'access');
@@ -440,13 +465,13 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, callAi, sa
     const e = wordsEdit(model, item!, r.proposal, keys);
     if (!e) { onError('This answer cannot be recorded for this question.'); return; }
     if (e.keepWords) await addWords(e.keepWords.key, e.keepWords.question, e.keepWords.words);
-    if (await saveOp(e.op, e.summary)) done(e.line ?? `Recorded: ${r.proposal.display}`);
+    if (await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(e.line ?? `Recorded: ${r.proposal.display}`); }
   });
   const wordsPreview = reading && (reading.r.kind === 'record' || reading.r.kind === 'confirm') ? wordsEdit(model, item!, reading.r.proposal, keys) : null;
 
   const choose = () => run(async () => {
     if (card.key === 'start:purpose' && pick === 'decided') { if (await commit(skip(card.key))) onNotice(WORDS.decided); return; }
-    const e = chooseEdit(card, model, pick, { me: null, at: new Date().toISOString(), item, statuses });
+    const e = chooseEdit(card, model, pick, { ...who, at: new Date().toISOString(), item, statuses });
     if (!e) { await commit(skip(card.key)); return; }
     if (await saveOp(e.op, e.summary)) done(null);
   });
@@ -496,6 +521,12 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, callAi, sa
         {(way === 'words' || way === 'waits') && (
           <>
             {followUp && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950" data-testid="discovery-follow-up">{followUp.question}</p>}
+            {later && (
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 px-3 py-2" data-testid="discovery-later">
+                <p className="text-sm text-slate-700">{laterLine(later.at)}</p>
+                <Button variant="ghost" disabled={busy} onClick={() => run(async () => { if (await commit(dropLater(card.key))) setText(''); })}>Clear my kept words</Button>
+              </div>
+            )}
             <AnswerBox label="Or answer in your own words" value={text} onChange={v => { setText(v); setReading(null); }} rows={3} maxLength={2000} placeholder="Type, or press the microphone and speak" {...boxVoice} />
           </>
         )}
@@ -521,15 +552,15 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, callAi, sa
           <Button variant="secondary" onClick={() => setReading(null)}>Change my answer</Button>
         </>}
         <Button variant="ghost" onClick={() => setAsking(a => !a)}>Not known, ask someone</Button>
-        <Button variant="ghost" disabled={busy} onClick={() => run(async () => { const e = notApplicable(card, item); if (await saveOp(e.op, e.summary)) done(null); })}>Not applicable</Button>
+        <Button variant="ghost" disabled={busy} onClick={() => run(async () => { const e = notApplicable(card, item); if (await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(null); } })}>Not applicable</Button>
         <Button variant="ghost" disabled={busy} onClick={() => run(async () => { await commit(skip(card.key)); })}>Skip</Button>
       </div>
       {asking && (
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label className="text-sm font-medium text-slate-700">Who would know?
-            <input value={who} onChange={e => setWho(e.target.value)} maxLength={120} className="mt-1 block rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
+            <input value={asked} onChange={e => setAsked(e.target.value)} maxLength={120} className="mt-1 block rounded-lg border border-slate-300 px-3 py-1.5 text-sm" />
           </label>
-          <Button disabled={busy || !who.trim()} onClick={() => run(async () => { const e = leaveWith(card, item, who); if (e && await saveOp(e.op, e.summary)) done(e.line ?? null); })}>Leave it with them</Button>
+          <Button disabled={busy || !asked.trim()} onClick={() => run(async () => { const e = leaveWith(card, item, asked); if (e && await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(e.line ?? null); } })}>Leave it with them</Button>
         </div>
       )}
       <p className="mt-3 text-xs text-slate-500">{WORDS.nothing}</p>
@@ -591,13 +622,14 @@ function FieldInput({ card, model, value, onChange }: { card: InputCard; model: 
 
 function FinishButton({ store, process, session, waiting, busy, onDone, keepAsSource, onError }: {
   store: JourneyStore; process: ProcessRow; session: StoredSession; waiting: number; busy: boolean;
-  onDone: () => void; keepAsSource: () => Promise<unknown>; onError: (e: string | null) => void;
+  onDone: () => void; keepAsSource: () => Promise<boolean>; onError: (e: string | null) => void;
 }) {
   const [asking, setAsking] = React.useState(false);
   const finish = async (keep: boolean) => {
     onError(null);
     try {
-      if (keep) await keepAsSource();
+      // A session is finished only once its waiting answers are safely in a source.
+      if (keep && !(await keepAsSource())) return;
       for (let i = 0; i < 3; i++) {
         const s = await store.getDiscoverySession(process.id);
         if (!s) { onDone(); return; }

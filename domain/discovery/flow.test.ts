@@ -53,12 +53,12 @@ test('an update reads the sources the last reading read, then the answers source
 test('the first cards write through the existing edits; "decided" and "Not sure yet" write nothing', () => {
   const m = emptyModel('Claims');
   const [purpose, done] = startCards(m, { asksPurpose: true });
-  const p = chooseEdit(purpose!, m, 'as_is', { me: 'u1', at })!;
+  const p = chooseEdit(purpose!, m, 'as_is', { me: 'u1', name: 'Asha Rao', at })!;
   assert.equal(p.op(m).model.meta.purpose!.value, 'as_is');
-  assert.equal(chooseEdit(purpose!, m, 'decided', { me: 'u1', at }), null);
-  const d = chooseEdit(done!, m, 'partly', { me: 'u1', at })!;
+  assert.equal(chooseEdit(purpose!, m, 'decided', { me: 'u1', name: 'Asha Rao', at }), null);
+  const d = chooseEdit(done!, m, 'partly', { me: 'u1', name: 'Asha Rao', at })!;
   assert.equal(d.op(m).model.meta.brief!.doneToday!.value, 'partly');
-  assert.equal(chooseEdit(done!, m, 'unknown', { me: 'u1', at }), null);
+  assert.equal(chooseEdit(done!, m, 'unknown', { me: 'u1', name: 'Asha Rao', at }), null);
 });
 
 test('a ways-in card answered with File alone writes nothing; "API: not available" closes it', () => {
@@ -67,8 +67,8 @@ test('a ways-in card answered with File alone writes nothing; "API: not availabl
   const card = discoveryQueue({ model: bare, assessment: assessProcess(bare), asksPurpose: false, triage: t }).find(c => c.itemKey === 'system:sys-servicenow')!;
   const item = cardItem(card, t)!;
   assert.equal(item.kind, 'ways');
-  assert.equal(chooseEdit(card, bare, '', { me: null, at, item, statuses: { 2: 'confirmed' } }), null);
-  const e = chooseEdit(card, bare, '', { me: null, at, item, statuses: { 0: 'confirmed_absent' } })!;
+  assert.equal(chooseEdit(card, bare, '', { me: null, name: '', at, item, statuses: { 2: 'confirmed' } }), null);
+  const e = chooseEdit(card, bare, '', { me: null, name: '', at, item, statuses: { 0: 'confirmed_absent' } })!;
   const after = e.op(bare).model;
   assert.ok(!triage(after, assessProcess(after)).items.some(i => i.key === 'system:sys-servicenow'));
 });
@@ -132,4 +132,20 @@ test('a question about the shape left with someone is not asked again in the ses
   const after = ask(e.op(gold).model);
   assert.equal(after.cards.some(c => c.key === key), false);
   assert.equal(after.cards.length, before.cards.length - 1, 'only that card goes');
+});
+
+test('who chose is kept: the purpose with the person\'s id, a resolved conflict with their name and id as the other screens store it', () => {
+  const m = emptyModel('Claims');
+  const [purpose] = startCards(m, { asksPurpose: true });
+  assert.equal(chooseEdit(purpose!, m, 'assess', { me: 'u1', name: 'Asha Rao', at })!.op(m).model.meta.purpose!.by, 'u1');
+  const a = assessProcess(gold);
+  const card = discoveryQueue({ model: gold, assessment: a, asksPurpose: true }).find(c => c.key === 'conflict:k-02')!;
+  const pick = card.choices![0]![0];
+  const after = chooseEdit(card, gold, pick, { me: 'u1', name: 'Asha Rao', at })!.op(gold).model;
+  const k = after.conflicts.find(c => c.id === 'k-02')!;
+  assert.deepEqual({ by: k.resolution!.by, byId: k.resolution!.byId }, { by: 'Asha Rao', byId: 'u1' });
+  assert.equal(after.meta.metrics.find(x => x.id === 'm-volume')!.value, 9000, 'the chosen figure is written, as the Questions tab writes it');
+  // No name in the profile: "Not recorded", never "Discovery" as a person.
+  const unnamed = chooseEdit(card, gold, pick, { me: 'u1', name: '', at })!.op(gold).model.conflicts.find(c => c.id === 'k-02')!.resolution!;
+  assert.deepEqual({ by: unnamed.by, byId: unnamed.byId }, { by: 'Not recorded', byId: 'u1' });
 });

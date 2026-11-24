@@ -163,7 +163,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   }, [proc, look, dismissed]);
   const tabs = proc && (
     <div role="tablist" aria-label="Ask Avala" className="mb-4 flex gap-1 border-b border-slate-200">
-      {(disc === 'none' ? ['ask', 'interview', 'suggestions'] as const : ['ask', 'interview', 'suggestions', 'discovery'] as const).map(v => (
+      {/* A viewer gets no Discovery tab (plan, decision 3); on a process with no steps the panel says who can start it. */}
+      {(disc === 'tab' || disc === 'demo' ? ['ask', 'interview', 'suggestions', 'discovery'] as const : ['ask', 'interview', 'suggestions'] as const).map(v => (
         <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => { setStart(null); setView(v); }}
           className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${view === v ? 'border-[#E69F00] text-[#002C4B]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
           {v === 'ask' ? 'Ask' : v === 'interview' ? `Questions${openCount ? ` (${openCount})` : ''}` : v === 'suggestions' ? 'Suggestions' : 'Discovery'}
@@ -172,7 +173,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     </div>
   );
   const gapsStage = procStages.includes('assessment') ? 'assessment' as const : procStages.includes('documents') ? 'documents' as const : null;
-  if (here && discoveryBody && ((proc && view === 'discovery') || (!proc && disc === 'only'))) {
+  if (here && discoveryBody && ((proc && view === 'discovery' && (disc === 'tab' || disc === 'demo')) || (!proc && disc === 'only'))) {
     return (
       <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
         <div data-testid="ask-panel">
@@ -233,7 +234,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
         {scope.kind === 'board' && lists && !project && (projectId ? <p className="text-sm leading-6 text-slate-600">That board is not in this workspace.</p> : null)}
         {processId && loaded === 'missing' && <p className="text-sm leading-6 text-slate-600">That process is not in your workspaces.</p>}
         {processId && loaded && loaded !== 'missing' && !askable(loaded.model) && <p className="text-sm leading-6 text-slate-600">{loaded.process.name} has no steps yet, so its record holds nothing to answer from. Add its sources and read them into the process first.</p>}
-        {!askable(here?.model) && (disc === 'viewer' || disc === 'demo') && <div className="mt-3">{discoveryBody}</div>}
+        {here && !askable(here.model) && disc === 'viewer' && <div className="mt-3">{discoveryBody}</div>}
         {((processId && loaded === null) || !lists) && !error && <div className="mt-4"><Spinner /></div>}
       </div>
     </SidePanel>

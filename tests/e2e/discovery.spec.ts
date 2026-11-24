@@ -24,12 +24,60 @@ const stored = (page: Page) => page.evaluate(KEY => {
   const working = s.revisions.find((r: { state: string }) => r.state === 'working');
   return { sources: s.sources.map((x: { key: string }) => x.key) as string[], working: working ? JSON.stringify(working.model) : null, sessions: (s.discovery ?? []).length as number };
 }, KEY);
+const me = (page: Page) => page.evaluate(KEY => JSON.parse(localStorage.getItem(KEY)!).me.id as string, KEY);
+const workingModel = (page: Page) => page.evaluate(KEY => JSON.parse(localStorage.getItem(KEY)!).revisions.find((r: { state: string }) => r.state === 'working').model, KEY);
+const setRole = (page: Page, role: string) => page.evaluate(({ KEY, role }) => {
+  const s = JSON.parse(localStorage.getItem(KEY)!);
+  s.workspaces[0].role = role;
+  localStorage.setItem(KEY, JSON.stringify(s));
+}, { KEY, role });
+const withStandIns = (page: Page, replies: unknown) => page.addInitScript(r => { (window as unknown as { __avalaStandIns: unknown }).__avalaStandIns = r; }, replies);
+
+test('the first choices are saved only with "Save and read it": picked and closed, the record is as it was', async ({ page }) => {
+  await withStandIns(page, { extraction: [first] });
+  await signInAndCreateProcess(page);
+  await page.getByTestId('own-words-discovery').getByRole('button', { name: 'Start with Ask Avala' }).click();
+  const describe = page.getByTestId('discovery-describe');
+  await describe.getByLabel('Document it as it is').check();
+  await describe.getByLabel('Not done today').check();
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('ask-panel')).toHaveCount(0);
+  expect(await stored(page)).toEqual({ sources: [], working: null, sessions: 0 });
+});
+
+test('a viewer gets no Discovery tab; on a process with no steps, a line says who can start it', async ({ page }) => {
+  await withStandIns(page, { answerFromNotes: [] });
+  await signInAndCreateProcess(page);
+  const processUrl = page.url().replace(/\/sources$/, '');
+  // A viewer, first on the process while it has no steps.
+  await setRole(page, 'viewer');
+  await page.reload();
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  const panel = page.getByTestId('ask-panel');
+  await expect(panel.getByTestId('discovery-viewer')).toHaveText('Someone who can edit this process can start Discovery.');
+  await expect(panel.getByRole('tab')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+
+  // Then with steps (put in as an admin): the tabs are the three of before.
+  await setRole(page, 'admin');
+  await page.goto(`${processUrl}/process`);
+  await page.getByRole('button', { name: 'Start the process model' }).click();
+  await expect(page.getByTestId('save-state')).toBeVisible();
+  await page.evaluate(({ gold, KEY }) => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    s.revisions.find((r: { state: string }) => r.state === 'working').model = gold;
+    s.workspaces[0].role = 'viewer';
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, { gold, KEY });
+  await page.goto(`${processUrl}/process`);
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  await expect(panel.getByRole('tab')).toHaveText([/^Ask$/, /^Questions/, /^Suggestions$/]);
+  await expect(panel.getByTestId('discovery-viewer')).toHaveCount(0);
+});
 
 test('Discovery: own words read into steps, one question at a time, a shape answer kept until the update reads it as a source', async ({ page }) => {
   test.setTimeout(150_000);
-  await page.addInitScript(({ first, gold }) => {
-    (window as unknown as { __avalaStandIns: unknown }).__avalaStandIns = { extraction: [first, gold], answerFromNotes: [{ answers: [] }] };
-  }, { first, gold });
+  await withStandIns(page, { extraction: [first, gold], answerFromNotes: [{ answers: [] }] });
   await signInAndCreateProcess(page);
 
   // The Sources stage's start in own words offers Ask Avala; the panel opens on Discovery, the only view with no steps.
@@ -40,7 +88,8 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
   const discovery = panel.getByTestId('discovery');
   await expect(discovery.getByTestId('discovery-describe')).toContainText('Nothing joins the process until you press Save.');
 
-  // Typed, nothing kept yet.
+  // A choice and typed words, nothing kept yet.
+  await discovery.getByLabel('Assess it and document it').check();
   await discovery.getByLabel('In your own words').fill(WORDS);
   expect(await stored(page)).toEqual({ sources: [], working: null, sessions: 0 });
   await discovery.getByRole('button', { name: 'Save and read it' }).click();
@@ -48,27 +97,26 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
   // The words are a source before anything is read from them, and the reading was given them alone.
   await expect(discovery.getByTestId('discovery-first')).toBeVisible({ timeout: 20_000 });
   expect((await stored(page)).sources).toEqual(['own-1']);
+  // The choice was saved with it, with who chose.
+  expect((await workingModel(page)).meta.purpose).toMatchObject({ value: 'assess', by: await me(page) });
   const reads = (await standInLog(page)).filter(c => c.task === 'extraction');
   expect(reads).toHaveLength(1);
   expect(reads[0]!.sources!.map(s => s.key)).toEqual(['own-1']);
   expect(reads[0]!.sources![0]!.passages.map(p => p.text).join(' ')).toBe(WORDS);
 
-  // What it understood, each step with the words it came from; still nothing in the draft.
+  // What it understood, each step with the words it came from; still no step in the draft.
   await expect(discovery.getByTestId('discovery-first')).toContainText('What I understand so far');
   await expect(discovery.getByTestId('discovery-steps').getByRole('listitem')).toHaveCount(first.steps.length);
   await expect(discovery.getByTestId('discovery-steps')).toContainText('From your words:');
-  expect((await stored(page)).working).toBeNull();
+  expect((await workingModel(page)).steps).toEqual([]);
   await discovery.getByRole('button', { name: 'Start the process from this' }).click();
 
   // One question at a time, with where it came from; Skip moves on and records nothing.
   const card = discovery.getByTestId('discovery-card');
-  await expect(card.getByTestId('discovery-question')).toHaveText('What do you want from this process?', { timeout: 20_000 });
+  await expect(card.getByTestId('discovery-question')).toHaveText('Is the work done today?', { timeout: 20_000 });
   await expect(card).toContainText('Nothing is recorded until you press Save.');
-  await expect(discovery.getByTestId('discovery-session')).toContainText('Started');
+  await expect(discovery.getByTestId('discovery-session')).toContainText('Started by analyst on');
   const afterStart = (await stored(page)).working;
-  expect(afterStart).not.toBeNull();
-  await card.getByRole('button', { name: 'Skip' }).click();
-  await expect(card.getByTestId('discovery-question')).toHaveText('Is the work done today?');
   await card.getByRole('button', { name: 'Skip' }).click();
 
   // Not known: left with a named person, in the question file.
@@ -93,6 +141,15 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
   expect((await stored(page)).working).toEqual(afterLeave);
   expect((await stored(page)).sources).toEqual(['own-1']);
 
+  // A conflict chosen on a card keeps who chose, as the Process stage does.
+  await expect(card.getByTestId('discovery-question')).toContainText('Which is right? Price tolerance');
+  await card.getByRole('radio').first().check();
+  await card.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(card.getByTestId('discovery-question')).toContainText('Which is right? Monthly volume');
+  const resolved = (await workingModel(page)).conflicts.find((c: { id: string }) => c.id === 'k-01').resolution;
+  expect(resolved).toMatchObject({ by: 'analyst', byId: await me(page) });
+  const afterConflict = (await stored(page)).working;
+
   // The update: the answers become a "Discovery answers" source, read with the own words; each passage is the
   // person's words alone, with the question as its place.
   const waiting = discovery.getByTestId('discovery-waiting');
@@ -105,7 +162,31 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
   expect(update.sources![1]!.passages).toEqual([{ text: END, place: 'Answer to: When is a case finished: what is the last thing that happens?' }]);
   await expect(discovery.getByTestId('discovery-waiting')).toHaveCount(0);
   // Nothing from the update joins the draft until the person applies it.
-  expect((await stored(page)).working).toEqual(afterLeave);
+  expect((await stored(page)).working).toEqual(afterConflict);
+
+  // Words kept to read later show again on their card, are counted, and can be cleared.
+  await page.evaluate(KEY => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    const st = s.discovery[0].state;
+    const key = 'gap:step_without_role:step:s-match:roleIds';
+    st.later = [{ key, question: 'Who does "Three-way match"?', words: 'The AP clerk does the match.', at: '2026-11-24T09:00:00.000Z' }];
+    st.skipped = st.skipped.filter((k: string) => k !== key);
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, KEY);
+  await page.reload();
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  await panel.getByRole('tab', { name: 'Discovery' }).click();
+  await expect(card.getByTestId('discovery-question')).toHaveText('Who does "Three-way match"?', { timeout: 20_000 });
+  await expect(card.getByLabel('Or answer in your own words')).toHaveValue('The AP clerk does the match.');
+  await expect(card.getByTestId('discovery-later')).toContainText('Your words, kept on 24 November to read later.');
+  await discovery.getByRole('button', { name: 'Where discovery stands' }).click();
+  await expect(discovery.getByTestId('discovery-summary')).toContainText('Kept to read later: 1.');
+  await discovery.getByRole('button', { name: 'Back to the questions' }).click();
+  await card.getByRole('button', { name: 'Clear my kept words' }).click();
+  await expect(card.getByTestId('discovery-later')).toHaveCount(0);
+  await expect(card.getByLabel('Or answer in your own words')).toHaveValue('');
+  await discovery.getByRole('button', { name: 'Where discovery stands' }).click();
+  await expect(discovery.getByTestId('discovery-summary')).not.toContainText('Kept to read later');
 });
 
 test('the demo shows what Discovery is, with nothing to press', async ({ page }) => {

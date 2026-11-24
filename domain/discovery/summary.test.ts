@@ -34,4 +34,9 @@ test('a session ends when the shape is settled and nothing that decides is open,
   assert.equal(s.line, `Recorded: 4 answers. What you want to change: 1. Conflicts to resolve: ${gold.conflicts.filter(c => !c.resolution).length}. Still open: ${s.open}.`);
   assert.match(s.closing, /^You stopped with \d+ questions? still to ask\. Carry on whenever you like\.$/);
   assert.equal(sessionSummary(m, assessProcess(m), 1).line.startsWith('Recorded: 1 answer.'), true);
+  // Words kept to read later are counted (review, 24 November 2026).
+  const later = sessionSummary(m, assessProcess(m), 4, 2);
+  assert.equal(later.later, 2);
+  assert.ok(later.line.endsWith(' Kept to read later: 2.'));
+  assert.equal(s.line.includes('Kept to read later'), false, 'said only when there are some');
 });

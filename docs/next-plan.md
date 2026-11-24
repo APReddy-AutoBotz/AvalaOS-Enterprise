@@ -849,6 +849,12 @@ Six pull requests; `next` can be released after any one of them; the first relea
     - The look in the sources waits while a session is in use and only then (`discoveryHoldsLook` in `journey/process/discoveryOpen.ts`, used by `useAutoLook`); an abandoned one blocks nothing.
     - The three review points of 24 November 2026: saving or removing the AI provider forgets the cached provider (`forgetVoice`), so the microphone follows without a reload; spoken words past the box's limit say so under it (`cutLine`); a provider that cannot be read leaves the microphone shown, as before 4a (the server still refuses a provider that cannot take speech).
     - The browser tests' stand-in gains a reading of the sources: a reply under `extraction` is the model a test gives, read from every source it is given, with each source's key and passages in the log (`standInReading`). The AI tasks' rule is unchanged: their replies are still refused when source passages are sent. Built only into the browser-test build, checked out of the released one as before.
+    - After the review of 24 November 2026:
+      - The first cards ("What do you want from this process?", "Is the work done today?") are saved with "Save and read it", never on a click.
+      - Who chose is kept: the purpose with the person's id; a resolved conflict with their name and id as the Process stage stores them (`chosenBy`), and its value written as the Questions tab writes it (`conflictValue`, now in `domain/questions/conflictValue.ts` for both).
+      - Words kept to read later show again on their card, with when they were kept, can be cleared (`dropLater`), and are counted in "Where discovery stands" ("Kept to read later: N.").
+      - A viewer gets no Discovery tab; on a process with no steps the panel says "Someone who can edit this process can start Discovery."
+      - Waiting answers leave the session before their source is added, and go back if it cannot be (`putBack`), so a refused write never leaves them both in a source and waiting; Finish finishes only once they are in a source.
     - No database or server function change; no file a server function loads.
     - Test: `domain/discovery/flow.test.ts`, `session.test.ts`, `queue.test.ts`, `domain/ai/voice.test.ts`, `standIn.test.ts`, `tests/e2e/discovery.spec.ts`.
 - **Pull requests 5 and 6:** as the plan has them.

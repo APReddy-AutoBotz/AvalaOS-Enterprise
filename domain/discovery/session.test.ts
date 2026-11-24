@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BUSY_LINE, commitSessionStep, emptyState, FULL_LINE, IN_USE_MS, keepAnswer, keepLater, markRead, readState, sessionInUse, skip,
+  BUSY_LINE, commitSessionStep, dropLater, laterFor, putBack, emptyState, FULL_LINE, IN_USE_MS, keepAnswer, keepLater, markRead, readState, sessionInUse, skip,
   startedLine, STATE_LIMIT, countedReading, countSaved, readingsReviewed, readingsStarted, reviewedReading, savedCount, startedReading, stateTextLength, tookIntoSource, usedCall, type KeptAnswer, type SaveAnswer, type SessionServer, type SessionState, type StoredSession,
 } from './session.ts';
 import { answersSource } from './answers.ts';
@@ -185,4 +185,25 @@ test('a reading is counted once against the cap, however often its end is seen; 
   const again = readState(JSON.parse(JSON.stringify(countSaved(s))));
   assert.equal(savedCount(again), 1);
   assert.deepEqual(readingsStarted(again), ['r1']);
+});
+
+test('answers taken out for a source go back when the source cannot be added; a newer answer to the same card stays', async () => {
+  const a = { key: 'shape:end', words: 'Posted and filed.', question: 'When is a case finished?', at: '2026-11-24T10:00:00.000Z' };
+  const b = { key: 'shape:start', words: 'An invoice arrives.', question: 'What starts the work?', at: '2026-11-24T10:01:00.000Z' };
+  let s = keepAnswer(b)(keepAnswer(a)(emptyState()));
+  const taken = [...s.waiting];
+  s = tookIntoSource(taken)(s);
+  assert.deepEqual(s.waiting, []);
+  const newer = { ...a, words: 'Posted, filed and paid.', at: '2026-11-24T10:05:00.000Z' };
+  s = keepAnswer(newer)(s);
+  s = putBack(taken)(s);
+  assert.deepEqual(s.waiting.map(w => w.words).sort(), ['An invoice arrives.', 'Posted, filed and paid.']);
+  assert.deepEqual(putBack(taken)(s).waiting.length, 2, 'nothing is added twice');
+});
+
+test('words kept to read later are found again for their card, and cleared', () => {
+  const w = { key: 'item:x', question: 'Who approves?', words: 'The AP lead.', at: '2026-11-24T10:00:00.000Z' };
+  const s = keepLater(w)(emptyState());
+  assert.deepEqual(laterFor(s, 'item:x'), w);
+  assert.equal(laterFor(dropLater('item:x')(s), 'item:x'), undefined);
 });

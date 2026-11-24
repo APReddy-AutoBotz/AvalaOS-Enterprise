@@ -11,6 +11,7 @@ import { ANSWER_TO, answersKey, answerAgainstConfirmed, type AnswerOutcome } fro
 import type { Card } from './card.ts';
 import type { Proposal } from '../questions/notes.ts';
 import { interviewEdit } from '../questions/interview.ts';
+import { conflictValue } from '../questions/conflictValue.ts';
 
 // ---- Who sees the tab -----------------------------------------------------------------------------
 
@@ -47,6 +48,9 @@ export const WORDS = {
   decided: 'An approach already decided is set in The brief, with who decided it and why.',
   allowance: (month: string) => `This workspace has used its AI allowance for the month, so Ask Avala cannot read words until it starts again on 1 ${month}. Questions with a choice or a number still save.`,
 } as const;
+
+/** Under a card whose words were kept to read later: when they were kept. */
+export const laterLine = (at: string) => `Your words, kept on ${new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })} to read later. Read them when you like, or clear them.`;
 
 /** "Kept. The draft is unchanged until you update it (3 answers waiting)." */
 export const keptLine = (k: number) => `Kept. The draft is unchanged until you update it (${k} ${k === 1 ? 'answer' : 'answers'} waiting).`;
@@ -99,7 +103,10 @@ export const cardItem = (card: Card, t: Triage): TriageItem | undefined => (card
 export interface Edit { op: Op; summary: string; line?: string }
 
 /** A choice on a card. Null when nothing is written (an approach already decided is set in The brief; "Not sure yet"). */
-export function chooseEdit(card: Card, m: ProcessModel, pick: string, ctx: { me: string | null; at: string; item?: TriageItem; statuses?: Record<number, AccessStatus> }): Edit | null {
+export function chooseEdit(card: Card, m: ProcessModel, pick: string, ctx: {
+  /** The signed-in person's id, and their name as the other screens store a chooser's (`chosenBy`): who chose is kept. */
+  me: string | null; name: string; at: string; item?: TriageItem; statuses?: Record<number, AccessStatus>;
+}): Edit | null {
   if (card.key === 'start:purpose') {
     if (pick !== 'assess' && pick !== 'as_is') return null;
     return { op: x => setPurpose(x, { value: pick, by: ctx.me, at: ctx.at }), summary: 'What is wanted from the process, from Discovery' };
@@ -111,7 +118,7 @@ export function chooseEdit(card: Card, m: ProcessModel, pick: string, ctx: { me:
   if (card.origin.kind === 'conflict') {
     const c = m.conflicts.find(x => x.id === (card.origin as { conflictId: string }).conflictId);
     if (!c || !c.values.some(v => v.value === pick)) return null;
-    return { op: x => resolveConflict(x, { conflictId: c.id, chosen: pick, by: 'Discovery', byId: ctx.me, reason: 'Chosen in a discovery session.' }), summary: `Conflict resolved: ${c.summary}` };
+    return { op: x => resolveConflict(x, { conflictId: c.id, chosen: pick, by: ctx.name.trim() || 'Not recorded', ...(ctx.me ? { byId: ctx.me } : {}), reason: 'Chosen in a discovery session.', ...conflictValue(x, c, pick) }), summary: `Conflict resolved: ${c.summary}` };
   }
   if (ctx.item) {
     const built = buildAnswer(ctx.item, m, { pick, statuses: ctx.statuses });
