@@ -140,7 +140,7 @@ export const keepIntro = (number: number, revision: number, date: string, approv
  * The day evidence packs are first kept with a version (package 14, pull request 5): set by the release's own
  * commit, checked by "Release dates set" (domain/site/releaseDates.ts). Until then the line shows "[release date]".
  */
-export const EVIDENCE_KEPT_SINCE: string | null = null;
+export const EVIDENCE_KEPT_SINCE: string | null = '24 November 2026';
 /** Owner-approved (24 November 2026): an opened version kept before evidence packs were kept with versions. */
 export const noEvidenceLine = (since: string | null = EVIDENCE_KEPT_SINCE) =>
   `No evidence pack was kept with this version: packs are kept from ${since ?? '[release date]'} on.`;
