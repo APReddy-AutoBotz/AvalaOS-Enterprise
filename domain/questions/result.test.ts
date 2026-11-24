@@ -19,13 +19,13 @@ const answer = (m: ProcessModel, key: string, a: Parameters<typeof buildAnswer>[
   return buildAnswer(item, m, a)!.op(m).model;
 };
 
-test('the line counts approvalCounts\' open questions less those left with someone: 3 on the bare sample', () => {
+test('the line counts approvalCounts\' open questions less those left with someone: 2 on the bare sample', () => {
   const a = assessProcess(gold);
   const c = approvalCounts(gold, a)!;
   const line = assessmentLine(gold, a)!;
   assert.equal(line.n, c.open - c.leftWithSomeone);
-  assert.equal(line.n, 3);
-  assert.equal(line.text, '3 open questions could change the recommendation');
+  assert.equal(line.n, 2);
+  assert.equal(line.text, '2 open questions could change the recommendation');
   // The focused list holds the same questions the line counts.
   assert.equal(items(gold).filter(couldChange).length, line.n);
   assert.equal(focusedLine(3), 'Showing the 3 that could change the recommendation');
@@ -34,21 +34,21 @@ test('the line counts approvalCounts\' open questions less those left with someo
 
 test('a question left with someone is not counted; one set aside with no name still is', () => {
   const named = deferQuestion(gold, { questionIds: ['q-servicenow'], owner: 'ServiceNow platform owner' }).model;
-  assert.equal(assessmentLine(named, assessProcess(named))!.n, 2);
-  assert.equal(assessmentLine(named, assessProcess(named))!.text, '2 open questions could change the recommendation');
-  assert.equal(items(named).filter(couldChange).length, 2);
+  assert.equal(assessmentLine(named, assessProcess(named))!.n, 1);
+  assert.equal(assessmentLine(named, assessProcess(named))!.text, '1 open question could change the recommendation');
+  assert.equal(items(named).filter(couldChange).length, 1);
   const nobody = deferQuestion(gold, { questionIds: ['q-servicenow'], owner: null }).model;
   assert.equal(nobody.openQuestions.find(q => q.id === 'q-servicenow')!.status, 'deferred');
-  assert.equal(assessmentLine(nobody, assessProcess(nobody))!.n, 3);
-  assert.equal(items(nobody).filter(couldChange).length, 3);
+  assert.equal(assessmentLine(nobody, assessProcess(nobody))!.n, 2);
+  assert.equal(items(nobody).filter(couldChange).length, 2);
 });
 
 test('one question, none, documented as it is and decided: the words, or no line', () => {
   let m = deferQuestion(gold, { questionIds: ['q-servicenow'], owner: 'ServiceNow platform owner' }).model;
-  m = deferQuestion(m, { questionIds: ['q-gr-api', 'q-invoice-api', 'q-attach-api'], owner: 'SAP basis team' }).model;
   assert.equal(assessmentLine(m, assessProcess(m))!.text, '1 open question could change the recommendation');
-  const scanner = items(m).find(i => i.key === 'system:sys-scanner')!;
-  m = deferQuestion(m, { questionIds: [], owner: 'Facilities', gap: { target: scanner.target, question: scanner.question } }).model;
+  m = deferQuestion(m, { questionIds: ['q-gr-api', 'q-invoice-api', 'q-attach-api'], owner: 'SAP basis team' }).model;
+  // The office scanner's question, still open, is a device's: it is Detail and is not counted.
+  assert.equal(items(m).find(i => i.key === 'system:sys-scanner')!.group, 'detail');
   assert.equal(assessmentLine(m, assessProcess(m)), null);
   const asIs = setPurpose(gold, { value: 'as_is', by: 'u1', at }).model;
   assert.equal(assessmentLine(asIs, assessProcess(asIs)), null);

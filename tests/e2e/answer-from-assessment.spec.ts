@@ -1,6 +1,6 @@
 // Closing questions from the Assessment stage (package 16 of docs/next-plan.md, section 3g), on the sample
 // case in an organisation set to "Assess": the line counts the open questions that could change the
-// recommendation; its button opens Closing the gaps on those; several are answered from pasted notes,
+// recommendation (not the office scanner's, a device's); its button opens Closing the gaps on those; several are answered from pasted notes,
 // read by the browser tests' stand-in for the AI server (journey/store/standIns.ts); nothing is kept
 // before Save; after it the result's figures match the saved process. Ask Avala's Questions tab and My
 // work lead to the same screen. The rules are tested in domain/questions/result.test.ts.
@@ -57,17 +57,28 @@ test('the Assessment stage counts the questions that could change the recommenda
   await page.goto(`${processUrl}/assessment`);
   await expect(rail(page).getByRole('link')).toHaveText([/Sources/, /Process/, /Assessment/]);
 
-  // The line: 3 on the bare sample, under what would sharpen the assessment most.
+  // My work's "Answer them" opens the Assessment stage with Closing the gaps. Checked first: once SAP and
+  // ServiceNow are answered below, nothing is left that only the people can answer now.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'My work' }).click();
+  const needs = page.getByTestId('needs-you');
+  await expect(needs).toContainText('only your people can answer');
+  await needs.getByRole('button', { name: /only your people can answer/ }).click();
+  await expect(page).toHaveURL(/\/assessment$/);
+  await expect(page.getByTestId('gaps-assistant')).toBeVisible();
+  await page.goto(`${processUrl}/assessment`);
+
+  // The line: 2 on the bare sample, under what would sharpen the assessment most. The office scanner's
+  // question, a device's, is Detail and is not counted (owner, 24 November 2026).
   const line = page.getByTestId('questions-line');
-  await expect(line).toContainText('3 open questions could change the recommendation');
+  await expect(line).toContainText('2 open questions could change the recommendation');
   await line.evaluate(el => el.scrollIntoView({ block: 'center' }));
   await shot(page, '160-assessment-questions-line');
   await line.getByRole('button', { name: 'Answer them' }).click();
 
-  // Closing the gaps on the same 3, and back to the assessment.
+  // Closing the gaps on the same 2, and back to the assessment.
   const assistant = page.getByTestId('gaps-assistant');
-  await expect(assistant.getByTestId('gaps-focused')).toContainText('Showing the 3 that could change the recommendation');
-  await expect(assistant.getByRole('list', { name: 'Questions' }).getByRole('listitem')).toHaveCount(3);
+  await expect(assistant.getByTestId('gaps-focused')).toContainText('Showing the 2 that could change the recommendation');
+  await expect(assistant.getByRole('list', { name: 'Questions' }).getByRole('listitem')).toHaveCount(2);
   await expect(assistant.getByRole('button', { name: 'Back to the assessment' })).toBeVisible();
   await expect(assistant).not.toContainText('Back to the document');
   await expect(assistant.getByTestId('gaps-summary')).toContainText('updates the model and the assessment at once');
@@ -75,7 +86,7 @@ test('the Assessment stage counts the questions that could change the recommenda
 
   // Several at once, from pasted notes.
   const before = await kept(page);
-  await assistant.getByRole('tab', { name: 'Several at once (3)' }).click();
+  await assistant.getByRole('tab', { name: 'Several at once (2)' }).click();
   await assistant.getByLabel('Your answers').fill(NOTES);
   await assistant.getByRole('button', { name: 'Find the answers' }).click();
   const proposals = assistant.getByTestId('proposals');
@@ -104,9 +115,11 @@ test('the Assessment stage counts the questions that could change the recommenda
   expect(access('sys-servicenow')).toEqual(['confirmed']);
   expect([2, 4, 6].map(i => access('sys-sap')[i])).toEqual(['confirmed', 'confirmed', 'confirmed']);
   expect(after.model.openQuestions.filter((q: { id: string; status: string }) => ['q-gr-api', 'q-invoice-api', 'q-attach-api', 'q-servicenow'].includes(q.id) && q.status === 'open')).toEqual([]);
-  await expect(assistant.getByTestId('gaps-focused')).toContainText('Showing the 1 that could change the recommendation');
+  await expect(assistant.getByTestId('gaps-focused')).toContainText('Showing the 0 that could change the recommendation');
+  await expect(assistant.getByTestId('gaps-done')).toContainText('No open question could change the recommendation');
   await assistant.getByRole('button', { name: 'Back to the assessment' }).click();
-  await expect(page.getByTestId('questions-line')).toContainText('1 open question could change the recommendation');
+  await expect(page.getByTestId('ease-score')).toBeVisible();
+  await expect(page.getByTestId('questions-line')).toHaveCount(0);
 
   // Ask Avala's Questions tab leads to the same screen, on "Several at once".
   await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
@@ -117,14 +130,6 @@ test('the Assessment stage counts the questions that could change the recommenda
   await expect(page).toHaveURL(/\/assessment$/);
   await expect(assistant.getByRole('tab', { name: /^Several at once/ })).toHaveAttribute('aria-selected', 'true');
   await assistant.getByRole('button', { name: 'Back to the assessment' }).click();
-
-  // My work's "Answer them" opens the Assessment stage with Closing the gaps.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'My work' }).click();
-  const needs = page.getByTestId('needs-you');
-  await expect(needs).toContainText('only your people can answer');
-  await needs.getByRole('button', { name: /only your people can answer/ }).click();
-  await expect(page).toHaveURL(/\/assessment$/);
-  await expect(page.getByTestId('gaps-assistant')).toBeVisible();
 
   // The stand-in answered one call, the reading of the notes; the line and the result add none. A call
   // carrying source passages (the look in the sources, once the notes are a source) is refused.

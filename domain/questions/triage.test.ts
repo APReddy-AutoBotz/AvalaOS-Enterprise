@@ -110,3 +110,23 @@ test('notes: a role answer must name a role of the process', async () => {
   assert.equal(ok[0].display, 'AP Team Lead');
   assert.equal(proposalsFrom(m, [route], ids, [{ questionId: '1', value: 'The night shift', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'x' }]).length, 0);
 });
+
+// The owner, 24 November 2026: the assessment does not route through a device (NON_INTEGRABLE in
+// domain/assess/scoring.ts, today a scanner), so its access question cannot change the recommendation.
+// It is still asked, for the documents, grouped as Detail and without "Assessment: N steps use it".
+test('a device\'s access question is still asked, as Detail, without the assessment among what it affects', () => {
+  const m = gold();
+  const items = triage(m, assessProcess(m)).items;
+  const scanner = items.find(i => i.key === 'system:sys-scanner')!;
+  assert.ok(scanner, 'still asked');
+  assert.equal(scanner.group, 'detail');
+  assert.deepEqual(scanner.affects, ['PDD 2.2 Applications']);
+  assert.equal(scanner.uses, undefined);
+  // An application the assessment does route through keeps its group.
+  assert.equal(items.find(i => i.key === 'system:sys-sap')!.group, 'decides');
+  // The same application recorded as another kind, used by the same step, would change the recommendation.
+  const asOther: ProcessModel = { ...m, systems: m.systems.map(s => (s.id === 'sys-scanner' ? { ...s, kind: 'other' as const } : s)) };
+  const other = triage(asOther, assessProcess(asOther)).items.find(i => i.key === 'system:sys-scanner')!;
+  assert.equal(other.group, 'decides');
+  assert.match(other.affects[0]!, /^Assessment: 1 step uses it$/);
+});
