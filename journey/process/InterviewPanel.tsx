@@ -24,6 +24,8 @@ import { useModelEditor } from './useModelEditor.ts';
 import { previewImpact, useImpactContext } from './ImpactNote.tsx';
 import { announceProcessChanged } from '../processChanged.ts';
 import { Button, ErrorNote, messageOf } from '../ui.tsx';
+import { AnswerBox } from './AnswerFromNotes.tsx';
+import { useVoice, voiceProps } from './voice.ts';
 
 type Phase =
   | { kind: 'answer'; attempt: 1 | 2; first: string; followUp?: string }
@@ -41,6 +43,7 @@ export function InterviewPanel({ store, process, workspace, model, working, star
   /** Opens Closing the gaps on "Several at once" (package 16); absent where the process has no stage for it. */
   onAnswerSeveral?: () => void;
 }) {
+  const voice = useVoice(store, workspace.id);
   const canEdit = workspace.role !== 'viewer';
   const editor = useModelEditor(store, process.id, { model, working }, () => announceProcessChanged(process.id));
   const ctx = useImpactContext(store, process.id, process.workspaceId, editor.lastChange?.at);
@@ -172,8 +175,9 @@ export function InterviewPanel({ store, process, workspace, model, working, star
         <form className="mt-4 space-y-3" onSubmit={e => { e.preventDefault(); read(phase.kind === 'answer' ? phase.attempt : 1, phase.kind === 'answer' ? phase.first : ''); }}>
           {phase.kind === 'answer' && phase.followUp && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="interview-follow-up">{phase.followUp}</p>}
           <label htmlFor="interview-answer" className="block text-sm font-medium text-slate-700">Your answer, in your own words</label>
-          <textarea id="interview-answer" rows={3} value={text} maxLength={INTERVIEW_LIMITS.answer} onChange={e => setText(e.target.value)}
-            className="block w-full resize-none rounded-lg border border-slate-300 px-3 py-2 text-sm leading-6 focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20" />
+          {/* Typed, or spoken (owner, 24 November 2026): the words go into the box; nothing is read until "Read my answer". */}
+          <AnswerBox id="interview-answer" label="Your answer, in your own words" value={text} onChange={setText} rows={3} maxLength={INTERVIEW_LIMITS.answer}
+            placeholder="Type, or press the microphone and speak" {...voiceProps(voice, store, workspace.id)} />
           <div className="flex flex-wrap gap-2">
             <Button type="submit" variant="accent">Read my answer</Button>
             <Button type="button" variant="ghost" onClick={skip}>Skip</Button>
