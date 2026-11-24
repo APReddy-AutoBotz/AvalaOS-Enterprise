@@ -2,11 +2,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { CSP_HEADER, cspDirectives, cspHeadersFile, cspPolicy, secureOrigin } from './csp.ts';
+import { CSP_HEADER, cspDirectives, cspHeadersFile, cspPolicy, secureOrigin, type CspSites } from './csp.ts';
 
 // Made-up settings of the same shape as Netlify's (no real project address is written in the code).
 const SITES = { supabaseUrl: 'https://example-project.supabase.co', sentryDsn: 'https://publickey123@o12345.ingest.de.sentry.io/678' };
-const directive = (name: string, sites = SITES) => cspDirectives(sites).find(d => d.name === name)?.values;
+const directive = (name: string, sites: CspSites = SITES) => cspDirectives(sites).find(d => d.name === name)?.values;
 
 test('the policy, report-only, as the live site and its previews are sent it', () => {
   assert.equal(CSP_HEADER, 'Content-Security-Policy-Report-Only');
