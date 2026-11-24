@@ -18,8 +18,9 @@ import { commentNeeds, homeSummary, itemsFor, needsByProcess, needsFor, openOn, 
 import { cardTotals } from '../../domain/assess/portfolio.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, CARD, cx, EmptyState, ErrorNote, messageOf, PageHead, Spinner, Tag, TypeGlyph } from '../ui.tsx';
-import { has } from '../../domain/workspace/modules.ts';
-import { loadProcessFacts, type LoadedFacts } from '../processFacts.ts';
+import { has, stagesFor } from '../../domain/workspace/modules.ts';
+import { openGaps } from '../process/openGaps.ts';
+import { loadProcessFacts, versionRows, type LoadedFacts } from '../processFacts.ts';
 import { cardLine, DUTY, Figures, hrs, People, Pill, StatusPill } from '../processCard.tsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -58,7 +59,8 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
           assess ? store.getSettings(workspace.id).then(r => r.settings).catch(() => undefined) : Promise.resolve(undefined),
         ]);
         const items = (await Promise.all(projects.map(p => store.listWorkItems(p.id)))).flat();
-        const facts = await Promise.all(processes.map(p => loadProcessFacts(store, p, settings)));
+        const versions = assess ? await versionRows(store, workspace.id) : new Map();
+        const facts = await Promise.all(processes.map(p => loadProcessFacts(store, p, settings, versions.get(p.id))));
         if (live) setData({ facts, items, names: new Map(members.map(m => [m.userId, m.name])) });
       } catch (e) { if (live) setError(messageOf(e)); }
     })();
@@ -140,7 +142,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
       ) : (
         <div className="mt-8 grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,5fr)_minmax(0,3fr)]">
           <div className="space-y-6">
-            {needs.length > 0 && <NeedsYou needs={needs} groups={groups} nav={nav} />}
+            {needs.length > 0 && <NeedsYou needs={needs} groups={groups} nav={nav} stages={stagesFor(workspace.modules)} />}
 
             {mine.length > 0 && (
               <section aria-labelledby="my-items" className={cx(CARD, 'overflow-hidden')} data-testid="my-items">
@@ -238,9 +240,18 @@ const NeedMark = () => (
  * What is waiting on this person: the one coloured block of the page. A single need is set large with
  * its own action; several are listed under the process they belong to.
  */
-function NeedsYou({ needs, groups, nav }: { needs: Need[]; groups: ReturnType<typeof needsByProcess>; nav: Nav }) {
+function NeedsYou({ needs, groups, nav, stages }: { needs: Need[]; groups: ReturnType<typeof needsByProcess>; nav: Nav; stages: StageId[] }) {
   const [all, setAll] = React.useState(false);
-  const openNeed = (n: Need) => nav.go({ page: 'process', processId: n.processId, stage: n.stage });
+  const openNeed = (n: Need) => {
+    // Questions to answer open Closing the gaps on Documents; where the organisation has no Documents stage
+    // (the "Assess" set-up), on the Assessment stage instead (package 16). The need itself is as the email counts it.
+    if (n.kind !== 'comments' && n.stage === 'documents' && !stages.includes('documents') && stages.includes('assessment')) {
+      nav.go({ page: 'process', processId: n.processId, stage: 'assessment' });
+      openGaps(n.processId, 'assessment', 'all');
+      return;
+    }
+    nav.go({ page: 'process', processId: n.processId, stage: n.stage });
+  };
   const processLink = (id: string, name: string, className: string) => (
     <a href={nav.href({ page: 'process', processId: id, stage: 'sources' })} onClick={e => { e.preventDefault(); nav.go({ page: 'process', processId: id, stage: 'sources' }); }} className={className}>{name}</a>
   );

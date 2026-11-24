@@ -62,8 +62,11 @@ test('the privacy notice names every AI provider a workspace may connect, and sa
   assert.match(text, /only to that provider/);
 });
 
-test('the privacy and security pages carry a release date: the security page the coverage notice\'s, the privacy page that date or later', () => {
-  assert.equal(UPDATED.security, COVERAGE_RULE.since);
+test('the privacy and security pages carry a release date: the coverage notice\'s date or later', () => {
+  // The security page changes again with package 14's second release (the line on approved versions, owner,
+  // 24 November 2026): until that release's commit sets its date it shows "[release date]".
+  if (UPDATED.security === null) assert.equal(updatedText('security'), '[release date]');
+  else if (COVERAGE_RULE.since !== null) assert.ok(Date.parse(UPDATED.security) >= Date.parse(COVERAGE_RULE.since), UPDATED.security);
   if (COVERAGE_RULE.since === null) assert.equal(updatedText('privacy'), '[release date]');
   // The privacy page changes again with a later release (the teardowns' counting): until that release's commit
   // sets its date it shows "[release date]"; once set, it is never before the coverage notice's date.

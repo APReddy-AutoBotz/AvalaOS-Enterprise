@@ -2,10 +2,11 @@
 // so the Ask Avala interview and that screen share one rule). The value goes to the question's target
 // through the patch operations, and the question is closed with the answer in words, so the record keeps
 // where the value came from. Nothing here runs on its own: the screens apply the edit when a person saves.
-import type { AccessStatus, ProcessModel } from '../processModel/types.ts';
+import type { AccessStatus, ProcessModel, RaisedBy } from '../processModel/types.ts';
 import { addQuestion, answerQuestion, closeQuestions, routeException, setAccessStatus, setStepTrait, setSystemUiStable, updateFact, type OpResult, type TraitName } from '../processModel/patch.ts';
 import type { JsonPatchOp } from '../processModel/jsonPatch.ts';
 import type { TriageItem } from './triage.ts';
+import { waysEdit, waysNote } from './ways.ts';
 
 export type Op = (m: ProcessModel) => OpResult;
 /** Runs operations in order as one edit. */
@@ -23,10 +24,13 @@ export function choicesFor(trait: string): [string, string][] {
 }
 const choiceValue = (trait: string, v: string): unknown => (trait === 'input' || trait === 'write' ? v : v === 'true');
 
-/** Records an answer to an item, creating the stored question first when the item is a gap found by rule. */
-export const record = (item: TriageItem, answer: string, status: 'answered' | 'deferred' = 'answered'): Op => m => {
+/**
+ * Records an answer to an item, creating the stored question first when the item is a gap found by rule.
+ * A question a discovery session raised from what was said keeps those words (`raisedBy`, package B).
+ */
+export const record = (item: TriageItem, answer: string, status: 'answered' | 'deferred' = 'answered', raisedBy?: RaisedBy): Op => m => {
   if (item.questionIds.length) return closeQuestions(m, { questionIds: item.questionIds, answer, status });
-  const added = addQuestion(m, { target: item.target, question: item.question });
+  const added = addQuestion(m, { target: item.target, question: item.question, ...(raisedBy ? { raisedBy } : {}) });
   const closed = closeQuestions(added.model, { questionIds: [added.questionId], answer, status });
   return { model: closed.model, patch: [...added.patch, ...closed.patch] };
 };
@@ -70,6 +74,13 @@ export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: s
       const write: Op = t.kind === 'system' ? m => setSystemUiStable(m, { systemId: t.id!, value: hit[0] === 'true' })
         : m => setStepTrait(m, { stepId: t.id!, trait: field.replace(/^traits\./, '') as TraitName, value: choiceValue(field.replace(/^traits\./, ''), hit[0]) });
       return { op: all(write, record(item, withSource(note ? `${hit[1]}. ${note}` : hit[1]))), summary: `Answered: ${item.question}` };
+    }
+    case 'ways': {
+      // A way in chosen per row, or "No way in"; words alone are never an answer here (domain/questions/ways.ts).
+      const ops = waysEdit(t.id!, a);
+      const said = waysNote(a);
+      if (!ops || !said) return null;
+      return { op: all(...ops, record(item, withSource(note ? `${said} ${note}` : said))), summary: `Ways in to ${model.systems.find(s => s.id === t.id)?.name ?? 'an application'}` };
     }
     case 'free':
       if (!note) return null;

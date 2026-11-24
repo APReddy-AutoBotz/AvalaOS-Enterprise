@@ -780,7 +780,7 @@ test('after approval, a process change marks what changed in the documents, and 
 
   // Approve, then rename the step.
   await page.getByRole('button', { name: 'Approve' }).click();
-  await expect(page.getByTestId('revision-status')).toHaveText('Approved revision 1');
+  await expect(page.getByTestId('revision-status')).toHaveText('Approved version 1');
   await stage(page, 'Process');
   await page.getByRole('tab', { name: /^Steps/ }).click();
   await page.getByLabel('Name of step 2').fill('Post invoice in SAP S/4HANA');
@@ -788,13 +788,11 @@ test('after approval, a process change marks what changed in the documents, and 
   await expect(page.getByTestId('save-state')).toHaveText('All changes saved');
   await expect(page.getByTestId('revision-status')).toContainText('unapproved changes');
 
-  // The PDD: what changed since approval, with the diff; the approved revision is unchanged.
+  // The PDD: what reads differently from approved version 1, with the diff; the version is kept as it read (package 14).
   await stage(page, 'Documents');
-  const since = page.getByTestId('since-approved');
-  await expect(since).toContainText('since approved revision 1');
-  // Until an approved document is kept as it read (package 14), the line never says it is unchanged (F07).
-  await expect(since).toContainText('Approved revision 1 of the process is kept exactly as approved.');
-  await expect(since).not.toContainText('unchanged');
+  const since = page.getByTestId('version-line');
+  await expect(since).toContainText('Approved version 1 is kept exactly as it read when');
+  await expect(since).toContainText('You are looking at the working draft');
   await expect(page.getByTestId('document').locator('[data-testid="doc-section"]').filter({ hasText: 'Detailed As-Is steps' }).getByTestId('chip-changed')).toBeVisible();
   await since.getByRole('button', { name: 'Review changes' }).click();
   await expect(since.getByTestId('change-list')).toContainText('Post invoice in SAP S/4HANA');

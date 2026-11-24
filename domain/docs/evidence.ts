@@ -55,6 +55,33 @@ export interface EvidenceInput extends DocInput {
   comments: SectionComment[];
   /** People's names by user id (members of the workspace). */
   names: Record<string, string>;
+  /**
+   * The approved versions kept so far (package 14, pull request 5), oldest or newest first. Given, the pack
+   * lists them, and "Earlier approved revisions" keeps only approvals with no kept copy. Absent: as before.
+   */
+  versions?: EvidenceVersion[];
+  /** Set when the pack is kept with the version being approved: whose approval it records (part I). */
+  keptAs?: EvidenceKeptAs;
+}
+
+/** One approved version as the pack lists it. Names are as the version row kept them. */
+export interface EvidenceVersion {
+  number: number;
+  revNo: number | null;
+  approvedAt: string;
+  approvedByName: string | null;
+  reason: string | null;
+  keptAt?: string | null;
+  keptByName?: string | null;
+}
+
+/** The version this pack is kept with: its number, who approved and when, and for a copy kept later, who kept it and when. */
+export interface EvidenceKeptAs {
+  number: number;
+  approvedAt: string;
+  approverName: string | null;
+  reason: string | null;
+  kept?: { at: string; name: string | null };
 }
 
 const STATUS_WORDS: Record<string, string> = { todo: 'To do', in_progress: 'In progress', in_review: 'In review', testing: 'Testing', ready_for_release: 'Ready for release', done: 'Done', blocked: 'Blocked', on_hold: 'On hold' };
@@ -98,6 +125,57 @@ function passagesCell(refs: SourceRef[], titles: Map<string, string>): Cell {
   return { text: out.length > 3 ? `${out.slice(0, 3).join('; ')}; and ${out.length - 3} more` : out.join('; ') };
 }
 
+/** Owner-approved (24 November 2026): the pack's first line when it is kept with a version (part I). */
+export function keptAsLine(k: EvidenceKeptAs): string {
+  const who = personCell(k.approverName);
+  const first = `Approved version ${k.number}, approved by ${who.text} on ${date(k.approvedAt)}`;
+  return k.kept ? `${first}; kept after approval on ${date(k.kept.at)} by ${personCell(k.kept.name).text}` : first;
+}
+
+/**
+ * Section 1's record of approvals, shared by both packs: the revision, the approved versions (number, who,
+ * when, why, how kept) when they are given, and the approvals with no kept copy.
+ */
+function approvalsCover(b: DocBuilder, input: EvidenceInput, approved: boolean) {
+  const m = input.model;
+  const name = (id: string | null | undefined) => (id ? input.names[id] ?? null : null);
+  const current = input.revisions.find(r => r.revNo === input.revNo) ?? null;
+  const k = input.keptAs;
+  b.keyValue('The revision', [
+    ['Process', m.meta.name],
+    ['Revision', input.revision.label],
+    ['State', approved ? 'Approved' : 'Working draft'],
+    ['Created', date(current?.createdAt)],
+    // A pack kept with a version records that approval: the version row holds the exact time.
+    ['Approved by', k ? personCell(k.approverName) : approved ? personCell(name(current?.approvedBy)) : 'Not approved'],
+    ['Approved on', k ? date(k.approvedAt) : approved ? (current?.approvedAt ? date(current.approvedAt) : notRecorded()) : 'Not approved'],
+  ]);
+  if (!input.versions) {
+    const earlier = input.revisions.filter(r => r.approvedAt && r.revNo !== input.revNo).sort((a, z) => z.revNo - a.revNo);
+    b.table('Earlier approved revisions', ['Revision', 'Approved by', 'Approved on'],
+      earlier.map(r => [`Revision ${r.revNo}`, personCell(name(r.approvedBy)), date(r.approvedAt)]), 'No earlier revision was approved.');
+    return;
+  }
+  const rows: EvidenceVersion[] = [...input.versions.filter(v => !k || v.number !== k.number)];
+  if (k) rows.push({ number: k.number, revNo: input.revNo, approvedAt: k.approvedAt, approvedByName: k.approverName, reason: k.reason, keptAt: k.kept?.at ?? null, keptByName: k.kept?.name ?? null });
+  rows.sort((a, z) => z.number - a.number);
+  if (rows.length) {
+    b.table('Approved versions', ['Version', 'Approved by', 'Approved on', 'Why', 'Kept'],
+      rows.map(v => [
+        `Version ${v.number}`, personCell(v.approvedByName), date(v.approvedAt),
+        v.number === 1 ? 'The first approved version.' : v.reason?.trim() ? v.reason.trim() : notRecorded(),
+        v.keptAt ? `After approval, on ${date(v.keptAt)} by ${personCell(v.keptByName).text}` : 'At approval',
+      ]), '');
+  }
+  // An approval that is a version is listed once, above; what is left was approved before copies were kept.
+  const asVersion = new Set(rows.map(v => v.revNo).filter((n): n is number => n !== null));
+  const earlier = input.revisions.filter(r => r.approvedAt && r.revNo !== input.revNo && !asVersion.has(r.revNo)).sort((a, z) => z.revNo - a.revNo);
+  if (earlier.length) {
+    b.table('Earlier approved revisions', ['Revision', 'Approved by', 'Approved on', 'Copy'],
+      earlier.map(r => [`Revision ${r.revNo}`, personCell(name(r.approvedBy)), date(r.approvedAt), 'Approved before copies were kept']), '');
+  }
+}
+
 export function buildEvidence(input: EvidenceInput): DocTree {
   // A process documented as it is has no requirements, work or tests: its pack is the process itself.
   if (!whatFollows(input.model).future) return buildEvidenceAsIs(input);
@@ -107,24 +185,14 @@ export function buildEvidence(input: EvidenceInput): DocTree {
   const titles = new Map(input.allSources.map(s => [s.key, s.title]));
   const reqs = (input.requirements ?? []).filter(r => r.state === 'active');
   const frs = reqs.filter(r => r.kind === 'FR');
-  const current = input.revisions.find(r => r.revNo === input.revNo) ?? null;
   const approved = input.revision.state === 'approved';
 
   // ---- 1 What the pack covers
   b.section('1', 'What this pack covers', 1);
+  if (input.keptAs) b.paragraph(keptAsLine(input.keptAs));
   if (!approved) b.callout('Built from a working draft: this pack is not evidence of an approved state. Approve the revision, then take the pack again.', 'warning');
   b.paragraph(`The record Avala OS holds for "${m.meta.name}": where each requirement came from, who approved the process, and which work and test cover each requirement. Everything here is read from the record; nothing is written for the pack.`);
-  b.keyValue('The revision', [
-    ['Process', m.meta.name],
-    ['Revision', input.revision.label],
-    ['State', approved ? 'Approved' : 'Working draft'],
-    ['Created', date(current?.createdAt)],
-    ['Approved by', approved ? personCell(name(current?.approvedBy)) : 'Not approved'],
-    ['Approved on', approved ? (current?.approvedAt ? date(current.approvedAt) : notRecorded()) : 'Not approved'],
-  ]);
-  const earlier = input.revisions.filter(r => r.approvedAt && r.revNo !== input.revNo).sort((a, z) => z.revNo - a.revNo);
-  b.table('Earlier approved revisions', ['Revision', 'Approved by', 'Approved on'],
-    earlier.map(r => [`Revision ${r.revNo}`, personCell(name(r.approvedBy)), date(r.approvedAt)]), 'No earlier revision was approved.');
+  approvalsCover(b, input, approved);
 
   // ---- 2 The sources
   b.section('2', 'The sources', 1);
@@ -237,24 +305,14 @@ function buildEvidenceAsIs(input: EvidenceInput): DocTree {
   const b = new DocBuilder();
   const name = (id: string | null | undefined) => (id ? input.names[id] ?? null : null);
   const titles = new Map(input.allSources.map(s => [s.key, s.title]));
-  const current = input.revisions.find(r => r.revNo === input.revNo) ?? null;
   const approved = input.revision.state === 'approved';
   const order = orderedSteps(m);
 
   b.section('1', 'What this pack covers', 1);
+  if (input.keptAs) b.paragraph(keptAsLine(input.keptAs));
   if (!approved) b.callout('Built from a working draft: this pack is not evidence of an approved state. Approve the revision, then take the pack again.', 'warning');
   b.paragraph(`The record Avala OS holds for "${m.meta.name}", documented as it is: where each step, rule, exception and control came from, and who approved the process. Everything here is read from the record; nothing is written for the pack.`);
-  b.keyValue('The revision', [
-    ['Process', m.meta.name],
-    ['Revision', input.revision.label],
-    ['State', approved ? 'Approved' : 'Working draft'],
-    ['Created', date(current?.createdAt)],
-    ['Approved by', approved ? personCell(name(current?.approvedBy)) : 'Not approved'],
-    ['Approved on', approved ? (current?.approvedAt ? date(current.approvedAt) : notRecorded()) : 'Not approved'],
-  ]);
-  const earlier = input.revisions.filter(r => r.approvedAt && r.revNo !== input.revNo).sort((a, z) => z.revNo - a.revNo);
-  b.table('Earlier approved revisions', ['Revision', 'Approved by', 'Approved on'],
-    earlier.map(r => [`Revision ${r.revNo}`, personCell(name(r.approvedBy)), date(r.approvedAt)]), 'No earlier revision was approved.');
+  approvalsCover(b, input, approved);
 
   b.section('2', 'The sources', 1);
   b.table('Sources', ['Source', 'Kind', 'Added', 'Passages', 'State'],

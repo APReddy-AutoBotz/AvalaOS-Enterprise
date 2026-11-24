@@ -1,9 +1,10 @@
 // The facts of one process that My work and the Processes page show: where it stands, who is named on
 // it, what is open, and what its assessment says. Read through the store; what they mean is decided in
 // domain/work/home.ts and domain/assess.
-import type { JourneyStore, ProcessRow } from './store/types.ts';
+import type { JourneyStore, ProcessRow, VersionStateRow } from './store/types.ts';
 import type { ProcessFacts } from '../domain/work/home.ts';
 import { revisionStatus } from '../domain/workspace/route.ts';
+import { versionTag } from '../domain/docs/versions.ts';
 import { assessProcess } from '../domain/assess/process.ts';
 import { processCard, type ProcessCard } from '../domain/assess/portfolio.ts';
 import type { AssessmentSettings } from '../domain/assess/settings.ts';
@@ -24,9 +25,17 @@ export type LoadedFacts = ProcessFacts & {
 };
 export const STATUS_TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
-export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, settings?: AssessmentSettings): Promise<LoadedFacts> {
+/**
+ * One process's facts for a list. `version` is its row of version_states, read once for the whole workspace by
+ * the page (`versionRows`); without it (the read failed) the list keeps the revision's own words.
+ */
+export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, settings?: AssessmentSettings, version?: VersionStateRow | null): Promise<LoadedFacts> {
   const revisions = await store.listRevisions(p.id);
-  const status = revisionStatus(revisions);
+  // With a kept version (package 14) the list says what the process page's tag says.
+  const v = version ?? null;
+  const tag = v ? versionTag({ latest: v.latest, processChanged: v.processChanged, legacyRevision: v.approvedHasVersion ? null : v.approvedRevNo }) : null;
+  const byRevision = revisionStatus(revisions);
+  const status: { label: string; tone: typeof byRevision.tone } = v?.latest && tag ? { label: tag, tone: v.processChanged ? 'changed' : 'approved' } : tag ? { label: tag, tone: byRevision.tone } : byRevision;
   const current = revisions.find(r => r.state === 'working') ?? revisions.find(r => r.state === 'approved');
   // The look in the sources as the server shares it, so every page and the weekday email count the same.
   const [model, proposals, decisions, shared, comments] = await Promise.all([current ? store.getModel(current.id) : Promise.resolve(null), store.listProposals(p.id), store.getAssessmentDecisions(p.id).catch(() => null), sharedLookOf(store, p.id), store.listSectionComments(p.id).catch(() => [])]);
@@ -47,4 +56,10 @@ export async function loadProcessFacts(store: JourneyStore, p: ProcessRow, setti
     ...(purposeOf(model) !== 'assess' ? { purpose: purposeOf(model) } : {}),
     ...(purposeOf(model) === 'decided' && model?.meta.decidedApproach ? { decidedLine: DECIDED_LIST_LINE(APPROACH_LABEL[model.meta.decidedApproach.approach]) } : {}),
   };
+}
+
+/** Where each process of a workspace stands with its approved versions, in one call; empty when it cannot be read. */
+export async function versionRows(store: JourneyStore, workspaceId: string): Promise<Map<string, VersionStateRow>> {
+  const rows: VersionStateRow[] = await store.versionStates(workspaceId).catch(() => []);
+  return new Map(rows.map((r): [string, VersionStateRow] => [r.processId, r]));
 }

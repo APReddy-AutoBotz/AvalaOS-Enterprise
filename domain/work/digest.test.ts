@@ -120,6 +120,7 @@ import { planQuestions } from '../questions/firstList.ts';
 import { foundFor, foundKeys } from '../assistant/sourceLook.ts';
 import { commentKey, commentLines, COMMENTS_SHOWN, digestFacts, type CommentLine } from './digest.ts';
 import { commentNeeds, needsFor, type OpenComment } from './home.ts';
+import { assessmentLine } from '../questions/result.ts';
 
 const gold = (): ProcessModel => JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const servicenow = 'system:sys-servicenow';
@@ -135,22 +136,35 @@ test('the email counts the questions as My work does: the first list, from the s
   const t = triage(m, assessProcess(m));
   const plan = planQuestions(t, m, { found: foundKeys(foundFor(look, t, [])) });
   const screen = { now: plan.now.length, found: plan.found.length, wait: plan.wait.length };
-  assert.deepEqual(screen, { now: 2, found: 1, wait: 9 });
+  // The office scanner's question, a device's, is Detail and waits (owner, 24 November 2026).
+  assert.deepEqual(screen, { now: 1, found: 1, wait: 10 });
   // What the email works out on the server from needs_digest_input().
   const row = { ...proc('p1', { openQuestions: m.openQuestions.filter(q => q.status === 'open').length }), model: m, look, dismissed: [] };
   const facts = digestFacts(row);
   assert.deepEqual(facts.questions, screen);
   assert.ok(!('model' in facts) && !('look' in facts), 'the model and the look are not kept');
   const lines = namedNeeds(ana, [facts]).map(n => n.text);
-  assert.deepEqual(lines, ['2 questions only your people can answer', '1 answer found in the sources to confirm']);
+  assert.deepEqual(lines, ['1 question only your people can answer', '1 answer found in the sources to confirm']);
   assert.deepEqual(lines, needsFor(ana, [{ ...proc('p1'), questions: screen }]).map(n => n.text));
   // "Not right" on the answer, shared: the question goes back to the people, as on the screen.
-  assert.deepEqual(digestFacts({ ...row, dismissed: [found.key] }).questions, { now: 3, found: 0, wait: 9 });
+  assert.deepEqual(digestFacts({ ...row, dismissed: [found.key] }).questions, { now: 2, found: 0, wait: 10 });
   // Only "can wait" questions: not a need, as on My work.
   assert.deepEqual(namedNeeds(ana, [{ ...proc('p2'), questions: { now: 0, found: 0, wait: 4 } }]), []);
   // A process with no steps, or a model that cannot be read, keeps the stored count.
   assert.equal(digestFacts({ ...proc('p3', { openQuestions: 2 }), model: null }).questions, undefined);
   assert.equal(digestFacts({ ...proc('p3', { openQuestions: 2 }), model: { steps: 'broken' } as never }).questions, undefined);
+});
+
+test('package 16 changes nothing the email counts: the demo\'s sample and the bare sample, beside the Assessment stage\'s line', () => {
+  // The demo's approved revision (public/demo-data/sample.json) and the hand-checked sample, with no look.
+  const demo = (JSON.parse(readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8')) as { revisions: { state: string; model: ProcessModel }[] })
+    .revisions.find(r => r.state === 'approved')!.model;
+  const counts = (m: ProcessModel) => digestFacts({ ...proc('p1'), model: m, look: null, dismissed: [] }).questions;
+  assert.deepEqual(counts(demo), { now: 2, found: 0, wait: 10 });
+  assert.deepEqual(counts(gold()), { now: 2, found: 0, wait: 10 });
+  // The line counts a different thing (questions that could change the recommendation, not left with someone), from the same triage.
+  assert.equal(assessmentLine(demo, assessProcess(demo))!.n, 2);
+  assert.equal(assessmentLine(gold(), assessProcess(gold()))!.n, 2);
 });
 
 const comment = (id: string, over: Partial<OpenComment & { processId: string }> = {}): OpenComment & { processId: string } => ({

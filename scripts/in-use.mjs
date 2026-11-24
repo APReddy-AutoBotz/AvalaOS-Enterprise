@@ -30,7 +30,7 @@ const trackedSet = new Set(tracked);
 const KEPT_WHOLE = [
   /^supabase\/migrations\//, /^supabase\/tests\//, /^supabase\/config\.toml$/, /^docs\//, /^\.github\//,
   /^[^/]+\.(md|json|toml|lock)$/, /^\.gitignore$/, /^\.nvmrc$/, /^\.npmrc$/, /^\.editorconfig$/, /^eval\/corpus\//, /^eval\/README\.md$/,
-  /^eval\/ask\/.*\.json$/, /^tsconfig(\.[a-z]+)?\.json$/,
+  /^eval\/ask\/.*\.json$/, /^eval\/discovery\/.*\.(json|txt)$/, /^tsconfig(\.[a-z]+)?\.json$/,
   // Files the fast tests read from disk (documents, spreadsheets, PDFs) rather than import.
   /^(domain|eval)\/.*\/fixtures\//,
   // What each teardown's demo file is built from (domain/site/teardowns.ts; scripts/teardown-data.ts reads it).

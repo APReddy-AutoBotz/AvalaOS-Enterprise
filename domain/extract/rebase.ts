@@ -246,6 +246,12 @@ export function applyChanges(current: ProcessModel, extracted: ProcessModel, sel
     next.meta.name = current.meta.name;
     // What a person wants from the process is theirs, given before the first reading: it stays.
     if (current.meta.purpose) next.meta.purpose = clone(current.meta.purpose);
+    // So is the brief as it stood: the lines given in "Tell us in your own words" (whether the work is done
+    // today, what the team has in mind) or read when a person asked. A reading brings no brief of its own
+    // today; if one ever does, the lines already there win, as adoptBrief keeps a person's lines.
+    if (current.meta.brief) next.meta.brief = { ...(next.meta.brief ?? {}), ...clone(current.meta.brief) };
+    // And what a person kept as wanted in future, in a discovery session (package B): a reading never brings it.
+    if (current.meta.wanted?.length) next.meta.wanted = clone(current.meta.wanted);
     return checked(next);
   }
   let next = clone(current);

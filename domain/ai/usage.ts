@@ -43,6 +43,7 @@ export const WORK_OF_TASK: Record<string, string> = {
   askProcess: 'Ask Avala',
   askBoard: 'Ask Avala',
   askWorkspace: 'Ask Avala',
+  discoveryQuestions: 'Discovery',
   health: 'Testing the AI key',
 };
 

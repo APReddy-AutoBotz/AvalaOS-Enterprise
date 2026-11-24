@@ -61,6 +61,7 @@ export function followUpFor(item: TriageItem, model: ProcessModel): string {
     case 'role': return `I could not tell which role from that. Which of these does it: ${model.roles.map(r => r.name).join(', ')}?`;
     case 'system': return `I could not tell which application from that. Which of these is used: ${model.systems.map(s => s.name).join(', ')}?`;
     case 'number': return 'I could not find a figure in that. What is the number?';
+    case 'ways': return `I could not tell how the automation can reach it from that. Can it use the API, and the screens: can each be used, does it exist but is not confirmed, or is it not available? Say any other way in too (${(item.interfaces ?? []).slice(2).map(x => x.label.toLowerCase()).join(', ')}). Or is there no way in at all?`;
     case 'access': return `I could not tell from that. For each, can the automation use it, does it exist but is not confirmed for use, or is it not available? ${(item.interfaces ?? []).map(x => x.label).join('; ')}.`;
     default: return `I could not find an answer to record in that. In a sentence: ${item.question}`;
   }

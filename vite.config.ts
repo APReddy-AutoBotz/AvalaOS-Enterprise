@@ -13,6 +13,14 @@ export default defineConfig({
   // this applies only to `vite preview` on a developer's or CI's machine, never to the built site.
   preview: { allowedHosts: ['avalaos.com'] },
   plugins: [react()],
+  // The build of Avala OS a kept version records beside its inputs (package 14): Netlify's commit, else "local".
+  // Not a secret. It lets the Documents page say a release changed the text only when the inputs prove it.
+  // The browser tests' stand-in for AI tasks (journey/store/standIns.ts) is built in only for the test build,
+  // which sets VITE_JOURNEY_STORE=memory (playwright.config.ts); elsewhere the branch is false and left out.
+  define: {
+    __AVALA_BUILD__: JSON.stringify((process.env.COMMIT_REF ?? '').slice(0, 12) || 'local'),
+    __AVALA_STAND_INS__: JSON.stringify(process.env.VITE_JOURNEY_STORE === 'memory'),
+  },
   build: {
     rollupOptions: {
       output: {

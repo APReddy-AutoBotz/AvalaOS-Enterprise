@@ -14,7 +14,7 @@ export const CONTACT_EMAIL = 'hello@avalaos.com';
  * until then they show "[release date]". The privacy page changes again with the release that carries the
  * teardowns' counting (marketing package, 21 November 2026), so its date is null until that release's commit.
  */
-export const UPDATED: Record<TrustPageId, string | null> = { privacy: '23 November 2026', terms: '17 November 2026', security: '20 November 2026' };
+export const UPDATED: Record<TrustPageId, string | null> = { privacy: '23 November 2026', terms: '17 November 2026', security: '24 November 2026' };
 export const updatedText = (id: TrustPageId): string => UPDATED[id] ?? '[release date]';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
@@ -276,7 +276,7 @@ const security: TrustPage = {
             'Every table in the database has row-level security: a person can read or change a workspace\'s data only if they are a member of it, and only as far as their role allows.',
             'Roles are Admin, Business analyst, Solution architect, Developer, Approver and Viewer. Viewers can read but not change. Only people with approval rights can approve a revision.',
             'Only admins can invite, change or remove members. The last admin of a workspace cannot be removed.',
-            'Approved revisions are kept unchanged. Edits are recorded with who made them and when, and admins can see an audit trail of approvals and membership changes.',
+            'Approved versions of a process and its documents are kept unchanged. Edits are recorded with who made them and when, and admins can see an audit trail of approvals and membership changes.',
           ],
         },
       ],

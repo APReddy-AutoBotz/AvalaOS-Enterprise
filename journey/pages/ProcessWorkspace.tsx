@@ -34,6 +34,11 @@ import { quoteInContext } from '../../domain/workspace/sources.ts';
 import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { SourceRow } from '../store/types.ts';
 import { ProcessPeople } from '../process/ProcessPeople.tsx';
+import type { VersionStateRow } from '../store/types.ts';
+import { keepFirstQuestion, UNNAMED_APPROVER, versionTag } from '../../domain/docs/versions.ts';
+import { approvalTarget, offersApproval, offersKeep } from '../../domain/docs/approving.ts';
+import { approvePrepared, longDate, prepareApproval, type PreparedApproval } from '../process/keepVersion.ts';
+import { ApproveDialog } from '../process/ApproveDialog.tsx';
 
 const TONE = { neutral: 'neutral', draft: 'info', approved: 'ok', changed: 'warn' } as const;
 
@@ -43,10 +48,42 @@ interface Loaded {
   revisions: RevisionRow[];
   /** The model shown: the working draft if there is one, else the approved revision. */
   model: ProcessModel | null;
+  /** Where the process stands with its approved versions (package 14); null when the store could not say. */
+  versions: VersionStateRow | null;
 }
 
-export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: { store: JourneyStore; nav: Nav; processId: string; stage: StageId; onWorkspace?: (workspaceId: string) => void }) {
+/** The owner's words for an approval that did not happen: "Not approved: {why}. The page has been reloaded." */
+const notApproved = (e: unknown) => `Not approved: ${messageOf(e).replace(/[.\s]*$/, '')}. The page has been reloaded.`;
+
+// Saves that go into the documents (the change record's kinds): after each, where the process stands with its
+// approved versions is read again, so the tag says "unapproved changes" at once, whichever stage saved.
+const DOCUMENT_WRITES = new Set(['savePatch', 'saveDocumentEdit', 'removeDocumentEdit', 'saveTestEdit', 'removeTestEdit', 'saveRequirements', 'saveAssessment', 'addSource', 'archiveSource']);
+function watchWrites(store: JourneyStore, after: () => void): JourneyStore {
+  return new Proxy(store, {
+    get(target, key) {
+      const value = Reflect.get(target, key, target);
+      if (typeof value !== 'function') return value;
+      const fn = value.bind(target);
+      return typeof key === 'string' && DOCUMENT_WRITES.has(key) ? (...args: unknown[]) => Promise.resolve(fn(...args)).then(r => { after(); return r; }) : fn;
+    },
+  });
+}
+
+/** The tag beside the name (package 14, part N item 2), with the revision's own words where nothing is approved. */
+function tagOf(revisions: RevisionRow[], v: VersionStateRow | null): { label: string; tone: 'neutral' | 'info' | 'ok' | 'warn' } {
+  const status = revisionStatus(revisions);
+  const label = v ? versionTag({ latest: v.latest, processChanged: v.processChanged, legacyRevision: v.approvedHasVersion ? null : v.approvedRevNo }) : null;
+  if (!label) return { label: status.label, tone: TONE[status.tone] };
+  return { label, tone: v?.latest && v.processChanged ? 'warn' : v?.latest ? 'ok' : TONE[status.tone] };
+}
+
+export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspace }: { store: JourneyStore; nav: Nav; processId: string; stage: StageId; onWorkspace?: (workspaceId: string) => void }) {
   const [data, setData] = React.useState<Loaded | null | 'missing'>(null);
+  const workspaceRef = React.useRef<string | null>(null);
+  const store = React.useMemo(() => watchWrites(base, () => {
+    const ws = workspaceRef.current;
+    if (ws) base.versionStates(ws, processId).then(v => setData(d => (d && d !== 'missing' ? { ...d, versions: v[0] ?? null } : d))).catch(() => {});
+  }), [base, processId]);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -83,10 +120,11 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
     try {
       const process = await store.getProcess(processId);
       if (!process) { setData('missing'); return; }
-      const [revisions, workspaces] = await Promise.all([store.listRevisions(processId), store.listWorkspaces()]);
+      workspaceRef.current = process.workspaceId;
+      const [revisions, workspaces, versions] = await Promise.all([store.listRevisions(processId), store.listWorkspaces(), store.versionStates(process.workspaceId, processId).catch(() => [])]);
       const current = revisions.find(r => r.state === 'working') ?? revisions.find(r => r.state === 'approved');
       const model = current ? await store.getModel(current.id) : null;
-      setData({ process, workspace: workspaces.find(w => w.id === process.workspaceId) ?? null, revisions, model });
+      setData({ process, workspace: workspaces.find(w => w.id === process.workspaceId) ?? null, revisions, model, versions: versions[0] ?? null });
     } catch (e) {
       setError(messageOf(e));
     }
@@ -108,6 +146,36 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
     if (loaded) document.querySelector('nav[aria-label="Stages"] [aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'center' });
   }, [stage, loaded]);
 
+  // Approving keeps the documents (package 14): built first, then confirmed with a reason from version 2 on.
+  const [approving, setApproving] = React.useState<PreparedApproval | null>(null);
+  const [approveError, setApproveError] = React.useState<string | null>(null);
+  // The reason typed in the approval window outlives a refusal and the reload after it; it is cleared once approved.
+  const [reason, setReason] = React.useState('');
+  const startApproval = async (processId: string, workspaceId: string, mode: 'approve' | 'keep' = 'approve') => {
+    setBusy(true); setError(null); setApproveError(null);
+    try {
+      const prepared = await prepareApproval(store, processId, workspaceId, mode);
+      if (!prepared) { await load(); return; }
+      if (prepared.number === 1) {
+        // Keeping an earlier approval as version 1 asks once, saying whose approval it records (pull request 4).
+        const a = prepared.approved;
+        if (prepared.mode === 'keep' && a && !window.confirm(keepFirstQuestion(a.revNo, longDate(a.approvedAt), a.approverName ?? UNNAMED_APPROVER))) return;
+        await approvePrepared(store, processId, prepared, null); await load(); return;
+      }
+      setApproving(prepared);
+    } catch (e) { setError(notApproved(e)); await load(); } finally { setBusy(false); }
+  };
+  const confirmApproval = async (processId: string, reason: string) => {
+    if (!approving) return;
+    setBusy(true); setApproveError(null);
+    try { await approvePrepared(store, processId, approving, reason); setApproving(null); setReason(''); await load(); }
+    catch (e) {
+      // Someone saved or approved meanwhile: the page reads everything again, and nothing was approved.
+      if ((e as { status?: number }).status === 409) { setApproving(null); setError(notApproved(e)); await load(); }
+      else setApproveError(messageOf(e));
+    } finally { setBusy(false); }
+  };
+
   const act = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
@@ -119,8 +187,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   }
   if (!data) return error ? <ErrorNote message={error} /> : <Spinner />;
 
-  const { process, workspace, revisions, model } = data;
-  const status = revisionStatus(revisions);
+  const { process, workspace, revisions, model, versions } = data;
+  const status = tagOf(revisions, versions);
   const working = revisions.find(r => r.state === 'working');
   const approved = revisions.find(r => r.state === 'approved');
   const current = working ?? approved;
@@ -130,7 +198,10 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
   const shownStages = stagesForProcess(workspace?.modules, model);
   const purposeOff = stagesFor(workspace?.modules).includes(stage) ? purposeOffMessage(stage, model) : null;
   const stageOff = !shownStages.includes(stage);
-  const canApprove = Boolean(workspace?.canApprove && working && (!approved || working.seq > 0));
+  const approvedWithoutCopy = Boolean(versions?.approvedRevisionId && !versions.approvedHasVersion);
+  const canApprove = offersApproval({ canApprove: Boolean(workspace?.canApprove), target: approvalTarget(revisions), latest: versions?.latest?.number ?? null, processChanged: Boolean(versions?.processChanged), workspaceChanges: versions?.workspaceChanges ?? [], approvedWithoutCopy });
+  // "Keep it as it reads now" (part J): an approval from before copies were kept, kept with its own approver and date.
+  const canKeep = offersKeep({ canApprove: Boolean(workspace?.canApprove), approvedRevisionId: versions?.approvedRevisionId ?? null, approvedHasVersion: Boolean(versions?.approvedHasVersion) });
   const hasSteps = Boolean(model && model.steps.length > 0);
 
   return (
@@ -145,21 +216,24 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className="min-w-0 break-words font-display text-3xl font-semibold tracking-tight text-[#002C4B] sm:text-4xl">{process.name}</h1>
-          <Tag data-testid="revision-status" tone={TONE[status.tone]} className="px-2 py-1 text-xs">{status.label}</Tag>
+          <Tag data-testid="revision-status" tone={status.tone} className="px-2 py-1 text-xs">{status.label}</Tag>
           {/* What is wanted from the process, on every page of it, when it is not "Assess it and document it": it says why Assessment is missing. */}
           {model && purposeTag(purposeOf(model), model.meta.decidedApproach) && <Tag tone="info" data-testid="purpose-tag" className="px-2 py-1 text-xs">{purposeTag(purposeOf(model), model.meta.decidedApproach)}</Tag>}
         </div>
         <div className="flex items-center gap-2">
-          {canApprove && working && model && typicalCounts(model).total > 0 && (
+          {canApprove && model && typicalCounts(model).total > 0 && (
             <Tag tone="warn" data-testid="typical-unconfirmed" title="Approving keeps them marked Typical, not confirmed, in the approved documents">{typicalCounts(model).total} typical {typicalCounts(model).total === 1 ? 'item' : 'items'} not confirmed</Tag>
           )}
-          {canApprove && working && (
-            <Button variant="secondary" disabled={busy} onClick={() => {
-              // An approved revision is never changed, so approving what nobody has confirmed is asked about first.
+          {canApprove && (
+            <Button variant="secondary" disabled={busy} data-testid="approve" onClick={() => {
+              // An approved version is never changed, so approving what nobody has confirmed is asked about first.
               const n = model ? typicalCounts(model).total : 0;
-              if (n > 0 && !window.confirm(`${n} typical ${n === 1 ? 'item has' : 'items have'} not been confirmed by your people. Approving keeps ${n === 1 ? 'it' : 'them'} marked "Typical, not confirmed" in the approved documents, and an approved revision cannot be changed. Approve anyway?`)) return;
-              act(() => store.approve(working.id, working.seq));
-            }}>Approve</Button>
+              if (n > 0 && !window.confirm(`${n} typical ${n === 1 ? 'item has' : 'items have'} not been confirmed by your people. Approving keeps ${n === 1 ? 'it' : 'them'} marked "Typical, not confirmed" in the approved documents, and an approved version cannot be changed. Approve anyway?`)) return;
+              startApproval(process.id, process.workspaceId);
+            }}>{busy && !approving ? 'Keeping the documents…' : 'Approve'}</Button>
+          )}
+          {canKeep && (
+            <Button variant="secondary" disabled={busy} data-testid="keep-as-reads" onClick={() => startApproval(process.id, process.workspaceId, 'keep')}>Keep it as it reads now</Button>
           )}
           <Button variant="ghost" onClick={() => setHistoryOpen(true)} aria-haspopup="dialog">History</Button>
         </div>
@@ -208,9 +282,9 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
           ? <SourcesStage store={store} processId={process.id} workspaceId={process.workspaceId} canEdit={canEdit} me={me} processName={process.name} hasSteps={hasSteps} asksInMind={whatFollows(model).asksInMind} onModelChanged={load} onSourcesChanged={loadSources} goToProcess={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })} />
           : stage === 'assessment' && model && current
           ? <AssessmentStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} working={working ? { id: working.id, seq: working.seq } : null}
-              revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} />
+              revisionId={current.id} canEdit={canEdit} me={me} sources={sources} onSaved={load} onSourcesChanged={loadSources} documents={shownStages.includes('documents')} />
           : stage === 'documents' && model && current && model.steps.length > 0
-          ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources} approvedRevision={approved ? approved.revNo : null} approvedRevisionId={approved && current.state === 'working' ? approved.id : null} currentRevisionId={current.id} onFix={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}
+          ? <DocumentsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} sources={sources} canEdit={canEdit} working={working ? { id: working.id, seq: working.seq } : null} onSaved={load} me={me} onSourcesChanged={loadSources} approvedRevision={approved ? approved.revNo : null} approvedRevisionId={approved && current.state === 'working' ? approved.id : null} currentRevisionId={current.id} versionState={versions} onFix={() => nav.go({ page: 'process', processId: process.id, stage: 'process' })}
               revision={{ label: `Revision ${current.revNo}${current.state === 'working' ? ', working draft' : ''}`, state: current.state === 'approved' ? 'approved' : 'working', date: new Date(current.approvedAt ?? current.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) }} />
           : stage === 'work-items' && model && model.steps.length > 0
           ? <WorkItemsStage store={store} processId={process.id} workspaceId={process.workspaceId} model={model} canEdit={canEdit} onOpenBoard={id => nav.go({ page: 'board', projectId: id })} />
@@ -222,7 +296,8 @@ export function ProcessWorkspace({ store, nav, processId, stage, onWorkspace }: 
         </ChooserContext.Provider></SourceContext.Provider>}
       </section>
 
-      {historyOpen && <HistoryDrawer store={store} processId={process.id} onClose={() => setHistoryOpen(false)} />}
+      {approving && <ApproveDialog prepared={approving} busy={busy} error={approveError} reason={reason} onReason={setReason} onApprove={r => confirmApproval(process.id, r)} onClose={() => { setApproving(null); setApproveError(null); }} />}
+      {historyOpen && <HistoryDrawer store={store} processId={process.id} workspaceId={process.workspaceId} onClose={() => setHistoryOpen(false)} />}
     </div>
   );
 }

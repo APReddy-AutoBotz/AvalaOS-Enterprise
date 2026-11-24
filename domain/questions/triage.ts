@@ -1,18 +1,20 @@
 // Turning the raw list of open questions and gaps into the questions that matter, by fixed rules:
 // duplicates merged, questions the model already answers set aside, each one grouped by what it
 // changes and given a likely owner. Nothing here is decided by AI.
+import { waysInterfaces } from './ways.ts';
 import { asksOnlyFor } from './matter.ts';
 import type { AccessStatus, ElementTarget, OpenQuestion, ProcessModel } from '../processModel/types.ts';
 import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { buildingSystem } from '../plan/intended.ts';
 import { asksQuestion, purposeOf, type PurposeValue } from '../plan/purpose.ts';
-import { APPROACH_LABEL } from '../assess/scoring.ts';
+import { APPROACH_LABEL, NON_INTEGRABLE } from '../assess/scoring.ts';
 import { choicesFor } from './answer.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
-export type AnswerKind = 'role' | 'system' | 'number' | 'text' | 'access' | 'free' | 'choice';
+/** `ways`: an application with no way in recorded; its interfaces are the six ways in (domain/questions/ways.ts). */
+export type AnswerKind = 'role' | 'system' | 'number' | 'text' | 'access' | 'ways' | 'free' | 'choice';
 
 export const GROUP_LABEL: Record<QGroup, string> = { decides: 'Changes the recommendation', signoff: 'Needed for sign-off', detail: 'Detail' };
 /** An item's group in words: for an approach decided for the process, what leads settles that approach. */
@@ -108,6 +110,10 @@ function answeredBy(m: ProcessModel, q: OpenQuestion): string | null {
 function classify(m: ProcessModel, t: ElementTarget, text: string, open: Set<string>): { group: QGroup; owner: QOwner; affects: string[]; uses?: number } {
   switch (t.kind) {
     case 'system': {
+      // A device the assessment does not route through (NON_INTEGRABLE, a scanner): its access question is still
+      // asked, for the documents, but cannot change the recommendation (owner, 24 November 2026).
+      const sys = m.systems.find(x => x.id === t.id);
+      if (sys && NON_INTEGRABLE.includes(sys.kind)) return { group: 'detail', owner: 'it', affects: ['PDD 2.2 Applications'] };
       const used = stepsForSystem(m, t.id!).filter(s => open.has(s.id)).length;
       return { group: used ? 'decides' : 'detail', owner: 'it', affects: [`Assessment: ${used} ${used === 1 ? 'step uses' : 'steps use'} it`, 'PDD 2.2 Applications'], uses: used };
     }
@@ -163,7 +169,9 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
     const question = interfaces.length
       ? `Which ${sys.name} interfaces can the automation use? ${interfaces.length} ${interfaces.length === 1 ? 'is' : 'are'} not confirmed.`
       : `How can ${sys.name} be accessed by the automation (API, screens, file)?`;
-    items.push({ key: `system:${id}`, question, target: { kind: 'system', id, field: 'access' }, questionIds: qs.map(q => q.id), kind: interfaces.length ? 'access' : 'free', interfaces,
+    // An application with no way in recorded is asked as a choice of ways in, never in free words (plan of 23 November 2026).
+    const ways = !interfaces.length && sys.access.length === 0;
+    items.push({ key: `system:${id}`, question, target: { kind: 'system', id, field: 'access' }, questionIds: qs.map(q => q.id), kind: interfaces.length ? 'access' : ways ? 'ways' : 'free', interfaces: ways ? waysInterfaces() : interfaces,
       assignedTo: qs.find(q => q.owner)?.owner ?? null, deferred: qs.length > 0 && qs.every(q => q.status === 'deferred'), ...classify(m, { kind: 'system', id }, question, openSteps) });
   }
 

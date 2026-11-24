@@ -32,8 +32,9 @@ export const PLATFORM_FACTS: PlatformFact[] = [
   fact('requirements', 'documents', 'a functional requirement is derived for each step whose approach in effect is automation, each human check and each exception. Its statement says what the solution shall do and does not name the approach; where a person chose the approach, its rationale says so.'),
   // domain/docs/edits.ts; journey/process/DocumentsStage.tsx.
   fact('edits-kept', 'documents', 'documents are rebuilt from the process, the assessment and the choices people made. Text a person edited in a section is kept; when the generated text under it changes, the section is marked "Needs review" and the person chooses Keep mine, Take update or Edit mine.'),
-  // domain/docs/changes.ts; the model_approve rule.
-  fact('approved', 'documents', 'an approved revision is never changed. Later changes are made in the working draft, and Documents shows what changed since the approved revision.'),
+  // Package 14 (owner-approved 24 November 2026): domain/docs/keep.ts, versions.ts, approving.ts; approve_version,
+  // keep_version_as_reads_now; journey/process/keepVersion.ts and DocumentsStage.tsx (the list of approved versions).
+  fact('approved', 'documents', 'approving keeps every document of the process exactly as it reads at that moment, as an approved version that is never changed. Later changes are made in the working draft, and Documents shows what reads differently from the latest approved version. Approving again makes a new version, with a reason from the second version on. A process approved before copies were kept can be kept as it reads now.'),
   // Where a person changes things (owner, 16 November 2026: asked how to correct the objective's wording, Ask
   // Avala knew the rules but not where to act). journey/process/BriefPanel.tsx MetaLine; patch.ts updateFact.
   fact('change-objective', 'process', 'the process objective and the process owner are changed in "The brief" at the top of the Process stage: press Change beside Objective or Process owner, then Save. Every document, requirement and new work item takes the new wording; items already on the Delivery board keep theirs.'),

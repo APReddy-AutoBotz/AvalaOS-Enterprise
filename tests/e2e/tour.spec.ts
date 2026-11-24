@@ -189,7 +189,7 @@ test('tour: the sample case through every stage', async ({ page }) => {
 
   await page.mouse.wheel(0, -5000);
   await page.getByRole('button', { name: 'Approve' }).click();
-  await expect(page.getByTestId('revision-status')).toHaveText('Approved revision 1');
+  await expect(page.getByTestId('revision-status')).toHaveText('Approved version 1');
 
   await stage(page, 'Work items');
   const items = page.getByTestId('work-items');

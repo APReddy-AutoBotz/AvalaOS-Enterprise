@@ -32,7 +32,8 @@ const sectionCommentFrom = (r: any): SectionComment => ({ id: r.id, docType: r.d
 
 const REQ_TYPE = { BR: 'business', FR: 'functional', NFR: 'non_functional' } as const;
 const REQ_KIND = { business: 'BR', functional: 'FR', non_functional: 'NFR' } as const;
-import { StoreError, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
+import { readKept } from '../../domain/docs/keep.ts';
+import { DRAFT_CHANGES_SHOWN, StoreError, type VersionRow, type VersionStateRow, type Draft, type ExtractionRow, type JourneyStore, type Me, type Member, type Person, type Invite, type ProcessRow, type RevisionRow, type SourceRow, type Workspace } from './types.ts';
 import { enabledProviders, providerScopes } from '../../domain/auth/providers.ts';
 import type { ItemComment, ItemEvent } from '../../domain/workitems/collab.ts';
 import type { Sprint } from '../../domain/workitems/sprints.ts';
@@ -50,8 +51,10 @@ const applicationFrom = (r: Record<string, any>): Application => ({
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
   const code = error?.code ?? '';
   const status = /^PT\d{3}$/.test(code) ? Number(code.slice(2)) : code === '42501' ? 403 : error?.status ?? fallback;
+  // The database's own error names (VERSION_CONFLICT, CHANGED_MEANWHILE and the like) travel as the code.
+  const named = /^([A-Z_]+): /.exec(error?.message ?? '')?.[1];
   const message = (error?.message ?? 'Request failed.').replace(/^[A-Z_]+: /, '');
-  throw new StoreError(status, message);
+  throw new StoreError(status, message, named);
 }
 
 const toRevision = (r: Record<string, any>): RevisionRow => ({
@@ -64,10 +67,21 @@ const toSource = (r: Record<string, any>): SourceRow => ({
   segmentCount: Number(r.segment_count ?? 0), warnings: Array.isArray(r.warnings) ? r.warnings : [], createdAt: r.created_at, archived: Boolean(r.archived_at),
 });
 const SOURCE_COLUMNS = 'id, source_key, title, file_name, format, kind, inferred, warnings, segment_count, created_at, archived_at';
+const VERSION_COLUMNS = 'id, number, model_revision_id, approved_at, approved_by, approved_by_name, reason, changes, kept_at, kept_by_name';
+const versionFrom = (r: Record<string, any>): VersionRow => ({
+  id: r.id, number: Number(r.number), revisionId: r.model_revision_id, approvedAt: r.approved_at, approvedBy: r.approved_by ?? null, approvedByName: r.approved_by_name ?? null,
+  reason: r.reason ?? null, changes: { sections: r.changes?.sections ?? [], documents: r.changes?.documents ?? [], look: r.changes?.look ?? [] }, keptAt: r.kept_at ?? null, keptByName: r.kept_by_name ?? null,
+});
 const toMe = (u: { id: string; email?: string | null } | null | undefined): Me | null => (u ? { id: u.id, email: u.email ?? '' } : null);
 
 export function createSupabaseStore(url: string, publishableKey: string): JourneyStore {
   const db: SupabaseClient = createClient(url, publishableKey, { auth: { persistSession: true, autoRefreshToken: true, storageKey: 'avala.journey.auth' } });
+  /** A version's look, kept once per workspace by its fingerprint (package 14, change c). */
+  async function lookOf(workspaceId: string, fingerprint: string) {
+    const { data, error } = await db.from('document_looks').select('look').eq('workspace_id', workspaceId).eq('fingerprint', fingerprint).single();
+    if (error) fail(error);
+    return (data as any).look;
+  }
 
   /** Calls an edge function with the user's session; errors carry the function's own message and code. */
   async function call(name: string, body: Record<string, unknown>): Promise<any> {
@@ -256,6 +270,67 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async approve(revisionId, expectedSeq) {
       const { error } = await db.rpc('model_approve', { target_revision: revisionId, expected_seq: expectedSeq });
       if (error) fail(error);
+    },
+    async versionStates(workspaceId, processId) {
+      const { data, error } = await db.rpc('version_states', { target_workspace: workspaceId, target_process: processId ?? null });
+      if (error) fail(error);
+      return ((data as any[]) ?? []).map((r): VersionStateRow => ({
+        processId: r.process_id,
+        latest: r.latest_version_id ? { id: r.latest_version_id, number: Number(r.latest_number), approvedAt: r.latest_approved_at, approvedBy: r.latest_approved_by ?? null, approvedByName: r.latest_approved_by_name ?? null, keptAt: r.latest_kept_at ?? null } : null,
+        approvedRevisionId: r.approved_revision_id ?? null, approvedRevNo: r.approved_rev_no === null || r.approved_rev_no === undefined ? null : Number(r.approved_rev_no),
+        approvedHasVersion: Boolean(r.approved_has_version), processChanged: Boolean(r.process_changed),
+        workspaceChanges: Array.isArray(r.workspace_changes) ? r.workspace_changes : [], changesSeen: Number(r.changes_seen ?? 0),
+      }));
+    },
+    async approveVersion(i) {
+      const { data, error } = await db.rpc('approve_version', {
+        target_process: i.processId, target_revision: i.revisionId, expected_seq: i.expectedSeq, expected_version: i.expectedVersion, expected_changes: i.expectedChanges,
+        reason: i.reason, documents: i.documents, fingerprints: i.fingerprints, look: i.look, changes: i.changes, inputs: i.inputs,
+      });
+      if (error) fail(error);
+      return { versionId: (data as any).versionId, number: Number((data as any).number) };
+    },
+    async keepVersionAsReadsNow(i) {
+      const { data, error } = await db.rpc('keep_version_as_reads_now', {
+        target_process: i.processId, expected_version: i.expectedVersion, expected_changes: i.expectedChanges,
+        reason: i.reason, documents: i.documents, fingerprints: i.fingerprints, look: i.look, changes: i.changes, inputs: i.inputs,
+      });
+      if (error) fail(error);
+      return { versionId: (data as any).versionId, number: Number((data as any).number) };
+    },
+    async listVersions(processId) {
+      const { data, error } = await db.from('approved_versions').select(VERSION_COLUMNS).eq('process_id', processId).order('number', { ascending: false });
+      if (error) fail(error);
+      return ((data as any[]) ?? []).map(versionFrom);
+    },
+    async listDraftChanges(processId) {
+      const { data: proc, error: pe } = await db.from('processes').select('workspace_id').eq('id', processId).single();
+      if (pe) fail(pe);
+      const { data, error } = await db.from('draft_changes').select('id, process_id, kind, change, origin, items, item_count, actor, created_at')
+        .eq('workspace_id', (proc as any).workspace_id).or(`process_id.eq.${processId},process_id.is.null`)
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).limit(DRAFT_CHANGES_SHOWN);
+      if (error) fail(error);
+      return ((data as any[]) ?? []).map(r => ({
+        id: Number(r.id), processId: r.process_id ?? null, kind: r.kind, change: r.change, origin: r.origin,
+        items: Array.isArray(r.items) ? r.items : [], itemCount: Number(r.item_count ?? 1), actor: r.actor ?? null, createdAt: r.created_at,
+      }));
+    },
+    async getVersionPrints(versionId) {
+      const { data, error } = await db.from('approved_versions').select('workspace_id, fingerprints, inputs, look_fingerprint').eq('id', versionId).single();
+      if (error) fail(error);
+      const v = data as any;
+      return { fingerprints: v.fingerprints ?? {}, inputs: v.inputs && Object.keys(v.inputs).length ? v.inputs : null, lookFingerprint: v.look_fingerprint };
+    },
+    async getVersionLook(versionId) {
+      const { data, error } = await db.from('approved_versions').select('workspace_id, look_fingerprint').eq('id', versionId).single();
+      if (error) fail(error);
+      return lookOf((data as any).workspace_id, (data as any).look_fingerprint);
+    },
+    async getVersion(versionId) {
+      const { data, error } = await db.from('approved_versions').select(`${VERSION_COLUMNS}, workspace_id, documents, look_fingerprint`).eq('id', versionId).single();
+      if (error) fail(error);
+      const v = data as any;
+      return { ...versionFrom(v), kept: readKept(v.documents), look: await lookOf(v.workspace_id, v.look_fingerprint) };
     },
     async listSources(processId) {
       const { data, error } = await db.from('process_sources').select(SOURCE_COLUMNS)

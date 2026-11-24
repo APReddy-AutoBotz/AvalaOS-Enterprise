@@ -115,14 +115,37 @@ export interface VersionState {
 
 /** Item 2 of part N, and the label of part J. Null: nothing is approved. A change made for the whole workspace never changes it (question 8). */
 export function versionTag(s: VersionState): string | null {
-  if (s.latest) return s.processChanged ? `Approved version ${s.latest.number} · unapproved changes` : `Approved version ${s.latest.number}`;
+  // The approved revision without a copy comes first: when a version exists it is older than what is approved
+  // (a page opened before copies were kept approved with the old button), so "Approved version N" would be wrong.
   if (s.legacyRevision !== null) return `Approved revision ${s.legacyRevision} (before copies were kept)`;
+  if (s.latest) return s.processChanged ? `Approved version ${s.latest.number} · unapproved changes` : `Approved version ${s.latest.number}`;
   return null;
 }
 
 /** Item 4 of part N. */
 export const LEGACY_LABEL = 'Approved before copies were kept: shown as built today';
+/** An earlier approval without a copy that is no longer the approved one: it is not shown, so not "shown as built today". */
+export const SUPERSEDED_LEGACY_LABEL = 'Approved before copies were kept';
 export const keptLaterLabel = (date: string) => `Kept after approval, as it read on ${date}`;
+/** Part J: what a copy kept later says when opened. Nothing is dated earlier than the day it was kept. */
+export const keptLaterLine = (kept: string, approved: string) => `Kept after approval, as it read on ${kept}; the copy is not what was approved on ${approved}.`;
+/** Proposed to the owner (pull request 4): the one question before keeping version 1 of an earlier approval. */
+export const keepFirstQuestion = (revision: number, date: string, approver: string) =>
+  `Keep approved revision ${revision} as its documents read now? It becomes approved version 1, recorded as approved on ${date} by ${approver} and kept today by you, after approval.`;
+/** Proposed to the owner (pull request 4): the window's title when a version exists before it, and its opening line. */
+export const keepTitle = (number: number) => `Keep version ${number} as it reads now`;
+export const keepIntro = (number: number, revision: number, date: string, approver: string) =>
+  `Approved revision ${revision} becomes approved version ${number} as its documents read now, recorded as approved on ${date} by ${approver} and kept today by you, after approval. Approved version ${number - 1} stays as it was.`;
+/**
+ * The day evidence packs are first kept with a version (package 14, pull request 5): set by the release's own
+ * commit, checked by "Release dates set" (domain/site/releaseDates.ts). Until then the line shows "[release date]".
+ */
+export const EVIDENCE_KEPT_SINCE: string | null = '24 November 2026';
+/** Owner-approved (24 November 2026): an opened version kept before evidence packs were kept with versions. */
+export const noEvidenceLine = (since: string | null = EVIDENCE_KEPT_SINCE) =>
+  `No evidence pack was kept with this version: packs are kept from ${since ?? '[release date]'} on.`;
+/** Who approved, when the record holds no name for them. */
+export const UNNAMED_APPROVER = 'an approver whose name was not recorded';
 
 /** The workspace-wide changes the Documents page names (question 8). */
 export type WorkspaceChange = 'assessment_settings' | 'layout' | 'look';
@@ -141,16 +164,25 @@ export interface DocumentsLineInput {
   processChanged: boolean;
   /** Changes made for the whole workspace since the version. */
   workspaceChanged: WorkspaceChange[];
+  /**
+   * The inputs index proves that only a release of Avala OS changed the documents: every input's fingerprint
+   * equals the version's and the build differs (keptInputs, releaseProven). Only then is item 5 said.
+   */
+  releaseProven?: boolean;
 }
 
+/** Recorded for pull request 3 (owner, 22 November 2026): an edit saved and then undone. */
+export const savedThenUndoneLine = (N: number) => `Changes were saved since approved version ${N}, and the working draft now reads exactly as that version.`;
+
 /**
- * The line above the documents of a process that has a kept version. In order: nothing differs; this
- * process was changed (item 1 of part N); only the workspace's settings changed (question 8); otherwise
- * only a release of Avala OS writes sections differently (item 5).
+ * The line above the documents of a process that has a kept version. In order: nothing differs (and, when a
+ * change was saved since, that it was undone); this process was changed (item 1 of part N); only the
+ * workspace's settings changed (question 8); a release of Avala OS writes sections differently, said only
+ * when the inputs index proves it (item 5); otherwise neutral words that blame nothing (proposed to the owner).
  */
 export function documentsLine(i: DocumentsLineInput): string {
   const N = i.number;
-  if (i.differing === 0 && !i.workspaceChanged.includes('look')) return `The working draft reads exactly as approved version ${N}.`;
+  if (i.differing === 0 && !i.workspaceChanged.includes('look')) return i.processChanged ? savedThenUndoneLine(N) : `The working draft reads exactly as approved version ${N}.`;
   if (i.processChanged && i.differing > 0) {
     return `Approved version ${N} is kept exactly as it read when ${i.approver} approved it on ${i.date}. You are looking at the working draft: ${sectionsRead(i.differing)} differently. Approve again to make ${i.differing === 1 ? 'it' : 'them'} version ${N + 1}.`;
   }
@@ -160,11 +192,20 @@ export function documentsLine(i: DocumentsLineInput): string {
       ? `Since approved version ${N}, ${what}, so ${sectionsRead(i.differing)} differently today. Approved version ${N} is unchanged.`
       : `Since approved version ${N}, ${what}. Approved version ${N} is unchanged and downloads with the look it was approved with.`;
   }
-  return `Avala OS now writes ${i.differing} ${i.differing === 1 ? 'section' : 'sections'} differently from approved version ${N}. The approved version is unchanged.`;
+  if (i.releaseProven) return `Avala OS now writes ${i.differing} ${i.differing === 1 ? 'section' : 'sections'} differently from approved version ${N}. The approved version is unchanged.`;
+  return `${sectionsRead(i.differing)} differently from approved version ${N} today. Approved version ${N} is unchanged.`;
+}
+
+/** Whether only a release of Avala OS can explain a difference: every input the same, the build not. */
+export function releaseProven(kept: { build: string; modelHash: string; inputs: Record<string, string> } | null, now: { build: string; modelHash: string; inputs: Record<string, string> }): boolean {
+  if (!kept || kept.build === now.build || kept.modelHash !== now.modelHash) return false;
+  const keys = new Set([...Object.keys(kept.inputs), ...Object.keys(now.inputs)]);
+  return [...keys].every(k => kept.inputs[k] === now.inputs[k]);
 }
 
 /** Item 1 of part N, its first half, for the kept version's own band. */
-export const openedVersionLine = (number: number, date: string, approver: string) => `Approved version ${number}, approved on ${date} by ${approver}. As kept at approval.`;
+export const openedVersionLine = (number: number, date: string, approver: string, keptOn?: string | null) =>
+  keptOn ? `Approved version ${number}, approved on ${date} by ${approver}. ${keptLaterLine(keptOn, date)}` : `Approved version ${number}, approved on ${date} by ${approver}. As kept at approval.`;
 
 /** A Word or Markdown file name for a kept version. */
 export const versionFileName = (doc: KeptType, process: string, number: number, ext: 'docx' | 'md') => `${docShort(doc)} - ${process} - version ${number}.${ext}`;

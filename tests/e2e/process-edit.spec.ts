@@ -105,7 +105,7 @@ test('editing after approval starts a new working draft and keeps the approved r
   await openProcessStage(page);
   await addStep(page, 'Post invoice');
   await page.getByRole('button', { name: 'Approve' }).click();
-  await expect(page.getByTestId('revision-status')).toHaveText('Approved revision 1');
+  await expect(page.getByTestId('revision-status')).toHaveText('Approved version 1');
   await addStep(page, 'Close the case');
   await expect(page.getByTestId('revision-status')).toContainText('unapproved changes');
   await page.getByRole('button', { name: 'History' }).click();

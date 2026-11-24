@@ -142,3 +142,52 @@ test('the pack says what its count of open questions is: every one as recorded, 
   const pack = buildEvidence(fixture());
   assert.ok(JSON.stringify(pack.sections.find(s => s.title === 'What is not evidenced')).includes(openCountNote(gold, fixture().assessment, open(gold))));
 });
+
+// ---- Package 14, pull request 5: the approved versions, and the pack kept with a version (part I) --------------
+
+test('given the versions, section 1 lists them with who, when, why and how kept; an approval that is a version is listed once', () => {
+  const d = buildEvidence(fixture({
+    versions: [
+      { number: 2, revNo: 2, approvedAt: '2026-11-16T08:00:00Z', approvedByName: 'Ana Rao', reason: 'The exception path changed.', keptAt: null, keptByName: null },
+      { number: 1, revNo: 1, approvedAt: '2026-11-13T08:00:00Z', approvedByName: 'lee@example.com', reason: null, keptAt: '2026-11-14T08:00:00Z', keptByName: 'Ben Iyer' },
+    ],
+  }));
+  assert.deepEqual(tableOf(d, '1', 'Approved versions').rows.map(r => r.map(c => c.text)), [
+    ['Version 2', 'Ana Rao', '16 November 2026', 'The exception path changed.', 'At approval'],
+    ['Version 1', NOT_RECORDED, '13 November 2026', 'The first approved version.', 'After approval, on 14 November 2026 by Ben Iyer'],
+  ]);
+  assert.equal(tableOf(d, '1', 'Earlier approved revisions'), undefined, 'every approval is a version, so none is listed again');
+  assert.doesNotMatch(toMarkdown(d), /@|example\.com/);
+});
+
+test('an approval with no kept copy stays listed by revision, labelled', () => {
+  const d = buildEvidence(fixture({ versions: [{ number: 1, revNo: 2, approvedAt: '2026-11-16T08:00:00Z', approvedByName: 'Ana Rao', reason: null }] }));
+  assert.deepEqual(tableOf(d, '1', 'Earlier approved revisions').rows.map(r => r.map(c => c.text)), [['Revision 1', NOT_RECORDED, '13 November 2026', 'Approved before copies were kept']]);
+  assert.equal(tableOf(d, '1', 'Approved versions').rows.length, 1);
+});
+
+test('without the versions the pack reads as before', () => {
+  const d = buildEvidence(fixture());
+  assert.equal(tableOf(d, '1', 'Approved versions'), undefined);
+  assert.deepEqual(tableOf(d, '1', 'Earlier approved revisions').columns, ['Revision', 'Approved by', 'Approved on']);
+});
+
+test('a pack kept with a version says whose approval it records, first; a copy kept later says both', () => {
+  const draft = fixture({ revision: { label: 'Approved version 3', state: 'approved', date: '24 November 2026' }, revNo: 3,
+    revisions: [{ revNo: 3, state: 'working', createdAt: '2026-11-20T09:00:00Z', approvedAt: null, approvedBy: null }, ...fixture().revisions],
+    versions: [{ number: 2, revNo: 2, approvedAt: '2026-11-16T08:00:00Z', approvedByName: 'Ana Rao', reason: 'The exception path changed.' }, { number: 1, revNo: 1, approvedAt: '2026-11-13T08:00:00Z', approvedByName: 'Ben Iyer', reason: null }],
+    keptAs: { number: 3, approvedAt: '2026-11-24T05:00:00Z', approverName: 'Ana Rao', reason: 'The control was added.' } });
+  const d = buildEvidence(draft);
+  const first = section(d, '1').blocks[0] as { kind: string; text: string };
+  assert.equal(first.kind, 'paragraph');
+  assert.equal(first.text, 'Approved version 3, approved by Ana Rao on 24 November 2026');
+  assert.equal(kv(d, '1')['Approved by'], 'Ana Rao');
+  assert.equal(kv(d, '1')['Approved on'], '24 November 2026');
+  assert.deepEqual(tableOf(d, '1', 'Approved versions').rows.map(r => r[0]!.text + ' · ' + r[3]!.text), ['Version 3 · The control was added.', 'Version 2 · The exception path changed.', 'Version 1 · The first approved version.']);
+  assert.doesNotMatch(toMarkdown(d), /not evidence of an approved state/);
+
+  const later = buildEvidence(fixture({ versions: [], keptAs: { number: 1, approvedAt: '2026-11-16T08:00:00Z', approverName: 'Ana Rao', reason: null, kept: { at: '2026-11-24T05:00:00Z', name: 'Ben Iyer' } } }));
+  assert.equal((section(later, '1').blocks[0] as { text: string }).text, 'Approved version 1, approved by Ana Rao on 16 November 2026; kept after approval on 24 November 2026 by Ben Iyer');
+  assert.deepEqual(tableOf(later, '1', 'Approved versions').rows.map(r => r.map(c => c.text)), [['Version 1', 'Ana Rao', '16 November 2026', 'The first approved version.', 'After approval, on 24 November 2026 by Ben Iyer']]);
+  assert.deepEqual(tableOf(later, '1', 'Earlier approved revisions').rows.map(r => r[0]!.text), ['Revision 1'], 'the superseded approval had no copy');
+});

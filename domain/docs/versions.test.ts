@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { gzipSync } from 'node:zlib';
 import { loadSample, keepInputOf } from './fixtures/keepSample.ts';
 import { buildKeptDocuments, fingerprintsOf, keptLook, keptSizes } from './keep.ts';
-import { changeCount, changeLines, documentsLine, fingerprintChanges, keptLaterLabel, LEGACY_LABEL, openedVersionLine, REASON_LABEL, reasonHelp, reasonProblem, sectionDiff, sectionsDifferingFrom, versionChanges, versionFileName, versionTag } from './versions.ts';
+import { changeCount, changeLines, documentsLine, fingerprintChanges, keepFirstQuestion, keepIntro, keepTitle, keptLaterLabel, LEGACY_LABEL, openedVersionLine, REASON_LABEL, reasonHelp, reasonProblem, releaseProven, sectionDiff, sectionsDifferingFrom, SUPERSEDED_LEGACY_LABEL, versionChanges, versionFileName, versionTag } from './versions.ts';
 
 const sample = await loadSample();
 const v1 = buildKeptDocuments(keepInputOf(sample));
@@ -78,10 +78,23 @@ test('the tag: a change to the process marks it; a workspace-wide change does no
   assert.equal(versionTag({ latest: { number: 2 }, processChanged: true, legacyRevision: null }), 'Approved version 2 · unapproved changes');
   assert.equal(versionTag({ latest: { number: 2 }, processChanged: false, legacyRevision: null }), 'Approved version 2');
   assert.equal(versionTag({ latest: null, processChanged: false, legacyRevision: 3 }), 'Approved revision 3 (before copies were kept)');
-  assert.equal(versionTag({ latest: { number: 1 }, processChanged: false, legacyRevision: 3 }), 'Approved version 1');
+  // Pull request 4: a newer approval without a copy (a page opened before copies were kept) is named, not the older version.
+  assert.equal(versionTag({ latest: { number: 1 }, processChanged: false, legacyRevision: 3 }), 'Approved revision 3 (before copies were kept)');
   assert.equal(versionTag({ latest: null, processChanged: true, legacyRevision: null }), null);
   assert.equal(LEGACY_LABEL, 'Approved before copies were kept: shown as built today');
   assert.equal(keptLaterLabel('22 November 2026'), 'Kept after approval, as it read on 22 November 2026');
+});
+
+test('a copy kept after approval says so, with both dates, and nothing dated earlier than the day it was kept', () => {
+  assert.equal(SUPERSEDED_LEGACY_LABEL, 'Approved before copies were kept');
+  assert.equal(openedVersionLine(1, '3 November 2026', 'Priya Shah'), 'Approved version 1, approved on 3 November 2026 by Priya Shah. As kept at approval.');
+  assert.equal(openedVersionLine(1, '3 November 2026', 'Priya Shah', '24 November 2026'),
+    'Approved version 1, approved on 3 November 2026 by Priya Shah. Kept after approval, as it read on 24 November 2026; the copy is not what was approved on 3 November 2026.');
+  assert.equal(keepFirstQuestion(2, '3 November 2026', 'Priya Shah'),
+    'Keep approved revision 2 as its documents read now? It becomes approved version 1, recorded as approved on 3 November 2026 by Priya Shah and kept today by you, after approval.');
+  assert.equal(keepTitle(3), 'Keep version 3 as it reads now');
+  assert.equal(keepIntro(3, 4, '3 November 2026', 'Priya Shah'),
+    'Approved revision 4 becomes approved version 3 as its documents read now, recorded as approved on 3 November 2026 by Priya Shah and kept today by you, after approval. Approved version 2 stays as it was.');
 });
 
 test('the Documents line, in each case', () => {
@@ -91,11 +104,26 @@ test('the Documents line, in each case', () => {
     'Approved version 2 is kept exactly as it read when Priya Shah approved it on 21 November 2026. You are looking at the working draft: 3 sections read differently. Approve again to make them version 3.');
   assert.equal(documentsLine({ ...base, differing: 1, processChanged: true }),
     'Approved version 2 is kept exactly as it read when Priya Shah approved it on 21 November 2026. You are looking at the working draft: 1 section reads differently. Approve again to make it version 3.');
-  assert.equal(documentsLine({ ...base, differing: 4 }), 'Avala OS now writes 4 sections differently from approved version 2. The approved version is unchanged.');
-  assert.equal(documentsLine({ ...base, differing: 1 }), 'Avala OS now writes 1 section differently from approved version 2. The approved version is unchanged.');
+  // Item 5 only when the inputs index proves a release (recorded for pull request 3); otherwise neutral words.
+  assert.equal(documentsLine({ ...base, differing: 4, releaseProven: true }), 'Avala OS now writes 4 sections differently from approved version 2. The approved version is unchanged.');
+  assert.equal(documentsLine({ ...base, differing: 1, releaseProven: true }), 'Avala OS now writes 1 section differently from approved version 2. The approved version is unchanged.');
+  assert.equal(documentsLine({ ...base, differing: 4 }), '4 sections read differently from approved version 2 today. Approved version 2 is unchanged.');
+  assert.equal(documentsLine({ ...base, differing: 1 }), '1 section reads differently from approved version 2 today. Approved version 2 is unchanged.');
+  // An edit saved and then undone (recorded for pull request 3): the tag says "unapproved changes", nothing differs.
+  assert.equal(documentsLine({ ...base, differing: 0, processChanged: true }), 'Changes were saved since approved version 2, and the working draft now reads exactly as that version.');
   assert.equal(documentsLine({ ...base, differing: 2, workspaceChanged: ['layout'] }), 'Since approved version 2, the workspace\'s document sections changed, so 2 sections read differently today. Approved version 2 is unchanged.');
   assert.equal(documentsLine({ ...base, differing: 1, workspaceChanged: ['assessment_settings', 'layout'] }), 'Since approved version 2, the workspace\'s assessment settings and document sections changed, so 1 section reads differently today. Approved version 2 is unchanged.');
   assert.equal(documentsLine({ ...base, differing: 0, workspaceChanged: ['look'] }), 'Since approved version 2, the workspace\'s look changed. Approved version 2 is unchanged and downloads with the look it was approved with.');
   assert.equal(openedVersionLine(1, '21 November 2026', 'Priya Shah'), 'Approved version 1, approved on 21 November 2026 by Priya Shah. As kept at approval.');
   assert.equal(versionFileName('pdd', 'Vendor invoice processing', 2, 'docx'), 'PDD - Vendor invoice processing - version 2.docx');
+});
+
+test('a release is proven only when every input is the same and the build is not', () => {
+  const kept = { build: 'aaa1111', modelHash: 'm', inputs: { edits: 'e', decisions: 'd' } };
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222' }), true);
+  assert.equal(releaseProven(kept, kept), false, 'the same build explains nothing');
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222', inputs: { edits: 'e2', decisions: 'd' } }), false, 'an input changed');
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222', modelHash: 'm2' }), false, 'the record changed');
+  assert.equal(releaseProven(kept, { ...kept, build: 'bbb2222', inputs: { edits: 'e' } }), false, 'an input went missing');
+  assert.equal(releaseProven(null, kept), false);
 });

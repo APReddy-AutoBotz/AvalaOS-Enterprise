@@ -75,14 +75,14 @@ test('release gate: sources to documents to the board, accessible throughout', a
 
   // Approve, then change the process: what changed since approval is marked, the approved revision is kept.
   await page.getByRole('button', { name: 'Approve' }).click();
-  await expect(page.getByTestId('revision-status')).toHaveText('Approved revision 1');
+  await expect(page.getByTestId('revision-status')).toHaveText('Approved version 1');
   await stage(page, 'Process');
   await page.getByRole('tab', { name: /^Steps/ }).click();
   await page.getByLabel('Name of step 2').fill('Post invoice in SAP S/4HANA');
   await page.getByLabel('Name of step 2').blur();
   await expect(page.getByTestId('revision-status')).toContainText('unapproved changes');
   await stage(page, 'Documents');
-  await expect(page.getByTestId('since-approved')).toBeVisible();
+  await expect(page.getByTestId('version-line')).toBeVisible();
 
   // Behaviours 5 and 6: proposals with criteria and requirement links, reviewed, confirmed once, on the board.
   await stage(page, 'Work items');

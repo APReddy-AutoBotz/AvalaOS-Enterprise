@@ -4,6 +4,7 @@
 // scripts/release-dates.ts) runs this on every pull request into main (owner, 21 November 2026). Pure.
 import { UPDATED } from './trust.ts';
 import { COVERAGE_RULE } from '../assess/coverage.ts';
+import { EVIDENCE_KEPT_SINCE } from '../docs/versions.ts';
 
 /** Each date the release's own commit sets: what it is in plain words, where it lives, and its value now. */
 export function releaseDates(): { what: string; where: string; value: string | null }[] {
@@ -12,6 +13,7 @@ export function releaseDates(): { what: string; where: string; value: string | n
     { what: "the terms page's \"Last updated\" date", where: 'UPDATED.terms in domain/site/trust.ts', value: UPDATED.terms },
     { what: "the security page's \"Last updated\" date", where: 'UPDATED.security in domain/site/trust.ts', value: UPDATED.security },
     { what: "the date in the API coverage notice", where: 'COVERAGE_RULE.since in domain/assess/coverage.ts', value: COVERAGE_RULE.since },
+    { what: 'the date evidence packs are first kept with a version', where: 'EVIDENCE_KEPT_SINCE in domain/docs/versions.ts', value: EVIDENCE_KEPT_SINCE },
   ];
 }
 
