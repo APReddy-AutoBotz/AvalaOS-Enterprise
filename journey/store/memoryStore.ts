@@ -31,14 +31,14 @@ import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 import { readKept, KeptFormatError, type Fingerprints, type KeptDocuments, type KeptInputs, type KeptLook } from '../../domain/docs/keep.ts';
 import { reasonProblem } from '../../domain/docs/versions.ts';
 import { hashValue } from '../../domain/processModel/hash.ts';
-import type { VersionRow, VersionStateRow } from './types.ts';
+import { DRAFT_CHANGES_SHOWN, type DraftChangeRow, type VersionRow, type VersionStateRow } from './types.ts';
 import type { StandIn } from './standIns.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 /** A kept version (package 14), as the database's approved_versions holds it. */
 interface StoredVersion extends VersionRow { processId: string; workspaceId: string; kept: KeptDocuments; fingerprints: Fingerprints; lookFingerprint: string; inputs: KeptInputs | null; changeMark: number }
 /** One row of the change record (the database's draft_changes): a person's change, or one that follows another. */
-interface DraftChange { id: number; workspaceId: string; processId: string | null; kind: string; person: boolean }
+interface DraftChange { id: number; workspaceId: string; processId: string | null; kind: string; person: boolean; change?: 'added' | 'changed' | 'removed'; items?: (string | null)[]; actor?: string | null; at?: string }
 interface State {
   me: Me | null;
   workspaces: Workspace[];
@@ -126,9 +126,11 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
   const nameOf = () => requireMe().email.split('@')[0]!;
   // The change record, as the database's recording triggers write it: one row per saved change, a person's
   // own or one that follows another; never a value. The tag and the approval guard read it.
-  const noteChange = (workspaceId: string, processId: string | null, kind: string, person = true) => {
+  // As the database keeps them: what changed (added, changed, removed), which items by their names in the product,
+  // who and when; History lists them (pull request 5).
+  const noteChange = (workspaceId: string, processId: string | null, kind: string, person = true, change: 'added' | 'changed' | 'removed' = 'changed', items: (string | null)[] = [null]) => {
     const rows = (state.draftChanges ??= []);
-    rows.push({ id: (rows[rows.length - 1]?.id ?? 0) + 1, workspaceId, processId, kind, person });
+    rows.push({ id: (rows[rows.length - 1]?.id ?? 0) + 1, workspaceId, processId, kind, person, change, items, actor: state.me?.id ?? null, at: now() });
   };
   const changesSeen = (workspaceId: string, processId: string) => (state.draftChanges ?? []).filter(d => (d.processId === processId && d.person) || (d.workspaceId === workspaceId && d.processId === null)).length;
   const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -455,6 +457,16 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       return (state.versions ?? []).filter(v => v.processId === processId).sort((a, b) => b.number - a.number)
         .map(({ processId: _p, workspaceId: _w, kept: _k, fingerprints: _f, lookFingerprint: _l, inputs: _i, changeMark: _m, ...row }) => structuredClone(row));
     },
+    async listDraftChanges(processId) {
+      requireMe();
+      const { w } = workspaceOf(processId);
+      return (state.draftChanges ?? []).filter(d => d.processId === processId || (d.workspaceId === w.id && d.processId === null))
+        .sort((a, b) => b.id - a.id).slice(0, DRAFT_CHANGES_SHOWN)
+        .map(d => ({
+          id: d.id, processId: d.processId, kind: d.kind as DraftChangeRow['kind'], change: d.change ?? 'changed', origin: d.person ? 'person' as const : 'follows' as const,
+          items: (d.items ?? [null]).slice(0, 50), itemCount: (d.items ?? [null]).length, actor: d.actor ?? null, createdAt: d.at ?? '',
+        }));
+    },
     async getVersionPrints(versionId) {
       requireMe();
       const v = (state.versions ?? []).find(x => x.id === versionId);
@@ -496,7 +508,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
         inferred: input.inferred, segmentCount: input.segments.length, warnings: input.warnings, createdAt: now(), archived: false,
       };
       state.sources.push({ ...row, processId, segments: input.segments });
-      noteChange(w.id, processId, 'source');
+      noteChange(w.id, processId, 'source', true, 'added', [input.key]);
       save();
       return row;
     },
@@ -506,7 +518,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (!src) throw new StoreError(404, 'Source not found.');
       const { w: sw } = workspaceOf(src.processId);
       if (sw.role === 'viewer') throw new StoreError(403, 'Archiving needs the editor or admin role.');
-      if (!src.archived) noteChange(sw.id, src.processId, 'source');
+      if (!src.archived) noteChange(sw.id, src.processId, 'source', true, 'removed', [src.key]);
       src.archived = true;
       save();
     },
@@ -837,7 +849,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
       state.docEdits ??= {};
       const was = (state.docEdits[processId] ?? []).find(e => e.docType === edit.docType && e.sectionKey === edit.sectionKey);
-      if (!was || was.html !== edit.html || was.baseHash !== edit.baseHash) noteChange(workspaceOf(processId).w.id, processId, 'section_edit');
+      if (!was || was.html !== edit.html || was.baseHash !== edit.baseHash) noteChange(workspaceOf(processId).w.id, processId, 'section_edit', true, was ? 'changed' : 'added', [`${edit.docType}:${edit.sectionKey}`]);
       const list = (state.docEdits[processId] ?? []).filter(e => !(e.docType === edit.docType && e.sectionKey === edit.sectionKey));
       list.push({ ...structuredClone(edit), updatedBy: state.me?.email, updatedAt: new Date().toISOString() });
       state.docEdits[processId] = list;
@@ -847,7 +859,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing documents needs the editor or admin role.');
       state.docEdits ??= {};
-      if ((state.docEdits[processId] ?? []).some(e => e.docType === docType && e.sectionKey === sectionKey)) noteChange(workspaceOf(processId).w.id, processId, 'section_edit');
+      if ((state.docEdits[processId] ?? []).some(e => e.docType === docType && e.sectionKey === sectionKey)) noteChange(workspaceOf(processId).w.id, processId, 'section_edit', true, 'removed', [`${docType}:${sectionKey}`]);
       state.docEdits[processId] = (state.docEdits[processId] ?? []).filter(e => !(e.docType === docType && e.sectionKey === sectionKey));
       save();
     },
@@ -901,7 +913,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing test cases needs the editor or admin role.');
       state.testEdits ??= {};
       const was = (state.testEdits[processId] ?? []).find(e => e.caseCode === edit.caseCode);
-      if (!was || !same([was.fields, was.setAside, was.baseHash ?? null], [edit.fields, edit.setAside, edit.baseHash ?? null])) noteChange(workspaceOf(processId).w.id, processId, 'test_edit');
+      if (!was || !same([was.fields, was.setAside, was.baseHash ?? null], [edit.fields, edit.setAside, edit.baseHash ?? null])) noteChange(workspaceOf(processId).w.id, processId, 'test_edit', true, was ? 'changed' : 'added', [edit.caseCode]);
       state.testEdits[processId] = [...(state.testEdits[processId] ?? []).filter(e => e.caseCode !== edit.caseCode), { ...structuredClone(edit), updatedBy: state.me?.email, updatedAt: now() }];
       save();
     },
@@ -909,7 +921,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Editing test cases needs the editor or admin role.');
       state.testEdits ??= {};
-      if ((state.testEdits[processId] ?? []).some(e => e.caseCode === caseCode)) noteChange(workspaceOf(processId).w.id, processId, 'test_edit');
+      if ((state.testEdits[processId] ?? []).some(e => e.caseCode === caseCode)) noteChange(workspaceOf(processId).w.id, processId, 'test_edit', true, 'removed', [caseCode]);
       state.testEdits[processId] = (state.testEdits[processId] ?? []).filter(e => e.caseCode !== caseCode);
       save();
     },
@@ -924,16 +936,22 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       state.requirements ??= {};
       const list = state.requirements[processId] ?? [];
       // One row of the change record per save for a person's wording, one for a register that follows the process.
-      let person = false, follows = false;
+      // Codes by who changed them and how, as the database groups one save's rows.
+      const groups = new Map<string, string[]>();
       for (const r of rows) {
         const i = list.findIndex(x => x.code === r.code);
         const old = i >= 0 ? list[i] : null;
-        if (!old || !same({ ...old, order: 0 }, { ...r, order: 0 })) { if (r.edited || old?.edited || r.category === 'user') person = true; else follows = true; }
+        if (!old || !same({ ...old, order: 0 }, { ...r, order: 0 })) {
+          const key = `${r.edited || old?.edited || r.category === 'user' ? 'person' : 'follows'}:${old ? 'changed' : 'added'}`;
+          groups.set(key, [...(groups.get(key) ?? []), r.code]);
+        }
         if (i >= 0) list[i] = structuredClone(r); else list.push(structuredClone(r));
       }
       const rw = workspaceOf(processId).w.id;
-      if (person) noteChange(rw, processId, 'requirement');
-      if (follows) noteChange(rw, processId, 'requirement', false);
+      for (const [key, codes] of [...groups].sort()) {
+        const [who, how] = key.split(':') as ['person' | 'follows', 'added' | 'changed'];
+        noteChange(rw, processId, 'requirement', who === 'person', how, [...codes].sort());
+      }
       state.requirements[processId] = list;
       save();
     },
@@ -967,8 +985,14 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       // Only a change of people's choices, rate, costs or shape is recorded, not the computed result saved again.
       const prior = (state.assessments ?? []).filter(a => a.processId === processId);
       const before = prior.length ? prior[prior.length - 1].decisions : emptyDecisions();
-      const pick = (d: Decisions) => [d.overrides ?? {}, d.rate ?? null, d.costs ?? null, d.map ?? null];
-      if (!same(pick(before), pick(input.decisions))) noteChange(workspaceOf(processId).w.id, processId, 'choice');
+      // One row per kind, as the database's trigger writes them; a step's choice names the steps it changed.
+      const aw = workspaceOf(processId).w.id;
+      const was = (before.overrides ?? {}) as Record<string, unknown>, is = (input.decisions.overrides ?? {}) as Record<string, unknown>;
+      const steps = [...new Set([...Object.keys(was), ...Object.keys(is)])].filter(k => !same(was[k] ?? null, is[k] ?? null)).sort();
+      if (steps.length) noteChange(aw, processId, 'choice', true, 'changed', steps);
+      if (!same(before.rate ?? null, input.decisions.rate ?? null)) noteChange(aw, processId, 'rate');
+      if (!same(before.costs ?? null, input.decisions.costs ?? null)) noteChange(aw, processId, 'costs');
+      if (!same(before.map ?? null, input.decisions.map ?? null)) noteChange(aw, processId, 'map_shape');
       state.assessments = (state.assessments ?? []).filter(a => !(a.processId === processId && a.revisionId === input.revisionId));
       state.assessments.push({ processId, revisionId: input.revisionId, decisions: structuredClone(input.decisions), result: input.result });
       save();

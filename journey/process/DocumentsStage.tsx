@@ -51,7 +51,7 @@ import { draftNarrative, draftToHtml, generatedText, groundingIssues, handoffChe
 import type { KeptVersion, VersionPrints, VersionRow, VersionStateRow } from '../store/types.ts';
 import { approvalsWithoutCopy, compareDraft, keepInputFrom, keptRevision } from '../../domain/docs/approving.ts';
 import { buildKeptDocuments, KEPT_TYPES, keptInputs, type KeptType } from '../../domain/docs/keep.ts';
-import { changeCount, changeLines, documentsLine, keptLaterLabel, LEGACY_LABEL, openedVersionLine, releaseProven, sectionDiff, SUPERSEDED_LEGACY_LABEL, UNNAMED_APPROVER, versionFileName } from '../../domain/docs/versions.ts';
+import { changeCount, changeLines, documentsLine, keptLaterLabel, LEGACY_LABEL, noEvidenceLine, openedVersionLine, releaseProven, sectionDiff, SUPERSEDED_LEGACY_LABEL, UNNAMED_APPROVER, versionFileName } from '../../domain/docs/versions.ts';
 import { longDate } from './keepVersion.ts';
 import { BUILD } from '../build.ts';
 
@@ -246,6 +246,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     setStored(cur => (cur ?? []).some(x => x.code === r.code) ? (cur ?? []).map(x => (x.code === r.code ? r : x)) : [...(cur ?? []), r]);
   };
 
+  // The approved versions kept so far: the evidence pack lists them, and so does the list of versions below.
+  const [versions, setVersions] = React.useState<VersionRow[]>([]);
   const built = React.useMemo<{ doc: DocTree; status: Record<string, SectionStatus> } | null>(() => {
     if (!decisions || !assessment) return null;
     const input = { model, assessment, decisions: decisions ?? emptyDecisions(), sources: sources.filter(s => !s.archived).map(s => ({ key: s.key, title: s.title })), revision, requirements: register?.requirements, names: nameById };
@@ -259,6 +261,8 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
         allSources: sources.map(s => ({ key: s.key, title: s.title, kind: FORMAT_LABEL[s.format] ?? '', createdAt: s.createdAt, passages: s.segmentCount, archived: s.archived })),
         proposals: evidenceRecord.proposals, boardStatus: evidenceRecord.boardStatus, testEdits, comments,
         names: Object.fromEntries(members.map(m => [m.userId, m.name])),
+        // The approved versions kept so far (pull request 5); approvals with no copy stay listed by revision.
+        versions: versions.map(v => ({ number: v.number, revNo: evidenceRecord.revisions.find(r => r.id === v.revisionId)?.revNo ?? null, approvedAt: v.approvedAt, approvedByName: v.approvedByName, reason: v.reason, keptAt: v.keptAt, keptByName: v.keptByName })),
       });
       return { doc, status: {} };
     }
@@ -266,7 +270,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
     if (!raw) return null;
     const edited = applyEdits(raw, edits);
     return { doc: applyLayout(edited.doc, docSettings.layouts[type]), status: edited.status };
-  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits, evidenceRecord, comments, members, nameById]);
+  }, [type, model, decisions, assessment, sources, revision, docSettings, register, sddReady, edits, testEdits, evidenceRecord, comments, members, nameById, versions]);
   const doc = built?.doc ?? null;
   const scrolled = React.useRef(false);
   React.useEffect(() => {
@@ -313,8 +317,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
   const [keptForDiff, setKeptForDiff] = React.useState<KeptVersion | null>(null);
   React.useEffect(() => { setKeptForDiff(null); }, [latest?.id]);
   const changedIds = latest ? (comparison?.byDoc[type as KeptType] ?? new Set<string>()) : new Set(sinceApproved.map(c => c.id));
-  // The list of approved versions, and one opened as kept.
-  const [versions, setVersions] = React.useState<VersionRow[]>([]);
+  // The list of approved versions (declared above, with the documents it feeds), and one opened as kept.
   // With the versions, the record's revisions: earlier approvals without a kept copy are listed after them (part G).
   const [approvedRevisions, setApprovedRevisions] = React.useState<RevisionRow[]>([]);
   React.useEffect(() => {
@@ -687,6 +690,7 @@ function KeptVersionView({ store, versionId, processName, onBack }: { store: Jou
           <Button variant="ghost" onClick={() => save(new Blob([toMarkdown(doc)], { type: 'text/markdown' }), versionFileName(type, processName, v.number, 'md'))} data-testid="version-markdown">Markdown</Button>
         </div>
       </div>
+      {!v.kept.documents.evidence && <p className="text-sm text-slate-600" data-testid="version-no-evidence">{noEvidenceLine()}</p>}
       <article id="document-print" data-testid="document" className="min-w-0 rounded-xl border border-slate-200 bg-white px-6 py-8 shadow-[0_1px_2px_rgba(15,23,42,0.05),0_16px_40px_-24px_rgba(15,23,42,0.18)] sm:px-12 sm:py-10" style={{ fontFamily: `${v.look.font}, Inter, sans-serif`, ['--doc-accent' as string]: `#${v.look.accent}` }}>
         <header className="border-b-4 pb-5" style={{ borderColor: 'var(--doc-accent)' }}>
           {v.look.logo && <img src={v.look.logo} alt="" className="mb-3 h-8 object-contain" />}

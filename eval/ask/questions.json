@@ -157,7 +157,7 @@
     { "id": "W08", "kind": "platform", "question": "What has to change for a step's score to change?",
       "cite": ["h:scores"],
       "say": [["facts", "fact", "Inputs"]] },
-    { "id": "W09", "kind": "platform", "question": "If we choose a different approach after a revision is approved, does the approved revision change?",
+    { "id": "W09", "kind": "platform", "question": "If we choose a different approach after a version is approved, does the approved version change?",
       "cite": ["h:approved"],
       "say": [["never", "not changed", "does not change", "working draft"]] },
     { "id": "W10", "kind": "platform", "question": "If AI-assisted automation alone were used for the whole process, how many steps could it do?",

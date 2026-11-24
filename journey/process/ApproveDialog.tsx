@@ -2,10 +2,11 @@
 // version before, and the reason, required. A native modal dialog: Escape closes it, the page behind cannot be
 // reached while it is open.
 import React from 'react';
+import { approvalCountsLine } from '../../domain/questions/approvalCounts.ts';
 import { changeLines, keepIntro, keepTitle, reasonHelp, reasonProblem, REASON_LABEL, UNNAMED_APPROVER } from '../../domain/docs/versions.ts';
 import { longDate } from './keepVersion.ts';
 import type { PreparedApproval } from './keepVersion.ts';
-import { Button } from '../ui.tsx';
+import { Button, cx } from '../ui.tsx';
 
 export function ApproveDialog({ prepared, busy, error, onApprove, onClose, reason, onReason }: {
   prepared: PreparedApproval; busy: boolean; error: string | null;
@@ -20,6 +21,7 @@ export function ApproveDialog({ prepared, busy, error, onApprove, onClose, reaso
   const N = prepared.number;
   const problem = reasonProblem(N, reason);
   const lines = changeLines(prepared.changes);
+  const countsLine = approvalCountsLine(prepared.counts);
   // "Keep it as it reads now" from version 2 on (pull request 4): the same window, saying what is kept and whose approval it records.
   const keep = prepared.mode === 'keep' ? prepared.approved : undefined;
   const title = keep ? keepTitle(N) : `Approve version ${N}`;
@@ -40,6 +42,8 @@ export function ApproveDialog({ prepared, busy, error, onApprove, onClose, reaso
             ? <ul className="mt-2 space-y-1.5 text-sm leading-6 text-slate-700" data-testid="approve-changes">{lines.map((l, i) => <li key={i} className="rounded-lg bg-slate-50 px-3 py-1.5">{l}</li>)}</ul>
             : <p className="mt-2 rounded-lg bg-slate-50 px-3 py-1.5 text-sm text-slate-700" data-testid="approve-changes">No section reads differently. Saved changes were undone or change nothing in the documents.</p>}
         </section>
+        {/* The two numbers (part L, pull request 5): open questions that could still change what is approved. */}
+        {countsLine && <p className={cx('mt-4 rounded-lg px-3 py-1.5 text-sm', prepared.counts?.open ? 'bg-amber-50 text-amber-950 ring-1 ring-inset ring-amber-200' : 'bg-slate-50 text-slate-700')} data-testid="approve-counts">{countsLine}</p>}
         <label className="mt-5 block text-sm font-semibold text-slate-900" htmlFor="approve-reason">{REASON_LABEL}</label>
         <p className="text-xs text-slate-500" id="approve-reason-help">{reasonHelp(N)}</p>
         <textarea id="approve-reason" name="reason" rows={3} maxLength={2000} value={reason} onChange={e => setReason(e.target.value)} aria-describedby="approve-reason-help" aria-invalid={(tried || Boolean(reason.trim())) && Boolean(problem) || undefined}
