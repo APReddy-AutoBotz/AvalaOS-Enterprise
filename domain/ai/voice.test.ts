@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NO_VOICE_LINE, voiceFor } from './voice.ts';
+import { cutLine, NO_VOICE_LINE, voiceFor } from './voice.ts';
 import { AI_PROVIDERS } from './providers.ts';
 
 test('the microphone shows on the platform key and on a provider that turns speech into text; elsewhere a plain line', () => {
@@ -19,4 +19,8 @@ test('nothing is offered without AI (the demo) or while the provider is not know
   assert.equal(voiceFor('openai', false), 'none');
   assert.equal(voiceFor(undefined, true), 'none');
   assert.equal(NO_VOICE_LINE, "Voice input is not available with this workspace's AI provider. Type your answer instead.");
+});
+
+test('spoken words past the box\'s limit are said, not dropped without a word', () => {
+  assert.equal(cutLine(2000), 'Your answer is at its 2,000-character limit; the rest was not added.');
 });

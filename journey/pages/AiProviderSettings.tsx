@@ -6,6 +6,7 @@ import React from 'react';
 import type { JourneyStore, Workspace, WorkspaceAi } from '../store/types.ts';
 import { AI_PROVIDERS, AiSettingsError, selectableProviders, validateAiChoice, validateApiKey, type AiNeed, type AiProvider } from '../../domain/ai/providers.ts';
 import { Button, ErrorNote, Field, messageOf, Spinner, when } from '../ui.tsx';
+import { forgetVoice } from '../process/voice.ts';
 
 const NEEDS: [AiNeed, string][] = [['transcription', 'Turning speech into text']];
 
@@ -52,6 +53,7 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
       const key = apiKey.trim() ? validateApiKey(apiKey) : undefined;
       if (!key && !keepsKey) throw new AiSettingsError(`Paste the ${AI_PROVIDERS[provider].label} API key.`);
       await store.saveWorkspaceAi(workspace.id, { ...choice, apiKey: key });
+      forgetVoice(workspace.id);
       await load();
       setEditing(false);
       setNotice('Saved. Test the key to make sure it works.');
@@ -64,7 +66,7 @@ export function AiProviderSettings({ store, workspace }: { store: JourneyStore; 
   });
   const remove = () => {
     if (!window.confirm(`Stop using this ${current ? AI_PROVIDERS[current.provider].label : ''} key? It is deleted from Avala OS, and AI work in ${workspace.name} goes back to Avala OS's AI and its monthly allowance.`)) return;
-    act(async () => { await store.clearWorkspaceAi(workspace.id); await load(); setNotice('The key is deleted. This workspace uses Avala OS\'s AI again.'); });
+    act(async () => { await store.clearWorkspaceAi(workspace.id); forgetVoice(workspace.id); await load(); setNotice('The key is deleted. This workspace uses Avala OS\'s AI again.'); });
   };
 
   const missing = current ? NEEDS.filter(([need]) => !AI_PROVIDERS[current.provider].can[need]).map(([, words]) => words) : [];

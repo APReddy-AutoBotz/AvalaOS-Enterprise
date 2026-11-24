@@ -157,6 +157,24 @@ export const usedCall = (usage?: { input: number; output: number } | null): Sess
 /** A reading of the sources, with the tokens its own totals record. */
 export const usedReading = (tokens: number): SessionStep => s => ({ ...s, use: afterReading(s.use, tokens) });
 
+/** A reading this session started, counted once however often its end is seen (`runs` holds the readings counted). */
+export const countedReading = (runId: string, tokens: number): SessionStep => s => {
+  const runs = strings(s.runs);
+  return runs.includes(runId) ? s : { ...s, runs: [...runs, runId], use: afterReading(s.use, tokens) };
+};
+
+/** The readings this session started, so their end is counted and shown here (an update of the draft). */
+export const startedReading = (runId: string): SessionStep => s => ({ ...s, started: [...new Set([...strings(s.started), runId])] });
+export const readingsStarted = (s: SessionState): string[] => strings(s.started);
+
+/** An update's changes were reviewed (applied, or found to change nothing): its review is not shown again. */
+export const reviewedReading = (runId: string): SessionStep => s => ({ ...s, reviewed: [...new Set([...strings(s.reviewed), runId])] });
+export const readingsReviewed = (s: SessionState): string[] => strings(s.reviewed);
+
+/** One answer saved to the record in this session (the summary's "Recorded: N answers"). */
+export const countSaved: SessionStep = s => ({ ...s, saved: num(s.saved) + 1 });
+export const savedCount = (s: SessionState): number => num(s.saved);
+
 /**
  * The waiting answers written into a "Discovery answers" source leave the session in the same step, so a
  * person's words are never kept twice. Only the answers that went into the source leave: one another editor

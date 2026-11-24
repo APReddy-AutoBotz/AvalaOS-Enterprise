@@ -834,11 +834,14 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
     },
     async latestExtraction(processId): Promise<ExtractionRow | null> {
-      const { data, error } = await db.from('extraction_runs').select('id, status, error, result, created_at, updated_at')
+      const { data, error } = await db.from('extraction_runs').select('id, status, error, result, created_at, updated_at, source_ids, input_tokens, output_tokens')
         .eq('process_id', processId).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (error) fail(error);
       if (!data) return null;
-      return { id: data.id, status: data.status, error: data.error, createdAt: data.created_at, updatedAt: data.updated_at, model: (data.result as any)?.model ?? null };
+      return {
+        id: data.id, status: data.status, error: data.error, createdAt: data.created_at, updatedAt: data.updated_at, model: (data.result as any)?.model ?? null,
+        sourceIds: Array.isArray(data.source_ids) ? data.source_ids : [], tokens: (Number(data.input_tokens) || 0) + (Number(data.output_tokens) || 0),
+      };
     },
     async history(processId) {
       const { data, error } = await db.rpc('model_history', { target_process: processId });

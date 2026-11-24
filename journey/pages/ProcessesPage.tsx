@@ -4,6 +4,7 @@
 // choice between the two is remembered in the browser.
 import { NOT_ASSESSED, offersPurpose, PURPOSE_LABEL, PURPOSE_WHAT, PURPOSES, type PurposeValue } from '../../domain/plan/purpose.ts';
 import { decideApproach, setPurpose } from '../../domain/processModel/patch.ts';
+import { openDiscovery } from '../process/openDiscovery.ts';
 import { DecidedFields, type DecidedChoice } from '../process/BriefPanel.tsx';
 import React from 'react';
 import type { JourneyStore, Member, ProcessRow, Workspace } from '../store/types.ts';
@@ -76,8 +77,14 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
   }, [store, workspace.id]);
   const nameOf = (id: string) => members.find(m => m.userId === id)?.name ?? 'Someone no longer in this workspace';
 
+  // "Add and start with Ask Avala" (package B): the process opens on its Sources stage with Ask Avala on Discovery.
+  // Offered to someone who can edit, where the workspace has AI; not in the demo.
+  const withDiscovery = canEdit && store.aiAvailable && store.kind !== 'demo';
+  const startWith = React.useRef(false);
   const create = async (e: React.FormEvent) => {
     e.preventDefault();
+    const discover = startWith.current;
+    startWith.current = false;
     setBusy(true);
     setError(null);
     try {
@@ -91,6 +98,7 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
         await store.savePatch(draft.revisionId, draft.seq, r.patch, 'user', `What is wanted from the process: ${PURPOSE_LABEL[purpose]}`);
       }
       nav.go({ page: 'process', processId: p.id, stage: 'sources' });
+      if (discover) openDiscovery(p.id);
     } catch (err) {
       setError(messageOf(err));
       setBusy(false);
@@ -101,7 +109,8 @@ function ProcessList({ store, nav, workspace, eyebrow }: { store: JourneyStore; 
     <form onSubmit={create} className="w-full max-w-xl space-y-3 text-left">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex-1"><Field label="Process name" placeholder="e.g. Vendor invoice processing" required maxLength={200} value={name} onChange={e => setName(e.target.value)} autoFocus /></div>
-        <Button type="submit" disabled={busy || !name.trim() || (purpose === 'decided' && (approach === '' || !reason.trim()))}>Add process</Button>
+        <Button type="submit" onClick={() => { startWith.current = false; }} disabled={busy || !name.trim() || (purpose === 'decided' && (approach === '' || !reason.trim()))}>Add process</Button>
+        {withDiscovery && <Button type="submit" variant="accent" onClick={() => { startWith.current = true; }} disabled={busy || !name.trim() || (purpose === 'decided' && (approach === '' || !reason.trim()))}>Add and start with Ask Avala</Button>}
       </div>
       {/* Asked when the organisation uses the documents; never worked out by Avala OS (domain/plan/purpose.ts). */}
       {askPurpose && (

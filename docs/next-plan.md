@@ -832,7 +832,23 @@ Six pull requests; `next` can be released after any one of them; the first relea
     - The browser tests' stand-in hears a recording as the words a test gives under `transcribe` (`standInTranscript`).
     - No database or server function change; no file a server function loads.
     - Test: `domain/discovery/session.test.ts`, `session.store.test.ts`, `domain/ai/voice.test.ts`, `standIn.test.ts`, `tests/e2e/spoken-answers.spec.ts`.
-  - **4b, the Discovery tab:** next.
+  - **4b, the Discovery tab (built 24 November 2026, in review).**
+    - Ask Avala on a process gains the tab **Discovery** for someone who can edit, where the workspace has AI (`discoveryTab` in `domain/discovery/flow.ts`). On a process with no steps it is the only view; a viewer reads "Someone who can edit this process can start Discovery."; the demo shows one paragraph and nothing to press.
+    - Where it starts: "Add and start with Ask Avala" on Processes, and "Or let Ask Avala ask you…" with **Start with Ask Avala** in "No documents? Tell us in your own words" (`journey/process/openDiscovery.ts`).
+    - The flow (`journey/process/DiscoveryPanel.tsx`; every rule in `domain/discovery/flow.ts`):
+      - The person's own words are kept as a source `own-N` (`ownWordsSource`, shared with "Tell us in your own words") and read as the Sources stage reads.
+      - "What I understand so far": the steps with who, where and the words each came from (`stepsWithWords`). **Start the process from this** applies the reading as the Sources stage does.
+      - Then one question at a time, with where it came from, why it matters and what it updates. A choice, an input field, or the person's words read by `answerFromNotes`, with "This will record: …".
+      - An answer about the shape is kept with the session; the draft changes only at **Update the draft from your answers (N)**, which writes the waiting answers as a "Discovery answers" source and takes them out of the session in the same step, reads that source with those the last reading read (`updateSources`), and shows what would change for the person to apply.
+      - "Not known, ask someone" (`leaveWith`), "Not applicable" (`notApplicable`), Skip. A question about the shape left with someone is not asked again (`discoveryQueue`, by target).
+      - A confirmed step or application is confirmed as a whole: an answer about any of its fields is held back and says so (`confirmedLine`, through `answerAgainstConfirmed`). Typed words behind such an answer are kept as a source `ans-N` first, so the conflict quotes a real source.
+      - An application with no way in recorded is asked with a status per way in and "No way in" (`waysRecordLine`).
+      - The session's cap, a full session (`FULL_LINE`), another page writing first (`BUSY_LINE`), the month's allowance used up and the minute limit are each said in plain words. "Started by {name} on {date}" with Finish; Finish with answers waiting offers to keep them as a source first.
+    - The look in the sources waits while a session is in use and only then (`discoveryHoldsLook` in `journey/process/discoveryOpen.ts`, used by `useAutoLook`); an abandoned one blocks nothing.
+    - The three review points of 24 November 2026: saving or removing the AI provider forgets the cached provider (`forgetVoice`), so the microphone follows without a reload; spoken words past the box's limit say so under it (`cutLine`); a provider that cannot be read leaves the microphone shown, as before 4a (the server still refuses a provider that cannot take speech).
+    - The browser tests' stand-in gains a reading of the sources: a reply under `extraction` is the model a test gives, read from every source it is given, with each source's key and passages in the log (`standInReading`). The AI tasks' rule is unchanged: their replies are still refused when source passages are sent. Built only into the browser-test build, checked out of the released one as before.
+    - No database or server function change; no file a server function loads.
+    - Test: `domain/discovery/flow.test.ts`, `session.test.ts`, `queue.test.ts`, `domain/ai/voice.test.ts`, `standIn.test.ts`, `tests/e2e/discovery.spec.ts`.
 - **Pull requests 5 and 6:** as the plan has them.
 - **Asked separately:** the check of about 70,000 tokens on the preview, before 4b merges, through a draft pull request from 4b's branch into `main` titled "Preview only, do not merge". The early deploy of `journey-ai` is no longer needed: the eleventh release deployed version 78, which carries `discoveryQuestions`.
 

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BUSY_LINE, commitSessionStep, emptyState, FULL_LINE, IN_USE_MS, keepAnswer, keepLater, markRead, readState, sessionInUse, skip,
-  startedLine, STATE_LIMIT, stateTextLength, tookIntoSource, usedCall, type KeptAnswer, type SaveAnswer, type SessionServer, type SessionState, type StoredSession,
+  startedLine, STATE_LIMIT, countedReading, countSaved, readingsReviewed, readingsStarted, reviewedReading, savedCount, startedReading, stateTextLength, tookIntoSource, usedCall, type KeptAnswer, type SaveAnswer, type SessionServer, type SessionState, type StoredSession,
 } from './session.ts';
 import { answersSource } from './answers.ts';
 
@@ -170,4 +170,19 @@ test('who started a session is said by name, never an email address', () => {
   assert.equal(startedLine('priya@example.com', '24 Nov 2026'), 'Started on 24 Nov 2026');
   assert.equal(startedLine(null, '24 Nov 2026'), 'Started on 24 Nov 2026');
   assert.equal(startedLine('  ', '24 Nov 2026'), 'Started on 24 Nov 2026');
+});
+
+test('a reading is counted once against the cap, however often its end is seen; updates started and reviewed are remembered', () => {
+  let s = emptyState();
+  s = startedReading('r1')(s);
+  s = countedReading('r1', 30_000)(s);
+  s = countedReading('r1', 30_000)(s);
+  assert.deepEqual(s.use, { tokens: 30_000, calls: 0, readings: 1 });
+  assert.deepEqual(readingsStarted(s), ['r1']);
+  assert.deepEqual(readingsReviewed(reviewedReading('r1')(s)), ['r1']);
+  assert.equal(savedCount(countSaved(countSaved(s))), 2);
+  // All of it survives the server's copy.
+  const again = readState(JSON.parse(JSON.stringify(countSaved(s))));
+  assert.equal(savedCount(again), 1);
+  assert.deepEqual(readingsStarted(again), ['r1']);
 });

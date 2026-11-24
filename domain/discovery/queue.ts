@@ -60,7 +60,11 @@ export function triageCard(item: TriageItem, m: ProcessModel): Card | null {
 export function discoveryQueue(i: QueueInput): Card[] {
   const m = i.model;
   const t = i.triage ?? triage(m, i.assessment);
-  const shape = shapeCards(m);
+  // A question about the shape left with someone is not asked again in the session: leaving it records a deferred
+  // question on the same target (who does the step, or in which application), so its card is dropped by target.
+  const at = (x: { kind: string; id?: string | null; field?: string | null }) => `${x.kind}:${x.id ?? ''}:${x.field ?? ''}`;
+  const left = new Set(t.items.filter(x => x.deferred && x.target).map(x => at(x.target!)));
+  const shape = shapeCards(m).filter(c => !c.itemKey || !left.has(at(c.target)));
   const inShape = new Set(shape.map(c => c.itemKey).filter(Boolean));
   const items = t.items.filter(x => !x.deferred && !inShape.has(x.key)).map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
   const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...(i.raised ?? []), ...inputCards(m, i.assessment)];
