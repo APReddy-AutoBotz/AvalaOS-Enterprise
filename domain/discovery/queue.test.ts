@@ -105,3 +105,12 @@ test('a process documented as it is gets no input card and no question about an 
   assert.ok(!cards.some(c => c.group === 'input'));
   assert.ok(!cards.some(c => c.target.kind === 'system' && c.target.field === 'access'));
 });
+
+test('an application with no way in recorded is a card to choose from, never plain words', () => {
+  const card = queue(gold).find(c => c.itemKey === 'system:sys-scanner')!;
+  assert.equal(card.answer, 'choose');
+  assert.deepEqual(card.choices, [['0', 'API'], ['1', 'Screens'], ['2', 'File'], ['3', 'Database'], ['4', 'Event'], ['5', 'Email'], ['none', 'No way in: a person does this']]);
+  assert.equal(originLine(card.origin), 'Missing: Not confirmed yet: how the automation can use Office scanner (Pune).');
+  // An application whose ways in are listed but unknown is still read from words.
+  assert.equal(queue(gold).find(c => c.itemKey === 'system:sys-servicenow')!.answer, 'words');
+});

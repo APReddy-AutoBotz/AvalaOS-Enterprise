@@ -21,6 +21,7 @@ export function howToAnswer(item: TriageItem, m: ProcessModel): string {
     case 'system': return m.systems.length ? `Name the application, for example one of: ${m.systems.map(s => s.name).join(', ')}.` : 'Name the application.';
     case 'number': return 'A number, with its unit (per month, minutes, and so on).';
     case 'access': return `For each, say whether it can be used, exists but is not confirmed, or is not available: ${(item.interfaces ?? []).map(x => x.label).join('; ')}.`;
+    case 'ways': return 'Say whether the API and the screens can be used, exist but are not confirmed, or are not available, and the same for any other way in (file, database, event, email); or write "No way in".';
     case 'text': return 'In your own words.';
     case 'free': return 'In your own words; say who confirmed it if it was not you.';
     case 'choice': return `One of: ${(item.choices ?? []).map(c => c[1]).join(', ')}.`;

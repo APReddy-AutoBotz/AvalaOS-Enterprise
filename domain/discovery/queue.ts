@@ -7,6 +7,7 @@ import type { ProcessModel } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { groupLabel, triage, type Triage, type TriageItem } from '../questions/triage.ts';
 import { whyItMatters } from '../questions/interview.ts';
+import { NO_WAY_IN, NO_WAY_IN_LABEL, WAYS } from '../questions/ways.ts';
 import { makeCard, type Card, type CardGroup, type CardOrigin } from './card.ts';
 import { conflictCards, shapeCards, startCards } from './checklist.ts';
 import { inputCards } from './inputs.ts';
@@ -38,6 +39,9 @@ function gapFor(item: TriageItem, m: ProcessModel): string {
   return 'Asked, and not answered yet.';
 }
 
+/** The choices of a ways-in card: each way by its index, then "No way in". */
+const waysChoices = (): [string, string][] => [...WAYS.map((w, i) => [String(i), w.label] as [string, string]), [NO_WAY_IN, NO_WAY_IN_LABEL]];
+
 /** A card for a question the triage lists: its quote when a session raised it, else its gap in words. */
 export function triageCard(item: TriageItem, m: ProcessModel): Card | null {
   const stored = m.openQuestions.find(q => item.questionIds.includes(q.id) && q.raisedBy);
@@ -46,7 +50,9 @@ export function triageCard(item: TriageItem, m: ProcessModel): Card | null {
   const group: CardGroup = item.group === 'decides' ? (label === 'Settles the decided approach' ? 'settles' : 'decides') : stored?.raisedBy ? 'said' : 'signoff';
   return makeCard({
     key: `item:${item.key}`, itemKey: item.key, group, origin, question: item.question, why: whyItMatters(item), target: item.target, updates: item.affects,
-    answer: item.kind === 'choice' ? 'choose' : 'words', ...(item.choices ? { choices: item.choices } : {}),
+    // An application with no way in recorded is chosen, way by way or "No way in", never asked in plain words.
+    answer: item.kind === 'choice' || item.kind === 'ways' ? 'choose' : 'words',
+    ...(item.kind === 'ways' ? { choices: waysChoices() } : item.choices ? { choices: item.choices } : {}),
   });
 }
 
