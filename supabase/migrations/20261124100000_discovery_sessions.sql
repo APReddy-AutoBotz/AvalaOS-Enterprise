@@ -42,9 +42,22 @@ create index discovery_sessions_updated_by_idx on public.discovery_sessions (upd
 -- Who started it, who wrote last and when are the database's, not the writer's. A write must name the version it
 -- read (an update that leaves `version` as it is names the current one); the stored version is then one more.
 -- A session stays with its process and workspace, and a finished one is never changed.
+--
+-- One exception, so an account can always be deleted (the privacy notice promises removal on request): deleting a
+-- person's account sets `started_by` and `updated_by` to null through the links' `on delete set null`. That update
+-- arrives from the database's own link check, at trigger depth 2, never from a person's own statement (depth 1).
+-- It is let through as it is, open or finished, with no version count and no stamp, when it changes nothing but
+-- those two columns, each only from a value to null. A person's own update that sets them to null is a normal
+-- write: who started the session is put back and the writer is stamped.
 create function app_private.discovery_session_rules() returns trigger
 language plpgsql set search_path = '' as $$
 begin
+  if tg_op = 'UPDATE' and pg_trigger_depth() > 1
+     and (new.started_by is not distinct from old.started_by or (old.started_by is not null and new.started_by is null))
+     and (new.updated_by is not distinct from old.updated_by or (old.updated_by is not null and new.updated_by is null))
+     and (to_jsonb(new) - 'started_by' - 'updated_by') = (to_jsonb(old) - 'started_by' - 'updated_by') then
+    return new;
+  end if;
   if tg_op = 'UPDATE' then
     if old.status = 'finished' then
       raise exception 'FINISHED: this discovery session is finished; start a new one' using errcode = 'P0001';

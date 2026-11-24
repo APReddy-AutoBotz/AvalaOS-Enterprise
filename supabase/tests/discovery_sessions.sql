@@ -1,5 +1,5 @@
 -- Behaviour checks for package B's discovery sessions (migration discovery_sessions). Rolls back: success ends
--- with the error "ALL_TESTS_PASSED (9 groups)"; any other error names the failed check. It creates its own
+-- with the error "ALL_TESTS_PASSED (10 groups)"; any other error names the failed check. It creates its own
 -- people, organisation and processes. Run it after the migration, in the same transaction as the trial does,
 -- or against a database where the migration is applied.
 
@@ -17,6 +17,7 @@ declare
   editor_u uuid := gen_random_uuid();
   viewer_u uuid := gen_random_uuid();
   outsider_u uuid := gen_random_uuid();
+  gone_u uuid := gen_random_uuid(); s3 uuid; s4 uuid; s5 uuid; q uuid; v3 int; v4 int; k3 text; k4 text;
   ws uuid; ws2 uuid; p uuid; p2 uuid; p3 uuid; s uuid; s2 uuid; rev uuid; n int; v int; who uuid; started uuid; st text; fin timestamptz;
   kept jsonb := '{"waiting": [{"words": "By email, on Mondays", "question": "How do invoices arrive, and when?"}], "used": {"calls": 2, "tokens": 5400, "readings": 1}}';
   step jsonb := '{"op": "add", "path": "/steps/0", "value": {"id": "s-1", "name": "Receive invoice", "description": "", "roleIds": [], "systemIds": [], "taskType": "receive", "inputs": [], "outputs": [], "ruleIds": [], "exceptionIds": [], "status": "user-confirmed", "sources": []}}';
@@ -24,7 +25,8 @@ declare
 begin
   insert into auth.users (id, email, invited_at, email_confirmed_at) values
     (admin_u, 'a-' || admin_u || '@example.test', now(), now()), (editor_u, 'e-' || editor_u || '@example.test', now(), now()),
-    (viewer_u, 'v-' || viewer_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now());
+    (viewer_u, 'v-' || viewer_u || '@example.test', now(), now()), (outsider_u, 'o-' || outsider_u || '@example.test', now(), now()),
+    (gone_u, 'g-' || gone_u || '@example.test', now(), now());
   delete from app_private.platform_owners;
   perform pg_temp.as_user(admin_u);
   ws := (public.create_organization('Discovery test', 'AP') ->> 'workspaceId')::uuid;
@@ -34,7 +36,7 @@ begin
   perform pg_temp.as_user(outsider_u);
   ws2 := (public.create_organization('Other', 'X') ->> 'workspaceId')::uuid;
   perform pg_temp.as_owner();
-  insert into public.workspace_members (workspace_id, user_id, role, can_approve) values (ws, editor_u, 'editor', false), (ws, viewer_u, 'viewer', false);
+  insert into public.workspace_members (workspace_id, user_id, role, can_approve) values (ws, editor_u, 'editor', false), (ws, viewer_u, 'viewer', false), (ws, gone_u, 'editor', false);
 
   -- 1. An editor starts a session; the database records who and when, whatever the page sends, at version 1.
   perform pg_temp.as_user(editor_u);
@@ -196,6 +198,64 @@ begin
   delete from public.workspaces where id = ws;
   select count(*) into n from public.discovery_sessions where workspace_id = ws;
   if n <> 0 then raise exception 'FAILED 9d: a session outlived its workspace'; end if;
+  passed := passed + 1;
+
+  -- 10. An account can always be deleted (found in review, 24 November 2026). A person who started and last wrote
+  --     an open session and a finished one is deleted: the deletion succeeds, both rows stay, who started and who
+  --     wrote are cleared, and the state, status and version are as they were. A person's own update that clears
+  --     who started a session leaves it as it was.
+  perform pg_temp.as_owner();
+  insert into public.processes (workspace_id, name) values (ws2, 'Claims') returning id into p;
+  insert into public.processes (workspace_id, name) values (ws2, 'Returns') returning id into p2;
+  insert into public.processes (workspace_id, name) values (ws2, 'Credits') returning id into q;
+  insert into public.workspace_members (workspace_id, user_id, role, can_approve) values (ws2, gone_u, 'editor', false), (ws2, editor_u, 'editor', false);
+  perform pg_temp.as_user(gone_u);
+  insert into public.discovery_sessions (workspace_id, process_id, state) values (ws2, p, kept) returning id into s3;
+  update public.discovery_sessions set state = state || '{"read": ["n:1"]}' where id = s3;
+  insert into public.discovery_sessions (workspace_id, process_id, state) values (ws2, p2, kept) returning id into s4;
+  update public.discovery_sessions set status = 'finished' where id = s4;
+  perform pg_temp.as_user(editor_u);
+  insert into public.discovery_sessions (workspace_id, process_id) values (ws2, q) returning id into s5;
+  perform pg_temp.as_owner();
+  select version, state::text into v3, k3 from public.discovery_sessions where id = s3;
+  select version, state::text into v4, k4 from public.discovery_sessions where id = s4;
+  delete from auth.users where id = gone_u;
+  select count(*) into n from public.discovery_sessions
+    where (id = s3 and status = 'open' and version = v3 and state::text = k3 or id = s4 and status = 'finished' and version = v4 and state::text = k4)
+      and started_by is null and updated_by is null;
+  if n <> 2 then raise exception 'FAILED 10a: after the account was deleted, % of 2 sessions are as they were with no one named', n; end if;
+  perform pg_temp.as_user(editor_u);
+  update public.discovery_sessions set started_by = null where id = s5;
+  select started_by into started from public.discovery_sessions where id = s5;
+  if started is distinct from editor_u then raise exception 'FAILED 10b: a person cleared who started a session'; end if;
+  perform pg_temp.as_owner();
+  update public.discovery_sessions set started_by = null, state = '{}' where id = s3;
+  select version into v from public.discovery_sessions where id = s3;
+  if v <> v3 + 1 then raise exception 'FAILED 10c: a direct update with more than the clean-up was not a normal write'; end if;
+  -- The same from inside another trigger (depth 2, as the link's clean-up arrives): more than clearing the two
+  -- names is still a normal write, counted and stamped.
+  create temp table poke (id uuid);
+  create function pg_temp.poke_session() returns trigger language plpgsql as $f$
+  begin update public.discovery_sessions set updated_by = null, state = '{"poked": true}' where id = new.id; return new; end $f$;
+  create trigger poke after insert on poke for each row execute function pg_temp.poke_session();
+  insert into poke values (s3);
+  select count(*) into n from public.discovery_sessions where id = s3 and version = v3 + 2 and state ? 'poked';
+  if n <> 1 then raise exception 'FAILED 10d: an update from a trigger that did more than the clean-up went through as it was'; end if;
+  -- And naming someone, rather than clearing a name, is never the clean-up: who started it is put back.
+  create temp table name_someone (id uuid, who uuid);
+  create function pg_temp.name_someone() returns trigger language plpgsql as $f$
+  begin update public.discovery_sessions set started_by = new.who where id = new.id; return new; end $f$;
+  create trigger name_someone after insert on name_someone for each row execute function pg_temp.name_someone();
+  insert into name_someone values (s3, editor_u);
+  select count(*) into n from public.discovery_sessions where id = s3 and started_by is null and version = v3 + 3;
+  if n <> 1 then raise exception 'FAILED 10e: an update from a trigger that named who started a session went through'; end if;
+  create function pg_temp.name_writer() returns trigger language plpgsql as $f$
+  begin update public.discovery_sessions set updated_by = new.who where id = new.id; return new; end $f$;
+  drop trigger name_someone on name_someone;
+  create trigger name_writer after insert on name_someone for each row execute function pg_temp.name_writer();
+  insert into name_someone values (s3, viewer_u);
+  select count(*) into n from public.discovery_sessions where id = s3 and updated_by is distinct from viewer_u and version = v3 + 4;
+  if n <> 1 then raise exception 'FAILED 10f: an update from a trigger that named who wrote last went through'; end if;
   passed := passed + 1;
 
   raise exception 'ALL_TESTS_PASSED (% groups)', passed;
