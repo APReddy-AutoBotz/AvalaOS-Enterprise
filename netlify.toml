@@ -23,3 +23,5 @@
     # The microphone for "Speak your answer", for this site only; camera and location stay off.
     Permissions-Policy = "camera=(), microphone=(self), geolocation=()"
     X-Frame-Options = "DENY"
+    # The content security policy is not here: it is built with the site from the build's own settings
+    # (domain/site/csp.ts) and written as the built site's _headers file, which Netlify adds to these.

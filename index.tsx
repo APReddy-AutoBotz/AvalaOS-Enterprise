@@ -6,7 +6,7 @@ import ReactDOM from 'react-dom/client';
 import { parseJourneyPath } from './domain/workspace/route';
 import { canonicalUrl, publicPage } from './domain/site/pages';
 import { teardownCanonical } from './domain/site/teardownPath';
-import { startMonitoring } from './journey/monitoring';
+import { startMonitoring, watchPolicy } from './journey/monitoring';
 import { ErrorBoundary } from './journey/ErrorBoundary';
 import { startCounting } from './journey/home/visits';
 
@@ -47,7 +47,9 @@ const Root = React.lazy(async (): Promise<{ default: React.ComponentType }> => {
   return import('./journey/JourneyApp');
 });
 
-// Errors are reported only when the build has VITE_SENTRY_DSN (journey/monitoring.ts).
+// Errors are reported only when the build has VITE_SENTRY_DSN (journey/monitoring.ts), and so is what the
+// content security policy would block (netlify.toml, domain/site/csp.ts).
+watchPolicy();
 startMonitoring();
 
 // Visits to the public pages are counted on avalaos.com only, signed out (package 12, journey/home/visits.ts).
