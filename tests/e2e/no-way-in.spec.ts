@@ -1,7 +1,7 @@
 // An application with no way in recorded (plan `claude/no-way-in-answer-plan-23-nov.md`, approved 23 November 2026):
 // on the sample in an organisation set to "Assess", the office scanner is asked as a choice of ways in. Words that
 // name no way in show a plain line and save nothing; "No way in" says what it will record before Save, and closes
-// the question, so the line goes from 3 to 2. A way the assessment does not read, chosen alone, saves nothing. The rules are tested in domain/questions/ways.test.ts.
+// the question; the line counts 2 throughout, as the scanner's question is a device's. A way the assessment does not read, chosen alone, saves nothing. The rules are tested in domain/questions/ways.test.ts.
 import fs from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
 import { openSettings, shot, signInAndCreateProcess } from './helpers.ts';
@@ -33,10 +33,14 @@ test('the scanner: words that name no way in save nothing; "No way in" says what
     localStorage.setItem(KEY, JSON.stringify(state));
   }, { gold, KEY });
   await page.goto(`${processUrl}/assessment`);
-  await expect(page.getByTestId('questions-line')).toContainText('3 open questions could change the recommendation');
+  // The scanner is a device: its question is Detail, not one of the 2 that could change the recommendation,
+  // and waits (owner, 24 November 2026). It is answered from "Can wait".
+  await expect(page.getByTestId('questions-line')).toContainText('2 open questions could change the recommendation');
   await page.getByTestId('questions-line').getByRole('button', { name: 'Answer them' }).click();
 
   const assistant = page.getByTestId('gaps-assistant');
+  await expect(assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /Office scanner/ })).toHaveCount(0);
+  await assistant.getByTestId('gaps-view-wait').click();
   await assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /Office scanner/ }).click();
   const card = assistant.getByTestId('gap-question');
   await expect(card.getByRole('list', { name: 'Ways in' }).getByRole('listitem')).toHaveCount(6);
@@ -64,7 +68,7 @@ test('the scanner: words that name no way in save nothing; "No way in" says what
   await expect(card.getByTestId('ways-record')).toContainText('"Scan paper invoice" is still recommended for');
   await shot(page, '165-gaps-no-way-in');
   await card.getByRole('button', { name: 'Save answer' }).click();
-  await expect(assistant.getByTestId('gaps-focused')).toContainText('Showing the 2 that could change the recommendation');
+  await expect(assistant.getByRole('list', { name: 'Questions' }).getByRole('button', { name: /Office scanner/ })).toHaveCount(0);
   const after = await kept(page);
   const scanner = after.model.systems.find((s: { id: string }) => s.id === 'sys-scanner');
   expect(scanner.access.map((a: { method: string; access: string }) => [a.method, a.access])).toEqual([['api', 'confirmed_absent'], ['ui', 'confirmed_absent']]);

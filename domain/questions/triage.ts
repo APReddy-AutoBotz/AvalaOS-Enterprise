@@ -8,7 +8,7 @@ import { gaps, stepsForSystem, type Gap } from '../processModel/selectors.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { buildingSystem } from '../plan/intended.ts';
 import { asksQuestion, purposeOf, type PurposeValue } from '../plan/purpose.ts';
-import { APPROACH_LABEL } from '../assess/scoring.ts';
+import { APPROACH_LABEL, NON_INTEGRABLE } from '../assess/scoring.ts';
 import { choicesFor } from './answer.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
@@ -110,6 +110,10 @@ function answeredBy(m: ProcessModel, q: OpenQuestion): string | null {
 function classify(m: ProcessModel, t: ElementTarget, text: string, open: Set<string>): { group: QGroup; owner: QOwner; affects: string[]; uses?: number } {
   switch (t.kind) {
     case 'system': {
+      // A device the assessment does not route through (NON_INTEGRABLE, a scanner): its access question is still
+      // asked, for the documents, but cannot change the recommendation (owner, 24 November 2026).
+      const sys = m.systems.find(x => x.id === t.id);
+      if (sys && NON_INTEGRABLE.includes(sys.kind)) return { group: 'detail', owner: 'it', affects: ['PDD 2.2 Applications'] };
       const used = stepsForSystem(m, t.id!).filter(s => open.has(s.id)).length;
       return { group: used ? 'decides' : 'detail', owner: 'it', affects: [`Assessment: ${used} ${used === 1 ? 'step uses' : 'steps use'} it`, 'PDD 2.2 Applications'], uses: used };
     }

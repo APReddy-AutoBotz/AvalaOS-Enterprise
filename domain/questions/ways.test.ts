@@ -37,8 +37,9 @@ test('an application with no way in recorded is asked as the six ways in, with i
   assert.equal(items(gold).filter(i => i.kind === 'ways').length, 1);
 });
 
-test('"No way in" closes it: the line goes from 3 to 2, and the meeting\'s result counts it closed', () => {
-  assert.equal(assessmentLine(gold, assessProcess(gold))!.n, 3);
+test('"No way in" closes it, and the meeting\'s result counts it closed; the scanner, a device, was never in the line', () => {
+  // A device's access question is Detail (owner, 24 November 2026), so the line counts SAP and ServiceNow only.
+  assert.equal(assessmentLine(gold, assessProcess(gold))!.n, 2);
   const after = save(gold, { pick: NO_WAY_IN });
   assert.equal(scanner(after), undefined);
   assert.equal(assessmentLine(after, assessProcess(after))!.n, 2);
@@ -75,7 +76,7 @@ test('only a way the assessment does not read (Email, File) builds no answer and
   const sn = items(bare).find(i => i.key === 'system:sys-servicenow')!;
   assert.equal(sn.kind, 'ways');
   const line = assessmentLine(bare, assessProcess(bare))!.n;
-  assert.equal(line, 3);
+  assert.equal(line, 2);
   const only: Record<number, AccessStatus>[] = [{ 5: 'confirmed_absent' }, { 2: 'confirmed' }, { 2: 'confirmed', 5: 'reported' }];
   for (const statuses of only) {
     assert.equal(buildAnswer(sn, bare, { statuses }), null, JSON.stringify(statuses));
@@ -147,13 +148,14 @@ test('words are read into the ways as an application\'s interfaces are, from a q
 });
 
 test('the counts: the weekday email\'s and My work\'s are unchanged before any answer, and drop by exactly one after "No way in"', () => {
+  // The scanner's question, a device's, waits (Detail) rather than being asked now.
   const row = (m: ProcessModel) => digestFacts({ status: 'draft', openQuestions: 0, proposalsWaiting: 0, analystId: null, architectId: null, approverId: null, model: m, look: null, dismissed: [] } as never).questions;
-  assert.deepEqual(row(gold), { now: 3, found: 0, wait: 9 });
-  assert.deepEqual(firstListCounts(gold), { now: 3, found: 0, wait: 9 });
+  assert.deepEqual(row(gold), { now: 2, found: 0, wait: 10 });
+  assert.deepEqual(firstListCounts(gold), { now: 2, found: 0, wait: 10 });
   const after = save(gold, { pick: NO_WAY_IN });
   assert.deepEqual(row(after), { now: 2, found: 0, wait: 9 });
   // Words alone, recorded the old way, change nothing.
-  assert.deepEqual(row(record(scanner(gold), 'Some words.')(gold).model), { now: 3, found: 0, wait: 9 });
+  assert.deepEqual(row(record(scanner(gold), 'Some words.')(gold).model), { now: 2, found: 0, wait: 10 });
   // The demo's sample: its scanner, if still with no way in, is asked the same way; its counts are what the guard of package 16 pins.
   assert.deepEqual(row(demo), digestFacts({ status: 'draft', openQuestions: 0, proposalsWaiting: 0, analystId: null, architectId: null, approverId: null, model: demo, look: null, dismissed: [] } as never).questions);
 });
