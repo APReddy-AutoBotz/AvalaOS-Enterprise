@@ -30,22 +30,37 @@ export const waysInterfaces = (): { index: number; label: string; access: Access
 /** The ways a person settled, by index. */
 const settled = (statuses: Record<number, AccessStatus> = {}) => WAYS.map((w, i) => ({ ...w, access: statuses[i] ?? 'unknown' })).filter(w => w.access !== 'unknown');
 
-/** The answer in words, as the question is closed with it; null when nothing is settled. */
+/**
+ * Whether a choice of ways in can be saved: the API or the screens settled, the two the assessment reads
+ * (found in review, 24 November 2026: "Email: not available" alone closed the question, and the step stayed
+ * recommended for RPA though nobody said the screens could be used). Other ways may be answered with them,
+ * never alone. "No way in" settles both.
+ */
+export const settlesWaysIn = (a: { pick?: string; statuses?: Record<number, AccessStatus> }): boolean =>
+  a.pick === NO_WAY_IN || settled(a.statuses).some(w => w.method === 'api' || w.method === 'ui');
+
+/** The line on the card when only other ways are chosen; Save stays off. */
+export const WAYS_NEED_API_OR_SCREENS = 'Say whether the API or the screens can be used as well; the recommendation depends on them.';
+export function waysMissing(a: { pick?: string; statuses?: Record<number, AccessStatus> }): string | null {
+  return !settlesWaysIn(a) && settled(a.statuses).length ? WAYS_NEED_API_OR_SCREENS : null;
+}
+
+/** The answer in words, as the question is closed with it; null unless the API or the screens are settled. */
 export function waysNote(a: { pick?: string; statuses?: Record<number, AccessStatus> }): string | null {
   if (a.pick === NO_WAY_IN) return NO_WAY_IN_NOTE;
   const s = settled(a.statuses);
-  return s.length ? `Ways in: ${s.map(w => `${w.label} ${STATUS_WORDS[w.access]}`).join('; ')}.` : null;
+  return settlesWaysIn(a) ? `Ways in: ${s.map(w => `${w.label} ${STATUS_WORDS[w.access]}`).join('; ')}.` : null;
 }
 
-/** The edit: one way in per way settled (the existing shape, confirmed by a person); for "No way in", screens and API not available and robots not allowed on the screens. Null when nothing is settled. */
+/** The edit: one way in per way settled (the existing shape, confirmed by a person); for "No way in", screens and API not available and robots not allowed on the screens. Null unless the API or the screens are settled (settlesWaysIn). */
 export function waysEdit(systemId: string, a: { pick?: string; statuses?: Record<number, AccessStatus> }): ((m: ProcessModel) => OpResult)[] | null {
   if (a.pick === NO_WAY_IN) return [
     m => addWayIn(m, { systemId, method: 'api', access: 'confirmed_absent' }),
     m => addWayIn(m, { systemId, method: 'ui', access: 'confirmed_absent' }),
     m => setSystemUiAllowed(m, { systemId, value: false }),
   ];
-  const s = settled(a.statuses);
-  return s.length ? s.map(w => (m: ProcessModel) => addWayIn(m, { systemId, method: w.method, access: w.access })) : null;
+  if (!settlesWaysIn(a)) return null;
+  return settled(a.statuses).map(w => (m: ProcessModel) => addWayIn(m, { systemId, method: w.method, access: w.access }));
 }
 
 /**

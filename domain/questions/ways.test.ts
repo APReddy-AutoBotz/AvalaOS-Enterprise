@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import type { ProcessModel } from '../processModel/types.ts';
+import type { AccessStatus, ProcessModel } from '../processModel/types.ts';
 import { validateModel } from '../processModel/validate.ts';
 import { applyPatch } from '../processModel/jsonPatch.ts';
 import { addWayIn, setSystemApi, updateFact, addStep, addSystem, removeStep } from '../processModel/patch.ts';
@@ -14,11 +14,11 @@ import { triage, type TriageItem } from './triage.ts';
 import { buildAnswer, record } from './answer.ts';
 import { notesSegments, proposalsFrom } from './notes.ts';
 import { buildPacks, packDocument } from './packs.ts';
-import { followUpFor } from './interview.ts';
+import { followUpFor, readInterview } from './interview.ts';
 import { assessmentLine, meetingResult } from './result.ts';
 import { firstListCounts } from './counts.ts';
 import { digestFacts } from '../work/digest.ts';
-import { earlierAnswers, NO_WAY_IN, waysRecordLine, WAYS } from './ways.ts';
+import { earlierAnswers, NO_WAY_IN, waysMissing, waysRecordLine, WAYS, WAYS_NEED_API_OR_SCREENS } from './ways.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const demo: ProcessModel = (JSON.parse(readFileSync(new URL('../../public/demo-data/sample.json', import.meta.url), 'utf8')) as { revisions: { state: string; model: ProcessModel }[] }).revisions.find(r => r.state === 'approved')!.model;
@@ -51,15 +51,54 @@ test('"No way in" closes it: the line goes from 3 to 2, and the meeting\'s resul
   assert.equal(q.answer, 'No way in: a person does this.');
 });
 
-test('one way in chosen closes it; words alone record nothing and leave no answered question behind an open one', () => {
-  const after = save(gold, { statuses: { 2: 'confirmed' } });
-  assert.equal(scanner(after), undefined);
-  assert.deepEqual(after.systems.find(s => s.id === 'sys-scanner')!.access.map(a => [a.method, a.access]), [['file', 'confirmed']]);
-  assert.equal(after.openQuestions.at(-1)!.answer, 'Ways in: File can be used.');
+test('the API alone or the screens alone close it; words alone record nothing and leave no answered question behind an open one', () => {
+  const api = save(gold, { statuses: { 0: 'confirmed_absent' } });
+  assert.equal(scanner(api), undefined);
+  assert.deepEqual(api.systems.find(s => s.id === 'sys-scanner')!.access.map(a => [a.method, a.access]), [['api', 'confirmed_absent']]);
+  assert.equal(api.openQuestions.at(-1)!.answer, 'Ways in: API not available.');
+  const ui = save(gold, { statuses: { 1: 'confirmed' } });
+  assert.equal(scanner(ui), undefined);
+  assert.equal(ui.openQuestions.at(-1)!.answer, 'Ways in: Screens can be used.');
   assert.equal(buildAnswer(scanner(gold), gold, { text: 'The scanner drops PDFs into a folder.' }), null);
   assert.equal(buildAnswer(scanner(gold), gold, { statuses: { 0: 'unknown' } }), null);
-  // Words with a choice are kept with it.
-  assert.equal(save(gold, { statuses: { 2: 'confirmed' }, text: 'It drops PDFs into a shared folder.' }).openQuestions.at(-1)!.answer, 'Ways in: File can be used. It drops PDFs into a shared folder.');
+  // Other ways are answered with the API or the screens, and words with a choice are kept with it.
+  const both = save(gold, { statuses: { 0: 'confirmed_absent', 2: 'confirmed' }, text: 'It drops PDFs into a shared folder.' });
+  assert.deepEqual(both.systems.find(s => s.id === 'sys-scanner')!.access.map(a => [a.method, a.access]), [['api', 'confirmed_absent'], ['file', 'confirmed']]);
+  assert.equal(both.openQuestions.at(-1)!.answer, 'Ways in: API not available; File can be used. It drops PDFs into a shared folder.');
+});
+
+// Found in review (24 November 2026): one way in the assessment does not read closed the question. On the sample with
+// ServiceNow's ways in removed, "Email: not available" alone took the line from 3 to 2 and its step stayed recommended
+// for RPA, though nobody said the screens or the API could be used.
+test('only a way the assessment does not read (Email, File) builds no answer and leaves no answered question; the card says what is needed', () => {
+  const bare: ProcessModel = { ...gold, systems: gold.systems.map(x => (x.id === 'sys-servicenow' ? { ...x, access: [] } : x)) };
+  const sn = items(bare).find(i => i.key === 'system:sys-servicenow')!;
+  assert.equal(sn.kind, 'ways');
+  const line = assessmentLine(bare, assessProcess(bare))!.n;
+  assert.equal(line, 3);
+  const only: Record<number, AccessStatus>[] = [{ 5: 'confirmed_absent' }, { 2: 'confirmed' }, { 2: 'confirmed', 5: 'reported' }];
+  for (const statuses of only) {
+    assert.equal(buildAnswer(sn, bare, { statuses }), null, JSON.stringify(statuses));
+    assert.equal(buildAnswer(sn, bare, { statuses, text: 'We email them.' }), null);
+    assert.equal(waysRecordLine(bare, sn, { statuses }), null);
+    assert.equal(waysMissing({ statuses }), WAYS_NEED_API_OR_SCREENS);
+  }
+  assert.equal(WAYS_NEED_API_OR_SCREENS, 'Say whether the API or the screens can be used as well; the recommendation depends on them.');
+  assert.equal(waysMissing({}), null);
+  assert.equal(waysMissing({ statuses: { 1: 'confirmed', 5: 'confirmed_absent' } }), null);
+  assert.equal(waysMissing({ pick: NO_WAY_IN }), null);
+  // Nothing saved, so the line and the stored questions are as they were.
+  assert.equal(assessmentLine(bare, assessProcess(bare))!.n, line);
+  assert.equal(bare.openQuestions.filter(q => q.status === 'answered').length, gold.openQuestions.filter(q => q.status === 'answered').length);
+  // The same rule for words read from notes and for the interview.
+  const { ids } = notesSegments(bare, [sn], 'We send them by email; there is no email way in for the robot.');
+  const emailOnly = [{ questionId: '1', value: 'confirmed_absent', interface: '5', certainty: 'stated' as const, segmentId: 'n:1', excerpt: 'there is no email way in' }];
+  assert.deepEqual(proposalsFrom(bare, [sn], ids, emailOnly), []);
+  assert.equal(readInterview(bare, sn, ids, emailOnly, 1, 'We send them by email.').kind, 'followUp');
+  assert.equal(readInterview(bare, sn, ids, emailOnly, 2, 'We send them by email.').kind, 'unanswered');
+  const withApi = [...emailOnly, { questionId: '1', value: 'confirmed', interface: '0', certainty: 'stated' as const, segmentId: 'n:1', excerpt: 'the REST API can be used' }];
+  assert.equal(proposalsFrom(bare, [sn], ids, withApi)[0]!.display, 'API: can be used; Email: not available');
+  assert.equal(readInterview(bare, sn, ids, withApi, 1, 'The REST API can be used.').kind, 'record');
 });
 
 test('"This will record: …" before Save, and for "No way in" what happens to the steps done in the application', () => {
@@ -104,7 +143,7 @@ test('words are read into the ways as an application\'s interfaces are, from a q
   assert.equal(scanner(after), undefined);
   assert.match(followUpFor(item, gold), /^I could not tell how the automation can reach it from that\. .* Or is there no way in at all\?$/);
   const pack = buildPacks(triage(gold, assessProcess(gold)), gold).find(x => x.items.some(i => i.item.key === 'system:sys-scanner'))!;
-  assert.match(JSON.stringify(packDocument(pack, gold.meta.name, '23 Nov 2026')), /For each way in \(API, screens, file, database, event, email\)/);
+  assert.match(JSON.stringify(packDocument(pack, gold.meta.name, '23 Nov 2026')), /Say whether the API and the screens can be used, .* \(file, database, event, email\); or write \\"No way in\\"/);
 });
 
 test('the counts: the weekday email\'s and My work\'s are unchanged before any answer, and drop by exactly one after "No way in"', () => {

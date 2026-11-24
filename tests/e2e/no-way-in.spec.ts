@@ -1,7 +1,7 @@
 // An application with no way in recorded (plan `claude/no-way-in-answer-plan-23-nov.md`, approved 23 November 2026):
 // on the sample in an organisation set to "Assess", the office scanner is asked as a choice of ways in. Words that
 // name no way in show a plain line and save nothing; "No way in" says what it will record before Save, and closes
-// the question, so the line goes from 3 to 2. The rules are tested in domain/questions/ways.test.ts.
+// the question, so the line goes from 3 to 2. A way the assessment does not read, chosen alone, saves nothing. The rules are tested in domain/questions/ways.test.ts.
 import fs from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
 import { openSettings, shot, signInAndCreateProcess } from './helpers.ts';
@@ -49,8 +49,17 @@ test('the scanner: words that name no way in save nothing; "No way in" says what
   await expect(card.getByRole('button', { name: 'Save answer' })).toBeDisabled();
   expect(await kept(page)).toEqual(before);
 
+  // Only a way the assessment does not read (found in review, 24 November 2026): the card asks for the API or
+  // the screens, and Save stays off.
+  await card.getByLabel('Status of Email').selectOption('confirmed_absent');
+  await expect(card.getByTestId('ways-missing')).toHaveText('Say whether the API or the screens can be used as well; the recommendation depends on them.');
+  await expect(card.getByTestId('ways-record')).toHaveCount(0);
+  await expect(card.getByRole('button', { name: 'Save answer' })).toBeDisabled();
+  expect(await kept(page)).toEqual(before);
+
   // "No way in": what it records, and what happens to the step done in the scanner, before Save.
   await card.getByRole('button', { name: 'No way in: a person does this' }).click();
+  await expect(card.getByTestId('ways-missing')).toHaveCount(0);
   await expect(card.getByTestId('ways-record')).toContainText('This will record: no way in to Office scanner (Pune); a person does the work in it.');
   await expect(card.getByTestId('ways-record')).toContainText('"Scan paper invoice" is still recommended for');
   await shot(page, '165-gaps-no-way-in');

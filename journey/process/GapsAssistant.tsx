@@ -21,7 +21,7 @@ import { messageOf } from '../ui.tsx';
 import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
 import type { Branding } from '../../domain/docs/branding.ts';
 import { couldChange, focusedLine, meetingResult } from '../../domain/questions/result.ts';
-import { earlierAnswers, NO_WAY_IN, NO_WAY_IN_LABEL, waysRecordLine } from '../../domain/questions/ways.ts';
+import { earlierAnswers, NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../domain/questions/ways.ts';
 import type { GapsMode } from './openGaps.ts';
 
 const GROUP_TONE: Record<QGroup, string> = { decides: 'bg-[#002C4B] text-white', signoff: 'bg-sky-100 text-sky-900', detail: 'bg-slate-100 text-slate-700' };
@@ -300,6 +300,8 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
               <button type="button" aria-pressed={pick === NO_WAY_IN} onClick={() => { if (pick === NO_WAY_IN) setPick(''); else { setPick(NO_WAY_IN); setStatuses(Object.fromEntries((item.interfaces ?? []).map(x => [x.index, x.access]))); } }}
                 className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold ring-1 ring-inset', pick === NO_WAY_IN ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white text-slate-800 ring-slate-300 hover:bg-slate-50')}>{NO_WAY_IN_LABEL}</button>
               {/* What Save will record, and for "No way in" what happens to the steps done in the application. */}
+              {/* Only other ways chosen: the API or the screens are still needed; Save stays off. */}
+              {waysMissing({ pick, statuses }) && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200" role="status" data-testid="ways-missing">{waysMissing({ pick, statuses })}</p>}
               {waysRecordLine(model, item, { pick, statuses }) && <p className="rounded-lg bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950 ring-1 ring-inset ring-sky-200" role="status" data-testid="ways-record">{waysRecordLine(model, item, { pick, statuses })}</p>}
             </div>
           )}

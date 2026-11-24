@@ -4,6 +4,7 @@
 import type { Segment, TaskDefinition } from '../ai/gateway.ts';
 import type { AccessStatus, ProcessModel } from '../processModel/types.ts';
 import type { TriageItem } from './triage.ts';
+import { settlesWaysIn } from './ways.ts';
 
 const str = { type: 'string' } as const;
 
@@ -108,5 +109,6 @@ export function proposalsFrom(model: ProcessModel, items: TriageItem[], ids: Map
       out.set(item.key, { ...base, display: v, answer: { text: v } });
     }
   }
-  return [...out.values()];
+  // A choice of ways in that settles neither the API nor the screens is not an answer (domain/questions/ways.ts).
+  return [...out.values()].filter(p => items.find(i => i.key === p.itemKey)?.kind !== 'ways' || settlesWaysIn(p.answer));
 }
