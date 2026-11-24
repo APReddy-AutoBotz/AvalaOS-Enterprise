@@ -1,11 +1,18 @@
 // Error monitoring (Sentry, free Developer plan). Off unless the build has VITE_SENTRY_DSN: then the SDK is
 // loaded on demand, errors only (no session replay, no performance tracing, no console logs), and every
 // report goes through scrubEvent (domain/site/errors.ts) first: no account, email address or link token.
+// The content security policy's breaches (domain/site/csp.ts) go the same way, one short message each
+// (domain/site/cspReport.ts), heard from the browser's own event: nothing on the page waits for them.
 import { scrubBreadcrumb, scrubEvent, type ReportBreadcrumb, type ReportEvent } from '../domain/site/errors.ts';
+import { POLICY_REPORTS_PER_PAGE, policyReport, type PolicyReport } from '../domain/site/cspReport.ts';
 
 type SentryModule = typeof import('@sentry/react');
 let sentry: SentryModule | null = null;
 const early: unknown[] = [];
+const earlyPolicy: PolicyReport[] = [];
+const policySeen = new Set<string>();
+
+const sendPolicy = (S: SentryModule, r: PolicyReport) => S.captureMessage(r.message, { level: 'warning', tags: r.tags });
 
 export async function startMonitoring(dsn: string | undefined = import.meta.env.VITE_SENTRY_DSN): Promise<void> {
   if (!dsn || sentry) return;
@@ -21,6 +28,7 @@ export async function startMonitoring(dsn: string | undefined = import.meta.env.
     });
     sentry = S;
     for (const e of early.splice(0)) S.captureException(e);
+    for (const r of earlyPolicy.splice(0)) sendPolicy(S, r);
   } catch { /* monitoring must never stop the product */ }
 }
 
@@ -28,4 +36,20 @@ export async function startMonitoring(dsn: string | undefined = import.meta.env.
 export function report(error: unknown): void {
   if (sentry) sentry.captureException(error);
   else if (import.meta.env.VITE_SENTRY_DSN && early.length < 20) early.push(error);
+}
+
+/**
+ * Listens for what the content security policy would block (it fires in report-only mode too) and reports
+ * it, kept until monitoring has started. Called before the page draws, so a breach while it loads is heard.
+ */
+export function watchPolicy(dsn: string | undefined = import.meta.env.VITE_SENTRY_DSN): void {
+  if (!dsn || typeof document === 'undefined') return;
+  document.addEventListener('securitypolicyviolation', e => {
+    try {
+      const r = policyReport(e, policySeen, location.origin);
+      if (!r) return;
+      if (sentry) sendPolicy(sentry, r);
+      else if (earlyPolicy.length < POLICY_REPORTS_PER_PAGE) earlyPolicy.push(r);
+    } catch { /* monitoring must never stop the product */ }
+  });
 }
