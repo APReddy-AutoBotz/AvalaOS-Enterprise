@@ -293,12 +293,12 @@ test('Save with no change saves nothing: an untouched section and an edited one 
   await expect(status).toHaveText('Approved version 1');
 
   // The edited section, opened and saved without a change.
-  await doc.getByTestId('doc-section').filter({ has: doc.getByTestId('chip-edited') }).getByRole('button', { name: /^Edit section/ }).click();
+  await doc.getByTestId('doc-section').filter({ has: page.getByTestId('chip-edited') }).getByRole('button', { name: /^Edit section/ }).click();
   await expect(page.getByTestId('section-editor')).toBeVisible();
   await doc.getByRole('button', { name: 'Save section' }).click();
   await expect(page.getByTestId('section-editor')).toHaveCount(0);
   // An untouched section, opened and saved without a change: it stays generated.
-  const untouched = doc.getByTestId('doc-section').filter({ hasNot: doc.getByTestId('chip-edited') }).filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).filter({ has: page.locator('p.leading-7') }).first();
+  const untouched = doc.getByTestId('doc-section').filter({ hasNot: page.getByTestId('chip-edited') }).filter({ has: page.getByRole('button', { name: /^Edit section/ }) }).filter({ has: page.locator('p.leading-7') }).first();
   await untouched.getByRole('button', { name: /^Edit section/ }).click();
   await expect(page.getByTestId('section-editor')).toBeVisible();
   await doc.getByRole('button', { name: 'Save section' }).click();

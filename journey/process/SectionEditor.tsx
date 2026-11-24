@@ -1,5 +1,8 @@
 // Rich-text editing of a section's narrative with TipTap: paragraphs, bold, italic, lists and
 // sub-headings, the tags the documents render. Loaded on demand, only when someone edits.
+// Tiptap 3 (24 November 2026): StarterKit's additions in version 3 (links, underline, the list keys and the
+// empty paragraph it adds after a closing list or sub-heading) are off, so the editor allows and writes what
+// it did on Tiptap 2 (tests/e2e/editor-roundtrip.spec.ts compares every case with Tiptap 2's results).
 import React from 'react';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
@@ -19,8 +22,10 @@ export default function SectionEditor({ initial, title, onSave, onCancel, busy, 
   const [drafting, setDrafting] = React.useState(false);
   const [note, setNote] = React.useState<string | null>(null);
   const editor = useEditor({
-    extensions: [StarterKit.configure({ heading: { levels: [3, 4] }, code: false, codeBlock: false, blockquote: false, horizontalRule: false, strike: false })],
+    extensions: [StarterKit.configure({ heading: { levels: [3, 4] }, code: false, codeBlock: false, blockquote: false, horizontalRule: false, strike: false, link: false, underline: false, listKeymap: false, trailingNode: false })],
     content: initial || '<p></p>',
+    // Version 3 no longer draws the editor again on every change; the toolbar shows Bold and the rest as pressed.
+    shouldRerenderOnTransaction: true,
     onUpdate: () => setIssues(null),
     immediatelyRender: false,
     editorProps: { attributes: { 'aria-label': `Text of ${title}`, role: 'textbox', 'aria-multiline': 'true', class: 'prose-sm min-h-[7rem] max-w-none px-3 py-2.5 text-sm leading-7 text-slate-800 focus:outline-none [&_ol]:list-decimal [&_ol]:pl-5 [&_ul]:list-disc [&_ul]:pl-5 [&_h3]:font-semibold [&_h4]:font-semibold' } },
@@ -55,7 +60,7 @@ export default function SectionEditor({ initial, title, onSave, onCancel, busy, 
           try {
             const d = await draft();
             if (!d.sentences) { setNote('The process has no facts for this section yet, so nothing was drafted.'); return; }
-            editor.commands.setContent(d.html);
+            editor.commands.setContent(d.html, { emitUpdate: false });
             const found = check(d.html);
             setIssues(found.length ? found : null);
             setNote(`Drafted ${d.sentences} ${d.sentences === 1 ? 'sentence' : 'sentences'} from the process. Read and change it before saving.`);
