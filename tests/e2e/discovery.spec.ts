@@ -14,6 +14,8 @@ const gold = JSON.parse(fs.readFileSync('eval/corpus/ap-invoice/expected.model.j
 // The first reading: the sample's process without its end, so Discovery asks when a case is finished.
 const ends = new Set(gold.events.filter((e: { kind: string }) => e.kind === 'end').map((e: { id: string }) => e.id));
 const first = { ...gold, events: gold.events.filter((e: { id: string }) => !ends.has(e.id)), flows: gold.flows.filter((f: { from: string; to: string }) => !ends.has(f.from) && !ends.has(f.to)) };
+// The update's reading: the sample whole, with one question about the process as a whole that the draft does not hold.
+const update = { ...gold, openQuestions: [...gold.openQuestions, { id: 'q-new', target: { kind: 'meta' }, question: 'Does the work differ for invoices from suppliers abroad?', whyItMatters: '', owner: null, status: 'open' }] };
 const WORDS = 'Supplier invoices arrive in the AP shared mailbox. An AP clerk checks the mandatory fields, then matches each invoice against the purchase order and the goods receipt in SAP.';
 const END = 'The invoice is posted in SAP and the case is closed.';
 
@@ -77,7 +79,7 @@ test('a viewer gets no Discovery tab; on a process with no steps, a line says wh
 
 test('Discovery: own words read into steps, one question at a time, a shape answer kept until the update reads it as a source', async ({ page }) => {
   test.setTimeout(150_000);
-  await withStandIns(page, { extraction: [first, gold, gold], answerFromNotes: [{ answers: [] }] });
+  await withStandIns(page, { extraction: [first, update, gold], answerFromNotes: [{ answers: [] }] });
   await signInAndCreateProcess(page);
 
   // The Sources stage's start in own words offers Ask Avala; the panel opens on Discovery, the only view with no steps.
@@ -162,11 +164,19 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
   const waiting = discovery.getByTestId('discovery-waiting');
   await expect(waiting).toContainText('1 answer is not in the draft yet.');
   await waiting.getByRole('button', { name: 'Update the draft from your answers (1)' }).click();
-  await expect(discovery.getByTestId('discovery-review')).toBeVisible({ timeout: 20_000 });
+  const review = discovery.getByTestId('discovery-review');
+  await expect(review).toBeVisible({ timeout: 20_000 });
+  // Plain words (owner, 25 November 2026): what the new reading would change, when it was read, and the question
+  // about the process as a whole listed, not ticked.
+  await expect(review).toContainText('What the new reading would change');
+  await expect(review.getByTestId('change-review')).toContainText(/Read again with your answers on \d{1,2} [A-Z][a-z]+ \d{4} at \d{2}:\d{2}\. It differs from the draft in \d+ places?: choose what to take\./);
+  await expect(review.getByTestId('not-ticked')).toHaveText('1 new question about the process as a whole is not ticked: tick the ones to keep.');
+  await expect(review.getByRole('checkbox', { name: /Does the work differ for invoices from suppliers abroad\?/ })).not.toBeChecked();
+  await expect(review).not.toContainText(/extraction|model/i);
   expect((await stored(page)).sources).toEqual(['own-1', 'ans-1']);
-  const update = (await standInLog(page)).filter(c => c.task === 'extraction')[1]!;
-  expect(update.sources!.map(s => s.key)).toEqual(['own-1', 'ans-1']);
-  expect(update.sources![1]!.passages).toEqual([{ text: END, place: 'Answer to: When is a case finished: what is the last thing that happens?' }]);
+  const updateLog = (await standInLog(page)).filter(c => c.task === 'extraction')[1]!;
+  expect(updateLog.sources!.map(s => s.key)).toEqual(['own-1', 'ans-1']);
+  expect(updateLog.sources![1]!.passages).toEqual([{ text: END, place: 'Answer to: When is a case finished: what is the last thing that happens?' }]);
   await expect(discovery.getByTestId('discovery-waiting')).toHaveCount(0);
   // Nothing from the update joins the draft until the person applies it.
   expect((await stored(page)).working).toEqual(afterConflict);
