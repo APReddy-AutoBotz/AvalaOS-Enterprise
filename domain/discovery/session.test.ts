@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  BUSY_LINE, commitSessionStep, dropLater, laterFor, putBack, emptyState, FULL_LINE, IN_USE_MS, keepAnswer, keepLater, markRead, readState, sessionInUse, skip,
+  BUSY_LINE, commitSessionStep, dropLater, keysBeingWritten, laterFor, sourcesRead, takingInto, waitingAgainst, emptyState, FULL_LINE, IN_USE_MS, keepAnswer, keepLater, markRead, readState, sessionInUse, skip,
   startedLine, STATE_LIMIT, countedReading, countSaved, readingsReviewed, readingsStarted, reviewedReading, savedCount, startedReading, stateTextLength, tookIntoSource, usedCall, type KeptAnswer, type SaveAnswer, type SessionServer, type SessionState, type StoredSession,
 } from './session.ts';
 import { answersSource } from './answers.ts';
@@ -187,18 +187,35 @@ test('a reading is counted once against the cap, however often its end is seen; 
   assert.deepEqual(readingsStarted(again), ['r1']);
 });
 
-test('answers taken out for a source go back when the source cannot be added; a newer answer to the same card stays', async () => {
+test('answers stay waiting until their source is saved; a source already saved is never written again', () => {
   const a = { key: 'shape:end', words: 'Posted and filed.', question: 'When is a case finished?', at: '2026-11-24T10:00:00.000Z' };
   const b = { key: 'shape:start', words: 'An invoice arrives.', question: 'What starts the work?', at: '2026-11-24T10:01:00.000Z' };
   let s = keepAnswer(b)(keepAnswer(a)(emptyState()));
-  const taken = [...s.waiting];
-  s = tookIntoSource(taken)(s);
-  assert.deepEqual(s.waiting, []);
-  const newer = { ...a, words: 'Posted, filed and paid.', at: '2026-11-24T10:05:00.000Z' };
-  s = keepAnswer(newer)(s);
-  s = putBack(taken)(s);
-  assert.deepEqual(s.waiting.map(w => w.words).sort(), ['An invoice arrives.', 'Posted, filed and paid.']);
-  assert.deepEqual(putBack(taken)(s).waiting.length, 2, 'nothing is added twice');
+  s = takingInto(s.waiting, 'ans-1')(s);
+  // Marked, still waiting, and the mark survives being read back from the server.
+  s = readState(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(s.waiting.map(w => w.into), ['ans-1', 'ans-1']);
+  assert.deepEqual(keysBeingWritten(s), ['ans-1']);
+  // The tab closed before the source was saved: nothing is done, both are pending again.
+  assert.deepEqual(waitingAgainst(s, ['own-1']).done, []);
+  assert.equal(waitingAgainst(s, ['own-1']).pending.length, 2);
+  // The tab closed after the source was saved, before the answers were taken out: they are done, not written twice.
+  const after = waitingAgainst(s, ['own-1', 'ans-1']);
+  assert.deepEqual({ done: after.done.length, pending: after.pending.length, keys: after.doneKeys }, { done: 2, pending: 0, keys: ['ans-1'] });
+  assert.deepEqual(tookIntoSource(after.done)(s).waiting, []);
+  // A new answer given meanwhile is not marked and stays pending.
+  const c = { key: 'item:x', words: 'The AP lead.', question: 'Who approves?', at: '2026-11-24T10:05:00.000Z' };
+  assert.deepEqual(waitingAgainst(keepAnswer(c)(s), ['ans-1']).pending.map(w => w.key), ['item:x']);
+});
+
+test('each reading the session starts keeps the sources it read; a reading started elsewhere has none', () => {
+  let s = startedReading('run-1', ['src-a'])(emptyState());
+  s = startedReading('run-2', ['src-a', 'src-b'])(s);
+  s = readState(JSON.parse(JSON.stringify(s)));
+  assert.deepEqual(sourcesRead(s, 'run-1'), ['src-a']);
+  assert.deepEqual(sourcesRead(s, 'run-2'), ['src-a', 'src-b']);
+  assert.deepEqual(sourcesRead(s, 'run-elsewhere'), []);
+  assert.deepEqual(readingsStarted(s), ['run-1', 'run-2']);
 });
 
 test('words kept to read later are found again for their card, and cleared', () => {

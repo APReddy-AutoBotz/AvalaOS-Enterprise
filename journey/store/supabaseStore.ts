@@ -41,6 +41,7 @@ import type { Sprint } from '../../domain/workitems/sprints.ts';
 import type { Module } from '../../domain/workspace/modules.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
+import { EXTRACTION_COLUMNS } from '../../domain/store/grantedSelects.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
@@ -834,13 +835,13 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
     },
     async latestExtraction(processId): Promise<ExtractionRow | null> {
-      const { data, error } = await db.from('extraction_runs').select('id, status, error, result, created_at, updated_at, source_ids, input_tokens, output_tokens')
+      const { data, error } = await db.from('extraction_runs').select(EXTRACTION_COLUMNS)
         .eq('process_id', processId).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (error) fail(error);
       if (!data) return null;
       return {
         id: data.id, status: data.status, error: data.error, createdAt: data.created_at, updatedAt: data.updated_at, model: (data.result as any)?.model ?? null,
-        sourceIds: Array.isArray(data.source_ids) ? data.source_ids : [], tokens: (Number(data.input_tokens) || 0) + (Number(data.output_tokens) || 0),
+        tokens: (Number(data.input_tokens) || 0) + (Number(data.output_tokens) || 0),
       };
     },
     async history(processId) {

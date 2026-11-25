@@ -856,7 +856,11 @@ Six pull requests; `next` can be released after any one of them; the first relea
       - Who chose is kept: the purpose with the person's id; a resolved conflict with their name and id as the Process stage stores them (`chosenBy`), and its value written as the Questions tab writes it (`conflictValue`, now in `domain/questions/conflictValue.ts` for both).
       - Words kept to read later show again on their card, with when they were kept, can be cleared (`dropLater`), and are counted in "Where discovery stands" ("Kept to read later: N.").
       - A viewer gets no Discovery tab; on a process with no steps the panel says "Someone who can edit this process can start Discovery."
-      - Waiting answers leave the session before their source is added, and go back if it cannot be (`putBack`), so a refused write never leaves them both in a source and waiting; Finish finishes only once they are in a source.
+      - Waiting answers stay in the session, marked with their source's key (`takingInto`), until the source is saved, and only then leave it; an answer whose source an earlier attempt saved is taken out and never written again (`waitingAgainst`); Finish finishes only once they are in a source.
+    - After the preview of 25 November 2026 (a select of `source_ids`, which a signed-in person may not read, stopped every Sources page):
+      - The store no longer reads a run's sources; the session keeps the sources of each reading it starts (`startedReading`, `sourcesRead`). A reading started elsewhere has none, and an update after it reads every active source.
+      - What the store selects from a table granted column by column is listed in `domain/store/grantedSelects.ts`: its test checks each column against the migrations' grants and that no other select on such a table exists, and `supabase/tests/store_selects.sql` runs each list as a signed-in member.
+      - A Discovery that cannot be opened says so, with "Try again".
     - No database or server function change; no file a server function loads.
     - Test: `domain/discovery/flow.test.ts`, `session.test.ts`, `queue.test.ts`, `domain/ai/voice.test.ts`, `standIn.test.ts`, `tests/e2e/discovery.spec.ts`.
 - **Pull requests 5 and 6:** as the plan has them.

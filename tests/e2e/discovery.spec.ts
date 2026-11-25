@@ -77,7 +77,7 @@ test('a viewer gets no Discovery tab; on a process with no steps, a line says wh
 
 test('Discovery: own words read into steps, one question at a time, a shape answer kept until the update reads it as a source', async ({ page }) => {
   test.setTimeout(150_000);
-  await withStandIns(page, { extraction: [first, gold], answerFromNotes: [{ answers: [] }] });
+  await withStandIns(page, { extraction: [first, gold, gold], answerFromNotes: [{ answers: [] }] });
   await signInAndCreateProcess(page);
 
   // The Sources stage's start in own words offers Ask Avala; the panel opens on Discovery, the only view with no steps.
@@ -152,6 +152,13 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
 
   // The update: the answers become a "Discovery answers" source, read with the own words; each passage is the
   // person's words alone, with the question as its place.
+  // As if an earlier update was cut off before its source was saved: the answer is still waiting, marked for a source
+  // that does not exist. The update writes it once.
+  await page.evaluate(KEY => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    s.discovery[0].state.waiting[0].into = 'ans-1';
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, KEY);
   const waiting = discovery.getByTestId('discovery-waiting');
   await expect(waiting).toContainText('1 answer is not in the draft yet.');
   await waiting.getByRole('button', { name: 'Update the draft from your answers (1)' }).click();
@@ -187,6 +194,41 @@ test('Discovery: own words read into steps, one question at a time, a shape answ
   await expect(card.getByLabel('Or answer in your own words')).toHaveValue('');
   await discovery.getByRole('button', { name: 'Where discovery stands' }).click();
   await expect(discovery.getByTestId('discovery-summary')).not.toContainText('Kept to read later');
+
+  // As if the tab closed after the answers source was saved and before the answers left the session: the answer is
+  // waiting, marked for the source that exists. The next update takes it out and reads that source; it is not written again.
+  await page.evaluate(({ KEY, END }) => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    s.discovery[0].state.waiting = [{ key: 'shape:end', words: END, question: 'When is a case finished: what is the last thing that happens?', at: '2026-11-24T09:00:00.000Z', into: 'ans-1' }];
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, { KEY, END });
+  await page.reload();
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  await panel.getByRole('tab', { name: 'Discovery' }).click();
+  await discovery.getByRole('button', { name: 'Close this review' }).click();
+  await discovery.getByTestId('discovery-waiting').getByRole('button', { name: 'Update the draft from your answers (1)' }).click();
+  await expect(discovery.getByTestId('discovery-review')).toBeVisible({ timeout: 20_000 });
+  expect((await stored(page)).sources).toEqual(['own-1', 'ans-1']);
+  const again = (await standInLog(page)).filter(c => c.task === 'extraction');
+  expect(again.at(-1)!.sources!.map(x => x.key)).toEqual(['own-1', 'ans-1']);
+  expect(await page.evaluate(KEY => JSON.parse(localStorage.getItem(KEY)!).discovery[0].state.waiting, KEY)).toEqual([]);
+});
+
+test('a Discovery that cannot be opened says so, and opens on "Try again"', async ({ page }) => {
+  await withStandIns(page, { extraction: [first] });
+  await signInAndCreateProcess(page);
+  const breakSessions = (broken: boolean) => page.evaluate(({ KEY, broken }) => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    s.discovery = broken ? { broken: true } : [];
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, { KEY, broken });
+  await breakSessions(true);
+  await page.getByTestId('own-words-discovery').getByRole('button', { name: 'Start with Ask Avala' }).click();
+  const failed = page.getByTestId('discovery-load-failed');
+  await expect(failed).toContainText('Discovery could not be opened:');
+  await breakSessions(false);
+  await failed.getByRole('button', { name: 'Try again' }).click();
+  await expect(page.getByTestId('discovery-describe')).toBeVisible();
 });
 
 test('the demo shows what Discovery is, with nothing to press', async ({ page }) => {

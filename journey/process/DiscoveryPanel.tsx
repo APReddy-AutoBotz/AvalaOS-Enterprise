@@ -27,7 +27,7 @@ import { answersSource, ANSWER_TO } from '../../domain/discovery/answers.ts';
 import { CAP_LINE, canReadWords, canUpdateDraft } from '../../domain/discovery/limits.ts';
 import { sessionSummary } from '../../domain/discovery/summary.ts';
 import {
-  BUSY_LINE, commitSessionStep, countedReading, countSaved, dropLater, emptyState, FULL_LINE, keepAnswer, keepLater, laterFor, putBack, readingsReviewed, readingsStarted,
+  BUSY_LINE, commitSessionStep, countedReading, countSaved, dropLater, emptyState, FULL_LINE, keepAnswer, keepLater, keysBeingWritten, laterFor, readingsReviewed, readingsStarted, sourcesRead, takingInto, waitingAgainst,
   readState, reviewedReading, savedCount, skip, startedLine, startedReading, tookIntoSource, usedCall, type LaterWords, type SessionStep, type StoredSession,
 } from '../../domain/discovery/session.ts';
 import {
@@ -145,11 +145,21 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
   /** Reads sources as the Sources stage does, and remembers that this session started it. */
   const read = async (ids: string[]) => {
     const { runId } = await store.startExtraction(workspace.id, process.id, ids);
-    await commit(startedReading(runId));
-    setRun({ id: runId, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null, sourceIds: ids });
+    // The session keeps which sources it read: the browser may not read a run's own list (review, 25 November 2026).
+    await commit(startedReading(runId, ids));
+    setRun({ id: runId, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
   };
 
-  if (session === undefined || run === undefined) return <p className="text-sm text-slate-500">Opening Discovery…</p>;
+  // A load that failed says so, with a way to try again (review, 25 November 2026), never "Opening…" for ever.
+  if (session === undefined || run === undefined) {
+    if (!error) return <p className="text-sm text-slate-500">Opening Discovery…</p>;
+    return (
+      <div className="space-y-2" data-testid="discovery-load-failed">
+        <ErrorNote message={`Discovery could not be opened: ${error}`} />
+        <Button variant="secondary" onClick={() => { setError(null); load().catch(e => setError(messageOf(e))); }}>Try again</Button>
+      </div>
+    );
+  }
 
   const hasSteps = Boolean(model?.steps.length);
   const stage = stageOf({ hasSteps, sources: sources.filter(s => !s.archived).length, run: run ?? null });
@@ -168,36 +178,37 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
   );
 
   /**
-   * The waiting answers become one "Discovery answers" source. They leave the session first, so a refused write can
-   * never leave them both in a source and still waiting (review, 24 November 2026); if the source cannot be added,
-   * they go back as they were (`putBack`), and the person's words are never lost.
+   * The waiting answers become one "Discovery answers" source (review, 25 November 2026). They stay in the session,
+   * marked with the source's key, until the source is saved, and only then leave it: closing the tab between the
+   * two writes loses nothing, and answers whose source an earlier attempt saved are taken out, never written again.
+   * Gives the ids of the answers sources to read.
    */
-  async function keepWaiting(): Promise<SourceRow | 'none' | 'failed'> {
+  async function keepWaiting(): Promise<{ ids: string[] } | 'none' | 'failed'> {
     const s = readState((await store.getDiscoverySession(process.id))?.state);
-    const taken = s.waiting;
-    const src = answersSource(taken, sources.map(x => x.key), sourceDate());
-    if (!src) return 'none';
-    // Refused (full or busy): the line is shown and nothing was taken out.
-    if (!(await commit(tookIntoSource(taken)))) return 'failed';
-    try {
-      const row = await store.addSource(process.id, { key: src.key, title: src.title, fileName: '', format: 'txt', kind: src.kind, segments: src.segments, inferred: false, warnings: [], byteSize: new TextEncoder().encode(src.segments.map(x => x.text).join('\n')).length });
-      announceProcessChanged(process.id);
-      return row;
-    } catch (e) {
-      if (!(await commit(putBack(taken)).catch(() => false))) {
-        throw new Error(`The answers could not be kept as a source, nor kept with the session. Copy them before you leave: ${taken.map(t => `${t.question} ${t.words}`).join(' | ')}`);
-      }
-      throw e;
-    }
+    const latest = await store.listSources(process.id);
+    const { done, pending, doneKeys } = waitingAgainst(s, latest.map(x => x.key));
+    const ids = latest.filter(x => doneKeys.includes(x.key)).map(x => x.id);
+    if (done.length && !(await commit(tookIntoSource(done)))) return 'failed';
+    const src = answersSource(pending, latest.map(x => x.key), sourceDate());
+    if (!src) return ids.length ? { ids } : 'none';
+    // Refused (full or busy): the line is shown and nothing is written.
+    if (!(await commit(takingInto(pending, src.key)))) return 'failed';
+    const row = await store.addSource(process.id, { key: src.key, title: src.title, fileName: '', format: 'txt', kind: src.kind, segments: src.segments, inferred: false, warnings: [], byteSize: new TextEncoder().encode(src.segments.map(x => x.text).join('\n')).length });
+    announceProcessChanged(process.id);
+    // Refused here, the source is saved and the answers still marked: the next update takes them out without writing them again.
+    if (!(await commit(tookIntoSource(pending)))) return 'failed';
+    return { ids: [...ids, row.id] };
   }
 
   const update = async () => {
     setBusy(true); setError(null); setNotice(null);
     try {
-      const row = await keepWaiting();
-      if (typeof row === 'string') return;
+      const kept = await keepWaiting();
+      if (typeof kept === 'string') return;
       const latest = await store.listSources(process.id);
-      await read(updateSources(run?.sourceIds ?? [], latest.filter(s => !s.archived), row.id));
+      const newest = kept.ids[kept.ids.length - 1]!;
+      const base = updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), newest);
+      await read([...base.slice(0, -1), ...kept.ids.filter(id => !base.includes(id)), newest]);
     } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
   };
 
@@ -234,14 +245,14 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
       {stage === 'reading' && <p role="status" className="rounded-lg bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950" data-testid="discovery-reading">{hasSteps ? WORDS.updating : WORDS.reading}</p>}
 
       {stage === 'first' && (
-        <FirstReading store={store} process={process} run={run ?? null} boxVoice={boxVoice} busy={busy} active={active}
+        <FirstReading store={store} process={process} run={run ?? null} lastRead={sourcesRead(state, run?.id)} boxVoice={boxVoice} busy={busy} active={active}
           onRead={async ids => { setBusy(true); setError(null); try { await read(ids); } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); } }}
           onAdd={async words => {
             setBusy(true); setError(null);
             try {
               const row = await store.addSource(process.id, ownWordsSource(words, sources.map(s => s.key), sourceDate()));
               const latest = await store.listSources(process.id);
-              await read(updateSources(run?.sourceIds ?? [], latest.filter(s => !s.archived), row.id));
+              await read(updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), row.id));
             } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
           }}
           onStarted={() => { announceProcessChanged(process.id); if (run) void commit(reviewedReading(run.id)); }} />
@@ -256,7 +267,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
               <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting)}</Button>
             </div>
           )}
-          {run?.status === 'failed' && readingsStarted(state).includes(run.id) && <div className="mb-4"><ErrorNote message={failedLine(run.error)} /><Button variant="secondary" onClick={() => void read(run.sourceIds ?? [])}>Try again</Button></div>}
+          {run?.status === 'failed' && readingsStarted(state).includes(run.id) && <div className="mb-4"><ErrorNote message={failedLine(run.error)} /><Button variant="secondary" onClick={() => { const ids = sourcesRead(state, run.id); void read(ids.length ? ids : active.map(x => x.id)); }}>Try again</Button></div>}
           {reviewing && (
             <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="discovery-review">
               <p className="mb-2 text-sm font-semibold text-slate-900">What your answers change in the draft</p>
@@ -265,7 +276,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
               <button type="button" className="mt-2 text-xs font-medium text-slate-500 underline" onClick={() => void commit(reviewedReading(reviewing.id))}>Close this review</button>
             </div>
           )}
-          <Cards store={store} process={process} model={m} asksPurpose={asksPurpose} skipped={state.skipped} waitingKeys={state.waiting.map(w => w.key)} keys={sources.map(s => s.key)}
+          <Cards store={store} process={process} model={m} asksPurpose={asksPurpose} skipped={state.skipped} waitingKeys={state.waiting.map(w => w.key)} keys={[...sources.map(s => s.key), ...keysBeingWritten(state)]}
             capped={capped || allowanceGone} boxVoice={boxVoice} saved={savedCount(state)} later={state.later} who={who} callAi={callAi} saveOp={saveOp} commit={commit}
             onAllowance={() => setAllowanceGone(true)} onNotice={setNotice} onError={setError} onOpenStage={onOpenStage}
             addWords={async (key, question, words) => {
@@ -324,8 +335,8 @@ function Describe({ m, asksPurpose, boxVoice, capped, busy, onSave, onSources }:
   );
 }
 
-function FirstReading({ store, process, run, boxVoice, busy, active, onRead, onAdd, onStarted }: {
-  store: JourneyStore; process: ProcessRow; run: ExtractionRow | null; boxVoice: BoxVoice; busy: boolean; active: SourceRow[];
+function FirstReading({ store, process, run, lastRead, boxVoice, busy, active, onRead, onAdd, onStarted }: {
+  store: JourneyStore; process: ProcessRow; run: ExtractionRow | null; lastRead: string[]; boxVoice: BoxVoice; busy: boolean; active: SourceRow[];
   onRead: (ids: string[]) => void; onAdd: (words: string) => void; onStarted: () => void;
 }) {
   const [adding, setAdding] = React.useState(false);
@@ -337,7 +348,7 @@ function FirstReading({ store, process, run, boxVoice, busy, active, onRead, onA
       <div className="space-y-2" data-testid="discovery-first">
         {run?.status === 'failed' && <ErrorNote message={failedLine(run.error)} />}
         <p className="text-sm text-slate-700">{active.length} {active.length === 1 ? 'source is' : 'sources are'} ready to read.</p>
-        <Button variant="accent" disabled={busy} onClick={() => onRead(run?.sourceIds?.length ? run.sourceIds : active.map(s => s.id))}>{run ? 'Try again' : 'Read it'}</Button>
+        <Button variant="accent" disabled={busy} onClick={() => onRead(lastRead.length ? lastRead : active.map(s => s.id))}>{run ? 'Try again' : 'Read it'}</Button>
       </div>
     );
   }

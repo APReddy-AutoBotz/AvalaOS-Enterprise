@@ -76,7 +76,7 @@ interface State {
   keptLooks?: { workspaceId: string; fingerprint: string; look: KeptLook }[];
   draftChanges?: DraftChange[];
   /** Browser tests only: readings the stand-in gave (the server's extraction_runs). */
-  extractions?: (ExtractionRow & { processId: string; done: ProcessModel })[];
+  extractions?: (ExtractionRow & { processId: string; done: ProcessModel; sourceIds: string[] })[];
   /** Package B: discovery sessions, by the server's rules (table discovery_sessions). */
   discovery?: (StoredSession & { workspaceId: string; updatedBy: string | null })[];
 }
@@ -576,7 +576,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
         save();
       }
       const c = structuredClone(last);
-      return { id: c.id, status: c.status, error: c.error, createdAt: c.createdAt, updatedAt: c.updatedAt, model: c.model, sourceIds: c.sourceIds, tokens: c.tokens };
+      return { id: c.id, status: c.status, error: c.error, createdAt: c.createdAt, updatedAt: c.updatedAt, model: c.model, tokens: c.tokens };
     },
     async lookAtExtraction() { /* no extraction runs in the browser */ },
     async runAiTask(_workspaceId, task, segments) {
