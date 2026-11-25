@@ -2,6 +2,7 @@
 // missing information found by rule, and conflicts between sources (the person picks the value).
 import React from 'react';
 import { addQuestion, answerQuestion, resolveConflict } from '../../domain/processModel/patch.ts';
+import { conflictValue } from '../../domain/questions/conflictValue.ts';
 import { askedOpenQuestions, getElement, untrackedGaps } from '../../domain/processModel/selectors.ts';
 import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { Conflict, ElementTarget, OpenQuestion, ProcessModel } from '../../domain/processModel/types.ts';
@@ -129,18 +130,6 @@ export function ConflictsTab({ model, editor, canEdit, sourceTitle }: TabContext
         onChoose={(chosen, reason) => editor.apply(m => resolveConflict(m, { conflictId: c.id, chosen, ...chosenBy(chooser), reason, ...conflictValue(m, c, chosen) }), `Resolved: ${c.summary}`)} /></React.Fragment>)}
     </ul>
   );
-}
-
-/** The value to write when a conflict is about a field that holds a single number or text. */
-function conflictValue(m: ProcessModel, c: Conflict, chosen: string): { value?: unknown } {
-  const t = c.target;
-  if (t.kind === 'metric' && t.field === 'value') {
-    const n = Number(chosen.replace(/[, ]/g, '').match(/-?\d+(\.\d+)?/)?.[0]);
-    return Number.isFinite(n) ? { value: n } : {};
-  }
-  const el = getElement(m, t) as Record<string, unknown> | undefined;
-  if (t.field && el && typeof el[t.field] === 'string' && t.kind !== 'meta') return { value: chosen };
-  return {};
 }
 
 function ConflictCard({ c, model, canEdit, onChoose, sourceTitle }: { c: Conflict; model: ProcessModel; canEdit: boolean; onChoose: (chosen: string, reason: string) => Promise<boolean>; sourceTitle: (id: string) => string }) {

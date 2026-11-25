@@ -13,7 +13,15 @@ import type { WaitingAnswer } from './answers.ts';
 import { afterCall, afterReading, NO_USE, type SessionUse } from './limits.ts';
 
 /** An answer about the shape of the process, kept until the draft is updated: the card it answers, by key. */
-export interface KeptAnswer extends WaitingAnswer { key: string }
+export interface KeptAnswer extends WaitingAnswer {
+  key: string;
+  /**
+   * The key of the "Discovery answers" source this answer is being written into (review, 25 November 2026). The
+   * answer stays waiting until that source is saved and the answer taken out, so closing the tab between the two
+   * writes loses nothing; a source with this key already saved means it is in, and it is never written twice.
+   */
+  into?: string;
+}
 
 /** Words a person kept to read later (the allowance or the cap reached); the card stays open. */
 export interface LaterWords { key: string; question: string; words: string; at: string }
@@ -55,7 +63,7 @@ export function readState(raw: unknown): SessionState {
   return {
     ...o,
     waiting: entries(o.waiting).filter(e => text(e.key) && text(e.words).trim())
-      .map(e => ({ key: text(e.key), words: text(e.words), question: text(e.question), at: text(e.at) })),
+      .map(e => ({ key: text(e.key), words: text(e.words), question: text(e.question), at: text(e.at), ...(text(e.into) ? { into: text(e.into) } : {}) })),
     later: entries(o.later).filter(e => text(e.key) && text(e.words).trim())
       .map(e => ({ key: text(e.key), words: text(e.words), question: text(e.question), at: text(e.at) })),
     skipped: strings(o.skipped),
@@ -157,6 +165,34 @@ export const usedCall = (usage?: { input: number; output: number } | null): Sess
 /** A reading of the sources, with the tokens its own totals record. */
 export const usedReading = (tokens: number): SessionStep => s => ({ ...s, use: afterReading(s.use, tokens) });
 
+/** A reading this session started, counted once however often its end is seen (`runs` holds the readings counted). */
+export const countedReading = (runId: string, tokens: number): SessionStep => s => {
+  const runs = strings(s.runs);
+  return runs.includes(runId) ? s : { ...s, runs: [...runs, runId], use: afterReading(s.use, tokens) };
+};
+
+/** The readings this session started, so their end is counted and shown here (an update of the draft). */
+export const startedReading = (runId: string, sourceIds: readonly string[] = []): SessionStep => s => ({
+  ...s,
+  started: [...new Set([...strings(s.started), runId])],
+  // Which sources each reading of the session read (review, 25 November 2026): the browser may not read a run's
+  // own list, so the session keeps it. A reading started elsewhere has none here; an update then reads every source.
+  sources: { ...sourcesMap(s.sources), [runId]: [...sourceIds] },
+});
+const sourcesMap = (x: unknown): Record<string, string[]> =>
+  x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x as Record<string, unknown>).map(([k, v]) => [k, strings(v)])) : {};
+/** The sources a reading this session started read; empty for a reading started elsewhere. */
+export const sourcesRead = (s: SessionState, runId: string | null | undefined): string[] => (runId ? sourcesMap(s.sources)[runId] ?? [] : []);
+export const readingsStarted = (s: SessionState): string[] => strings(s.started);
+
+/** An update's changes were reviewed (applied, or found to change nothing): its review is not shown again. */
+export const reviewedReading = (runId: string): SessionStep => s => ({ ...s, reviewed: [...new Set([...strings(s.reviewed), runId])] });
+export const readingsReviewed = (s: SessionState): string[] => strings(s.reviewed);
+
+/** One answer saved to the record in this session (the summary's "Recorded: N answers"). */
+export const countSaved: SessionStep = s => ({ ...s, saved: num(s.saved) + 1 });
+export const savedCount = (s: SessionState): number => num(s.saved);
+
 /**
  * The waiting answers written into a "Discovery answers" source leave the session in the same step, so a
  * person's words are never kept twice. Only the answers that went into the source leave: one another editor
@@ -166,6 +202,32 @@ export const tookIntoSource = (taken: readonly KeptAnswer[]): SessionStep => s =
   ...s,
   waiting: s.waiting.filter(w => !taken.some(t => t.key === w.key && t.at === w.at && t.words === w.words)),
 });
+
+/**
+ * The waiting answers being written into the source `key`: marked, and still waiting (review, 25 November 2026).
+ * Only once the source is saved are they taken out (`tookIntoSource`). Every waiting answer is marked afresh, so a
+ * mark left by a write that never finished is replaced.
+ */
+export const takingInto = (taken: readonly KeptAnswer[], key: string): SessionStep => s => ({
+  ...s,
+  waiting: s.waiting.map(w => (taken.some(t => t.key === w.key && t.at === w.at && t.words === w.words) ? { ...w, into: key } : w)),
+});
+
+/**
+ * Splits the waiting answers by the sources that exist now: those whose source was saved (`done`: take them out,
+ * never write them again) and the rest (`pending`, a mark whose source does not exist counts as none).
+ */
+export function waitingAgainst(s: SessionState, sourceKeys: readonly string[]): { done: KeptAnswer[]; pending: KeptAnswer[]; doneKeys: string[] } {
+  const keys = new Set(sourceKeys);
+  const done = s.waiting.filter(w => w.into && keys.has(w.into));
+  return { done, pending: s.waiting.filter(w => !done.includes(w)), doneKeys: [...new Set(done.map(w => w.into!))] };
+}
+
+/** Source keys held by answers being written, so no other source takes one meanwhile. */
+export const keysBeingWritten = (s: SessionState): string[] => [...new Set(s.waiting.map(w => w.into).filter((k): k is string => Boolean(k)))];
+
+/** The words kept to read later for a card, if any. */
+export const laterFor = (s: SessionState, key: string): LaterWords | undefined => s.later.find(l => l.key === key);
 
 // ---- Whether a session is in use ----------------------------------------------------------------
 

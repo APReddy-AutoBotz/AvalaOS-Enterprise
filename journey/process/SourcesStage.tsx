@@ -239,7 +239,11 @@ const ELEMENT_LABEL: Record<ProposedChange['element'], string> = {
 };
 const KIND_LABEL: Record<ProposedChange['kind'], string> = { add: 'New', update: 'Changed', remove: 'Not found any more', conflict: 'Differs from what you confirmed' };
 
-function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { store: JourneyStore; processId: string; extracted: ProcessModel; finishedAt: string; onApplied: () => void }) {
+export function ChangeReview({ store, processId, extracted, finishedAt, onApplied, matchLine }: {
+  store: JourneyStore; processId: string; extracted: ProcessModel; finishedAt: string; onApplied: () => void;
+  /** Said instead of the usual line when nothing would change (Discovery: "Your answers match the draft as it stands."). */
+  matchLine?: string;
+}) {
   const [current, setCurrent] = React.useState<ProcessModel | null>(null);
   const [set, setSet] = React.useState<ChangeSet | null>(null);
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
@@ -260,7 +264,7 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
 
   if (error && !set) return <ErrorNote message={error} />;
   if (!set || !current) return <p className="text-sm text-slate-500">Comparing with the current model…</p>;
-  if (!set.changes.length) return <p className="text-sm text-emerald-800" data-testid="no-changes">The extraction of {when(finishedAt)} matches the process as it stands.</p>;
+  if (!set.changes.length) return <p className="text-sm text-emerald-800" data-testid="no-changes">{matchLine ?? `The extraction of ${when(finishedAt)} matches the process as it stands.`}</p>;
 
   const apply = async () => {
     setBusy(true);

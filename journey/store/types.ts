@@ -182,7 +182,14 @@ export interface NewSource {
 }
 
 export type ExtractionStatus = 'queued' | 'running' | 'merging' | 'reviewing' | 'assembling' | 'done' | 'failed';
-export interface ExtractionRow { id: string; status: ExtractionStatus; error: string | null; createdAt: string; updatedAt: string; model: ProcessModel | null }
+export interface ExtractionRow {
+  id: string; status: ExtractionStatus; error: string | null; createdAt: string; updatedAt: string; model: ProcessModel | null;
+  /**
+   * The tokens its own totals record (package B: the session's cap counts them). The sources a run read are not read
+   * back: a signed-in person may not select `source_ids` (column grants); Discovery keeps its own in the session.
+   */
+  tokens?: number;
+}
 
 /** A failed request, with the HTTP-like status the server returned. */
 export class StoreError extends Error {

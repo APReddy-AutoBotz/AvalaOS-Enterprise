@@ -20,3 +20,6 @@ export function voiceFor(provider: string | null | undefined, aiAvailable: boole
   const info = Object.hasOwn(AI_PROVIDERS, provider) ? AI_PROVIDERS[provider as AiProvider] : null;
   return info?.can.transcription ? 'speak' : 'line';
 }
+
+/** Under the box when spoken words would take an answer past its limit: the rest is not added (review, 24 November 2026). */
+export const cutLine = (max: number) => `Your answer is at its ${max.toLocaleString('en-GB')}-character limit; the rest was not added.`;

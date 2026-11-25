@@ -35,6 +35,22 @@ export function standInTranscript(replies: StandInReplies, used: Record<string, 
   return typeof reply === 'string' ? { text: reply } : { refused: 'The stand-in has no words for a recording.' };
 }
 
+/** The reply list that stands in for a reading of the sources (journey-extract): the model it gives, in order. */
+export const EXTRACTION = 'extraction';
+
+/** What the reading stand-in was given: each source's key and its passages, as a person or a file wrote them. */
+export interface ReadSources { key: string; passages: { text: string; place: string | null }[] }
+
+/**
+ * A reading in a browser test (package B, pull request 4b): the model a test gave under `extraction`, or why not.
+ * It reads every source it is given (a reading reads sources; the rule against source passages is for the AI tasks,
+ * so the automatic look is never answered by replies meant for a person's words), and the log keeps what it was given.
+ */
+export function standInReading(replies: StandInReplies, used: Record<string, number>): { model: unknown } | { refused: string } {
+  if (!Object.hasOwn(replies, EXTRACTION) || !replies[EXTRACTION]!.length) return { refused: 'The stand-in has no reading.' };
+  return { model: standInReply(replies, used, EXTRACTION) };
+}
+
 /** The next reply for a task, a copy; `used` counts the replies given so far per task. */
 export function standInReply(replies: StandInReplies, used: Record<string, number>, task: string): unknown {
   const list = replies[task]!;

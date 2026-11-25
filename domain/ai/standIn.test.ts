@@ -7,7 +7,7 @@ import { assessProcess } from '../assess/process.ts';
 import { triage } from '../questions/triage.ts';
 import { answerFromNotes, notesSegments } from '../questions/notes.ts';
 import { sourceSegments } from '../assistant/suggest.ts';
-import { standInRefusal, standInReply, standInTranscript } from './standIn.ts';
+import { standInReading, standInRefusal, standInReply, standInTranscript } from './standIn.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const items = triage(gold, assessProcess(gold)).items.slice(0, 3);
@@ -48,4 +48,13 @@ test('a recording is heard as the words the test gave, in order, and only when i
   assert.deepEqual(standInTranscript({ transcribe: ['Through its screens.', 'With a service account.'] }, used), { text: 'With a service account.' });
   assert.deepEqual(standInTranscript({ answerFromNotes: [{ answers: [] }] }, {}), { refused: 'The stand-in has no words for a recording.' });
   assert.deepEqual(standInTranscript({ transcribe: [{ not: 'words' }] }, {}), { refused: 'The stand-in has no words for a recording.' });
+});
+
+// Package B, pull request 4b (24 November 2026): a reading in a browser test gives the model the test gave.
+test('a reading gives the model the test gave, and only when it gave one', () => {
+  const used: Record<string, number> = {};
+  assert.deepEqual(standInReading({ extraction: [{ steps: [] }] }, used), { model: { steps: [] } });
+  assert.deepEqual(standInReading({ answerFromNotes: [{ answers: [] }] }, {}), { refused: 'The stand-in has no reading.' });
+  // The AI tasks' rule is unchanged: a call carrying a source's passages is still not answered.
+  assert.match(standInRefusal({ answerFromNotes: [{ answers: [] }] }, 'answerFromNotes', [{ id: 's1', sourceId: 'sop', text: 'x' } as never])!, /not passages of sop/);
 });

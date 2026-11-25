@@ -31,7 +31,7 @@ import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 import { readKept, KeptFormatError, type Fingerprints, type KeptDocuments, type KeptInputs, type KeptLook } from '../../domain/docs/keep.ts';
 import { reasonProblem } from '../../domain/docs/versions.ts';
 import { hashValue } from '../../domain/processModel/hash.ts';
-import { DRAFT_CHANGES_SHOWN, type DraftChangeRow, type VersionRow, type VersionStateRow } from './types.ts';
+import { DRAFT_CHANGES_SHOWN, type DraftChangeRow, type ExtractionRow, type VersionRow, type VersionStateRow } from './types.ts';
 import type { StandIn } from './standIns.ts';
 import { FULL_LINE, readState, STATE_LIMIT, stateTextLength, type SaveAnswer, type StoredSession } from '../../domain/discovery/session.ts';
 
@@ -75,6 +75,8 @@ interface State {
   versions?: StoredVersion[];
   keptLooks?: { workspaceId: string; fingerprint: string; look: KeptLook }[];
   draftChanges?: DraftChange[];
+  /** Browser tests only: readings the stand-in gave (the server's extraction_runs). */
+  extractions?: (ExtractionRow & { processId: string; done: ProcessModel; sourceIds: string[] })[];
   /** Package B: discovery sessions, by the server's rules (table discovery_sessions). */
   discovery?: (StoredSession & { workspaceId: string; updatedBy: string | null })[];
 }
@@ -551,8 +553,31 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       if (options.standIn) return options.standIn.transcribe();
       throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`);
     },
-    async startExtraction() { throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`); },
-    async latestExtraction() { return null; },
+    async startExtraction(_workspaceId, processId, sourceIds) {
+      // Browser tests only: the reading a test gave (journey/store/standIns.ts), done on the next look a moment later.
+      if (!options.standIn) throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`);
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Reading the sources needs the editor or admin role.');
+      const read = sourceIds.map(id => state.sources.find(x => x.id === id && x.processId === processId)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+      const model = options.standIn.read(read.map(x => ({ key: x.key, passages: x.segments.map(g => ({ text: g.text, place: g.locator?.heading ?? null })) }))) as ProcessModel;
+      const at = now();
+      const run = { id: uuid(), processId, status: 'running' as const, error: null, createdAt: at, updatedAt: at, model: null, sourceIds: [...sourceIds], tokens: 0, done: model };
+      (state.extractions ??= []).push(run);
+      save();
+      return { runId: run.id };
+    },
+    async latestExtraction(processId) {
+      if (!demo) state = { ...state, extractions: load().extractions ?? state.extractions };
+      const runs = (state.extractions ?? []).filter(r => r.processId === processId);
+      const last = runs[runs.length - 1];
+      if (!last) return null;
+      if (last.status === 'running' && Date.now() - Date.parse(last.createdAt) > 1500) {
+        Object.assign(last, { status: 'done', model: last.done, updatedAt: now(), tokens: 30_000 });
+        save();
+      }
+      const c = structuredClone(last);
+      return { id: c.id, status: c.status, error: c.error, createdAt: c.createdAt, updatedAt: c.updatedAt, model: c.model, tokens: c.tokens };
+    },
     async lookAtExtraction() { /* no extraction runs in the browser */ },
     async runAiTask(_workspaceId, task, segments) {
       if (options.standIn) return options.standIn.run(task, segments);
