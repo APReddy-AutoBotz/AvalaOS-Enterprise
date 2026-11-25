@@ -31,7 +31,7 @@ import {
   readState, reviewedReading, savedCount, skip, startedLine, startedReading, tookIntoSource, usedCall, type LaterWords, type SessionStep, type StoredSession,
 } from '../../domain/discovery/session.ts';
 import {
-  cardItem, chooseEdit, keptLine, laterLine, leaveWith, notApplicable, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
+  cardItem, chooseEdit, keptLine, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
 } from '../../domain/discovery/flow.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
 import { ChangeReview, coarsePatch } from './SourcesStage.tsx';
@@ -99,13 +99,14 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     return s;
   };
   /** A step on the session, applied to the server's latest copy with the version it was read at. */
-  const commit = async (step: SessionStep): Promise<boolean> => {
+  // `say` is where a refusal is said: the top of the panel, or the card that asked (review, 25 November 2026).
+  const commit = async (step: SessionStep, say: Say = setError): Promise<boolean> => {
     await ensure();
     const r = await commitSessionStep({ get: () => store.getDiscoverySession(process.id), save: (id, next, v) => store.saveDiscoverySession(id, next, v) }, step);
     if (r.kind === 'saved') { setSession(r.session); return true; }
-    if (r.kind === 'full') setError(FULL_LINE);
-    else if (r.kind === 'busy') setError(BUSY_LINE);
-    else { setSession(null); setError('This session was finished. Start a new one to carry on.'); }
+    if (r.kind === 'full') say(FULL_LINE);
+    else if (r.kind === 'busy') say(BUSY_LINE);
+    else { setSession(null); say(FINISHED_LINE); }
     return false;
   };
   React.useEffect(() => {
@@ -116,8 +117,8 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
   }, [run?.id, run?.status, session?.id]);
 
   /** One edit on the working draft, read again if another page wrote first. */
-  const saveOp = async (op: Op, summary: string): Promise<boolean> => {
-    setError(null);
+  const saveOp = async (op: Op, summary: string, say: Say = setError): Promise<boolean> => {
+    say(null);
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const d = await store.startDraft(process.id);
@@ -127,7 +128,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
         announceProcessChanged(process.id);
         return true;
       } catch (e) {
-        if (!(e instanceof StoreError && e.status === 409) || attempt === 1) { setError(messageOf(e)); return false; }
+        if (!(e instanceof StoreError && e.status === 409) || attempt === 1) { say(notSavedLine(messageOf(e))); return false; }
       }
     }
     return false;
@@ -291,6 +292,8 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
 type BoxVoice = { transcribe?: (audio: string) => Promise<string>; voiceLine?: string };
 type Who = { me: string | null; name: string };
+type Say = (line: string | null) => void;
+const FINISHED_LINE = 'This session was finished. Start a new one to carry on.';
 
 function Choices({ card, value, onChange }: { card: Card; value: string; onChange: (v: string) => void }) {
   return (
@@ -403,7 +406,7 @@ function FirstReading({ store, process, run, lastRead, boxVoice, busy, active, o
 function Cards({ model, asksPurpose, skipped, waitingKeys, keys, capped, boxVoice, saved, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
   store: JourneyStore; process: ProcessRow; model: ProcessModel; asksPurpose: boolean; skipped: string[]; waitingKeys: string[]; keys: string[];
   capped: boolean; boxVoice: BoxVoice; saved: number; later: LaterWords[]; who: Who;
-  callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string) => Promise<boolean>; commit: (step: SessionStep) => Promise<boolean>;
+  callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string, say?: Say) => Promise<boolean>; commit: (step: SessionStep, say?: Say) => Promise<boolean>;
   addWords: (key: string, question: string, words: string) => Promise<void>;
   onAllowance: () => void; onNotice: (n: string | null) => void; onError: (e: string | null) => void; onOpenStage: (stage: 'sources' | 'process' | 'gaps') => void;
 }) {
@@ -439,15 +442,20 @@ function Summary({ summary, onOpenStage }: { summary: ReturnType<typeof sessionS
   );
 }
 
-function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage, waiting }: {
+function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who, callAi, saveOp: saveOnPanel, commit: commitOnPanel, addWords, onAllowance, onNotice, onOpenStage, waiting }: {
   card: Card; item: TriageItem | undefined; model: ProcessModel; n: number; of: number; keys: string[]; capped: boolean; boxVoice: BoxVoice; waiting: number;
   /** Words kept on this card to read later: shown again in the box. */
   later: LaterWords | undefined; who: Who;
-  callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string) => Promise<boolean>; commit: (step: SessionStep) => Promise<boolean>;
+  callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string, say?: Say) => Promise<boolean>; commit: (step: SessionStep, say?: Say) => Promise<boolean>;
   addWords: (key: string, question: string, words: string) => Promise<void>;
   onAllowance: () => void; onNotice: (n: string | null) => void; onError: (e: string | null) => void; onOpenStage: (stage: 'sources' | 'process' | 'gaps') => void;
 }) {
   const [text, setText] = React.useState(later?.words ?? '');
+  // A refused write is said on the card that asked, in plain words (review, 25 November 2026), not at the top.
+  const [refused, setRefused] = React.useState<string | null>(null);
+  const saveOp = (op: Op, summary: string) => saveOnPanel(op, summary, setRefused);
+  const commit = (step: SessionStep) => commitOnPanel(step, setRefused);
+  const onError = setRefused;
   const [pick, setPick] = React.useState('');
   const [statuses, setStatuses] = React.useState<Record<number, AccessStatus>>(() => Object.fromEntries((item?.interfaces ?? []).map(x => [x.index, x.access])));
   const [reading, setReading] = React.useState<{ r: Reading; said: string; attempt: 1 | 2; first: string } | null>(null);
@@ -574,6 +582,7 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
           <Button disabled={busy || !asked.trim()} onClick={() => run(async () => { const e = leaveWith(card, item, asked); if (e && await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(e.line ?? null); } })}>Leave it with them</Button>
         </div>
       )}
+      {refused && <p role="alert" className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950 ring-1 ring-inset ring-amber-200" data-testid="discovery-card-refused">{refused}</p>}
       <p className="mt-3 text-xs text-slate-500">{WORDS.nothing}</p>
     </article>
   );

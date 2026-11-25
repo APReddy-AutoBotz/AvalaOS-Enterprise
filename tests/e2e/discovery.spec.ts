@@ -231,6 +231,51 @@ test('a Discovery that cannot be opened says so, and opens on "Try again"', asyn
   await expect(page.getByTestId('discovery-describe')).toBeVisible();
 });
 
+test('a "Who does …?" card on a draft that already holds its question: Not applicable closes it, leaving it defers it, nothing doubled', async ({ page }) => {
+  test.setTimeout(90_000);
+  // As a real first reading leaves it (owner's walk, 25 November 2026): steps with no one or no application
+  // recorded, and the rule-made question already stored, with the gap's own words.
+  const stored = structuredClone(first);
+  stored.openQuestions.push(
+    { id: 'q-14', target: { kind: 'step', id: 's-match', field: 'roleIds' }, question: 'Who does "Three-way match"?', whyItMatters: '', owner: null, status: 'open' },
+    { id: 'q-15', target: { kind: 'step', id: 's-review', field: 'systemIds' }, question: 'Which system is used for "Review high-value invoice"?', whyItMatters: '', owner: null, status: 'open' },
+  );
+  await withStandIns(page, { extraction: [stored] });
+  await signInAndCreateProcess(page);
+  await page.getByTestId('own-words-discovery').getByRole('button', { name: 'Start with Ask Avala' }).click();
+  const discovery = page.getByTestId('discovery');
+  await discovery.getByLabel('In your own words').fill(WORDS);
+  await discovery.getByRole('button', { name: 'Save and read it' }).click();
+  await discovery.getByRole('button', { name: 'Start the process from this' }).click({ timeout: 20_000 });
+  const card = discovery.getByTestId('discovery-card');
+  const question = card.getByTestId('discovery-question');
+  const on = async (step: string, field: string) => ((await workingModel(page)).openQuestions as { target: { id: string; field: string }; status: string; owner: string | null; answer?: string }[])
+    .filter(q => q.target.id === step && q.target.field === field);
+  await expect(question).toHaveText('What do you want from this process?', { timeout: 20_000 });
+  const before = (await workingModel(page)).openQuestions.length;
+  expect(await on('s-match', 'roleIds')).toHaveLength(1);
+  for (const q of ['What do you want from this process?', 'Is the work done today?', 'Which system is used for "Check mandatory fields"?']) {
+    await expect(question).toHaveText(q);
+    await card.getByRole('button', { name: 'Skip' }).click();
+  }
+
+  // "Not applicable" closes the stored question; the card goes, and no copy is added.
+  await expect(question).toHaveText('Who does "Three-way match"?');
+  await card.getByRole('button', { name: 'Not applicable' }).click();
+  await expect(question).not.toHaveText('Who does "Three-way match"?');
+  await expect(card.getByTestId('discovery-card-refused')).toHaveCount(0);
+  expect(await on('s-match', 'roleIds')).toEqual([expect.objectContaining({ status: 'answered', answer: 'Not applicable to this process.' })]);
+
+  // "Not known, ask someone" defers the stored question with the name; one question, and the card goes.
+  await expect(question).toHaveText('Which system is used for "Review high-value invoice"?');
+  await card.getByRole('button', { name: 'Not known, ask someone' }).click();
+  await card.getByLabel('Who would know?').fill('Priya in IT');
+  await card.getByRole('button', { name: 'Leave it with them' }).click();
+  await expect(question).not.toHaveText('Which system is used for "Review high-value invoice"?');
+  expect(await on('s-review', 'systemIds')).toEqual([expect.objectContaining({ status: 'deferred', owner: 'Priya in IT' })]);
+  expect((await workingModel(page)).openQuestions.length).toBe(before);
+});
+
 test('the demo shows what Discovery is, with nothing to press', async ({ page }) => {
   await page.goto('/demo/processes');
   await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();

@@ -57,16 +57,35 @@ export function triageCard(item: TriageItem, m: ProcessModel): Card | null {
 }
 
 /** The session's cards in the order they are asked. */
+type Target = { kind: string; id?: string | null; field?: string | null };
+const at = (x: Target) => `${x.kind}:${x.id ?? ''}:${x.field ?? ''}`;
+
+/**
+ * The triage item a card answers: the one with its key; for a card built from a gap, else the open item on the same
+ * target (kind, id, field). A first reading may store the gap's own question (owner's walk, 25 November 2026: "Who
+ * does …?" stored as q-14), which triage then lists under the question's id, not the gap's key. Answering, leaving
+ * or closing the card then acts on that stored question, and never adds a second copy.
+ */
+export function coveringItem(card: Card, t: Triage): TriageItem | undefined {
+  if (!card.itemKey) return undefined;
+  const byKey = t.items.find(x => x.key === card.itemKey);
+  if (byKey || card.origin.kind !== 'gap') return byKey;
+  return t.items.find(x => !x.deferred && x.target && at(x.target) === at(card.target) && x.questionIds.length > 0);
+}
+
 export function discoveryQueue(i: QueueInput): Card[] {
   const m = i.model;
   const t = i.triage ?? triage(m, i.assessment);
-  // A question about the shape left with someone is not asked again in the session: leaving it records a deferred
-  // question on the same target (who does the step, or in which application), so its card is dropped by target.
-  const at = (x: { kind: string; id?: string | null; field?: string | null }) => `${x.kind}:${x.id ?? ''}:${x.field ?? ''}`;
-  const left = new Set(t.items.filter(x => x.deferred && x.target).map(x => at(x.target!)));
-  const shape = shapeCards(m).filter(c => !c.itemKey || !left.has(at(c.target)));
-  const inShape = new Set(shape.map(c => c.itemKey).filter(Boolean));
-  const items = t.items.filter(x => !x.deferred && !inShape.has(x.key)).map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
+  // A question about the shape that a person closed ("Not applicable") or left with someone is not asked again: its
+  // stored question on the same target (who does the step, or in which application) is no longer open, while the
+  // gap itself stays in the model, so its card is dropped by target.
+  const settled = new Set(m.openQuestions.filter(q => q.status !== 'open').map(q => at(q.target)));
+  const shape = shapeCards(m).filter(c => !c.itemKey || !settled.has(at(c.target)));
+  // The item a shape card answers is asked by that card alone.
+  const inShape = new Set(shape.map(c => coveringItem(c, t)?.key).filter((k): k is string => Boolean(k)));
+  // A gap with no stored question whose target a person closed or left (above) is not asked again as an item either.
+  const items = t.items.filter(x => !x.deferred && !inShape.has(x.key) && !(x.questionIds.length === 0 && x.target && settled.has(at(x.target))))
+    .map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
   const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...(i.raised ?? []), ...inputCards(m, i.assessment)];
   // One card per key, the first kept; a stable sort by group keeps each group's own order.
   const seen = new Set<string>();

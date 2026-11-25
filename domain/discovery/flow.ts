@@ -9,6 +9,7 @@ import { buildAnswer, record, type Op } from '../questions/answer.ts';
 import { OWNER_LABEL, type Triage, type TriageItem } from '../questions/triage.ts';
 import { ANSWER_TO, answersKey, answerAgainstConfirmed, type AnswerOutcome } from './answers.ts';
 import type { Card } from './card.ts';
+import { coveringItem } from './queue.ts';
 import type { Proposal } from '../questions/notes.ts';
 import { interviewEdit } from '../questions/interview.ts';
 import { conflictValue } from '../questions/conflictValue.ts';
@@ -98,7 +99,7 @@ export function updateSources(lastRead: readonly string[], active: readonly { id
 // ---- What an answer on a card writes --------------------------------------------------------------
 
 /** The triage item a card stands for, when it stands for one. */
-export const cardItem = (card: Card, t: Triage): TriageItem | undefined => (card.itemKey ? t.items.find(i => i.key === card.itemKey) : undefined);
+export const cardItem = (card: Card, t: Triage): TriageItem | undefined => coveringItem(card, t);
 
 export interface Edit { op: Op; summary: string; line?: string }
 
@@ -168,6 +169,9 @@ export function leaveWith(card: Card, item: TriageItem | undefined, name: string
 }
 
 export const NOT_APPLICABLE = 'Not applicable to this process.';
+
+/** Said on a card whose write was refused: what the server or the edit said, and that nothing changed. */
+export const notSavedLine = (message: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Nothing was changed.`;
 
 /** "Not applicable": the question is closed with that answer; a card with no stored question records it first. */
 export function notApplicable(card: Card, item: TriageItem | undefined): Edit {
