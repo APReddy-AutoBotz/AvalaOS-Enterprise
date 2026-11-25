@@ -183,7 +183,7 @@ function AddStep({ editor, after }: { model: ProcessModel; editor: ModelEditor; 
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Verb and object, e.g. Check mandatory fields" className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
       </label>
       <label className="text-xs font-medium text-slate-600">Type
-        <div className="mt-1"><Select value={type} options={TASK_TYPES} label="Type of new step" onChange={setType} /></div>
+        <div className="mt-1"><Select value={type} options={TASK_TYPES} label="Type of new step" onChange={v => setType(v as TaskType)} /></div>
       </label>
       <Button type="submit" disabled={!name.trim()}>Add step</Button>
     </form>
