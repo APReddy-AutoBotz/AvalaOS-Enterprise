@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import zlib from 'zlib';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { CSP_HEADER, cspHeadersFile, cspPolicy } from './domain/site/csp.ts';
@@ -9,9 +10,9 @@ import { CSP_REPORT_PATH } from './tests/e2e/cspReports.ts';
 // the built site as Netlify's `_headers` file, so the live site and every preview are sent it.
 function policyHeaders(policy: string): Plugin {
   return {
-        name: 'avala-csp-headers',
-        apply: 'build',
-        generateBundle() { this.emitFile({ type: 'asset', fileName: '_headers', source: cspHeadersFile(policy) }); },
+    name: 'avala-csp-headers',
+    apply: 'build',
+    generateBundle() { this.emitFile({ type: 'asset', fileName: '_headers', source: cspHeadersFile(policy) }); },
   };
 }
 
@@ -37,6 +38,29 @@ function policyReports(): Plugin {
   };
 }
 
+// What the section editor's script carries (the Tiptap upgrade, 24 November 2026): its size, and which
+// packages are built into it or into any other script, among those Tiptap brings that the editor does not
+// use (links, underline, the menus' positioning). Printed by the build, read in CI's log.
+const WATCHED = ['@tiptap/starter-kit', '@tiptap/extension-link', 'linkifyjs', 'tippy.js', '@tiptap/extension-underline', '@floating-ui/dom', '@floating-ui/core', '@tiptap/extension-bubble-menu', '@tiptap/extension-floating-menu'];
+function editorReport(): Plugin {
+  return {
+    name: 'avala-editor-report',
+    apply: 'build',
+    generateBundle(_options, bundle) {
+      const pkg = (id: string) => id.match(/node_modules\/((?:@[^/]+\/)?[^/]+)/)?.[1];
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type !== 'chunk') continue;
+        const packages = [...new Set(chunk.moduleIds.map(pkg).filter((p): p is string => Boolean(p)))].sort();
+        const watched = packages.filter(p => WATCHED.includes(p));
+        if (chunk.facadeModuleId?.endsWith('journey/process/SectionEditor.tsx')) {
+          console.log(`Section editor's script ${chunk.fileName}: ${chunk.code.length} bytes, ${zlib.gzipSync(chunk.code).length} gzipped; packages: ${packages.join(', ')}`);
+        }
+        if (watched.length) console.log(`Unused editor packages built into ${chunk.fileName}: ${watched.join(', ')}`);
+      }
+    },
+  };
+}
+
 // The site's one build: index.html is the entry; the journey, the homepage and the demo are reached from it.
 
 export default defineConfig(({ mode }) => {
@@ -53,7 +77,7 @@ export default defineConfig(({ mode }) => {
       allowedHosts: ['avalaos.com'],
       headers: { [CSP_HEADER]: cspReports ? `${policy}; report-uri ${CSP_REPORT_PATH}` : policy },
     },
-    plugins: [react(), policyHeaders(policy), policyReports()],
+    plugins: [react(), policyHeaders(policy), policyReports(), editorReport()],
     // The build of Avala OS a kept version records beside its inputs (package 14): Netlify's commit, else "local".
     // Not a secret. It lets the Documents page say a release changed the text only when the inputs prove it.
     // The browser tests' stand-in for AI tasks (journey/store/standIns.ts) is built in only for the test build,

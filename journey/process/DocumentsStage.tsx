@@ -43,7 +43,7 @@ import type { Member } from '../store/types.ts';
 import { deriveRequirements } from '../../domain/requirements/derive.ts';
 import { reconcile, type StoredRequirement } from '../../domain/requirements/register.ts';
 import { RequirementsPanel } from './RequirementsPanel.tsx';
-import { applyEdits, EditError, makeEdit, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
+import { applyEdits, EditError, makeEdit, savesNothing, type SectionEdit, type SectionStatus } from '../../domain/docs/edits.ts';
 import { changedSections, type SectionChange } from '../../domain/docs/changes.ts';
 import { shapeInEffect } from '../../domain/flowchart/shape.ts';
 import { viewDecisions } from './mapShape.ts';
@@ -596,7 +596,7 @@ export function DocumentsStage({ store, processId, workspaceId, model: loaded, w
                   {editing === s.id && st ? (
                     <div className="mt-3 space-y-3">
                       <React.Suspense fallback={<Spinner label="Opening the editor" />}>
-                        <SectionEditor initial={mine?.html ?? st.generatedHtml} title={s.title} busy={editBusy} onCancel={() => setEditing(null)} onSave={html => saveEdit(s.id, html, st.hash)} check={checkText} draft={draftFor(s.title, s.number)} />
+                        <SectionEditor initial={mine?.html ?? st.generatedHtml} title={s.title} busy={editBusy} onCancel={() => setEditing(null)} onSave={html => (savesNothing(html, mine?.html ?? st.generatedHtml, st.state) ? setEditing(null) : saveEdit(s.id, html, st.hash))} check={checkText} draft={draftFor(s.title, s.number)} />
                       </React.Suspense>
                       {mine && <button type="button" className="text-xs text-slate-600 hover:underline" onClick={() => { takeUpdate(s.id); setEditing(null); }}>Use the generated text instead</button>}
                       {s.blocks.filter(b => b.kind !== 'rich' && b.kind !== 'paragraph' && b.kind !== 'list' && b.kind !== 'callout').map((b, i) => <BlockView key={i} b={b} />)}

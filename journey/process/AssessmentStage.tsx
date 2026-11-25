@@ -546,7 +546,7 @@ function StepDetail({ model, result, decisions, canEdit, editor, onOverride, onC
         <section>
           <h3 className="text-xs font-semibold text-slate-500">Override</h3>
           <form className="mt-2 space-y-2" onSubmit={e => { e.preventDefault(); if (!approach) return; const r = onOverride(approach, rationale); if (r === true) { setRationale(''); setApproach(''); setProblem(null); } else if (typeof r === 'string') setProblem(r); }}>
-            <Select value={approach} label="Override recommendation" onChange={setApproach} options={[{ value: '', label: 'Choose an approach' }, ...APPROACHES.filter(m => m !== result.winner).map(m => ({ value: m, label: APPROACH_LABEL[m] }))]} />
+            <Select value={approach} label="Override recommendation" onChange={v => setApproach(v as Approach | '')} options={[{ value: '', label: 'Choose an approach' }, ...APPROACHES.filter(m => m !== result.winner).map(m => ({ value: m, label: APPROACH_LABEL[m] }))]} />
             <textarea aria-label="Rationale" required placeholder="Why the recommendation should be different" value={rationale} onChange={e => setRationale(e.target.value)} rows={3}
               className="block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
             {problem && <p className="text-xs text-red-700">{problem}</p>}
