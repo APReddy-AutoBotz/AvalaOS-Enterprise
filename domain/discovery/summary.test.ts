@@ -40,3 +40,44 @@ test('a session ends when the shape is settled and nothing that decides is open,
   assert.ok(later.line.endsWith(' Kept to read later: 2.'));
   assert.equal(s.line.includes('Kept to read later'), false, 'said only when there are some');
 });
+
+// ---- The summary counts what the queue asks (review, 25 November 2026) ---------------------------------------------
+
+import { askedParts, discoveryQueue } from './queue.ts';
+import { cardItem, leaveWith, notApplicable } from './flow.ts';
+import { validateModel } from '../processModel/validate.ts';
+
+test('every card answered, left with someone or not applicable: done, and the closing sentence for done', () => {
+  // The sample without its end, with the gap's own question stored for one step, as a first reading leaves it.
+  let m: ProcessModel = structuredClone(gold);
+  const ends = new Set(m.events.filter(e => e.kind === 'end').map(e => e.id));
+  m.events = m.events.filter(e => !ends.has(e.id));
+  m.flows = m.flows.filter(f => !ends.has(f.from) && !ends.has(f.to));
+  m.openQuestions.push({ id: 'q-14', target: { kind: 'step', id: 's-match', field: 'roleIds' }, question: 'Who does "Three-way match"?', whyItMatters: '', owner: null, status: 'open' });
+  const a0 = assessProcess(m);
+  assert.ok(askedParts(m, triage(m, a0)).shape.length >= 3, 'shape cards to start with');
+  assert.equal(sessionDone(m, a0), false);
+  assert.match(sessionSummary(m, a0, 0).closing, /^You stopped with \d+ questions still to ask\./);
+
+  // One card at a time, as the queue asks them: those of the shape and those that decide, in turn not applicable and left.
+  for (let n = 0; n < 60; n++) {
+    const a = assessProcess(m);
+    const t = triage(m, a);
+    const parts = askedParts(m, t);
+    if (!parts.shape.length && deciding(m, a) === 0) break;
+    const card = parts.shape[0] ?? discoveryQueue({ model: m, assessment: a, asksPurpose: false, triage: t }).find(c => c.group !== 'start' && c.group !== 'conflict' && c.group !== 'shape')!;
+    const item = cardItem(card, t);
+    const e = n % 2 ? leaveWith(card, item, 'Rahul in AP')! : notApplicable(card, item);
+    m = e.op(m).model;
+    assert.ok(validateModel(m).valid, `still a valid model after ${card.key}`);
+  }
+  const a = assessProcess(m);
+  assert.equal(askedParts(m, triage(m, a)).shape.length, 0, 'no shape card asked');
+  assert.equal(deciding(m, a), 0);
+  assert.equal(sessionDone(m, a), true);
+  const s = sessionSummary(m, a, 0);
+  assert.equal(s.done, true);
+  assert.equal(s.closing, 'Every question that could change the recommendation is answered, left with someone, or not applicable.');
+  // A closed gap is still in the model, so counting every shape card would have said there was more to ask.
+  assert.ok(shapeCards(m).length > 0);
+});

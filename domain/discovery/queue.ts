@@ -73,19 +73,29 @@ export function coveringItem(card: Card, t: Triage): TriageItem | undefined {
   return t.items.find(x => !x.deferred && x.target && at(x.target) === at(card.target) && x.questionIds.length > 0);
 }
 
-export function discoveryQueue(i: QueueInput): Card[] {
-  const m = i.model;
-  const t = i.triage ?? triage(m, i.assessment);
+/**
+ * What the session still asks, before ordering: the shape cards and the triage items given cards of their own. The
+ * queue and the summary both count from this (review, 25 November 2026), so "still to ask" is what the queue asks.
+ */
+export function askedParts(m: ProcessModel, t: Triage): { shape: Card[]; items: TriageItem[] } {
   // A question about the shape that a person closed ("Not applicable") or left with someone is not asked again: its
   // stored question on the same target (who does the step, or in which application) is no longer open, while the
   // gap itself stays in the model, so its card is dropped by target.
   const settled = new Set(m.openQuestions.filter(q => q.status !== 'open').map(q => at(q.target)));
-  const shape = shapeCards(m).filter(c => !c.itemKey || !settled.has(at(c.target)));
+  const shape = shapeCards(m).filter(c => !settled.has(at(c.target)));
   // The item a shape card answers is asked by that card alone.
   const inShape = new Set(shape.map(c => coveringItem(c, t)?.key).filter((k): k is string => Boolean(k)));
   // A gap with no stored question whose target a person closed or left (above) is not asked again as an item either.
-  const items = t.items.filter(x => !x.deferred && !inShape.has(x.key) && !(x.questionIds.length === 0 && x.target && settled.has(at(x.target))))
-    .map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
+  const items = t.items.filter(x => !x.deferred && !inShape.has(x.key) && !(x.questionIds.length === 0 && x.target && settled.has(at(x.target))));
+  return { shape, items };
+}
+
+export function discoveryQueue(i: QueueInput): Card[] {
+  const m = i.model;
+  const t = i.triage ?? triage(m, i.assessment);
+  const parts = askedParts(m, t);
+  const shape = parts.shape;
+  const items = parts.items.map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
   const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...(i.raised ?? []), ...inputCards(m, i.assessment)];
   // One card per key, the first kept; a stable sort by group keeps each group's own order.
   const seen = new Set<string>();
