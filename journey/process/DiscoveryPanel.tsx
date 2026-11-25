@@ -35,6 +35,7 @@ import {
 } from '../../domain/discovery/flow.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
 import { ChangeReview, coarsePatch } from './SourcesStage.tsx';
+import { REVIEW_WORDS } from '../../domain/extract/reviewWords.ts';
 import { useVoice, voiceProps } from './voice.ts';
 import { useDiscoveryOpenHere } from './discoveryOpen.ts';
 import { announceProcessChanged } from '../processChanged.ts';
@@ -271,8 +272,8 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
           {run?.status === 'failed' && readingsStarted(state).includes(run.id) && <div className="mb-4"><ErrorNote message={failedLine(run.error)} /><Button variant="secondary" onClick={() => { const ids = sourcesRead(state, run.id); void read(ids.length ? ids : active.map(x => x.id)); }}>Try again</Button></div>}
           {reviewing && (
             <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="discovery-review">
-              <p className="mb-2 text-sm font-semibold text-slate-900">What your answers change in the draft</p>
-              <ChangeReview store={store} processId={process.id} extracted={reviewing.model!} finishedAt={reviewing.updatedAt} matchLine="Your answers match the draft as it stands."
+              <p className="mb-2 text-sm font-semibold text-slate-900">{REVIEW_WORDS.heading}</p>
+              <ChangeReview store={store} processId={process.id} extracted={reviewing.model!} finishedAt={reviewing.updatedAt} withAnswers
                 onApplied={() => { void commit(reviewedReading(reviewing.id)); announceProcessChanged(process.id); }} />
               <button type="button" className="mt-2 text-xs font-medium text-slate-500 underline" onClick={() => void commit(reviewedReading(reviewing.id))}>Close this review</button>
             </div>

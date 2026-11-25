@@ -1,7 +1,8 @@
 // The Process Definition Document: how the process works today and how it will work. Section order
 // follows the UiPath default PDD, plus the delivery model. Every table is derived from the Process
 // Model and the assessment; nothing is drafted here and nothing is assumed.
-import { gaps, orderedSteps } from '../processModel/selectors.ts';
+import { orderedSteps } from '../processModel/selectors.ts';
+import { closedByPerson, openGapsOf } from '../questions/closedGaps.ts';
 import { DocBuilder, missing, type CellInput, type DocTree } from './tree.ts';
 import type { MetricKind } from '../processModel/types.ts';
 import { buildingSystem, existingSystems, processWords } from '../plan/intended.ts';
@@ -105,8 +106,8 @@ export function buildPdd(input: DocInput): DocTree {
       factCell(s.traits?.effortMinutes, v => `${v} min`), sourceList(s.sources),
     ]), 'No steps are recorded yet.');
   for (const s of steps) {
-    if (!s.roleIds.length) b.note(`Who does "${s.name}"?`, { kind: 'step', id: s.id, field: 'roleIds' });
-    if (!s.systemIds.length && s.taskType !== 'manual') b.note(`Which system is used for "${s.name}"?`, { kind: 'step', id: s.id, field: 'systemIds' });
+    if (!s.roleIds.length && !closedByPerson(m, { kind: 'step', id: s.id, field: 'roleIds' })) b.note(`Who does "${s.name}"?`, { kind: 'step', id: s.id, field: 'roleIds' });
+    if (!s.systemIds.length && s.taskType !== 'manual' && !closedByPerson(m, { kind: 'step', id: s.id, field: 'systemIds' })) b.note(`Which system is used for "${s.name}"?`, { kind: 'step', id: s.id, field: 'systemIds' });
   }
   b.section('2.5', 'Decision points and business rules');
   b.table('Decision points', ['Decision', 'Kind', 'Outcomes'], m.gateways.map(g => [g.question, g.type, m.flows.filter(f => f.from === g.id).map(f => f.label || 'Unlabelled').join(' / ') || missing()]), 'No decision points are recorded.');
@@ -152,7 +153,7 @@ export function buildPdd(input: DocInput): DocTree {
     `${prefix}-${String(i + 1).padStart(2, '0')}`, { text: e.name, status: e.status }, e.trigger, e.stepIds.map(id => String(no(id))).join(', '), e.handling || missing(), e.routedToRoleId ? roleName(e.routedToRoleId) : missing(),
   ]);
   b.table('Business exceptions', ['ID', 'Exception', 'Trigger', 'Steps', 'Action', 'Routed to'], exRows('business', 'BE'), 'No business exceptions are recorded.');
-  for (const e of m.exceptions.filter(x => !x.routedToRoleId)) b.note(`Who handles the exception "${e.name}"?`, { kind: 'exception', id: e.id, field: 'routedToRoleId' });
+  for (const e of m.exceptions.filter(x => !x.routedToRoleId && !closedByPerson(m, { kind: 'exception', id: x.id, field: 'routedToRoleId' }))) b.note(`Who handles the exception "${e.name}"?`, { kind: 'exception', id: e.id, field: 'routedToRoleId' });
   b.section('3.7', 'Application error handling');
   b.table('Application errors', ['ID', 'Error', 'Trigger', 'Steps', 'Action', 'Routed to'], exRows('application', 'AE'), 'No application errors are recorded.');
   if (!m.exceptions.some(e => e.kind === 'application')) b.open('How should the automation handle application errors (system down, time-outs, login failure)?');
@@ -166,7 +167,7 @@ export function buildPdd(input: DocInput): DocTree {
   b.table('Sources', ['Key', 'Title'], input.sources.map(s => [s.key, s.title]), 'No sources were used; the model was entered by hand.');
   b.section('6', 'Open gaps and deferred items', 1);
   for (const q of m.openQuestions.filter(q => q.status === 'open')) b.note(q.question, q.target);
-  for (const g of gaps(m)) b.note(g.label, g.target);
+  for (const g of openGapsOf(m)) b.note(g.label, g.target);
   b.table('Open gaps', ['#', 'Question', 'Raised in'], b.openItems.map((o, i) => [String(i + 1), o.text, o.section ?? '']), 'No open gaps.');
 
   return {
@@ -255,8 +256,8 @@ function buildPddAsIs(input: DocInput): DocTree {
       ...(timed ? [known(s.traits?.effortMinutes) !== null ? factCell(s.traits?.effortMinutes, v => `${v} min`) : ''] : []), sourceList(s.sources),
     ]), 'No steps are recorded yet.');
   for (const s of steps) {
-    if (!s.roleIds.length) b.note(`Who does "${s.name}"?`, { kind: 'step', id: s.id, field: 'roleIds' });
-    if (!s.systemIds.length && s.taskType !== 'manual') b.note(`Which system is used for "${s.name}"?`, { kind: 'step', id: s.id, field: 'systemIds' });
+    if (!s.roleIds.length && !closedByPerson(m, { kind: 'step', id: s.id, field: 'roleIds' })) b.note(`Who does "${s.name}"?`, { kind: 'step', id: s.id, field: 'roleIds' });
+    if (!s.systemIds.length && s.taskType !== 'manual' && !closedByPerson(m, { kind: 'step', id: s.id, field: 'systemIds' })) b.note(`Which system is used for "${s.name}"?`, { kind: 'step', id: s.id, field: 'systemIds' });
   }
   section('Decision points and business rules');
   b.table('Decision points', ['Decision', 'Kind', 'Outcomes'], m.gateways.map(g => [g.question, g.type, m.flows.filter(f => f.from === g.id).map(f => f.label || 'Unlabelled').join(' / ') || missing()]), 'No decision points are recorded.');
@@ -272,7 +273,7 @@ function buildPddAsIs(input: DocInput): DocTree {
   b.paragraph('The cases that leave the standard path, and how people handle them today.');
   b.table('Business exceptions', ['ID', 'Exception', 'Trigger', 'Steps', 'Action', 'Handled by'], exRows('business', 'BE'), 'No business exceptions are recorded.');
   if (m.exceptions.some(e => e.kind === 'application')) b.table('When an application fails', ['ID', 'Problem', 'Trigger', 'Steps', 'Action', 'Handled by'], exRows('application', 'AE'), '');
-  for (const e of m.exceptions.filter(x => !x.routedToRoleId)) b.note(`Who handles the exception "${e.name}"?`, { kind: 'exception', id: e.id, field: 'routedToRoleId' });
+  for (const e of m.exceptions.filter(x => !x.routedToRoleId && !closedByPerson(m, { kind: 'exception', id: x.id, field: 'routedToRoleId' }))) b.note(`Who handles the exception "${e.name}"?`, { kind: 'exception', id: e.id, field: 'routedToRoleId' });
   section('Reporting and audit');
   b.table('Controls, reporting and audit', ['Control', 'Steps', 'Source'], m.controls.map(c => [c.text, c.stepIds.map(id => String(no(id))).join(', '), sourceList(c.sources)]), 'No controls or reporting needs are recorded.');
 
@@ -283,7 +284,7 @@ function buildPddAsIs(input: DocInput): DocTree {
   chapter('Open gaps and deferred items');
   // Only what is asked of this process: a question that serves an assessment is not listed (it stays on the record).
   for (const q of m.openQuestions.filter(q => q.status === 'open' && asksQuestion(m, q))) b.note(q.question, q.target);
-  for (const g of gaps(m)) if (asksQuestion(m, { target: g.target, question: g.label })) b.note(g.label, g.target);
+  for (const g of openGapsOf(m)) if (asksQuestion(m, { target: g.target, question: g.label })) b.note(g.label, g.target);
   b.table('Open gaps', ['#', 'Question', 'Raised in'], b.openItems.map((o, i) => [String(i + 1), o.text, o.section ?? '']), 'No open gaps.');
 
   return { type: 'pdd', title: 'Process Definition Document', subtitle: m.meta.name, control: controlOf(input), sections: b.sections, openItems: b.openItems };

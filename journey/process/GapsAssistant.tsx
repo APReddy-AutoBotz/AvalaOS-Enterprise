@@ -21,6 +21,7 @@ import { messageOf } from '../ui.tsx';
 import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
 import type { Branding } from '../../domain/docs/branding.ts';
 import { couldChange, focusedLine, meetingResult } from '../../domain/questions/result.ts';
+import { closedGaps } from '../../domain/questions/closedGaps.ts';
 import { earlierAnswers, NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../domain/questions/ways.ts';
 import type { GapsMode } from './openGaps.ts';
 import { useVoice, voiceProps } from './voice.ts';
@@ -171,7 +172,39 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           </div>
         </div>
       )}
+      <ClosedByPerson model={model} canEdit={canEdit} onReopen={(ids, question) => editor.apply(m => reopenQuestions(m, { questionIds: ids }), `Reopened: ${question}`)} />
     </div>
+  );
+}
+
+/**
+ * The gaps a person closed ("Not applicable", or answered without a value) are not asked again (package B, pull
+ * request 5a): one line says how many, and opens them, each with its answer and Reopen, the only way back.
+ */
+function ClosedByPerson({ model, canEdit, onReopen }: { model: ProcessModel; canEdit: boolean; onReopen: (ids: string[], question: string) => void }) {
+  const closed = React.useMemo(() => closedGaps(model), [model]);
+  const [open, setOpen] = React.useState(false);
+  if (!closed.length) return null;
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white px-4 py-3" data-testid="closed-gaps">
+      <p className="text-sm text-slate-700">
+        {closed.length} {closed.length === 1 ? 'question closed by a person is' : 'questions closed by a person are'} not asked again.{' '}
+        <button type="button" className="font-medium text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? 'Hide them' : 'Show them'}</button>
+      </p>
+      {open && (
+        <ul className="mt-2 divide-y divide-slate-100">
+          {closed.map(c => (
+            <li key={c.question.id} className="flex flex-wrap items-start justify-between gap-2 py-2" data-testid="closed-gap">
+              <div>
+                <p className="text-sm font-medium text-slate-900">{c.question.question}</p>
+                <p className="text-sm text-slate-600">Answer: {c.question.answer ?? 'Closed'}</p>
+              </div>
+              {canEdit && <Button variant="ghost" onClick={() => onReopen([c.question.id], c.question.question)}>Reopen</Button>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

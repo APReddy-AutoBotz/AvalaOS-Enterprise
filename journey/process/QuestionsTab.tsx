@@ -3,7 +3,8 @@
 import React from 'react';
 import { addQuestion, answerQuestion, resolveConflict } from '../../domain/processModel/patch.ts';
 import { conflictValue } from '../../domain/questions/conflictValue.ts';
-import { askedOpenQuestions, getElement, untrackedGaps } from '../../domain/processModel/selectors.ts';
+import { askedOpenQuestions, getElement } from '../../domain/processModel/selectors.ts';
+import { untrackedOpenGaps } from '../../domain/questions/closedGaps.ts';
 import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { Conflict, ElementTarget, OpenQuestion, ProcessModel } from '../../domain/processModel/types.ts';
 import { Button, EmptyState } from '../ui.tsx';
@@ -30,7 +31,7 @@ function valueKind(t: ElementTarget): ValueKind {
 export function QuestionsTab({ model, editor, canEdit, questionsNote }: TabContext) {
   const open = askedOpenQuestions(model);
   const answered = model.openQuestions.filter(q => q.status !== 'open');
-  const missing = untrackedGaps(model);
+  const missing = untrackedOpenGaps(model);
   return (
     <div className="space-y-6">
       {questionsNote && <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="questions-count-note">{questionsNote}</p>}
