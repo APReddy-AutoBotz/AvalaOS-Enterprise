@@ -17,6 +17,16 @@ export const closingQuestion = (m: ProcessModel, target: ElementTarget): OpenQue
 /** Whether a person closed the gap on this target. */
 export const closedByPerson = (m: ProcessModel, target: ElementTarget): boolean => Boolean(closingQuestion(m, target));
 
+/**
+ * The gap kinds a person's answer cannot close (review, 25 November 2026): an application's access is asked by the
+ * question rules per application and is settled only by the way-in answer, never by words; an assumption is
+ * confirmed on the Process stage, not by a question.
+ */
+export const NEVER_CLOSED: ReadonlySet<Gap['kind']> = new Set(['system_access_unknown', 'unsourced_assumption']);
+
+/** Whether a person closed this gap: never for the kinds above. */
+export const gapClosed = (m: ProcessModel, g: Pick<Gap, 'kind' | 'target'>): boolean => !NEVER_CLOSED.has(g.kind) && closedByPerson(m, g.target);
+
 /** The exception-route target, which is a gap of its own (triage asks who handles an exception with no route). */
 const routeTarget = (id: string): ElementTarget => ({ kind: 'exception', id, field: 'routedToRoleId' });
 
@@ -26,17 +36,17 @@ const routeTarget = (id: string): ElementTarget => ({ kind: 'exception', id, fie
  */
 export function closedGaps(m: ProcessModel): { label: string; target: ElementTarget; question: OpenQuestion }[] {
   const found: { label: string; target: ElementTarget }[] = [
-    ...gaps(m).filter(g => g.kind !== 'system_access_unknown' && g.kind !== 'unsourced_assumption').map(g => ({ label: g.label, target: g.target })),
+    ...gaps(m).filter(g => !NEVER_CLOSED.has(g.kind)).map(g => ({ label: g.label, target: g.target })),
     ...m.exceptions.filter(e => !e.routedToRoleId).map(e => ({ label: `Who handles the exception "${e.name}"?`, target: routeTarget(e.id) })),
   ];
   return found.flatMap(g => { const q = closingQuestion(m, g.target); return q ? [{ ...g, question: q }] : []; });
 }
 
 /** The gaps a document lists as open: those no person closed. */
-export const openGapsOf = (m: ProcessModel, all: readonly Gap[] = gaps(m)): Gap[] => all.filter(g => !closedByPerson(m, g.target));
+export const openGapsOf = (m: ProcessModel, all: readonly Gap[] = gaps(m)): Gap[] => all.filter(g => !gapClosed(m, g));
 
 /** The gaps no open question covers and no person closed: the Questions tab's "missing" list. */
-export const untrackedOpenGaps = (m: ProcessModel): Gap[] => untrackedGaps(m).filter(g => !closedByPerson(m, g.target));
+export const untrackedOpenGaps = (m: ProcessModel): Gap[] => untrackedGaps(m).filter(g => !gapClosed(m, g));
 
 /** Every open item as recorded (the Questions tab's "N in all"): open questions asked, and gaps no one tracks or closed. */
 export const openItemsNow = (m: ProcessModel): number => askedOpenQuestions(m).length + untrackedOpenGaps(m).length;

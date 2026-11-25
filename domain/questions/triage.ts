@@ -10,7 +10,7 @@ import { buildingSystem } from '../plan/intended.ts';
 import { asksQuestion, purposeOf, type PurposeValue } from '../plan/purpose.ts';
 import { APPROACH_LABEL, NON_INTEGRABLE } from '../assess/scoring.ts';
 import { choicesFor } from './answer.ts';
-import { closedByPerson } from './closedGaps.ts';
+import { closedByPerson, gapClosed } from './closedGaps.ts';
 
 export type QGroup = 'decides' | 'signoff' | 'detail';
 export type QOwner = 'business' | 'it' | 'finance';
@@ -179,7 +179,7 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   // Gaps found by rule that no stored question covers. An answered question covers its gap too: a gap a person closed
   // ("Not applicable", or answered without a value) is not asked again until a person reopens it (closedGaps.ts).
   const covered = (g: Gap) => stored.some(q => q.target.kind === g.target.kind && q.target.id === g.target.id && q.target.field === g.target.field)
-    || closedByPerson(m, g.target);
+    || gapClosed(m, g);
   for (const g of gaps(m)) {
     if (g.kind === 'system_access_unknown' || covered(g)) continue;
     if (building && g.target.kind === 'system' && g.target.id === building.id) continue;
@@ -238,7 +238,7 @@ export function triage(m: ProcessModel, a: ProcessAssessment): Triage {
   }
   asked.sort((x, y) => Number(x.deferred) - Number(y.deferred) || ORDER[x.group] - ORDER[y.group] || x.owner.localeCompare(y.owner));
   // Gaps a person closed are not counted as raised either, so "N in all" agrees with the lists.
-  const gapCount = gaps(m).filter(g => !closedByPerson(m, g.target)).length
+  const gapCount = gaps(m).filter(g => !gapClosed(m, g)).length
     + m.exceptions.filter(x => !x.routedToRoleId && !closedByPerson(m, { kind: 'exception', id: x.id, field: 'routedToRoleId' })).length;
   return { items: asked, alreadyKnown, raw: stored.length + gapCount, ...(purpose !== 'assess' ? { purpose } : {}) };
 }

@@ -99,3 +99,25 @@ test('figures on a draft shaped like the owner\'s test process: 6 steps, no one 
   assert.deepEqual(before, { line: 2, tab: 2, first: { now: 2, found: 0, wait: 23 } });
   assert.deepEqual(figures(after), { line: 2, tab: 2, first: { now: 2, found: 0, wait: 21 } });
 });
+
+test('an application\'s access is never closed by a worded answer: listed, counted, and in the PDD and the BRD as before (review, 25 November 2026)', () => {
+  const base = gold();
+  const asked = new Set(base.openQuestions.filter(x => x.target.kind === 'system').map(x => x.target.id));
+  const sys = base.systems.find(s => s.inScope && !asked.has(s.id))!;
+  assert.ok(sys, 'an application with no stored question about it');
+  sys.access = [];
+  const label = `How can ${sys.name} be accessed (API, UI, file)?`;
+  const answered: ProcessModel = { ...base, openQuestions: [...base.openQuestions, { id: 'q-91', target: { kind: 'system', id: sys.id, field: 'access' }, question: label, whyItMatters: '', owner: null, status: 'answered', answer: 'Through its screens, we think.' }] };
+  const before = triage(base, assessProcess(base));
+  const after = triage(answered, assessProcess(answered));
+  const forSys = (t: typeof before) => t.items.filter(i => i.target.kind === 'system' && i.target.id === sys.id).length;
+  assert.equal(forSys(before), 1);
+  assert.equal(forSys(after), 1, 'the application\'s item is still listed');
+  assert.equal(after.raw, before.raw, '"N in all" unchanged');
+  assert.equal(openItemsNow(answered), openItemsNow(base));
+  for (const build of [buildPdd, buildBrd]) {
+    assert.ok(openItems(build(docInput(base))).includes(label), `${build.name} before`);
+    assert.ok(openItems(build(docInput(answered))).includes(label), `${build.name} after`);
+  }
+  assert.deepEqual(closedGaps(answered), [], 'not offered as closed in Closing the gaps');
+});
