@@ -14,7 +14,7 @@
 // - A new open review comment on a document reaches the people named on the process, never its author:
 //   only those new since the person's last email, a few shown with a count of the rest; an email can go for
 //   comments alone (migration digest_counts_and_comments). My work shows the same under "Needs you".
-import { commentsFor, needsFor, type Need, type OpenComment, type Person, type ProcessFacts } from './home.ts';
+import { asksQuestions, commentsFor, GAPS_MARK, needsFor, type Need, type OpenComment, type Person, type ProcessFacts } from './home.ts';
 import type { StageId } from '../workspace/route.ts';
 import type { ProcessModel } from '../processModel/types.ts';
 import type { SourceLook } from '../assistant/sourceLook.ts';
@@ -95,6 +95,9 @@ const esc = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt
 const EMAIL = /^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/;
 
 const stagePath = (site: string, processId: string, stage: StageId) => `${site}/process/${processId}/${stage}`;
+// A need for questions carries the marker, so the page opens Closing the gaps where the process answers them
+// (questionsLanding: Documents, or the Assessment stage on the "Assess" set-up). needKey is unchanged.
+const needPath = (site: string, n: Need) => `${stagePath(site, n.processId, n.stage)}${asksQuestions(n) ? `?${GAPS_MARK.name}=${GAPS_MARK.value}` : ''}`;
 
 export function needsDigest(input: DigestInput): Digest {
   const assigned = input.assigned ?? [];
@@ -160,7 +163,7 @@ export function needsDigest(input: DigestInput): Digest {
     intro, '',
     ...[...groups.values()].flatMap(g => [
       g.name,
-      ...g.needs.flatMap(n => [`- ${markNew(n) ? 'New: ' : ''}${n.text}`, `  ${stagePath(site, n.processId, n.stage)}`]),
+      ...g.needs.flatMap(n => [`- ${markNew(n) ? 'New: ' : ''}${n.text}`, `  ${needPath(site, n)}`]),
       '',
     ]),
     ...(fi ? [
@@ -185,7 +188,7 @@ export function needsDigest(input: DigestInput): Digest {
   const items = [...groups.values()].map(g => `
 <p style="margin:16px 0 6px;font-size:15px;font-weight:bold;color:#0f172a">${esc(g.name)}</p>
 <ul style="margin:0;padding-left:20px;font-size:15px;line-height:22px">${g.needs.map(n => `
-<li style="margin:0 0 6px">${markNew(n) ? '<span style="display:inline-block;margin-right:6px;padding:0 6px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:bold">New</span>' : ''}<a href="${esc(stagePath(site, n.processId, n.stage))}" style="color:#002C4B">${esc(n.text)}</a></li>`).join('')}
+<li style="margin:0 0 6px">${markNew(n) ? '<span style="display:inline-block;margin-right:6px;padding:0 6px;border-radius:6px;background:#FEF3C7;color:#92400E;font-size:12px;font-weight:bold">New</span>' : ''}<a href="${esc(needPath(site, n))}" style="color:#002C4B">${esc(n.text)}</a></li>`).join('')}
 </ul>`).join('') + (fi ? `
 <p style="margin:16px 0 6px;font-size:15px;font-weight:bold;color:#0f172a">Assigned to you on the board</p>
 <ul style="margin:0;padding-left:20px;font-size:15px;line-height:22px">${shownItems.map(i => `

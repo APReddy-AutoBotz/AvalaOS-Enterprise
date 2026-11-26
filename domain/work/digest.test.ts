@@ -207,3 +207,21 @@ test('new comments ride along with process needs; a long list is cut with a coun
   assert.deepEqual(lines.map(n => [n.processId, n.text, n.stage, n.kind]), [['p1', '1 open review comment on the documents', 'documents', 'comments']]);
   assert.deepEqual(commentLines(ME, facts, facts.flatMap(p => (p.comments ?? []).map(c => ({ ...c, processId: p.id })))).map(c => c.id), ['c1']);
 });
+
+test('the links for questions carry the marker that opens Closing the gaps; the others and what counts as new do not change', () => {
+  const needs = namedNeeds(ana, [
+    proc('p1', { questions: { now: 2, found: 1, wait: 4 }, architectId: ME, proposalsWaiting: 3 }),
+    proc('p2', { openQuestions: 3 }),
+    proc('p4', { approverId: ME, status: 'changed' }),
+  ]);
+  const d = needsDigest(base({ needs }));
+  const text = d.email!.text;
+  assert.match(text, /- (New: )?2 questions only your people can answer\n  https:\/\/avalaos\.com\/process\/p1\/documents\?gaps=all\n/);
+  assert.match(text, /- (New: )?1 answer found in the sources to confirm\n  https:\/\/avalaos\.com\/process\/p1\/documents\?gaps=all\n/);
+  assert.match(text, /- (New: )?3 open questions to answer\n  https:\/\/avalaos\.com\/process\/p2\/documents\?gaps=all\n/);
+  assert.match(text, /- (New: )?3 work items waiting to be confirmed to the board\n  https:\/\/avalaos\.com\/process\/p1\/work-items\n/);
+  assert.match(text, /\n  https:\/\/avalaos\.com\/process\/p4\/process\n/);
+  assert.equal((d.email!.html.match(/\/documents\?gaps=all"/g) ?? []).length, 3);
+  assert.ok(!/(work-items|\/process)\?gaps/.test(d.email!.html));
+  assert.deepEqual(d.keys, ['p1:analyst:documents', 'p1:architect:work-items', 'p2:analyst:documents', 'p4:approver:process'], 'the keys are as before');
+});
