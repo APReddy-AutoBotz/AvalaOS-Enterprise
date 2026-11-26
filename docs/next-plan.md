@@ -39,7 +39,16 @@ Where a section below says "in review", "built", "in `next`" or "waits for the r
 
 **Still open:** the first weekday email from `journey-notify` 16 (27 November 2026, 03:30 UTC).
 
-**Asked separately, not done:** the migration that closes `model_approve`; revoking TRUNCATE from `authenticated`; the user guide's chapters; package 16's line in `platform.ts` with the full Ask Avala measure on 1 December 2026.
+**Asked separately, not done:** the user guide's chapters; package 16's line in `platform.ts` with the full Ask Avala measure (see below: the owner moved it forward on 26 November 2026). The migration that closes `model_approve` and the revoke of TRUNCATE are done (below).
+
+**Update, 26 November 2026 (evening): two migrations applied, and what followed the twelfth release.**
+- **`model_approve` refuses** (#250, merged into `next` as `f59b3c5`): applied on the owner's yes after a rolled-back trial (`approved_versions.sql`, 16 groups, and `model_persistence.sql`, 8 groups, each in its own transaction). It is recorded on the live database as `20261126130411 model_approve_refusal`. `model_approve` now answers 409 "RELOAD_TO_APPROVE: This page is out of date. Reload the page, then approve." with the caller's own rights (security invoker), and changes nothing; who may call it is unchanged (authenticated and service_role). `approve_version` and `app_private.approve_revision` are untouched. Nothing on any screen called it, and no approval had been made since the eleventh release.
+- **TRUNCATE** (#251, merged as `724eee2`): applied on the owner's yes after a rolled-back trial (`truncate_grants.sql`, 3 groups). It is recorded as `20261126130434 revoke_truncate`. `authenticated` and `anon` hold TRUNCATE on no table in `public`; `service_role` keeps it on all 40. The default privileges for tables made by `postgres` no longer give it to `authenticated`, so new tables start without it; tables made by `supabase_admin` are not covered (its own defaults; `postgres` cannot change them), which the migration says.
+- **The two files are named after the versions the live database recorded** (`20261126130411_model_approve_refusal.sql`, `20261126130434_revoke_truncate.sql`), so the live list and the repository match for them.
+- Both were confirmed from the database by the review chat. Neither needs a release.
+- **The weekday email's link for questions** (#252, merged as `08e1917`): its question lines open Closing the gaps, on Documents or, on the "Assess" set-up, on the Assessment stage, and My work's "Answer them" does the same. `journey-notify` changes at the next release. This closes the dated item in section 3g once released.
+- **In review:** the screens-only pull request #257 (the flow editor's `keyboard.bindTo` and the old approve out of the store) and the reading limit #258 (one reading at a time per process, 6 an hour per person; its migration `extraction_start_limit` is neither trialled nor applied, each on the owner's separate yes).
+- **The AI runs planned for 1 December** (the full Ask Avala measure with package 16's line, and the Discovery replay) run now, counted against the workspace "Test", by the owner's decision of 26 November 2026; the second chat runs them.
 
 **Update, 24 November 2026: the eleventh release.** What was in `next` after the tenth release is live: #227 to #237, and the release's own commit #238 (`9343e80`), which set `UPDATED.security` and `EVIDENCE_KEPT_SINCE` to 24 November 2026 (merge commit `58ae491` on `main`, merged by the review chat on the owner's yes at 05:18 UTC). It carries:
 - package 14's screens (pull requests 3, 4 and 5: approving keeps the documents, earlier approvals and "Keep it as it reads now", the evidence pack's versions, History's lines, the two numbers, Ask Avala's line; section 3f);
@@ -749,8 +758,8 @@ Recorded for later, on the owner's word (22 November 2026):
 - **Pull request 3: an edit saved and then undone.** The tag stays "unapproved changes", and Documents says "Changes were saved since approved version {N}, and the working draft now reads exactly as that version." That line is shown when the tag says "unapproved changes" and no section differs.
 - **Pull request 3: the order of reading when approving.** The page reads `version_states` (its `changes_seen`) before it reads the inputs it builds from, then passes `changes_seen` to the approval. A save in between makes the approval refuse and ask for a reload, never keep a copy without it.
 - **The notes of the first release say plainly** that versions approved between the two releases keep no evidence pack.
-- **A later hardening item, asked for separately:** the role `authenticated` holds TRUNCATE on `processes` and `workspaces` (the default grant). The API cannot use it; revoke it in a later migration.
-- **After the release, asked for separately:** a migration that replaces `model_approve` with a refusal to reload the page, so a tab opened before the release cannot approve without a kept copy.
+- **A later hardening item, asked for separately:** the role `authenticated` holds TRUNCATE on `processes` and `workspaces` (the default grant). The API cannot use it; revoke it in a later migration. Done 26 November 2026 for all 22 tables that held it and for new tables (`revoke_truncate`, see the update of that evening at the top).
+- **After the release, asked for separately:** a migration that replaces `model_approve` with a refusal to reload the page, so a tab opened before the release cannot approve without a kept copy. Done 26 November 2026 (`model_approve_refusal`, see the update of that evening at the top).
 
 ## 3g. Packages 16 and 17, and two dated items (owner, 20 November 2026)
 
