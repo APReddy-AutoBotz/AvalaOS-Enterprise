@@ -53,8 +53,11 @@ export interface StartRefusal {
 /** How a refused start is answered to the page; null when it was admitted. */
 export function readingRefusal(a: StartAnswer, limit: number = READING_LIMIT.perPersonHour): StartRefusal | null {
   if (a.admitted) return null;
-  if (a.reason === 'in_progress') return { status: 409, code: 'READING_IN_PROGRESS', message: IN_PROGRESS_LINE, runId: a.runId };
-  return { status: 429, code: 'READINGS_PER_HOUR', message: perHourMessage(a.retryAfterSeconds, limit), retryAfterSeconds: a.retryAfterSeconds };
+  // Spelt out, so it reads the same under the site's looser type settings as under the functions' strict ones.
+  const r = a as Exclude<StartAnswer, { admitted: true }>;
+  if (r.reason === 'in_progress') return { status: 409, code: 'READING_IN_PROGRESS', message: IN_PROGRESS_LINE, runId: (r as Extract<StartAnswer, { reason: 'in_progress' }>).runId };
+  const wait = (r as Extract<StartAnswer, { reason: 'per_hour' }>).retryAfterSeconds;
+  return { status: 429, code: 'READINGS_PER_HOUR', message: perHourMessage(wait, limit), retryAfterSeconds: wait };
 }
 
 /** The reading under way named by a refusal the page received (`READING_IN_PROGRESS` with its run), else null. */

@@ -469,7 +469,7 @@ async function createRun(req: Request, body: any): Promise<Response> {
     if (refused.retryAfterSeconds) res.headers.set('Retry-After', String(refused.retryAfterSeconds));
     return res;
   }
-  const runId = answer.runId;
+  const runId = (answer as Extract<StartAnswer, { admitted: true }>).runId;
   await trigger({ action: 'start', runId, token });
   return reply(202, { ok: true, runId });
 }
