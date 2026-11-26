@@ -78,7 +78,20 @@ test('Discovery: a reading already under way is followed with the same line', as
   await page.getByTestId('own-words-discovery').getByRole('button', { name: 'Start with Ask Avala' }).click();
   const discovery = page.getByTestId('discovery');
   await discovery.getByLabel('In your own words').fill('Supplier invoices arrive in the AP shared mailbox. An AP clerk checks the mandatory fields.');
-  await keepRuns(page, processId, [{ minutesAgo: 0, running: true }]);
+  // Another tab keeps writing its reading as it runs: "Save and read it" saves the words first, which writes this
+  // tab's copy of the store, so the other tab's reading is kept in every write, as its own writes would keep it.
+  await page.evaluate(({ KEY, processId, gold }) => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    const now = Date.now();
+    const other = { id: '00000000-0000-4000-8000-000000000099', processId, createdBy: s.me.id, status: 'running', error: null, model: null, tokens: 0,
+      sourceIds: [], done: gold, createdAt: new Date(now + 60_000).toISOString(), updatedAt: new Date(now).toISOString() };
+    const write = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (k: string, v: string) {
+      if (k === KEY) { const x = JSON.parse(v); x.extractions = [...(x.extractions ?? []).filter((r: { id: string }) => r.id !== other.id), other]; v = JSON.stringify(x); }
+      return write.call(this, k, v);
+    };
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, { KEY, processId, gold });
   await discovery.getByRole('button', { name: 'Save and read it' }).click();
   await expect(discovery.getByTestId('reading-under-way')).toHaveText(UNDER_WAY, { timeout: 20_000 });
   await expect(discovery.getByTestId('discovery-reading')).toBeVisible();
