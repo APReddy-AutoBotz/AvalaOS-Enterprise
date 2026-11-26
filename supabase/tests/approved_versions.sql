@@ -10,6 +10,17 @@ begin
   execute 'set local role authenticated';
 end $$;
 create function pg_temp.as_owner() returns void language plpgsql as $$ begin execute 'reset role'; end $$;
+-- An approval as the site made it before copies were kept: the shared body, called under the person's sign-in
+-- claims (it reads the caller from them) and returned to that person's role. model_approve no longer approves
+-- (migration model_approve_refusal), and the live database still holds approvals made this way.
+create function pg_temp.approve_revision(target uuid, seq bigint) returns jsonb language plpgsql as $$
+declare r jsonb;
+begin
+  execute 'reset role';
+  r := app_private.approve_revision(target, seq);
+  execute 'set local role authenticated';
+  return r;
+end $$;
 -- What the caller's page would read before approving: how many rows of the change record it can see.
 create function pg_temp.seen(target uuid) returns bigint language sql as $$
   select s.changes_seen from public.version_states((select workspace_id from public.processes where id = target), target) s
@@ -39,7 +50,7 @@ declare
   outsider_u uuid := gen_random_uuid();
   approver2_u uuid := gen_random_uuid();
   ws uuid; rev3 uuid; c0 bigint; c1 bigint; ws2 uuid; p uuid; p2 uuid; p3 uuid; rev1 uuid; rev2 uuid; v1 uuid; r jsonb; n int; passed int := 0;
-  big jsonb; big_look jsonb; t0 timestamptz; ms numeric; sizes text; msg text; st record;
+  big jsonb; big_look jsonb; t0 timestamptz; ms numeric; sizes text; msg text; st record; who uuid; audit0 bigint;
   step jsonb := '{"op": "add", "path": "/steps/0", "value": {"id": "s-1", "name": "Receive invoice", "description": "", "roleIds": [], "systemIds": [], "taskType": "receive", "inputs": [], "outputs": [], "ruleIds": [], "exceptionIds": [], "status": "user-confirmed", "sources": []}}';
   rename jsonb := '[{"op": "replace", "path": "/steps/0/name", "value": "Receive the invoice"}]';
   chosen jsonb := '[{"kind": "step", "stepId": "s-1", "approach": "human", "rationale": "Kept with people.", "by": "Priya", "byId": "00000000-0000-0000-0000-000000000001", "at": "2026-11-21T10:00:00Z"}]';
@@ -70,27 +81,56 @@ begin
   rev1 := (public.model_start_draft(p) ->> 'revisionId')::uuid;
   perform public.model_save_patch(rev1, 0, jsonb_build_array(step), 'user', 'Added a step');
 
-  -- 1. model_approve is one path with approve_version (change a): both call the shared body, and the released
-  --    site's refusals read exactly as before, in the same order.
+  -- 1. model_approve approves nothing (migration model_approve_refusal): whoever calls it, for any revision, it
+  --    asks for a reload, in the words a page from before the eleventh release shows, and changes nothing.
+  --    approve_version keeps the shared body, and that body's refusals read exactly as before, in the same order.
   perform pg_temp.as_owner();
-  if position('app_private.approve_revision(target_revision, expected_seq)' in (select prosrc from pg_proc where oid = 'public.model_approve(uuid,bigint)'::regprocedure)) = 0
-     or position('app_private.approve_revision(target_revision, expected_seq)' in (select prosrc from pg_proc where proname = 'approve_version')) = 0 then
-    raise exception 'FAILED 1a: model_approve and approve_version do not share approve_revision';
+  if position('app_private.approve_revision(target_revision, expected_seq)' in (select prosrc from pg_proc where proname = 'approve_version')) = 0 then
+    raise exception 'FAILED 1a: approve_version does not call approve_revision';
+  end if;
+  if position('approve_revision' in (select prosrc from pg_proc where oid = 'public.model_approve(uuid,bigint)'::regprocedure)) <> 0 then
+    raise exception 'FAILED 1a: model_approve still calls approve_revision';
   end if;
   if (select count(*) from pg_proc where proname = 'approve_version' and prosrc like '%edit_seq <> expected_seq%') <> 0 then
     raise exception 'FAILED 1b: approve_version carries its own copy of the draft checks';
   end if;
-  perform pg_temp.as_user(outsider_u);
-  begin perform public.model_approve(rev1, 1); raise exception 'FAILED 1c'; exception when sqlstate 'PT404' then get stacked diagnostics msg = message_text; end;
-  if msg <> 'NOT_FOUND: revision' then raise exception 'FAILED 1c: %', msg; end if;
-  perform pg_temp.as_user(editor_u);
-  begin perform public.model_approve(rev1, 1); raise exception 'FAILED 1d'; exception when sqlstate 'PT403' then get stacked diagnostics msg = message_text; end;
-  if msg <> 'FORBIDDEN: approving needs approval rights' then raise exception 'FAILED 1d: %', msg; end if;
+  select count(*) into audit0 from public.workspace_audit where workspace_id = ws;
+  foreach who in array array[approver_u, editor_u, viewer_u, outsider_u] loop
+    perform pg_temp.as_user(who);
+    begin perform public.model_approve(rev1, 1); raise exception 'FAILED 1c'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
+    if msg <> 'RELOAD_TO_APPROVE: This page is out of date. Reload the page, then approve.' then raise exception 'FAILED 1c: %', msg; end if;
+  end loop;
   perform pg_temp.as_user(approver_u);
-  begin perform public.model_approve(gen_random_uuid(), 1); raise exception 'FAILED 1e'; exception when sqlstate 'PT404' then get stacked diagnostics msg = message_text; end;
-  if msg <> 'NOT_FOUND: revision' then raise exception 'FAILED 1e: %', msg; end if;
-  begin perform public.model_approve(rev1, 0); raise exception 'FAILED 1f'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
-  if msg <> 'EDIT_CONFLICT: the draft is at edit 1, not 0' then raise exception 'FAILED 1f: %', msg; end if;
+  begin perform public.model_approve(gen_random_uuid(), 1); raise exception 'FAILED 1d'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
+  if msg <> 'RELOAD_TO_APPROVE: This page is out of date. Reload the page, then approve.' then raise exception 'FAILED 1d: %', msg; end if;
+  perform pg_temp.as_owner();
+  if (select state <> 'working' or edit_seq <> 1 or approved_at is not null or approved_by is not null from public.process_model_revisions where id = rev1)
+     or exists (select 1 from public.process_model_revisions where workspace_id = ws and state = 'approved')
+     or exists (select 1 from public.approved_versions where workspace_id = ws)
+     or exists (select 1 from public.document_looks where workspace_id = ws)
+     or (select count(*) from public.workspace_audit where workspace_id = ws) <> audit0 then
+    raise exception 'FAILED 1e: a refused model_approve changed something';
+  end if;
+  if not has_function_privilege('authenticated', 'public.model_approve(uuid,bigint)', 'EXECUTE')
+     or not has_function_privilege('service_role', 'public.model_approve(uuid,bigint)', 'EXECUTE')
+     or has_function_privilege('anon', 'public.model_approve(uuid,bigint)', 'EXECUTE') then
+    raise exception 'FAILED 1f: who may call model_approve changed';
+  end if;
+  if (select prosecdef from pg_proc where oid = 'public.model_approve(uuid,bigint)'::regprocedure) then
+    raise exception 'FAILED 1f: model_approve still runs with its owner''s rights';
+  end if;
+  -- The shared body's refusals, unchanged (they were model_approve's until now).
+  perform pg_temp.as_user(outsider_u);
+  begin perform pg_temp.approve_revision(rev1, 1); raise exception 'FAILED 1g'; exception when sqlstate 'PT404' then get stacked diagnostics msg = message_text; end;
+  if msg <> 'NOT_FOUND: revision' then raise exception 'FAILED 1g: %', msg; end if;
+  perform pg_temp.as_user(editor_u);
+  begin perform pg_temp.approve_revision(rev1, 1); raise exception 'FAILED 1h'; exception when sqlstate 'PT403' then get stacked diagnostics msg = message_text; end;
+  if msg <> 'FORBIDDEN: approving needs approval rights' then raise exception 'FAILED 1h: %', msg; end if;
+  perform pg_temp.as_user(approver_u);
+  begin perform pg_temp.approve_revision(gen_random_uuid(), 1); raise exception 'FAILED 1i'; exception when sqlstate 'PT404' then get stacked diagnostics msg = message_text; end;
+  if msg <> 'NOT_FOUND: revision' then raise exception 'FAILED 1i: %', msg; end if;
+  begin perform pg_temp.approve_revision(rev1, 0); raise exception 'FAILED 1j'; exception when sqlstate 'PT409' then get stacked diagnostics msg = message_text; end;
+  if msg <> 'EDIT_CONFLICT: the draft is at edit 1, not 0' then raise exception 'FAILED 1j: %', msg; end if;
   passed := passed + 1;
 
   -- 2. Only an approver keeps a version. Approving the working draft and keeping its documents are one
@@ -283,7 +323,8 @@ begin
   perform pg_temp.as_user(approver2_u);
   rev2 := (public.model_start_draft(p2) ->> 'revisionId')::uuid;
   perform public.model_save_patch(rev2, 0, jsonb_build_array(step), 'user', 'Added a step');
-  perform public.model_approve(rev2, 1);
+  -- Approved the way the site did before copies were kept (model_approve, which now refuses).
+  perform pg_temp.approve_revision(rev2, 1);
   select * into st from public.version_states(ws, p2) s;
   if st.latest_number is not null or st.approved_rev_no <> 1 or st.approved_has_version or st.process_changed then raise exception 'FAILED 10b: %', row_to_json(st); end if;
   if (select count(*) from public.version_states(ws)) <> 3 then raise exception 'FAILED 10c'; end if;
