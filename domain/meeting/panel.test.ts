@@ -50,6 +50,7 @@ test('when to read: a minute apart, unless "Read now"; the notes since the last 
   assert.ok(readingDue(s, at(2, 1)));
   assert.deepEqual(readingNotes(s).map(n => n.id), ['n1', 'n2'], 'the new note, with the one before as context');
   assert.ok(!readingDue({ ...s, use: { tokens: 130_000, calls: 0 } }, at(5)), 'at the cap no reading starts');
+  assert.ok(readingDue({ ...s, minutes: 60, use: { tokens: 130_000, calls: 0 } }, at(5)), 'a 60-minute call has twice the room');
 });
 
 test('a whole call: found answers, the hold, the next question, the review and the one edit Save writes', () => {
@@ -237,4 +238,36 @@ test('the same notes, list and replies give the same next question', () => {
     return nextQuestion(s, list, t, at(3));
   };
   assert.deepEqual(run(), run());
+});
+
+test('a choice the notes already answer is not suggested again; the analyst picks its answer in the review', () => {
+  const DONE = 'start:doneToday';
+  assert.ok(list.some(x => x.card.key === DONE), 'the sample\'s list asks whether the work is done today');
+  let s = note(start(), 'n1', 2, 'The AP clerks do this every day today, by hand in SAP.');
+  const p = prepareReading(s, ctx);
+  const sent = p.answers!.items.find(i => i.key === DONE);
+  assert.ok(sent, 'the choice goes to the answer reading');
+  assert.equal(sent!.kind, 'free', 'as a plain question, only to learn whether it is answered');
+  s = applyReading(s, p, { answers: verified(answerFromNotes, p.answers!.segments, { answers: [{ questionId: qid(p, DONE), value: 'Yes, done every day today', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'The AP clerks do this every day today' }] }), notice: { data: { questions: [], wanted: [] } } }, { model: gold, at: at(3), asked: [], list });
+  assert.ok(isAnswered(s, DONE));
+  for (let i = 0; i < 30; i++) {
+    const n = nextQuestion(s, list, t, at(4 + i));
+    if (!n) break;
+    assert.notEqual(n.card.key, DONE, 'never suggested once the notes answer it');
+    s = markAsked(s, n, at(4 + i));
+  }
+  // The review lists it to pick, never as an answer, and nothing is picked for the analyst.
+  const review = buildReview(s, { model: gold, list, triage: t, timeZone: 'UTC' });
+  assert.ok(!review.answers.some(a => a.key === DONE));
+  const choice = review.choose.find(c => c.key === DONE)!;
+  assert.equal(choice.ticked, false);
+  assert.deepEqual(choice.choices.map(c => c[0]), ['yes', 'partly', 'no', 'unknown']);
+  const source = callNotesSource(s, { takenKeys: [], endedAt: at(30), timeZone: 'UTC' })!;
+  const base = { model: gold, list, triage: t, timeZone: 'UTC', source, date: '26 November 2026', by: { id: 'u-1', name: 'Asha' }, at: at(30) };
+  const unpicked = callEdit(s, review, { ticked: new Set([choice.id]) }, base).op(gold).model;
+  assert.equal(unpicked.meta.brief?.doneToday?.value, gold.meta.brief?.doneToday?.value, 'ticked without a pick changes nothing');
+  const picked = callEdit(s, review, { ticked: new Set(), picks: { [DONE]: 'yes' } }, base);
+  assert.equal(picked.op(gold).model.meta.brief?.doneToday?.value, 'yes');
+  assert.equal(picked.counts.answers, 1);
+  assert.deepEqual(errorsOf(validateModel(picked.op(gold).model)), []);
 });

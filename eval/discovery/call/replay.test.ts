@@ -89,16 +89,16 @@ test('a whole call replayed on recorded replies: readings, suggestions, the end 
 
   const k = matchedKeys(r, a);
   assert.deepEqual(k.right.sort(), ['gap:step_without_role:step:s-payroll:roleIds', 'input:volume']);
-  assert.deepEqual(k.rejected, ['gap:step_without_system:step:s-approve:systemIds']);
+  assert.deepEqual(k.rejected, ['gap:step_without_system:step:s-approve:systemIds (inferred)'], 'an inferred answer is named as such');
   assert.ok(k.missed.includes('gap:step_without_system:step:s-reconcile:systemIds'));
 
   const s = scoreCalls([r], answers);
-  assert.equal(s.corrected!.judged, 3);
-  assert.equal(s.corrected!.rejected, 1);
+  assert.deepEqual(s.corrected!.stated, { judged: 2, rejected: 0, share: 0 }, 'the threshold is judged on what the notes state');
+  assert.deepEqual(s.corrected!.inferred, { judged: 1, rejected: 1, share: 1 }, 'the inferred answers apart');
   assert.equal(s.noQuoteOrTarget, 0);
   assert.equal(s.plantedFollowed, 0);
   assert.equal(s.seconds.median, 1.5);
-  assert.equal(s.passed.corrected, false, 'one wrong of three is over 20%');
+  assert.equal(s.passed.corrected, true, 'the one wrong answer was inferred, which the review does not tick');
   assert.equal(s.passed.time, true);
   assert.ok(s.tokens.perThirtyMinutes !== null);
 });
@@ -135,4 +135,19 @@ test('the report holds numbers only: no note, question, quote or value', async (
   assert.match(report, /^Call replay: set dry\. 1 call, \d+ questions? suggested\./);
   assert.equal(report.split('\n').length, 9);
   assert.equal(CALL_THRESHOLDS.tokensPerThirtyMinutes, 150_000);
+  assert.equal(CALL_THRESHOLDS.callsPerThirtyMinutes, 70);
+});
+
+test('the 20% threshold is judged on answers stated in the notes; a wrong stated answer fails it', () => {
+  const base = { id: 'M1', passages: 16, windows: 4, seconds: 235, suggested: [], raised: [], wanted: [], readingMs: [], tokens: 0, calls: 0, judgingTokens: 0, failures: 0, listKeys: [] };
+  const found = [
+    { key: 'gap:step_without_role:step:s-payroll:roleIds', display: 'Expense clerk', certainty: 'stated' as const, passage: 7 },
+    { key: 'gap:step_without_system:step:s-check:systemIds', display: 'Finance inbox', certainty: 'stated' as const, passage: 2 },
+    { key: 'gap:unknown_value:meta::objective', display: 'Pay claims on time', certainty: 'inferred' as const, passage: 7 },
+  ];
+  const s = scoreCalls([{ ...base, found }], answers);
+  assert.deepEqual(s.corrected!.stated, { judged: 2, rejected: 1, share: 0.5 });
+  assert.deepEqual(s.corrected!.inferred, { judged: 1, rejected: 1, share: 1 });
+  assert.equal(s.passed.corrected, false);
+  assert.match(renderCallScorecard(s, 'x'), /among those stated in the notes \(what the review ticks\): 1 of 2 judged \(50%.*Among those inferred \(not ticked\): 1 of 1 \(100%\)/);
 });
