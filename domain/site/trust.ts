@@ -13,8 +13,10 @@ export const CONTACT_EMAIL = 'hello@avalaos.com';
  * release's, set in the release's own commit together with `COVERAGE_RULE.since` (owner, 18 November 2026);
  * until then they show "[release date]". The privacy page changes again with the release that carries the
  * teardowns' counting (marketing package, 21 November 2026), so its date is null until that release's commit.
+ * It changes again with package B's pull request 5b (what a discovery session keeps, what goes to the AI provider):
+ * null until the release that carries it (review, 26 November 2026).
  */
-export const UPDATED: Record<TrustPageId, string | null> = { privacy: '23 November 2026', terms: '17 November 2026', security: '24 November 2026' };
+export const UPDATED: Record<TrustPageId, string | null> = { privacy: null, terms: '17 November 2026', security: '24 November 2026' };
 export const updatedText = (id: TrustPageId): string => UPDATED[id] ?? '[release date]';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
