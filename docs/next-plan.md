@@ -35,9 +35,9 @@ Where a section below says "in review", "built", "in `next`" or "waits for the r
 
 **The content security policy's 14 days** of report-only run from 26 November to 10 December 2026. Enforcement is asked separately, in its own release.
 
-**Still open:**
-- the owner's reading of Sentry (environment production, search "Content security policy");
-- the first weekday email from `journey-notify` 16 (27 November 2026, 03:30 UTC).
+**Sentry, read by the owner on 26 November 2026:** one issue only, `AVALAOS-WEB-2`, "frame-src would block https://app.netlify.com (/.netlify/scripts/cdp)", 10 events, all on previews (Netlify's preview toolbar, left as it is by the owner's choice). **None from production.**
+
+**Still open:** the first weekday email from `journey-notify` 16 (27 November 2026, 03:30 UTC).
 
 **Asked separately, not done:** the migration that closes `model_approve`; revoking TRUNCATE from `authenticated`; the user guide's chapters; package 16's line in `platform.ts` with the full Ask Avala measure on 1 December 2026.
 
