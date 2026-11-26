@@ -224,10 +224,10 @@ test('"Keep it as it reads now" builds from the approved record, never from the 
 test('"Keep it as it reads now" after a newer approval without a copy needs a reason, and is refused when anything moved meanwhile', async () => {
   const { store, ws, p } = await open();
   await approve(store, ws.id, p.id, null);
-  // A page opened before copies were kept approves a new draft with the old button: no copy of it is kept.
+  // An approval made the way a page did before copies were kept (model_approve, which now refuses): no copy is kept.
   const draft = await store.startDraft(p.id);
   const { seq } = await store.savePatch(draft.revisionId, draft.seq, [{ op: 'replace', path: '/meta/name', value: 'Approved the old way' }], 'user', 'Renamed');
-  await store.approve(draft.revisionId, seq);
+  await store.approveWithoutCopy(draft.revisionId, seq);
   const [st] = await store.versionStates(ws.id, p.id);
   assert.equal(st.latest?.number, 1);
   assert.equal(st.approvedHasVersion, false);
