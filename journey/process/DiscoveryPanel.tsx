@@ -20,6 +20,7 @@ import { offersPurpose } from '../../domain/plan/purpose.ts';
 import { ownWordsSource, sourceDate } from '../../domain/plan/start.ts';
 import { failedLine } from '../../domain/extract/failure.ts';
 import { IN_PROGRESS_LINE, runUnderWay } from '../../domain/extract/startLimit.ts';
+import { unreadAnswers, unreadLine, updateReads } from '../../domain/discovery/unread.ts';
 import { GROUP_HEADING, originLine, type Card } from '../../domain/discovery/card.ts';
 import { discoveryQueue } from '../../domain/discovery/queue.ts';
 import { startCards } from '../../domain/discovery/checklist.ts';
@@ -220,16 +221,23 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     setBusy(true); setError(null); setNotice(null);
     try {
       const kept = await keepWaiting();
-      if (typeof kept === 'string') return;
+      if (kept === 'failed') return;
+      // Answers saved by an earlier update whose reading did not start are read with the new ones (unread.ts).
       const latest = await store.listSources(process.id);
-      const newest = kept.ids[kept.ids.length - 1]!;
-      const base = updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), newest);
-      await read([...base.slice(0, -1), ...kept.ids.filter(id => !base.includes(id)), newest]);
+      const fresh = readState((await store.getDiscoverySession(process.id))?.state);
+      const unread = unreadAnswers(fresh, session?.startedAt, latest).ids;
+      const keptIds = kept === 'none' ? [] : kept.ids;
+      const answers = updateReads([], unread, keptIds);
+      if (!answers.length) return;
+      const base = updateSources(sourcesRead(fresh, run?.id), latest.filter(s => !s.archived), answers[answers.length - 1]!);
+      await read(updateReads(base.slice(0, -1), unread, keptIds));
     } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
   };
 
   const reviewing = run?.status === 'done' && run.model && hasSteps && readingsStarted(state).includes(run.id) && !readingsReviewed(state).includes(run.id) ? run : null;
   const waiting = state.waiting.length;
+  // Answers saved but not read into the draft: the reading of an update did not start (unread.ts).
+  const unread = session && session.status === 'open' ? unreadAnswers(state, session.startedAt, sources) : { ids: [], answers: 0 };
   const files = active.filter(s => !/^own-|^ans-/.test(s.key)).length;
 
   return (
@@ -277,11 +285,12 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
       {stage === 'cards' && (
         <>
-          {waiting > 0 && !reviewing && (
+          {(waiting > 0 || unread.answers > 0) && !reviewing && (
             <div className="mb-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-waiting">
-              <p className="text-sm text-amber-950">{waiting} {waiting === 1 ? 'answer is' : 'answers are'} not in the draft yet.</p>
+              {waiting > 0 && <p className="text-sm text-amber-950">{waiting} {waiting === 1 ? 'answer is' : 'answers are'} not in the draft yet.</p>}
+              {unread.answers > 0 && !running && <p className="text-sm text-amber-950" data-testid="discovery-unread">{unreadLine(unread.answers)}</p>}
               {updateNote(active.length + 1, files) && <p className="text-xs text-amber-900">{updateNote(active.length + 1, files)}</p>}
-              <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting)}</Button>
+              <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting + unread.answers)}</Button>
             </div>
           )}
           {run?.status === 'failed' && readingsStarted(state).includes(run.id) && <div className="mb-4"><ErrorNote message={failedLine(run.error)} /><Button variant="secondary" onClick={() => { const ids = sourcesRead(state, run.id); void read(ids.length ? ids : active.map(x => x.id)); }}>Try again</Button></div>}
