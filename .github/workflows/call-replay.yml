@@ -1,7 +1,8 @@
 # The call replay (eval/discovery/call, eval/README.md "The call replay"; package C, C2). It replays made-up calls,
 # two minutes at a time, through the BA panel's own rules (domain/meeting/) and the two live tasks the panel uses,
-# `answerFromNotes` and `discoveryQuestions`. It uses AI, so it runs only from "Run workflow", never on its own and
-# never from a push, and each run only on the owner's yes.
+# `answerFromNotes` and `discoveryQuestions`. It uses AI, so it runs only from "Run workflow", or from a push to a
+# `claude/` branch whose commit message holds the marker below; never on a schedule, never from any other push; and
+# each run only on the owner's yes.
 #
 # The set: "dry" (the two made-up sets of notes, set M), "a" (those, the made-up transcripts D1 and D2 as notes, and
 # the sample's three calls), "b" (the two transcripts of the process "Project time writing", read from the database at
