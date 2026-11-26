@@ -531,6 +531,8 @@ test('editing a section: the text is kept on rebuild and reload, and when the pr
 });
 
 test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and saved to the process after review', async ({ page }) => {
+  const consoleLines: string[] = [];
+  page.on('console', m => consoleLines.push(m.text()));
   await buildProcess(page);
   await stage(page, 'Flows');
   const map = page.getByTestId('flow-map');
@@ -548,6 +550,13 @@ test('flows: the maps fit the screen; the flow is edited on the BPMN canvas and 
   const canvas = page.getByTestId('bpmn-canvas');
   await expect(canvas.locator('.djs-element[data-element-id]').first()).toBeVisible();
   await expect(canvas).toContainText('Post invoice in SAP');
+  // The editor is made without a keyboard binding target (diagram-js 15 binds it to the drawing itself), so the
+  // console no longer says the option is unsupported; its shortcuts work once the drawing has focus.
+  expect(consoleLines.filter(l => l.includes('keyboard.bindTo'))).toEqual([]);
+  await canvas.click({ position: { x: 12, y: 12 } });
+  await page.keyboard.press('ControlOrMeta+a');
+  expect(await page.evaluate(() => (window as any).__bpmnModeler.get('selection').get().length)).toBeGreaterThan(1);
+  await page.evaluate(() => (window as any).__bpmnModeler.get('selection').select(null));
   // Drawn top to bottom: the second step is below the first, as in the maps.
   const ys = await page.evaluate(() => {
     const reg = (window as any).__bpmnModeler.get('elementRegistry');

@@ -111,7 +111,14 @@ export interface MemoryStoreOptions {
   standIn?: StandIn;
 }
 
-export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStore {
+/**
+ * The in-browser store, and one helper for tests only: approving the way a page did before copies of the
+ * documents were kept (model_approve, which refuses since the migration model_approve_refusal), so a test can
+ * set up "approved before copies were kept", which the live database still holds. No screen calls it.
+ */
+export type MemoryStore = JourneyStore & { approveWithoutCopy(revisionId: string, expectedSeq: number): Promise<void> };
+
+export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore {
   const demo = options.demo !== undefined;
   let state: State = demo ? { ...empty(), ...(structuredClone(options.demo) as Partial<State>) } : load();
   const listeners = new Set<(me: Me | null) => void>();
@@ -376,7 +383,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       save();
       return { seq: rev.seq };
     },
-    async approve(revisionId, expectedSeq) {
+    async approveWithoutCopy(revisionId: string, expectedSeq: number) {
       requireMe();
       const rev = state.revisions.find(r => r.id === revisionId);
       if (!rev) throw new StoreError(404, 'Revision not found.');

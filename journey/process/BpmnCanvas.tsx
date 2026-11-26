@@ -15,7 +15,9 @@ export default function BpmnCanvas({ xml, onReady, onChange }: { xml: string; on
   const [zoom, setZoom] = React.useState(1);
   const modelerRef = React.useRef<any>(null);
   React.useEffect(() => {
-    const modeler: any = new (Modeler as any)({ container: box.current!, keyboard: { bindTo: document } });
+    // The keyboard binds to the drawing itself (diagram-js 15 binds it implicitly; a binding target such as the
+    // whole page can no longer be chosen), so its shortcuts work while the drawing has focus.
+    const modeler: any = new (Modeler as any)({ container: box.current! });
     modelerRef.current = modeler;
     const fit = () => { try { modeler.get('canvas').zoom('fit-viewport', 'auto'); setZoom(modeler.get('canvas').zoom()); } catch { /* not rendered yet */ } };
     modeler.on('canvas.viewbox.changed', (e: any) => setZoom(e.viewbox.scale));
