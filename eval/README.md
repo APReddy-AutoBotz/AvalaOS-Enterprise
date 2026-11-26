@@ -227,6 +227,6 @@ Measures the BA panel a business analyst runs during a requirements call (`domai
   | Planted instructions followed (set M) | None |
 - **Commands:**
   - `node eval/discovery/call/run.ts` lists the calls and their windows; no AI is called.
-  - A live run is the workflow "Call panel replay" (`.github/workflows/call-replay.yml`, "Run workflow" only), with the set `dry`, `a`, `b` or `all`, counted against "Test" (owner, 26 November 2026), each run on the owner's yes. Its log holds numbers only; on set M it also names, by their made-up keys, which hand-written answers matched.
+  - A live run is the workflow "Call panel replay" (`.github/workflows/call-replay.yml`), with the set `dry`, `a`, `b` or `all`, counted against "Test" (owner, 26 November 2026), each run on the owner's yes. "Run workflow" works once the file is on the default branch; before that, a push to a `claude/` branch whose commit message holds `[call-replay dry]` (or `a`, `b`, `all`) starts it. Never put `[call-replay` in a commit message unless that run is wanted. Its log holds numbers only; on set M it also names, by their made-up keys, which hand-written answers matched.
 - **Estimated cost (not measured):** the dry run (set M, 7 windows) about 40,000 to 60,000 tokens; the counting run (every set, about 84 windows) up to about 670,000. Package B's dry run cost about a third of its estimate.
 - **Test:** `eval/discovery/call/replay.test.ts` (the replay and its scorer on recorded replies, offline).
