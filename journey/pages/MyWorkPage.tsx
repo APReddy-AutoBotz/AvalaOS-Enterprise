@@ -14,7 +14,7 @@ import type { Nav } from '../JourneyApp.tsx';
 import type { WorkItem, WorkStatus } from '../../domain/workitems/board.ts';
 import { STATUS_LABEL } from '../../domain/workitems/board.ts';
 import { roleOf } from '../../domain/people/roles.ts';
-import { commentNeeds, homeSummary, itemsFor, needsByProcess, needsFor, openOn, processesFor, type Need, type Person } from '../../domain/work/home.ts';
+import { asksQuestions, commentNeeds, homeSummary, itemsFor, needsByProcess, needsFor, openOn, processesFor, questionsLanding, type Need, type Person } from '../../domain/work/home.ts';
 import { cardTotals } from '../../domain/assess/portfolio.ts';
 import type { StageId } from '../../domain/workspace/route.ts';
 import { Button, CARD, cx, EmptyState, ErrorNote, messageOf, PageHead, Spinner, Tag, TypeGlyph } from '../ui.tsx';
@@ -243,11 +243,13 @@ const NeedMark = () => (
 function NeedsYou({ needs, groups, nav, stages }: { needs: Need[]; groups: ReturnType<typeof needsByProcess>; nav: Nav; stages: StageId[] }) {
   const [all, setAll] = React.useState(false);
   const openNeed = (n: Need) => {
-    // Questions to answer open Closing the gaps on Documents; where the organisation has no Documents stage
-    // (the "Assess" set-up), on the Assessment stage instead (package 16). The need itself is as the email counts it.
-    if (n.kind !== 'comments' && n.stage === 'documents' && !stages.includes('documents') && stages.includes('assessment')) {
-      nav.go({ page: 'process', processId: n.processId, stage: 'assessment' });
-      openGaps(n.processId, 'assessment', 'all');
+    // Questions to answer open Closing the gaps where the process answers them: on Documents, or on the Assessment
+    // stage where the organisation has no Documents stage (the "Assess" set-up), as the weekday email's link does
+    // (questionsLanding). The need itself is as the email counts it.
+    if (asksQuestions(n)) {
+      const landing = questionsLanding(stages);
+      nav.go({ page: 'process', processId: n.processId, stage: landing.stage });
+      if (landing.gaps) openGaps(n.processId, landing.gaps, 'all');
       return;
     }
     nav.go({ page: 'process', processId: n.processId, stage: n.stage });

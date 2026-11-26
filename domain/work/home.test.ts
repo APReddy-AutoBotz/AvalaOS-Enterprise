@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { WorkItem } from '../workitems/board.ts';
-import { dutyOf, homeSummary, itemsFor, namedOn, needsByProcess, needsFor, openOn, processesFor, type Person, type ProcessFacts } from './home.ts';
+import { asksQuestions, dutyOf, homeSummary, itemsFor, namedOn, needsByProcess, needsFor, openOn, processesFor, questionsLanding, type Person, type ProcessFacts } from './home.ts';
 
 const ba: Person = { userId: 'ba', access: 'editor', canApprove: false, job: 'business_analyst' };
 const sa: Person = { userId: 'sa', access: 'editor', canApprove: false, job: 'solution_architect' };
@@ -103,4 +103,19 @@ test('with the first list worked out, only what people must answer now and answe
   assert.deepEqual(needsFor(ba, [later]), []);
   // The weekday email knows only the stored count: unchanged.
   assert.deepEqual(needsFor(ba, [proc({ analystId: 'ba', proposalsWaiting: 0, status: 'approved', openQuestions: 3 })]).map(n => n.text), ['3 open questions to answer']);
+});
+
+test('questions open Closing the gaps on Documents, else on the Assessment stage, else nowhere', () => {
+  assert.deepEqual(questionsLanding(['sources', 'process', 'assessment', 'documents', 'flows', 'work-items']), { stage: 'documents', gaps: 'documents' });
+  assert.deepEqual(questionsLanding(['sources', 'process', 'assessment', 'documents', 'flows']), { stage: 'documents', gaps: 'documents' });
+  assert.deepEqual(questionsLanding(['sources', 'process', 'assessment']), { stage: 'assessment', gaps: 'assessment' }, 'the "Assess" set-up');
+  assert.deepEqual(questionsLanding(['sources', 'process', 'documents', 'flows']), { stage: 'documents', gaps: 'documents' }, 'documented as it is');
+  assert.deepEqual(questionsLanding(['sources', 'process']), { stage: 'process', gaps: null });
+  const p: ProcessFacts = { id: 'p1', name: 'P', analystId: 'u1', architectId: 'u1', approverId: 'u1', status: 'changed', openQuestions: 0, questions: { now: 1, found: 1, wait: 0 }, proposalsWaiting: 2 };
+  const me: Person = { userId: 'u1', access: 'editor', canApprove: true, job: 'business_analyst' };
+  assert.deepEqual(needsFor(me, [p]).map(n => [n.text, asksQuestions(n)]), [
+    ['1 question only your people can answer', true], ['1 answer found in the sources to confirm', true],
+    ['2 work items waiting to be confirmed to the board', false], ['Changes since the approved revision are waiting for approval', false],
+  ]);
+  assert.equal(asksQuestions({ duty: 'analyst', stage: 'documents', kind: 'comments' }), false, 'review comments are read on Documents, not answered');
 });

@@ -68,6 +68,30 @@ export function needsFor(me: Person, processes: ProcessFacts[]): Need[] {
   return out;
 }
 
+/**
+ * A need that asks for questions to be answered (those only people can answer now, answers found in the
+ * sources to confirm, or the stored count of open questions): it opens Closing the gaps. Comments and the
+ * other duties are not.
+ */
+export const asksQuestions = (n: Pick<Need, 'duty' | 'stage' | 'kind'>): boolean => n.kind !== 'comments' && n.duty === 'analyst' && n.stage === 'documents';
+
+/** The stages that show Closing the gaps. */
+export type GapsStageId = Extract<StageId, 'documents' | 'assessment'>;
+
+/**
+ * Where questions are answered on a process with these stages: Closing the gaps on Documents where it has
+ * that stage, else on the Assessment stage (the "Assess" set-up), else the Process stage, which has no
+ * Closing the gaps. My work and the weekday email's links both follow it.
+ */
+export function questionsLanding(stages: readonly StageId[]): { stage: StageId; gaps: GapsStageId | null } {
+  if (stages.includes('documents')) return { stage: 'documents', gaps: 'documents' };
+  if (stages.includes('assessment')) return { stage: 'assessment', gaps: 'assessment' };
+  return { stage: 'process', gaps: null };
+}
+
+/** The marker on the weekday email's link to questions: the page opens Closing the gaps where questions are answered. */
+export const GAPS_MARK = { name: 'gaps', value: 'all' } as const;
+
 /** The duties a person is named for on a process, in the order analyst, architect, approver. */
 export const namedDuties = (userId: string, p: Pick<ProcessFacts, 'analystId' | 'architectId' | 'approverId'>): Duty[] =>
   (['analyst', 'architect', 'approver'] as const).filter(d => (d === 'analyst' ? p.analystId : d === 'architect' ? p.architectId : p.approverId) === userId);
