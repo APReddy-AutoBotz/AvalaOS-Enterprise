@@ -19,6 +19,7 @@ import { NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../d
 import { offersPurpose } from '../../domain/plan/purpose.ts';
 import { ownWordsSource, sourceDate } from '../../domain/plan/start.ts';
 import { failedLine } from '../../domain/extract/failure.ts';
+import { IN_PROGRESS_LINE, runUnderWay } from '../../domain/extract/startLimit.ts';
 import { GROUP_HEADING, originLine, type Card } from '../../domain/discovery/card.ts';
 import { discoveryQueue } from '../../domain/discovery/queue.ts';
 import { startCards } from '../../domain/discovery/checklist.ts';
@@ -80,6 +81,8 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     store.currentUser().then(u => setMe(u?.id ?? null)).catch(() => {});
   }, [store, workspace.id]);
 
+  // A reading someone else started, which this tab follows (it was refused a second one meanwhile).
+  const [following, setFollowing] = React.useState(false);
   // Follow a running reading; once it is done, count it against the session's cap (once).
   const running = Boolean(run && run.status !== 'done' && run.status !== 'failed');
   React.useEffect(() => {
@@ -146,7 +149,18 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
   /** Reads sources as the Sources stage does, and remembers that this session started it. */
   const read = async (ids: string[]) => {
-    const { runId } = await store.startExtraction(workspace.id, process.id, ids);
+    let runId: string;
+    try { ({ runId } = await store.startExtraction(workspace.id, process.id, ids)); }
+    catch (e) {
+      // A reading of this process is already under way (one at a time, domain/extract/startLimit.ts): follow it.
+      // It is not this session's, so it is not kept as one the session started.
+      const under = runUnderWay(e);
+      if (!under) throw e;
+      setFollowing(true);
+      setRun({ id: under, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
+      return;
+    }
+    setFollowing(false);
     // The session keeps which sources it read: the browser may not read a run's own list (review, 25 November 2026).
     await commit(startedReading(runId, ids));
     setRun({ id: runId, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
@@ -245,6 +259,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
       )}
 
       {stage === 'reading' && <p role="status" className="rounded-lg bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950" data-testid="discovery-reading">{hasSteps ? WORDS.updating : WORDS.reading}</p>}
+      {stage === 'reading' && following && <p className="text-sm text-slate-600" data-testid="reading-under-way">{IN_PROGRESS_LINE}</p>}
 
       {stage === 'first' && (
         <FirstReading store={store} process={process} run={run ?? null} lastRead={sourcesRead(state, run?.id)} boxVoice={boxVoice} busy={busy} active={active}
