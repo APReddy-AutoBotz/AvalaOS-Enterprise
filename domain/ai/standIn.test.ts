@@ -58,3 +58,11 @@ test('a reading gives the model the test gave, and only when it gave one', () =>
   // The AI tasks' rule is unchanged: a call carrying a source's passages is still not answered.
   assert.match(standInRefusal({ answerFromNotes: [{ answers: [] }] }, 'answerFromNotes', [{ id: 's1', sourceId: 'sop', text: 'x' } as never])!, /not passages of sop/);
 });
+
+test('noticing (5b) reads a person\'s own words kept as sources; every other task and source is still refused', () => {
+  const replies = { discoveryQuestions: [{ questions: [], wanted: [] }], answerFromNotes: [{ answers: [] }] };
+  const own = [{ id: 'n:1', text: 'We check invoices.', sourceId: 'own-1' }, { id: 'n:2', text: 'Filed.', sourceId: 'ans-2' }];
+  assert.equal(standInRefusal(replies, 'discoveryQuestions', own), null);
+  assert.match(standInRefusal(replies, 'answerFromNotes', own)!, /not passages of own-1, ans-2/);
+  assert.match(standInRefusal(replies, 'discoveryQuestions', [{ id: 's:1', text: 'SOP text', sourceId: 'sop-1' }])!, /not passages of sop-1/);
+});

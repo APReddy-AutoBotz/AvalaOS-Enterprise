@@ -4,8 +4,10 @@
 // with one click or changes a line. Lines the sources are silent on say "Not stated" and are never
 // filled in for the person. Rules and words: domain/plan/delivery.ts; edits: setBriefFact, confirmBrief.
 import React from 'react';
-import type { DoneToday, InMind, PlannedDoc, ProcessBrief, ProcessModel, WorkKind } from '../../domain/processModel/types.ts';
-import { confirmBrief, decideApproach, removeDecidedApproach, setBriefFact, setPurpose, updateFact, type OpResult } from '../../domain/processModel/patch.ts';
+import type { DoneToday, InMind, PlannedDoc, ProcessBrief, ProcessModel, WantedStatement, WorkKind } from '../../domain/processModel/types.ts';
+import type { StoredRequirement } from '../../domain/requirements/register.ts';
+import { isRequirement, requirementFromWanted, wantedKey } from '../../domain/requirements/fromWanted.ts';
+import { confirmBrief, decideApproach, dropWanted, removeDecidedApproach, setBriefFact, setPurpose, updateFact, type OpResult } from '../../domain/processModel/patch.ts';
 import { APPROACH_LABEL } from '../../domain/assess/scoring.ts';
 import { decidedBy } from '../../domain/assess/decided.ts';
 import { PURPOSE_LABEL, PURPOSE_WHAT, PURPOSES, purposeOf, type PurposeValue } from '../../domain/plan/purpose.ts';
@@ -21,8 +23,10 @@ const STATE: Record<BriefLine['state'], { text: string; tone: 'info' | 'ok' | 'n
 };
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
 
-export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead, purpose }: {
+export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead, purpose, requirements }: {
   editor: ModelEditor; canEdit: boolean; sourceTitle: (key: string) => string;
+  /** The requirements register, for "Make it a requirement" on what a person wants to change (package B, 5b). */
+  requirements?: { list: () => Promise<StoredRequirement[]>; save: (rows: StoredRequirement[]) => Promise<void> };
   /** Reading the brief from the sources, when the server can (part A's reading task). */
   reading?: boolean; onRead?: () => void;
   /** "What do you want from this process?", when the organisation uses the documents: who I am, and people's names by id. */
@@ -94,7 +98,62 @@ export function BriefPanel({ editor, canEdit, sourceTitle, reading, onRead, purp
           )}
         </div>
       )}
+      <WantedList editor={editor} canEdit={canEdit} sourceTitle={sourceTitle} requirements={requirements} />
     </section>
+  );
+}
+
+/**
+ * "What you want to change" (package B, pull request 5b): what a person said should happen in future, kept in a
+ * discovery session (`meta.wanted`). Never a step of the work done today; a person may make one a requirement
+ * (a business requirement with origin `user`) or remove it.
+ */
+function WantedList({ editor, canEdit, sourceTitle, requirements }: {
+  editor: ModelEditor; canEdit: boolean; sourceTitle: (key: string) => string;
+  requirements?: { list: () => Promise<StoredRequirement[]>; save: (rows: StoredRequirement[]) => Promise<void> };
+}) {
+  const wanted = editor.model.meta.wanted ?? [];
+  const [stored, setStored] = React.useState<StoredRequirement[] | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => { if (wanted.length && requirements) requirements.list().then(setStored).catch(() => setStored([])); }, [wanted.length, requirements]);
+  if (!wanted.length) return null;
+  const make = async (w: WantedStatement) => {
+    if (!requirements) return;
+    setBusy(true); setError(null);
+    try {
+      const rows = await requirements.list();
+      if (!isRequirement(w, rows)) await requirements.save([requirementFromWanted(w, rows)]);
+      setStored(await requirements.list());
+    } catch (e) { setError(e instanceof Error ? e.message : 'The requirement could not be saved.'); } finally { setBusy(false); }
+  };
+  return (
+    <div className="border-t border-slate-100 px-4 py-3" data-testid="wanted">
+      <h3 className="text-sm font-semibold text-slate-900">What you want to change</h3>
+      <p className="mt-0.5 text-xs text-slate-500">Said in a discovery session about how the work should go in future. None of it is a step of the work done today.</p>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {wanted.map(w => {
+          const code = stored?.find(r => r.key === wantedKey(w))?.code;
+          const src = w.sources[0];
+          return (
+            <li key={w.id} className="flex flex-wrap items-start justify-between gap-2 py-2" data-testid="wanted-item">
+              <div className="min-w-0">
+                <p className="text-sm text-slate-900">{w.statement}</p>
+                {src && <p className="text-xs text-slate-500">From {sourceTitle(src.sourceId)}</p>}
+                {code && <p className="text-xs font-medium text-emerald-800">A requirement: {code}</p>}
+              </div>
+              {canEdit && (
+                <div className="flex gap-2">
+                  {!code && requirements && <Button variant="secondary" disabled={busy || stored === null} onClick={() => void make(w)}>Make it a requirement</Button>}
+                  <Button variant="ghost" disabled={editor.saving} onClick={() => editor.apply(m => dropWanted(m, { id: w.id }), `Removed from what you want to change: ${w.statement}`)}>Remove</Button>
+                </div>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      {error && <p className="mt-2 text-sm text-red-700" role="alert">{error}</p>}
+    </div>
   );
 }
 

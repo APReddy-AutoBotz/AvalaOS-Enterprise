@@ -9,6 +9,8 @@
 // names another version, so a step from an older copy is never written over a newer one: it is applied again to
 // the newer copy. A step adds or removes only its own entries, by key, so two editors' answers both stay. Keys
 // this release does not know (a later release's) are kept as they are.
+import type { Card } from './card.ts';
+import type { SourceLocator } from '../processModel/types.ts';
 import type { WaitingAnswer } from './answers.ts';
 import { afterCall, afterReading, NO_USE, type SessionUse } from './limits.ts';
 
@@ -225,6 +227,39 @@ export function waitingAgainst(s: SessionState, sourceKeys: readonly string[]): 
 
 /** Source keys held by answers being written, so no other source takes one meanwhile. */
 export const keysBeingWritten = (s: SessionState): string[] => [...new Set(s.waiting.map(w => w.into).filter((k): k is string => Boolean(k)))];
+
+// ---- What noticing raised (package B, pull request 5b) --------------------------------------------------------
+// Two lists in the session's state, beside the others (the table keeps any key, so no database change):
+// `raised`, the cards raised from what was said and not yet acted on, each quoting the words; and `wanted`, the
+// statements about the future noticed and not yet kept or set aside.
+
+/** A statement about the future noticed in what was said, with its quote's place. */
+export interface NoticedWanted { excerpt: string; sourceId?: string; locator?: SourceLocator; answerTo?: string; at: string }
+
+const isCard = (x: unknown): x is Card => Boolean(x && typeof x === 'object' && typeof (x as Card).key === 'string' && typeof (x as Card).question === 'string' && (x as Card).target && (x as Card).origin);
+/** The cards raised and not yet acted on, in the order said. */
+export const raisedOf = (s: SessionState): Card[] => (Array.isArray(s.raised) ? s.raised.filter(isCard) : []);
+/** The wanted statements noticed and not yet kept or set aside. */
+export const wantedOf = (s: SessionState): NoticedWanted[] => (Array.isArray(s.wanted) ? (s.wanted as NoticedWanted[]).filter(w => w && typeof w.excerpt === 'string' && w.excerpt.trim()) : []);
+
+/** What one noticing call raised, kept with the passages it read so they are never sent again. */
+export const noticedStep = (cards: readonly Card[], wanted: readonly Omit<NoticedWanted, 'at'>[], readRefs: readonly string[], at: string): SessionStep => s => {
+  const raised = raisedOf(s);
+  const known = new Set(raised.map(c => c.key));
+  const have = new Set(wantedOf(s).map(w => w.excerpt.toLowerCase()));
+  return {
+    ...s,
+    raised: [...raised, ...cards.filter(c => (known.has(c.key) ? false : (known.add(c.key), true)))],
+    wanted: [...wantedOf(s), ...wanted.filter(w => (have.has(w.excerpt.toLowerCase()) ? false : (have.add(w.excerpt.toLowerCase()), true))).map(w => ({ ...w, at }))],
+    read: [...new Set([...s.read, ...readRefs])],
+  };
+};
+
+/** A raised card acted on (answered, kept, left with someone, not applicable): it leaves the list. */
+export const dropRaised = (keys: readonly string[]): SessionStep => s => ({ ...s, raised: raisedOf(s).filter(c => !keys.includes(c.key)) });
+
+/** A noticed wanted statement kept in the record, or set aside: it leaves the list. */
+export const dropNoticedWanted = (excerpt: string): SessionStep => s => ({ ...s, wanted: wantedOf(s).filter(w => w.excerpt !== excerpt) });
 
 /** The words kept to read later for a card, if any. */
 export const laterFor = (s: SessionState, key: string): LaterWords | undefined => s.later.find(l => l.key === key);

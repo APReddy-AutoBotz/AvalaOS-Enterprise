@@ -2,8 +2,11 @@
 // approved 24 November 2026): who sees the tab, where a session stands, and what each answer on a card writes.
 // The screen (journey/process/DiscoveryPanel.tsx) holds no rule of its own. Every write goes through the existing
 // operations (domain/processModel/patch.ts), a person's Save only; a value a person confirmed is never overwritten.
-import type { AccessStatus, ElementTarget, ProcessModel } from '../processModel/types.ts';
-import { addQuestion, closeQuestions, deferQuestion, resolveConflict, setBriefFact, setPurpose } from '../processModel/patch.ts';
+import type { AccessStatus, ElementTarget, ProcessModel, RaisedBy, SourceLocator, Step } from '../processModel/types.ts';
+import { addQuestion, closeQuestions, deferQuestion, keepWanted, resolveConflict, setBriefFact, setPurpose } from '../processModel/patch.ts';
+import type { Said } from './notice.ts';
+import { raisedOf, wantedOf, type NoticedWanted, type SessionState } from './session.ts';
+import { heldBack, type WantedQuote } from './wanted.ts';
 import { orderedSteps } from '../processModel/selectors.ts';
 import { buildAnswer, record, type Op } from '../questions/answer.ts';
 import { OWNER_LABEL, type Triage, type TriageItem } from '../questions/triage.ts';
@@ -154,7 +157,8 @@ export function confirmedLine(m: ProcessModel, t: ElementTarget): string | null 
   return `${what} was confirmed by a person, so this answer does not change it. Saving keeps what was confirmed and records the difference to settle on the Process stage.`;
 }
 
-const asked = (card: Card) => ({ target: card.target, question: card.question });
+const raisedByOf = (card: Card): RaisedBy | undefined => (card.origin.kind === 'quote' ? card.origin.quote : undefined);
+const asked = (card: Card) => ({ target: card.target, question: card.question, ...(raisedByOf(card) ? { raisedBy: raisedByOf(card)! } : {}) });
 
 /** "Not known, ask someone": the question is left with the named person, and goes into the question file for their kind. */
 export function leaveWith(card: Card, item: TriageItem | undefined, name: string): Edit | null {
@@ -175,13 +179,54 @@ export const notSavedLine = (message: string) => `Not saved: ${message.trim().re
 
 /** "Not applicable": the question is closed with that answer; a card with no stored question records it first. */
 export function notApplicable(card: Card, item: TriageItem | undefined): Edit {
-  if (item) return { op: record(item, NOT_APPLICABLE), summary: `Not applicable: ${card.question}` };
+  if (item) return { op: record(item, NOT_APPLICABLE, 'answered', raisedByOf(card)), summary: `Not applicable: ${card.question}` };
   return {
     op: x => {
-      const a = addQuestion(x, { target: card.target, question: card.question, whyItMatters: card.why || 'Asked in a discovery session.' });
+      const a = addQuestion(x, { target: card.target, question: card.question, whyItMatters: card.why || 'Asked in a discovery session.', ...(raisedByOf(card) ? { raisedBy: raisedByOf(card)! } : {}) });
       const b = closeQuestions(a.model, { questionIds: [a.questionId], answer: NOT_APPLICABLE });
       return { model: b.model, patch: [...a.patch, ...b.patch] };
     },
     summary: `Not applicable: ${card.question}`,
+  };
+}
+
+// ---- Noticing: questions about what was said, and what is wanted (package B, pull request 5b) ---------------------
+
+/** The description's passages as said by the person, for noticing: the source's own passages, quoted by key. */
+export function descriptionSaid(source: { key: string; segments: { id: string; text: string; locator?: SourceLocator }[] }): Said[] {
+  return source.segments.map(s => ({ ref: s.id, text: s.text, sourceId: source.key, ...(s.locator ? { locator: s.locator } : {}) }));
+}
+
+/** A saved answer as said, for noticing: the person's words, with the question it answered beside them. */
+export const answerSaid = (key: string, question: string, words: string, at: string): Said => ({ ref: `answer:${key}:${at}`, text: words.trim(), answerTo: question });
+
+/**
+ * What noticing must not ask again: every question the record holds (open, left with someone, answered or not
+ * applicable, so a target a person closed or left is known), the questions raised in the session, and those whose
+ * answers wait for an update.
+ */
+export function noticeAsked(m: ProcessModel, s: Pick<SessionState, 'waiting' | 'later'> & { raised?: unknown }): string[] {
+  return [...new Set([...m.openQuestions.map(q => q.question), ...raisedOf(s as SessionState).map(c => c.question), ...s.waiting.map(w => w.question), ...s.later.map(l => l.question)])];
+}
+
+/** The quotes of the wanted statements noticed, for the held-back rule (wanted.ts). */
+export const wantedQuotes = (s: SessionState): WantedQuote[] => wantedOf(s).flatMap(w => (w.sourceId ? [{ sourceId: w.sourceId, excerpt: w.excerpt }] : []));
+
+/**
+ * The steps of a first reading held back as what the person wants to change: when the work is done today (or
+ * partly), a step whose every quote lies inside a statement marked wanted is not a step of today's work.
+ */
+export const heldBackSteps = (current: ProcessModel, extracted: ProcessModel, s: SessionState): Step[] =>
+  heldBack({ ...current, meta: { ...current.meta, brief: current.meta.brief ?? extracted.meta.brief } }, extracted.steps, [
+    ...wantedQuotes(s),
+    // A statement already kept under What you want to change still holds its step back.
+    ...(current.meta.wanted ?? []).flatMap(w => w.sources.map(x => ({ sourceId: x.sourceId, excerpt: x.excerpt }))),
+  ]);
+
+/** "Keep" on a noticed wanted statement: kept in the record under What you want to change, with its quote. */
+export function keepWantedEdit(w: NoticedWanted): Edit {
+  return {
+    op: x => keepWanted(x, { statement: w.excerpt, ...(w.sourceId ? { sources: [{ sourceId: w.sourceId, excerpt: w.excerpt, locator: w.locator ?? {} }] } : {}) }),
+    summary: `What you want to change: ${w.excerpt}`,
   };
 }
