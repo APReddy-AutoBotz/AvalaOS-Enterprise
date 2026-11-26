@@ -13,7 +13,7 @@ import React from 'react';
 import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/route.ts';
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
 import { offersPurpose, purposeOf, purposeOffMessage, stagesForProcess, whatFollows } from '../../domain/plan/purpose.ts';
-import { openItemCount } from '../../domain/processModel/selectors.ts';
+import { openItemsNow } from '../../domain/questions/closedGaps.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -390,7 +390,7 @@ function StagePanel({ stage, model, canEdit, busy, onStart, onGo }: { stage: Sta
 }
 
 function ModelSummary({ model }: { model: ProcessModel }) {
-  const open = openItemCount(model);
+  const open = openItemsNow(model);
   const tiles: [string, number][] = [
     ['Steps', model.steps.length],
     ['Roles', model.roles.length],

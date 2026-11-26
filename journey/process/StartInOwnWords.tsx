@@ -8,9 +8,10 @@ import type { JourneyStore } from '../store/types.ts';
 import type { DoneToday, InMind } from '../../domain/processModel/types.ts';
 import { DONE_TODAY, IN_MIND } from '../../domain/processModel/validate.ts';
 import { DONE_TODAY_LABEL, IN_MIND_LABEL } from '../../domain/plan/delivery.ts';
-import { applicationNames, ownWordsEdits, OWN_WORDS_LIMIT } from '../../domain/plan/start.ts';
-import type { IngestSegment } from '../../domain/ingest/segment.ts';
+import { applicationNames, ownWordsEdits, ownWordsSource, sourceDate } from '../../domain/plan/start.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
+import { openDiscovery } from './openDiscovery.ts';
+import { useVoice, voiceProps } from './voice.ts';
 import { Button, ErrorNote, messageOf } from '../ui.tsx';
 
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
@@ -18,6 +19,7 @@ const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text
 export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksInMind = true }: { store: JourneyStore; processId: string; workspaceId: string; me?: string; onSaved: () => void;
   /** Whether to ask what the team has in mind: not when the process is documented as it is (domain/plan/purpose.ts). */
   asksInMind?: boolean }) {
+  const voice = useVoice(store, workspaceId);
   const [doneToday, setDoneToday] = React.useState<DoneToday | ''>('');
   const [apps, setApps] = React.useState('');
   const [inMind, setInMind] = React.useState<InMind[]>([]);
@@ -30,14 +32,8 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksIn
     setBusy(true); setError(null);
     try {
       // The words first, as a source: everything read from them can point back to them.
-      const text = words.trim().slice(0, OWN_WORDS_LIMIT);
-      const paras = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
       const existing = await store.listSources(processId);
-      let n = 1; while (existing.some(s => s.key === `own-${n}`)) n++;
-      const key = `own-${n}`;
-      const segments: IngestSegment[] = paras.map((t, i) => ({ id: `${key}:${i + 1}`, sourceId: key, kind: 'paragraph', text: t, locator: { lineStart: i + 1 } }));
-      const date = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      await store.addSource(processId, { key, title: `Described in own words, ${date}`, fileName: '', format: 'txt', kind: 'Description', segments, inferred: false, warnings: [], byteSize: new Blob([text]).size });
+      await store.addSource(processId, ownWordsSource(words, existing.map(x => x.key), sourceDate()));
       // Then the form's answers, as given by a person, in one edit on the working draft.
       const ops = ownWordsEdits({ doneToday, inMind: asksInMind ? inMind.filter(x => x !== 'open' || inMind.length === 1) : [], apps: applicationNames(apps) });
       if (ops.length) {
@@ -53,6 +49,13 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksIn
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-5" aria-label="Start without documents" data-testid="own-words">
       <h3 className="text-sm font-semibold text-slate-900">No documents? Tell us in your own words</h3>
+      {/* Discovery (package B): Ask Avala reads what is said and asks about it. Where the workspace has AI, not in the demo. */}
+      {store.aiAvailable && store.kind !== 'demo' && (
+        <div className="mt-2 flex flex-wrap items-center gap-3 rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-inset ring-amber-200" data-testid="own-words-discovery">
+          <p className="text-sm leading-6 text-amber-950">Or let Ask Avala ask you: it reads what you say and asks about it, one question at a time.</p>
+          <Button variant="accent" onClick={() => openDiscovery(processId)}>Start with Ask Avala</Button>
+        </div>
+      )}
       <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-600">
         Describe how the work goes, or how it should go, in a few minutes: who does what, in which applications, what can go wrong.
         Your words are kept as the first source, and the steps are read from them like from any document.
@@ -81,7 +84,7 @@ export function StartInOwnWords({ store, processId, workspaceId, onSaved, asksIn
       <div className="mt-4">
         <AnswerBox label="In your own words" value={words} onChange={setWords} rows={7}
           placeholder="For example: Supplier invoices arrive by email. Someone in accounts payable checks them against the purchase order in SAP…"
-          transcribe={store.aiAvailable ? audio => store.transcribe(workspaceId, audio) : undefined} />
+          {...voiceProps(voice, store, workspaceId)} />
       </div>
       <ErrorNote message={error} />
       <div className="mt-2 flex flex-wrap items-center gap-2">

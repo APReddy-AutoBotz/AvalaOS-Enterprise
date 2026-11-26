@@ -13,6 +13,8 @@ import type { ModelEditor } from './useModelEditor.ts';
 import { buildAnswer } from '../../domain/questions/answer.ts';
 import type { OpResult } from '../../domain/processModel/patch.ts';
 import type { JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
+import { useVoice, voiceProps } from './voice.ts';
+import { cutLine } from '../../domain/ai/voice.ts';
 
 export interface NotesContext { store: JourneyStore; workspaceId: string; processId: string; me: string; sourceKeys: string[]; onSourcesChanged: () => void }
 
@@ -56,19 +58,29 @@ const Mic = ({ className }: { className?: string }) => (
 );
 
 /** One place to answer: type, or press the microphone and speak. What is said is written into the box to check before saving. */
-export function AnswerBox({ value, onChange, label, placeholder, rows = 4, transcribe, disabled }: {
+export function AnswerBox({ value, onChange, label, placeholder, rows = 4, transcribe, voiceLine, maxLength, disabled, id }: {
   value: string; onChange: (v: string) => void; label: string; placeholder: string; rows?: number;
-  /** Absent when speech cannot be turned into text here (local mode). */
-  transcribe?: (audioDataUrl: string) => Promise<string>; disabled?: boolean;
+  /** Absent when speech cannot be turned into text here (local mode, or a provider that cannot: journey/process/voice.ts). */
+  transcribe?: (audioDataUrl: string) => Promise<string>;
+  /** Said instead of the microphone where the workspace's provider cannot turn speech into text. */
+  voiceLine?: string;
+  /** The most characters the answer may hold; spoken words beyond it are cut there. */
+  maxLength?: number; disabled?: boolean; id?: string;
 }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  // Spoken words past the box's limit are not added, and the box says so (review, 24 November 2026).
+  const [cut, setCut] = React.useState(false);
   const latest = React.useRef(value);
   latest.current = value;
   const recorder = useRecorder(async audio => {
     if (!transcribe) return;
     setBusy(true); setError(null);
-    try { const text = (await transcribe(audio)).trim(); if (text) onChange(latest.current.trim() ? `${latest.current.trim()}\n${text}` : text); }
+    try {
+      const text = (await transcribe(audio)).trim();
+      const next = text ? (latest.current.trim() ? `${latest.current.trim()}\n${text}` : text) : '';
+      if (next) { onChange(maxLength ? next.slice(0, maxLength) : next); setCut(Boolean(maxLength && next.length > maxLength)); }
+    }
     catch (e) { setError(messageOf(e)); }
     finally { setBusy(false); }
   });
@@ -78,7 +90,7 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
   return (
     <div>
       <div className={cx('relative rounded-xl border bg-white transition focus-within:border-[#002C4B] focus-within:ring-2 focus-within:ring-[#002C4B]/20', recording ? 'border-rose-300 ring-2 ring-rose-100' : 'border-slate-300')}>
-        <textarea aria-label={label} rows={rows} value={value} onChange={e => onChange(e.target.value)} disabled={disabled || busy || recording} placeholder={placeholder}
+        <textarea id={id} aria-label={label} rows={rows} value={value} maxLength={maxLength} onChange={e => { setCut(false); onChange(e.target.value); }} disabled={disabled || busy || recording} placeholder={placeholder}
           className="block w-full resize-y rounded-xl bg-transparent px-3.5 py-3 pr-16 text-sm leading-6 focus:outline-none disabled:text-slate-500" />
         {canSpeak && (
           <button type="button" onClick={() => (recording ? recorder.stop() : recorder.start().catch(e => setError(microphoneProblem((e as { name?: string })?.name))))} disabled={disabled || busy}
@@ -93,7 +105,9 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
         {recording ? <span className="font-semibold text-rose-700"><span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-rose-600" />Listening {mmss(recorder.seconds)}. Press the square to stop.</span>
           : busy ? 'Writing down what you said…'
           : error ? <span className="text-red-700">{error}</span>
-          : canSpeak ? 'Type, or press the microphone and speak. You can check and edit the words before saving.' : ''}
+          : cut ? <span className="text-amber-800" data-testid="answer-cut">{cutLine(maxLength!)}</span>
+          : canSpeak ? 'Type, or press the microphone and speak. You can check and edit the words before saving.'
+          : voiceLine ? <span data-testid="no-voice">{voiceLine}</span> : ''}
       </p>
     </div>
   );
@@ -105,6 +119,7 @@ export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '', o
   /** After the answers are saved, with the process as it was before them (package 16: the result shows what they closed). */
   onSaved?: (before: ProcessModel) => void;
 }) {
+  const voice = useVoice(ctx.store, ctx.workspaceId);
   const [notes, setNotes] = React.useState(initialNotes);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -141,7 +156,7 @@ export function SeveralAnswers({ model, items, editor, ctx, initialNotes = '', o
   return (
     <div className="space-y-3" data-testid="answer-several">
       {!proposals && <>
-        <AnswerBox label="Your answers" value={notes} onChange={setNotes} rows={7} disabled={Boolean(busy)} transcribe={audio => ctx.store.transcribe(ctx.workspaceId, audio)}
+        <AnswerBox label="Your answers" value={notes} onChange={setNotes} rows={7} disabled={Boolean(busy)} {...voiceProps(voice, ctx.store, ctx.workspaceId)}
           placeholder={'Answer any of the numbered questions, in any order, as you would say it. You can also paste meeting notes or an email reply.\nFor example: MIRO and FB60 can be used by the automation user; MIGO is not available to AP.'} />
         <div className="flex flex-wrap items-center gap-2">
           <Button disabled={!notes.trim() || Boolean(busy)} onClick={find}>Find the answers</Button>

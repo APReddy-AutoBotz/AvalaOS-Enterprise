@@ -8,6 +8,7 @@ import type { IngestSegment } from '../../domain/ingest/segment.ts';
 import type { StoredFormat } from '../../domain/workspace/sources.ts';
 import type { Decisions } from '../../domain/assess/decisions.ts';
 import type { SharedLook, StoredLook } from '../../domain/assistant/sharedLook.ts';
+import type { SaveAnswer, SessionState, StoredSession } from '../../domain/discovery/session.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
 import type { SectionComment } from '../../domain/docs/review.ts';
@@ -181,7 +182,14 @@ export interface NewSource {
 }
 
 export type ExtractionStatus = 'queued' | 'running' | 'merging' | 'reviewing' | 'assembling' | 'done' | 'failed';
-export interface ExtractionRow { id: string; status: ExtractionStatus; error: string | null; createdAt: string; updatedAt: string; model: ProcessModel | null }
+export interface ExtractionRow {
+  id: string; status: ExtractionStatus; error: string | null; createdAt: string; updatedAt: string; model: ProcessModel | null;
+  /**
+   * The tokens its own totals record (package B: the session's cap counts them). The sources a run read are not read
+   * back: a signed-in person may not select `source_ids` (column grants); Discovery keeps its own in the session.
+   */
+  tokens?: number;
+}
 
 /** A failed request, with the HTTP-like status the server returned. */
 export class StoreError extends Error {
@@ -327,6 +335,18 @@ export interface JourneyStore {
   getSourceLook(processId: string): Promise<StoredLook | null>;
   /** Saves the shared look read at `version` (null: none yet). Returns the new version, or null when another page wrote first. */
   saveSourceLook(processId: string, workspaceId: string, next: SharedLook, version: number | null): Promise<number | null>;
+  /**
+   * Package B's discovery sessions (table discovery_sessions; rules in domain/discovery/session.ts). The process's
+   * open session, or null. Every write names the version it read (review, 24 November 2026): a write from an older
+   * copy is refused ('stale') and never overwrites; the page applies its step to the newer copy (commitSessionStep).
+   */
+  getDiscoverySession(processId: string): Promise<StoredSession | null>;
+  /** Starts the process's session (editors and admins); null when another page started one first: read that one. */
+  startDiscoverySession(processId: string, workspaceId: string, state: SessionState): Promise<StoredSession | null>;
+  /** Saves a session's state read at `version`. 'full': past its size; 'finished': someone finished it. */
+  saveDiscoverySession(sessionId: string, state: SessionState, version: number): Promise<SaveAnswer>;
+  /** Finishes a session read at `version` (any editor may). */
+  finishDiscoverySession(sessionId: string, version: number): Promise<SaveAnswer>;
   getAssessmentDecisions(processId: string): Promise<Decisions>;
   /** Saves the decisions with a snapshot of the result for the model revision it was computed on. */
   saveAssessment(processId: string, input: { revisionId: string; modelHash: string; rulesVersion: string; result: unknown; decisions: Decisions }): Promise<void>;

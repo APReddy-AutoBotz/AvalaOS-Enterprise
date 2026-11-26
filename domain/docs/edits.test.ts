@@ -8,7 +8,7 @@ import { updateFact } from '../processModel/patch.ts';
 import { buildPdd } from './pdd.ts';
 import { toMarkdown } from './markdown.ts';
 import { applyLayout } from './layout.ts';
-import { applyEdits, EditError, newEdit, richMarkdown, richParas, sanitizeHtml } from './edits.ts';
+import { applyEdits, EditError, newEdit, richMarkdown, richParas, sanitizeHtml, savesNothing } from './edits.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
 const pdd = (m: ProcessModel) => buildPdd({ model: m, assessment: assessProcess(m), decisions: emptyDecisions(), sources: [], revision: { label: 'r', state: 'working', date: 'd' } });
@@ -60,4 +60,16 @@ test('an edit replaces the narrative, keeps the tables, survives a rebuild and a
 
 test('an empty edit is refused', () => {
   assert.throws(() => newEdit('pdd', sec(pdd(gold), '2.1'), '<p> </p>'), EditError);
+});
+
+test('Save with no change saves nothing, except where the section waits for review', () => {
+  const opened = '<p>Invoices are checked <strong>twice</strong>.</p><ul><li><p>One</p></li></ul>';
+  assert.equal(savesNothing(opened, opened, 'generated'), true);
+  assert.equal(savesNothing(opened, opened, 'edited'), true);
+  // The same words as the editor writes them back: attributes and tags the documents do not keep fall away.
+  assert.equal(savesNothing('<p class="x">Invoices are checked <strong>twice</strong>.</p><ul><li><p>One</p></li></ul>', opened, 'edited'), true);
+  assert.equal(savesNothing('<p>Invoices are checked <strong>twice</strong>!</p><ul><li><p>One</p></li></ul>', opened, 'edited'), false, 'a word changed');
+  assert.equal(savesNothing('<p>Invoices are checked twice.</p><ul><li><p>One</p></li></ul>', opened, 'edited'), false, 'bold taken off');
+  assert.equal(savesNothing(opened, opened, 'needs_review'), false, 'saving records that the new generated text was seen');
+  assert.equal(savesNothing('x'.repeat(100_001), opened, 'edited'), false, 'too long is for the save to refuse, not to skip');
 });

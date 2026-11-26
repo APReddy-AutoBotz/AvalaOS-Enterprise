@@ -175,6 +175,51 @@ function changeText(f: string, before: unknown, after: unknown, showField: (f: s
   return `${label}: ${showField(f, before)} → ${showField(f, after)}`;
 }
 
+// ---- A re-reading must not pile up reworded questions (package B, pull request 5a; owner, 25 November 2026) -------
+// Keyed on the draft, never on where the reading was started: once the draft has steps, every reading (Discovery's
+// update or the Sources stage) follows these rules. A first reading (no steps yet) is unchanged: all its questions.
+//   (a) A question on a field (who does a step, its application, an application's access, a figure's value, an
+//       exception's route, the objective or the owner, …) is not added when a stored question, open, left with
+//       someone or answered, is on the same field: one stored question per field, and a closed one stays closed.
+//   (b) A question about the process as a whole is listed, not ticked: words alone cannot tell a rewording from a
+//       new question, so the person ticks the ones to keep.
+//   (c) A question about an element as a whole (a step, a rule, an exception…) is added when nothing is asked about
+//       that element yet, and listed, not ticked, when a stored question already is.
+
+/** What a re-reading does with one of its new questions. */
+export type QuestionOffer = 'add' | 'offer-whole' | 'offer-element' | 'skip';
+
+export const QUESTION_DETAIL: Record<Exclude<QuestionOffer, 'skip'>, string> = {
+  add: 'New question from the reading',
+  'offer-whole': 'New question from the reading, about the process as a whole: not ticked',
+  'offer-element': 'New question from the reading; a question about this is already recorded: not ticked',
+};
+
+const sameTarget = (a: ElementTarget, b: ElementTarget) => a.kind === b.kind && (a.id ?? '') === (b.id ?? '') && (a.field ?? '') === (b.field ?? '');
+
+export function questionOffer(current: ProcessModel, target: ElementTarget, map: ReadonlyMap<string, string>): QuestionOffer {
+  if (!current.steps.length) return 'add';
+  if (target.kind === 'meta' && !target.field) return 'offer-whole';
+  // A target on an element the reading adds is new: nothing can be stored on it yet.
+  if (target.id && !map.has(target.id)) return 'add';
+  const here: ElementTarget = { ...target, ...(target.id ? { id: map.get(target.id)! } : {}) };
+  const asked = current.openQuestions.some(x => sameTarget(x.target, here));
+  if (target.field) return asked ? 'skip' : 'add';
+  return asked ? 'offer-element' : 'add';
+}
+
+/** The review's line for what is listed and not ticked: "3 new questions about the process as a whole are not ticked: tick the ones to keep." */
+export function notTickedLine(set: Pick<ChangeSet, 'changes'>): string | null {
+  const whole = set.changes.filter(c => c.element === 'question' && c.detail === QUESTION_DETAIL['offer-whole']).length;
+  const element = set.changes.filter(c => c.element === 'question' && c.detail === QUESTION_DETAIL['offer-element']).length;
+  const parts = [
+    whole ? `${whole} new ${whole === 1 ? 'question' : 'questions'} about the process as a whole` : '',
+    element ? `${element} new ${element === 1 ? 'question' : 'questions'} about something already asked about` : '',
+  ].filter(Boolean);
+  if (!parts.length) return null;
+  return `${parts.join(' and ')} ${whole + element === 1 ? 'is' : 'are'} not ticked: tick the ones to keep.`;
+}
+
 function plan(current: ProcessModel, extracted: ProcessModel): Plan {
   if (isEmpty(current)) {
     const changes: ProposedChange[] = KINDS.flatMap(k => k.list(extracted).map(x => ({ id: `add:${k.element}:${x.id}`, kind: 'add' as const, element: k.element, extractedId: x.id, label: k.name(x), detail: '', defaultSelected: true })));
@@ -224,7 +269,9 @@ function plan(current: ProcessModel, extracted: ProcessModel): Plan {
   // Questions and conflicts from the extraction that are new.
   for (const q of extracted.openQuestions) {
     if (current.openQuestions.some(x => nameSimilarity(x.question, q.question) >= 0.8)) continue;
-    changes.push({ id: `add:question:${q.id}`, kind: 'add', element: 'question', extractedId: q.id, label: q.question, detail: 'New open question', defaultSelected: true });
+    const offer = questionOffer(current, q.target, map);
+    if (offer === 'skip') continue;
+    changes.push({ id: `add:question:${q.id}`, kind: 'add', element: 'question', extractedId: q.id, label: q.question, detail: QUESTION_DETAIL[offer], defaultSelected: offer === 'add' });
   }
   for (const x of extracted.conflicts) {
     if (current.conflicts.some(y => nameSimilarity(y.summary, x.summary) >= 0.8)) continue;

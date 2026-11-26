@@ -21,8 +21,10 @@ import { messageOf } from '../ui.tsx';
 import { QuestionPacks, type ImportedReply } from './QuestionPacks.tsx';
 import type { Branding } from '../../domain/docs/branding.ts';
 import { couldChange, focusedLine, meetingResult } from '../../domain/questions/result.ts';
+import { closedGaps } from '../../domain/questions/closedGaps.ts';
 import { earlierAnswers, NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../domain/questions/ways.ts';
 import type { GapsMode } from './openGaps.ts';
+import { useVoice, voiceProps } from './voice.ts';
 
 const GROUP_TONE: Record<QGroup, string> = { decides: 'bg-[#002C4B] text-white', signoff: 'bg-sky-100 text-sky-900', detail: 'bg-slate-100 text-slate-700' };
 const input = 'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-[#002C4B] focus:outline-none focus:ring-2 focus:ring-[#002C4B]/20';
@@ -170,7 +172,39 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           </div>
         </div>
       )}
+      <ClosedByPerson model={model} canEdit={canEdit} onReopen={(ids, question) => editor.apply(m => reopenQuestions(m, { questionIds: ids }), `Reopened: ${question}`)} />
     </div>
+  );
+}
+
+/**
+ * The gaps a person closed ("Not applicable", or answered without a value) are not asked again (package B, pull
+ * request 5a): one line says how many, and opens them, each with its answer and Reopen, the only way back.
+ */
+function ClosedByPerson({ model, canEdit, onReopen }: { model: ProcessModel; canEdit: boolean; onReopen: (ids: string[], question: string) => void }) {
+  const closed = React.useMemo(() => closedGaps(model), [model]);
+  const [open, setOpen] = React.useState(false);
+  if (!closed.length) return null;
+  return (
+    <section className="rounded-xl border border-slate-200 bg-white px-4 py-3" data-testid="closed-gaps">
+      <p className="text-sm text-slate-700">
+        {closed.length} {closed.length === 1 ? 'question closed by a person is' : 'questions closed by a person are'} not asked again.{' '}
+        <button type="button" className="font-medium text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4" aria-expanded={open} onClick={() => setOpen(o => !o)}>{open ? 'Hide them' : 'Show them'}</button>
+      </p>
+      {open && (
+        <ul className="mt-2 divide-y divide-slate-100">
+          {closed.map(c => (
+            <li key={c.question.id} className="flex flex-wrap items-start justify-between gap-2 py-2" data-testid="closed-gap">
+              <div>
+                <p className="text-sm font-medium text-slate-900">{c.question.question}</p>
+                <p className="text-sm text-slate-600">Answer: {c.question.answer ?? 'Closed'}</p>
+              </div>
+              {canEdit && <Button variant="ghost" onClick={() => onReopen([c.question.id], c.question.question)}>Reopen</Button>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -219,6 +253,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
   key?: React.Key; item: TriageItem; model: ProcessModel; canEdit: boolean; position: string; notes?: NotesContext; waits?: string;
   onApply: (op: Op, summary: string) => Promise<boolean>; onSkip: () => void; onBack?: () => void;
 }) {
+  const voice = useVoice(notes?.store, notes?.workspaceId);
   const [text, setText] = React.useState('');
   const [pick, setPick] = React.useState('');
   const [statuses, setStatuses] = React.useState<Record<number, AccessStatus>>(() => Object.fromEntries((item.interfaces ?? []).map(x => [x.index, x.access])));
@@ -308,12 +343,12 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
           {item.kind === 'number' && <input aria-label="Answer" inputMode="decimal" value={text} onChange={e => setText(e.target.value)} placeholder="A number" className={input} />}
           {structured ? (
             <div>
-              <AnswerBox label={notes ? 'Or say it' : 'Note (optional)'} value={said} onChange={setSaid} rows={2} transcribe={notes ? audio => notes.store.transcribe(notes.workspaceId, audio) : undefined}
+              <AnswerBox label={notes ? 'Or say it' : 'Note (optional)'} value={said} onChange={setSaid} rows={2} {...(notes ? voiceProps(voice, notes.store, notes.workspaceId) : {})}
                 placeholder={notes ? 'Or type or say the answer in your own words, then press Fill in' : 'Anything worth recording with the answer'} />
               {notes && <div className="-mt-1 flex flex-wrap items-center gap-2"><Button variant="secondary" disabled={!said.trim() || filling === 'Reading your answer…'} onClick={fill}>Fill in from my answer</Button><span className="text-xs text-slate-600" role="status">{filling ?? ''}</span></div>}
             </div>
           ) : (
-            <AnswerBox label="Answer" value={text} onChange={setText} rows={4} transcribe={notes ? audio => notes.store.transcribe(notes.workspaceId, audio) : undefined}
+            <AnswerBox label="Answer" value={text} onChange={setText} rows={4} {...(notes ? voiceProps(voice, notes.store, notes.workspaceId) : {})}
               placeholder="Type the answer as you would say it, or press the microphone and speak" />
           )}
           <div className="flex flex-wrap items-center gap-2">

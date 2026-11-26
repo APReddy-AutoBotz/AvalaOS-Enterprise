@@ -19,6 +19,10 @@ import type { Passage } from '../../domain/assistant/ask.ts';
 import { answerSuggestions, sourceSegments, type Suggestion } from '../../domain/assistant/suggest.ts';
 import { allowanceStopped, allowanceUsedUp, AUTO_LOOK, foundFor, foundKeys, sourcesKey, toLookUp, waitingUntil, type SourceLook } from '../../domain/assistant/sourceLook.ts';
 import { answerStep, commitStep, dismissStep, handOverStep, sendStep, Skip, stoppedStep, type LookStep, type SharedLook } from '../../domain/assistant/sharedLook.ts';
+import { discoveryHoldsLook } from './discoveryOpen.ts';
+
+/** How often a look held back by a discovery session asks again whether it may go. */
+const DISCOVERY_RECHECK_MS = 5 * 60 * 1000;
 
 const EVENT = 'avala:source-look';
 const lookKey = (processId: string) => `avala:source-look:${processId}`;
@@ -203,7 +207,10 @@ export function useAutoLook(store: JourneyStore, process: { id: string; workspac
   React.useEffect(() => {
     if (!pid || !model || !model.steps.length || !canEdit || !store.aiAvailable || failed.has(pid)) return;
     let wake = 0, live = true;
-    const t = window.setTimeout(() => {
+    const t = window.setTimeout(async () => {
+      // A discovery session in use on the process holds the look back (package B); an idle one does not.
+      if (await discoveryHoldsLook(store, pid)) { if (live) wake = window.setTimeout(() => setTick(n => n + 1), DISCOVERY_RECHECK_MS); return; }
+      if (!live) return;
       lookInSources(store, { id: pid, workspaceId: wid }, model).then(() => {
         // Held by an earlier page's call: try again when its wait ends.
         const look = current(pid);

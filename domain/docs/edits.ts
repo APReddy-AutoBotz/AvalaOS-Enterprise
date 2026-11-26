@@ -128,6 +128,17 @@ export function applyEdits(doc: DocTree, edits: SectionEdit[]): { doc: DocTree; 
   return { doc: { ...doc, sections }, status };
 }
 
+/**
+ * Whether pressing Save in the section editor changes nothing (owner, 24 November 2026): the text, cleaned as
+ * a save cleans it, is exactly the text the editor was opened on. Then no edit is written, so an untouched
+ * section stays generated and an approved version shows no unapproved change. Not while the section waits
+ * for review: saving there records that the person has seen the new generated text, as before.
+ */
+export function savesNothing(html: string, opened: string, state: SectionState): boolean {
+  if (state === 'needs_review') return false;
+  try { return sanitizeHtml(html) === sanitizeHtml(opened); } catch { return false; }
+}
+
 /** An edit to save: sanitised, against the generated narrative it replaces. */
 export function newEdit(docType: DocType, section: Section, html: string): SectionEdit {
   return makeEdit(docType, section.id, html, hashText(narrativeHtml(section)));

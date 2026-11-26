@@ -2,7 +2,9 @@
 // missing information found by rule, and conflicts between sources (the person picks the value).
 import React from 'react';
 import { addQuestion, answerQuestion, resolveConflict } from '../../domain/processModel/patch.ts';
-import { askedOpenQuestions, getElement, untrackedGaps } from '../../domain/processModel/selectors.ts';
+import { conflictValue } from '../../domain/questions/conflictValue.ts';
+import { askedOpenQuestions, getElement } from '../../domain/processModel/selectors.ts';
+import { untrackedOpenGaps } from '../../domain/questions/closedGaps.ts';
 import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { Conflict, ElementTarget, OpenQuestion, ProcessModel } from '../../domain/processModel/types.ts';
 import { Button, EmptyState } from '../ui.tsx';
@@ -29,7 +31,7 @@ function valueKind(t: ElementTarget): ValueKind {
 export function QuestionsTab({ model, editor, canEdit, questionsNote }: TabContext) {
   const open = askedOpenQuestions(model);
   const answered = model.openQuestions.filter(q => q.status !== 'open');
-  const missing = untrackedGaps(model);
+  const missing = untrackedOpenGaps(model);
   return (
     <div className="space-y-6">
       {questionsNote && <p className="rounded-xl bg-slate-50 px-4 py-2.5 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200" data-testid="questions-count-note">{questionsNote}</p>}
@@ -129,18 +131,6 @@ export function ConflictsTab({ model, editor, canEdit, sourceTitle }: TabContext
         onChoose={(chosen, reason) => editor.apply(m => resolveConflict(m, { conflictId: c.id, chosen, ...chosenBy(chooser), reason, ...conflictValue(m, c, chosen) }), `Resolved: ${c.summary}`)} /></React.Fragment>)}
     </ul>
   );
-}
-
-/** The value to write when a conflict is about a field that holds a single number or text. */
-function conflictValue(m: ProcessModel, c: Conflict, chosen: string): { value?: unknown } {
-  const t = c.target;
-  if (t.kind === 'metric' && t.field === 'value') {
-    const n = Number(chosen.replace(/[, ]/g, '').match(/-?\d+(\.\d+)?/)?.[0]);
-    return Number.isFinite(n) ? { value: n } : {};
-  }
-  const el = getElement(m, t) as Record<string, unknown> | undefined;
-  if (t.field && el && typeof el[t.field] === 'string' && t.kind !== 'meta') return { value: chosen };
-  return {};
 }
 
 function ConflictCard({ c, model, canEdit, onChoose, sourceTitle }: { c: Conflict; model: ProcessModel; canEdit: boolean; onChoose: (chosen: string, reason: string) => Promise<boolean>; sourceTitle: (id: string) => string }) {

@@ -2,7 +2,8 @@
 // A finished extraction is reviewed as a change set before anything reaches the model.
 import { DemoFilesNote } from '../demo/DemoFilesNote.tsx';
 import React from 'react';
-import { applyChanges, proposeChanges, type ChangeSet, type ProposedChange } from '../../domain/extract/rebase.ts';
+import { applyChanges, notTickedLine, proposeChanges, type ChangeSet, type ProposedChange } from '../../domain/extract/rebase.ts';
+import { readingWhen, REVIEW_WORDS } from '../../domain/extract/reviewWords.ts';
 import { failedLine, isStalled } from '../../domain/extract/failure.ts';
 import { deepEqual, type JsonPatchOp } from '../../domain/processModel/jsonPatch.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
@@ -234,12 +235,16 @@ function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onAppl
 }
 
 const ELEMENT_LABEL: Record<ProposedChange['element'], string> = {
-  step: 'Steps', role: 'Roles', system: 'Systems', gateway: 'Decisions', event: 'Start and end', rule: 'Rules', exception: 'Exceptions',
+  step: 'Steps', role: 'Roles', system: 'Applications', gateway: 'Decisions', event: 'Start and end', rule: 'Rules', exception: 'Exceptions',
   metric: 'Figures', data: 'Data', question: 'Open questions', conflict: 'Conflicts between sources', meta: 'Process',
 };
 const KIND_LABEL: Record<ProposedChange['kind'], string> = { add: 'New', update: 'Changed', remove: 'Not found any more', conflict: 'Differs from what you confirmed' };
 
-function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { store: JourneyStore; processId: string; extracted: ProcessModel; finishedAt: string; onApplied: () => void }) {
+export function ChangeReview({ store, processId, extracted, finishedAt, onApplied, withAnswers = false }: {
+  store: JourneyStore; processId: string; extracted: ProcessModel; finishedAt: string; onApplied: () => void;
+  /** Discovery's update, read with the person's answers: its line says so. */
+  withAnswers?: boolean;
+}) {
   const [current, setCurrent] = React.useState<ProcessModel | null>(null);
   const [set, setSet] = React.useState<ChangeSet | null>(null);
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
@@ -259,8 +264,10 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
   React.useEffect(() => { load().catch(e => setError(messageOf(e))); }, [load]);
 
   if (error && !set) return <ErrorNote message={error} />;
-  if (!set || !current) return <p className="text-sm text-slate-500">Comparing with the current model…</p>;
-  if (!set.changes.length) return <p className="text-sm text-emerald-800" data-testid="no-changes">The extraction of {when(finishedAt)} matches the process as it stands.</p>;
+  if (!set || !current) return <p className="text-sm text-slate-500">{REVIEW_WORDS.comparing}</p>;
+  if (!set.changes.length) return <p className="text-sm text-emerald-800" data-testid="no-changes">{REVIEW_WORDS.matches}</p>;
+  const at = readingWhen(finishedAt);
+  const notTicked = set.first ? null : notTickedLine(set);
 
   const apply = async () => {
     setBusy(true);
@@ -294,9 +301,10 @@ function ChangeReview({ store, processId, extracted, finishedAt, onApplied }: { 
     <div className="space-y-3" data-testid="change-review">
       <p className="text-sm text-slate-700">
         {set.first
-          ? `The extraction of ${when(finishedAt)} found ${extracted.steps.length} steps, ${extracted.roles.length} roles and ${extracted.systems.length} systems. ${firstListLine(extracted)}`
-          : `The extraction of ${when(finishedAt)} differs from the current model in ${set.changes.length} place${set.changes.length === 1 ? '' : 's'}. Choose what to take.`}
+          ? `${REVIEW_WORDS.first(at, extracted.steps.length, extracted.roles.length, extracted.systems.length)} ${firstListLine(extracted)}`
+          : REVIEW_WORDS.again(at, set.changes.length, withAnswers)}
       </p>
+      {notTicked && <p className="text-sm text-amber-900" data-testid="not-ticked">{notTicked}</p>}
       {!set.first && (
         <div className="max-h-[28rem] space-y-3 overflow-y-auto rounded-lg border border-slate-200 p-3">
           {[...groups].map(([element, changes]) => (

@@ -22,6 +22,35 @@ export function standInRefusal(replies: StandInReplies, task: string, segments: 
   return null;
 }
 
+/** The reply list that stands in for turning speech into text: the words a recording is heard as, in order. */
+export const TRANSCRIBE = 'transcribe';
+
+/**
+ * The words a recording is heard as, or why the stand-in does not answer (a string starting "The stand-in").
+ * Only when the test gave words under `transcribe`; the recording itself is never read.
+ */
+export function standInTranscript(replies: StandInReplies, used: Record<string, number>): { text: string } | { refused: string } {
+  if (!Object.hasOwn(replies, TRANSCRIBE) || !replies[TRANSCRIBE]!.length) return { refused: 'The stand-in has no words for a recording.' };
+  const reply = standInReply(replies, used, TRANSCRIBE);
+  return typeof reply === 'string' ? { text: reply } : { refused: 'The stand-in has no words for a recording.' };
+}
+
+/** The reply list that stands in for a reading of the sources (journey-extract): the model it gives, in order. */
+export const EXTRACTION = 'extraction';
+
+/** What the reading stand-in was given: each source's key and its passages, as a person or a file wrote them. */
+export interface ReadSources { key: string; passages: { text: string; place: string | null }[] }
+
+/**
+ * A reading in a browser test (package B, pull request 4b): the model a test gave under `extraction`, or why not.
+ * It reads every source it is given (a reading reads sources; the rule against source passages is for the AI tasks,
+ * so the automatic look is never answered by replies meant for a person's words), and the log keeps what it was given.
+ */
+export function standInReading(replies: StandInReplies, used: Record<string, number>): { model: unknown } | { refused: string } {
+  if (!Object.hasOwn(replies, EXTRACTION) || !replies[EXTRACTION]!.length) return { refused: 'The stand-in has no reading.' };
+  return { model: standInReply(replies, used, EXTRACTION) };
+}
+
 /** The next reply for a task, a copy; `used` counts the replies given so far per task. */
 export function standInReply(replies: StandInReplies, used: Record<string, number>, task: string): unknown {
   const list = replies[task]!;

@@ -1,7 +1,8 @@
 // The Business Requirements Document: why the process is being changed and what the business
 // needs. It summarises and links to the PDD rather than repeating the step detail. Every figure
 // comes from the model, the assessment or a person's entry.
-import { gaps, orderedSteps } from '../processModel/selectors.ts';
+import { orderedSteps } from '../processModel/selectors.ts';
+import { openGapsOf } from '../questions/closedGaps.ts';
 import { paybackOf } from '../assess/payback.ts';
 import { QUADRANT } from '../assess/priority.ts';
 import { DocBuilder, missing, type DocTree } from './tree.ts';
@@ -100,7 +101,7 @@ export function buildBrd(input: DocInput): DocTree {
 
   b.section('12', 'Open questions', 1);
   for (const q of m.openQuestions.filter(q => q.status === 'open')) b.note(q.question, q.target);
-  for (const g of gaps(m)) b.note(g.label, g.target);
+  for (const g of openGapsOf(m)) b.note(g.label, g.target);
   b.table('Open questions', ['#', 'Question', 'Raised in'], b.openItems.map((o, i) => [String(i + 1), o.text, o.section ?? '']), 'No open questions.');
 
   return {

@@ -5,7 +5,8 @@ import type { ProcessModel, RoleKind, SourceRef, SystemKind, TaskType } from '..
 import { addRole, addStep, addSystem, moveStep, ModelOpError, removeElement, removeStep, updateFact } from '../../domain/processModel/patch.ts';
 import { questionsTabCount } from '../../domain/questions/firstList.ts';
 import { useQuestionPlan } from './sourceLook.ts';
-import { openItemCount, orderedSteps, stepsForRole, stepsForSystem } from '../../domain/processModel/selectors.ts';
+import { orderedSteps, stepsForRole, stepsForSystem } from '../../domain/processModel/selectors.ts';
+import { openItemsNow } from '../../domain/questions/closedGaps.ts';
 import { Button, cx, ErrorNote } from '../ui.tsx';
 import type { ModelEditor, ModelOp } from './useModelEditor.ts';
 import type { ImpactContext } from '../../domain/docs/impact.ts';
@@ -55,7 +56,7 @@ export function ProcessEditor({ processId, editor, canEdit, me, sourceTitle, imp
   const [panel, setPanel] = React.useState<{ title: string; sources: SourceRef[] } | null>(null);
   // One count of open questions everywhere: the first list, as Ask Avala's questions tab counts it.
   const { plan } = useQuestionPlan(processId, model);
-  const { count: openCount, note: questionsNote } = questionsTabCount(plan, openItemCount(model));
+  const { count: openCount, note: questionsNote } = questionsTabCount(plan, openItemsNow(model));
   const conflictCount = model.conflicts.filter(c => !c.resolution).length;
   const tabs: { id: TabId; label: string; count?: number }[] = [
     { id: 'steps', label: 'Steps', count: model.steps.length },
@@ -183,7 +184,7 @@ function AddStep({ editor, after }: { model: ProcessModel; editor: ModelEditor; 
         <input value={name} onChange={e => setName(e.target.value)} placeholder="Verb and object, e.g. Check mandatory fields" className="mt-1 block w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
       </label>
       <label className="text-xs font-medium text-slate-600">Type
-        <div className="mt-1"><Select value={type} options={TASK_TYPES} label="Type of new step" onChange={setType} /></div>
+        <div className="mt-1"><Select value={type} options={TASK_TYPES} label="Type of new step" onChange={v => setType(v as TaskType)} /></div>
       </label>
       <Button type="submit" disabled={!name.trim()}>Add step</Button>
     </form>

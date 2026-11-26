@@ -23,3 +23,23 @@ export function ownWordsEdits(form: { doneToday: DoneToday | ''; inMind: InMind[
   return ops;
 }
 
+
+/**
+ * The words a person gave, as the source they are kept in (the first `own-N` key the process does not use):
+ * one passage per paragraph, nothing added. Shared by "Tell us in your own words" and Discovery.
+ */
+export function ownWordsSource(words: string, takenKeys: readonly string[], date: string) {
+  const text = words.trim().slice(0, OWN_WORDS_LIMIT);
+  const paras = text.split(/\n\s*\n/).map(p => p.trim()).filter(Boolean);
+  let n = 1;
+  while (takenKeys.includes(`own-${n}`)) n++;
+  const key = `own-${n}`;
+  return {
+    key, title: `Described in own words, ${date}`, fileName: '', format: 'txt' as const, kind: 'Description', inferred: false, warnings: [] as string[],
+    byteSize: new TextEncoder().encode(text).length,
+    segments: paras.map((t, i) => ({ id: `${key}:${i + 1}`, sourceId: key, kind: 'paragraph' as const, text: t, locator: { lineStart: i + 1 } })),
+  };
+}
+
+/** The day as the screens write it in a source's title ("24 Nov 2026"). */
+export const sourceDate = (d = new Date()) => d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });

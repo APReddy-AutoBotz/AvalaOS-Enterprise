@@ -9,6 +9,7 @@ import { DEFAULT_SETTINGS, settingsFrom, validateSettings } from '../../domain/a
 // Uses only the project URL and the publishable key, which are safe in the browser.
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
+import { readState, type SaveAnswer, type StoredSession } from '../../domain/discovery/session.ts';
 import { decisionsFromEntries, decisionsToEntries } from '../../domain/assess/decisions.ts';
 import type { StoredRequirement } from '../../domain/requirements/register.ts';
 import type { SectionEdit } from '../../domain/docs/edits.ts';
@@ -40,6 +41,7 @@ import type { Sprint } from '../../domain/workitems/sprints.ts';
 import type { Module } from '../../domain/workspace/modules.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
+import { EXTRACTION_COLUMNS } from '../../domain/store/grantedSelects.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
@@ -47,6 +49,27 @@ const applicationFrom = (r: Record<string, any>): Application => ({
   id: r.id, name: r.name, aliases: r.aliases ?? [], kind: r.kind, access: Array.isArray(r.access) ? r.access : [],
   uiAllowed: r.ui_allowed ?? null, remote: r.remote ?? null, notes: r.notes ?? '', updatedAt: r.updated_at, updatedBy: r.updated_by ?? null,
 });
+
+// A discovery session's row (package B; domain/discovery/session.ts).
+const SESSION_COLUMNS = 'id, process_id, status, state, version, started_by, started_at, updated_at';
+function sessionFrom(r: Record<string, any>): StoredSession {
+  return {
+    id: r.id, processId: r.process_id, status: r.status === 'finished' ? 'finished' : 'open', state: readState(r.state), version: Number(r.version),
+    startedBy: r.started_by ?? null, startedAt: r.started_at, updatedAt: r.updated_at,
+  };
+}
+/**
+ * A write names the version it read twice: as the row's version, which the database refuses when it is not the
+ * stored one (EDIT_CONFLICT), and as a filter, so an older copy matches no row. Either way: 'stale', never an overwrite.
+ */
+async function sessionWrite(q: PromiseLike<{ data: { version: number }[] | null; error: { message: string; code?: string } | null }>): Promise<SaveAnswer> {
+  const { data, error } = await q;
+  if (error?.code === '23514') return 'full';
+  if (error && /^FINISHED: /.test(error.message)) return 'finished';
+  if (error && /^EDIT_CONFLICT: /.test(error.message)) return 'stale';
+  if (error) fail(error);
+  return data && data.length ? { version: Number(data[0]!.version) } : 'stale';
+}
 
 function fail(error: { message: string; code?: string; status?: number } | null, fallback = 500): never {
   const code = error?.code ?? '';
@@ -400,6 +423,24 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       const { data, error } = await db.from('process_source_looks').update(row).eq('process_id', processId).eq('version', version).select('version');
       if (error) fail(error);
       return data && data.length ? Number(data[0].version) : null;
+    },
+    async getDiscoverySession(processId) {
+      const { data, error } = await db.from('discovery_sessions').select(SESSION_COLUMNS).eq('process_id', processId).eq('status', 'open').maybeSingle();
+      if (error) fail(error);
+      return data ? sessionFrom(data) : null;
+    },
+    async startDiscoverySession(processId, workspaceId, state) {
+      const { data, error } = await db.from('discovery_sessions').insert({ process_id: processId, workspace_id: workspaceId, state }).select(SESSION_COLUMNS).single();
+      // Another page started one first (one open session per process): read that one.
+      if (error?.code === '23505') return null;
+      if (error) fail(error);
+      return sessionFrom(data);
+    },
+    async saveDiscoverySession(sessionId, state, version) {
+      return sessionWrite(db.from('discovery_sessions').update({ state, version }).eq('id', sessionId).eq('version', version).select('version'));
+    },
+    async finishDiscoverySession(sessionId, version) {
+      return sessionWrite(db.from('discovery_sessions').update({ status: 'finished', version }).eq('id', sessionId).eq('version', version).select('version'));
     },
     async getAssessmentDecisions(processId) {
       const { data, error } = await db.from('assessments').select('overrides').eq('process_id', processId).order('updated_at', { ascending: false }).limit(1).maybeSingle();
@@ -794,11 +835,14 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
     },
     async latestExtraction(processId): Promise<ExtractionRow | null> {
-      const { data, error } = await db.from('extraction_runs').select('id, status, error, result, created_at, updated_at')
+      const { data, error } = await db.from('extraction_runs').select(EXTRACTION_COLUMNS)
         .eq('process_id', processId).order('created_at', { ascending: false }).limit(1).maybeSingle();
       if (error) fail(error);
       if (!data) return null;
-      return { id: data.id, status: data.status, error: data.error, createdAt: data.created_at, updatedAt: data.updated_at, model: (data.result as any)?.model ?? null };
+      return {
+        id: data.id, status: data.status, error: data.error, createdAt: data.created_at, updatedAt: data.updated_at, model: (data.result as any)?.model ?? null,
+        tokens: (Number(data.input_tokens) || 0) + (Number(data.output_tokens) || 0),
+      };
     },
     async history(processId) {
       const { data, error } = await db.rpc('model_history', { target_process: processId });

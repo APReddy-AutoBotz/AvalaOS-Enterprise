@@ -20,6 +20,9 @@ import { useProcessChanged } from './processChanged.ts';
 import { openGaps } from './process/openGaps.ts';
 import { questionPlan, useSharedLook, useSourceLook } from './process/sourceLook.ts';
 import { SidePanel } from './process/widgets.tsx';
+import { DiscoveryDemo, DiscoveryPanel } from './process/DiscoveryPanel.tsx';
+import { useDiscoveryAsked, useOpenDiscovery } from './process/openDiscovery.ts';
+import { discoveryTab, WORDS as DISCOVERY_WORDS } from '../domain/discovery/flow.ts';
 import { AskAvalaButton, AskMark, ErrorNote, messageOf, Spinner } from './ui.tsx';
 
 interface LoadedProcess { process: ProcessRow; model: ProcessModel | null; sources: SourceRow[]; working: { id: string; seq: number } | null }
@@ -38,6 +41,8 @@ export function AskAvala({ store, nav, workspace }: { store: JourneyStore; nav: 
   const stages = stagesFor(workspace.modules);
   const boards = navFor(workspace).board;
   const [open, setOpen] = React.useState(false);
+  // "Add and start with Ask Avala" and the Sources stage's line open the panel on Discovery (package B).
+  useDiscoveryAsked(React.useCallback(() => setOpen(true), []));
   // Nothing to ask about where the organisation uses neither processes nor the board.
   if (!stages.length && !boards) return null;
   return (
@@ -56,8 +61,8 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   const [projects, setProjects] = React.useState<Project[] | null>(null);
   const [loaded, setLoaded] = React.useState<LoadedProcess | null | 'missing'>(null);
   const [error, setError] = React.useState<string | null>(null);
-  // On a process: asking questions, or the interview through its open questions (stage 2).
-  const [view, setView] = React.useState<'ask' | 'interview' | 'suggestions'>('ask');
+  // On a process: asking questions, the interview through its open questions (stage 2), suggestions, or Discovery (package B).
+  const [view, setView] = React.useState<'ask' | 'interview' | 'suggestions' | 'discovery'>('ask');
   // A suggested answer opens the interview on its question, filled in.
   const [start, setStart] = React.useState<Extract<Suggestion['target'], { kind: 'answer' }> | null>(null);
 
@@ -128,6 +133,24 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
     </div>
   );
 
+  // Discovery (package B): its own tab for someone who can edit, where the workspace has AI; the only view on a process with no steps.
+  const here = processId && loaded && loaded !== 'missing' ? loaded : null;
+  const disc = here ? discoveryTab({ canEdit: workspace.role !== 'viewer', aiAvailable: store.aiAvailable, demo: store.kind === 'demo', hasSteps: askable(here.model) }) : 'none';
+  useOpenDiscovery(processId, React.useCallback(() => setView('discovery'), []));
+  const openStage = (stage: 'sources' | 'process' | 'gaps') => {
+    if (!here) return;
+    const id = here.process.id;
+    const gaps = procStages.includes('assessment') ? 'assessment' as const : procStages.includes('documents') ? 'documents' as const : null;
+    onClose();
+    if (stage === 'gaps' && gaps) { nav.go({ page: 'process', processId: id, stage: gaps }); openGaps(id, gaps, 'all'); return; }
+    nav.go({ page: 'process', processId: id, stage: stage === 'gaps' ? 'process' : stage });
+  };
+  const discoveryBody = here && (
+    disc === 'demo' ? <DiscoveryDemo />
+    : disc === 'viewer' ? <p className="text-sm leading-6 text-slate-600" data-testid="discovery-viewer">{DISCOVERY_WORDS.viewer}</p>
+    : <React.Fragment key={here.process.id}><DiscoveryPanel store={store} workspace={workspace} process={here.process} model={here.model} sources={here.sources} onOpenStage={openStage} /></React.Fragment>
+  );
+
   // The interview's tab, with how many questions need people now (the first list, and answers found to confirm), on a process that has steps.
   const proc = processId && loaded && loaded !== 'missing' && askable(loaded.model) ? loaded : null;
   // The shared look, read from the server when the panel opens on a process (package 4 of docs/next-plan.md).
@@ -140,15 +163,26 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
   }, [proc, look, dismissed]);
   const tabs = proc && (
     <div role="tablist" aria-label="Ask Avala" className="mb-4 flex gap-1 border-b border-slate-200">
-      {(['ask', 'interview', 'suggestions'] as const).map(v => (
+      {/* A viewer gets no Discovery tab (plan, decision 3); on a process with no steps the panel says who can start it. */}
+      {(disc === 'tab' || disc === 'demo' ? ['ask', 'interview', 'suggestions', 'discovery'] as const : ['ask', 'interview', 'suggestions'] as const).map(v => (
         <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => { setStart(null); setView(v); }}
           className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium ${view === v ? 'border-[#E69F00] text-[#002C4B]' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>
-          {v === 'ask' ? 'Ask' : v === 'interview' ? `Questions${openCount ? ` (${openCount})` : ''}` : 'Suggestions'}
+          {v === 'ask' ? 'Ask' : v === 'interview' ? `Questions${openCount ? ` (${openCount})` : ''}` : v === 'suggestions' ? 'Suggestions' : 'Discovery'}
         </button>
       ))}
     </div>
   );
   const gapsStage = procStages.includes('assessment') ? 'assessment' as const : procStages.includes('documents') ? 'documents' as const : null;
+  if (here && discoveryBody && ((proc && view === 'discovery' && (disc === 'tab' || disc === 'demo')) || (!proc && disc === 'only'))) {
+    return (
+      <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
+        <div data-testid="ask-panel">
+          {about}{tabs}
+          {discoveryBody}
+        </div>
+      </SidePanel>
+    );
+  }
   if (proc && view === 'interview') {
     return (
       <SidePanel title="Ask Avala" onClose={onClose} wide brand={<AskMark />}>
@@ -200,6 +234,7 @@ function AskHost({ store, nav, workspace, stages, boards, onClose }: {
         {scope.kind === 'board' && lists && !project && (projectId ? <p className="text-sm leading-6 text-slate-600">That board is not in this workspace.</p> : null)}
         {processId && loaded === 'missing' && <p className="text-sm leading-6 text-slate-600">That process is not in your workspaces.</p>}
         {processId && loaded && loaded !== 'missing' && !askable(loaded.model) && <p className="text-sm leading-6 text-slate-600">{loaded.process.name} has no steps yet, so its record holds nothing to answer from. Add its sources and read them into the process first.</p>}
+        {here && !askable(here.model) && disc === 'viewer' && <div className="mt-3">{discoveryBody}</div>}
         {((processId && loaded === null) || !lists) && !error && <div className="mt-4"><Spinner /></div>}
       </div>
     </SidePanel>

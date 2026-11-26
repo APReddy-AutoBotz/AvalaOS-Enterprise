@@ -31,8 +31,9 @@ import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 import { readKept, KeptFormatError, type Fingerprints, type KeptDocuments, type KeptInputs, type KeptLook } from '../../domain/docs/keep.ts';
 import { reasonProblem } from '../../domain/docs/versions.ts';
 import { hashValue } from '../../domain/processModel/hash.ts';
-import { DRAFT_CHANGES_SHOWN, type DraftChangeRow, type VersionRow, type VersionStateRow } from './types.ts';
+import { DRAFT_CHANGES_SHOWN, type DraftChangeRow, type ExtractionRow, type VersionRow, type VersionStateRow } from './types.ts';
 import type { StandIn } from './standIns.ts';
+import { FULL_LINE, readState, STATE_LIMIT, stateTextLength, type SaveAnswer, type StoredSession } from '../../domain/discovery/session.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 /** A kept version (package 14), as the database's approved_versions holds it. */
@@ -74,6 +75,10 @@ interface State {
   versions?: StoredVersion[];
   keptLooks?: { workspaceId: string; fingerprint: string; look: KeptLook }[];
   draftChanges?: DraftChange[];
+  /** Browser tests only: readings the stand-in gave (the server's extraction_runs). */
+  extractions?: (ExtractionRow & { processId: string; done: ProcessModel; sourceIds: string[] })[];
+  /** Package B: discovery sessions, by the server's rules (table discovery_sessions). */
+  discovery?: (StoredSession & { workspaceId: string; updatedBy: string | null })[];
 }
 
 const KEY = 'avala.journey.memory.v1';
@@ -116,6 +121,25 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
   };
   const where = demo ? 'in the demo' : 'in local mode';
   const requireMe = () => { if (!state.me) throw new StoreError(401, 'Sign in again.'); return state.me; };
+  const sessionOut = (r: NonNullable<State['discovery']>[number]): StoredSession => {
+    const c = structuredClone(r);
+    return { id: c.id, processId: c.processId, status: c.status, state: c.state, version: c.version, startedBy: c.startedBy, startedAt: c.startedAt, updatedAt: c.updatedAt };
+  };
+  const writeSession = (sessionId: string, version: number, change: (r: NonNullable<State['discovery']>[number]) => NonNullable<State['discovery']>[number]): SaveAnswer => {
+    const me = requireMe();
+    if (!demo) state = { ...state, discovery: load().discovery ?? state.discovery };
+    const i = (state.discovery ?? []).findIndex(s => s.id === sessionId);
+    if (i < 0) return 'stale';
+    const row = state.discovery![i]!;
+    if (workspaceOf(row.processId).w.role === 'viewer') throw new StoreError(403, 'Discovery needs the editor or admin role.');
+    if (row.status === 'finished') return 'finished';
+    if (row.version !== version) return 'stale';
+    const next = change(row);
+    if (stateTextLength(next.state) > STATE_LIMIT) return 'full';
+    state.discovery![i] = { ...next, version: row.version + 1, updatedAt: now(), updatedBy: me.id };
+    save();
+    return { version: row.version + 1 };
+  };
   const workspaceOf = (processId: string) => {
     const p = state.processes.find(x => x.id === processId);
     const w = p && state.workspaces.find(x => x.id === p.workspaceId);
@@ -524,9 +548,36 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
     },
     aiAvailable: Boolean(options.standIn),
     async readFlowchartImage() { throw new StoreError(501, `Reading images needs the server; it is not available ${where}.`); },
-    async transcribe() { throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`); },
-    async startExtraction() { throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`); },
-    async latestExtraction() { return null; },
+    async transcribe() {
+      // Browser tests only: the words the test gave for a recording (journey/store/standIns.ts).
+      if (options.standIn) return options.standIn.transcribe();
+      throw new StoreError(501, `Transcription needs the server; it is not available ${where}.`);
+    },
+    async startExtraction(_workspaceId, processId, sourceIds) {
+      // Browser tests only: the reading a test gave (journey/store/standIns.ts), done on the next look a moment later.
+      if (!options.standIn) throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`);
+      requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Reading the sources needs the editor or admin role.');
+      const read = sourceIds.map(id => state.sources.find(x => x.id === id && x.processId === processId)).filter((x): x is NonNullable<typeof x> => Boolean(x));
+      const model = options.standIn.read(read.map(x => ({ key: x.key, passages: x.segments.map(g => ({ text: g.text, place: g.locator?.heading ?? null })) }))) as ProcessModel;
+      const at = now();
+      const run = { id: uuid(), processId, status: 'running' as const, error: null, createdAt: at, updatedAt: at, model: null, sourceIds: [...sourceIds], tokens: 0, done: model };
+      (state.extractions ??= []).push(run);
+      save();
+      return { runId: run.id };
+    },
+    async latestExtraction(processId) {
+      if (!demo) state = { ...state, extractions: load().extractions ?? state.extractions };
+      const runs = (state.extractions ?? []).filter(r => r.processId === processId);
+      const last = runs[runs.length - 1];
+      if (!last) return null;
+      if (last.status === 'running' && Date.now() - Date.parse(last.createdAt) > 1500) {
+        Object.assign(last, { status: 'done', model: last.done, updatedAt: now(), tokens: 30_000 });
+        save();
+      }
+      const c = structuredClone(last);
+      return { id: c.id, status: c.status, error: c.error, createdAt: c.createdAt, updatedAt: c.updatedAt, model: c.model, tokens: c.tokens };
+    },
     async lookAtExtraction() { /* no extraction runs in the browser */ },
     async runAiTask(_workspaceId, task, segments) {
       if (options.standIn) return options.standIn.run(task, segments);
@@ -972,6 +1023,33 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): JourneyStor
       state.looks = { ...(state.looks ?? {}), [processId]: { ...structuredClone(next), version: (row?.version ?? 0) + 1 } };
       save();
       return state.looks[processId].version;
+    },
+    // Discovery sessions keep the database's rules: a write names the version it read and is refused from an
+    // older copy; who and when are the store's; one open session per process; a finished one never changes.
+    async getDiscoverySession(processId) {
+      requireMe();
+      workspaceOf(processId);
+      if (!demo) state = { ...state, discovery: load().discovery ?? state.discovery };
+      const row = (state.discovery ?? []).find(s => s.processId === processId && s.status === 'open');
+      return row ? sessionOut(row) : null;
+    },
+    async startDiscoverySession(processId, workspaceId, initial) {
+      const me = requireMe();
+      if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Discovery needs the editor or admin role.');
+      if (!demo) state = { ...state, discovery: load().discovery ?? state.discovery };
+      if ((state.discovery ?? []).some(s => s.processId === processId && s.status === 'open')) return null;
+      if (stateTextLength(initial) > STATE_LIMIT) throw new StoreError(413, FULL_LINE);
+      const at = now();
+      const row = { id: uuid(), processId, workspaceId, status: 'open' as const, state: readState(structuredClone(initial)), version: 1, startedBy: me.id, startedAt: at, updatedAt: at, updatedBy: me.id };
+      (state.discovery ??= []).push(row);
+      save();
+      return sessionOut(row);
+    },
+    async saveDiscoverySession(sessionId, next, version) {
+      return writeSession(sessionId, version, row => ({ ...row, state: readState(structuredClone(next)) }));
+    },
+    async finishDiscoverySession(sessionId, version) {
+      return writeSession(sessionId, version, row => ({ ...row, status: 'finished' }));
     },
     async getAssessmentDecisions(processId) {
       requireMe();

@@ -158,3 +158,77 @@ test('a new reading never removes what a person said about an application\'s way
   for (const a of mine) assert.ok(after.access.some(x => x.method === a.method && x.access === a.access && x.status === 'user-confirmed'), 'kept as the person said');
   assert.ok(validateModel(m).valid);
 });
+
+// ---- A re-reading does not pile up reworded questions (package B, pull request 5a; owner, 25 November 2026) -------
+
+import { notTickedLine, QUESTION_DETAIL } from './rebase.ts';
+import { emptyModel } from '../processModel/empty.ts';
+import type { ElementTarget, OpenQuestion } from '../processModel/types.ts';
+
+/** The sample brought in as a first reading: a draft with steps. */
+function draftOf(questions: OpenQuestion[] = []): ProcessModel {
+  const empty = emptyModel('Supplier invoices');
+  const first = applyChanges(empty, gold(), new Set(proposeChanges(empty, gold()).changes.map(c => c.id)));
+  return { ...first, openQuestions: [...first.openQuestions, ...questions] };
+}
+const q = (id: string, target: ElementTarget, question: string, status: OpenQuestion['status'] = 'open'): OpenQuestion => ({ id, target, question, whyItMatters: '', owner: null, status, ...(status === 'answered' ? { answer: 'Not applicable to this process.' } : {}) });
+const reading = (questions: OpenQuestion[]): ProcessModel => ({ ...gold(), openQuestions: [...gold().openQuestions, ...questions] });
+const questionChanges = (current: ProcessModel, extracted: ProcessModel) => proposeChanges(current, extracted).changes.filter(c => c.element === 'question');
+
+test('a first reading (no steps in the draft yet) takes every question, ticked, as before', () => {
+  // A draft with no steps yet, though not empty: what the person wants from the process is set.
+  const bare: ProcessModel = { ...emptyModel('Supplier invoices'), openQuestions: [q('q-1', { kind: 'meta' }, 'Who signs the process off?')] };
+  const extra = q('x-1', { kind: 'meta' }, 'What does the business hope the process gains next year from its suppliers?');
+  for (const c of questionChanges(bare, reading([extra]))) assert.equal(c.defaultSelected, true, c.label);
+});
+
+test('(a) a question on a field already asked about, open, left or closed, is not added; on a field not asked about, it is', () => {
+  for (const status of ['open', 'deferred', 'answered'] as const) {
+    const current = draftOf([q('q-90', { kind: 'step', id: 's-match', field: 'roleIds' }, 'Who does "Three-way match"?', status)]);
+    const cs = questionChanges(current, reading([q('x-1', { kind: 'step', id: 's-match', field: 'roleIds' }, 'Which team carries out the three-way matching against the order?')]));
+    assert.equal(cs.some(c => c.extractedId === 'x-1'), false, status);
+  }
+  const current = draftOf();
+  const cs = questionChanges(current, reading([q('x-2', { kind: 'step', id: 's-check', field: 'roleIds' }, 'Which team checks the mandatory fields?')]));
+  assert.equal(cs.find(c => c.extractedId === 'x-2')?.defaultSelected, true);
+});
+
+test('(c) a question about an element as a whole: added when nothing is asked about it, listed not ticked when something is', () => {
+  const current = draftOf([q('q-91', { kind: 'step', id: 's-match' }, 'Is the matching step still done by hand on Fridays?')]);
+  const cs = questionChanges(current, reading([
+    q('x-3', { kind: 'step', id: 's-match' }, 'How often does the matching run fail outright for a whole batch of invoices?'),
+    q('x-4', { kind: 'step', id: 's-check' }, 'Are mandatory fields ever waived for a known supplier?'),
+  ]));
+  assert.deepEqual(cs.find(c => c.extractedId === 'x-3') && { on: cs.find(c => c.extractedId === 'x-3')!.defaultSelected, d: cs.find(c => c.extractedId === 'x-3')!.detail }, { on: false, d: QUESTION_DETAIL['offer-element'] });
+  assert.equal(cs.find(c => c.extractedId === 'x-4')?.defaultSelected, true);
+});
+
+test('(b) on a draft shaped like the live processes (most open questions about the process as a whole), rewordings are listed, none ticked', () => {
+  // 20 of 33 open questions about the process as a whole, as on the live processes (20 of 33, 27 of 66, 31 of 44).
+  const whole = Array.from({ length: 20 }, (_, i) => q(`q-w${i}`, { kind: 'meta' }, `Whole-process question number ${i} about supplier invoices and approvals in the region ${i}?`));
+  const fields = Array.from({ length: 3 }, (_, i) => q(`q-f${i}`, { kind: 'metric', id: 'm-paper-share', field: 'value' }, `Share of paper invoices, asked ${i}?`));
+  const current = draftOf([...whole, ...fields]);
+  assert.equal(current.openQuestions.filter(x => x.status === 'open').length, 33);
+  // The update rewords every whole-process question (fewer than 0.8 alike, so the word rule lets them all through),
+  // asks the paper share again, and raises one question on a step not asked about.
+  const reworded = Array.from({ length: 20 }, (_, i) => q(`x-w${i}`, { kind: 'meta' }, `Could someone confirm item ${i}: how approvals of supplier invoices differ across regions?`));
+  const cs = questionChanges(current, reading([...reworded, q('x-p', { kind: 'metric', id: 'm-paper-share', field: 'value' }, 'What portion of invoices still arrive on paper?'), q('x-n', { kind: 'step', id: 's-check', field: 'systemIds' }, 'Where are the mandatory fields checked?')]));
+  const listed = cs.filter(c => c.extractedId?.startsWith('x-w'));
+  assert.equal(listed.length, 20, 'every rewording is listed');
+  assert.equal(listed.filter(c => c.defaultSelected).length, 0, 'none is ticked');
+  assert.equal(cs.some(c => c.extractedId === 'x-p'), false, 'the figure already asked about is not added');
+  assert.equal(cs.find(c => c.extractedId === 'x-n')?.defaultSelected, true);
+  assert.equal(notTickedLine({ changes: cs }), '20 new questions about the process as a whole are not ticked: tick the ones to keep.');
+  // Applied as proposed, the open questions go from 33 to 34 (only the step's), not 55.
+  const picked = new Set(proposeChanges(current, reading([...reworded])).changes.filter(c => c.defaultSelected).map(c => c.id));
+  const after = applyChanges(current, reading([...reworded]), picked);
+  assert.ok(validateModel(after).valid);
+  assert.equal(after.openQuestions.filter(x => x.status === 'open').length, 33);
+});
+
+test('the not-ticked line counts both kinds, and says nothing when every question is ticked', () => {
+  assert.equal(notTickedLine({ changes: [] }), null);
+  const c = (detail: string) => ({ id: detail, kind: 'add' as const, element: 'question' as const, label: '', detail, defaultSelected: false });
+  assert.equal(notTickedLine({ changes: [c(QUESTION_DETAIL['offer-whole']), c(QUESTION_DETAIL['offer-element'])] }),
+    '1 new question about the process as a whole and 1 new question about something already asked about are not ticked: tick the ones to keep.');
+});

@@ -8,11 +8,11 @@
 // leaves it out, which `node scripts/check-no-stand-ins.mjs dist` checks after `npm run build`.
 // The rules (which calls are answered, which refused) are domain/ai/standIn.ts.
 import type { Segment } from '../../domain/ai/gateway.ts';
-import { standInRefusal, standInReply, type StandInReplies } from '../../domain/ai/standIn.ts';
+import { EXTRACTION, standInReading, standInRefusal, standInReply, standInTranscript, TRANSCRIBE, type ReadSources, type StandInReplies } from '../../domain/ai/standIn.ts';
 import { StoreError } from './types.ts';
 
-export interface StandInCall { task: string; answered: boolean; why?: string }
-export interface StandIn { run(task: string, segments: Segment[]): { data: unknown } }
+export interface StandInCall { task: string; answered: boolean; why?: string; sources?: ReadSources[] }
+export interface StandIn { run(task: string, segments: Segment[]): { data: unknown }; transcribe(): string; read(sources: ReadSources[]): unknown }
 
 interface PageGlobals { __avalaStandIns?: StandInReplies; __avalaStandInLog?: StandInCall[] }
 
@@ -29,6 +29,18 @@ export function standInFromPage(): StandIn | undefined {
       log.push(why ? { task, answered: false, why } : { task, answered: true });
       if (why) throw new StoreError(501, why);
       return { data: standInReply(replies, used, task) };
+    },
+    read(sources) {
+      const r = standInReading(replies, used);
+      log.push('model' in r ? { task: EXTRACTION, answered: true, sources } : { task: EXTRACTION, answered: false, why: r.refused, sources });
+      if (!('model' in r)) throw new StoreError(501, r.refused);
+      return r.model;
+    },
+    transcribe() {
+      const heard = standInTranscript(replies, used);
+      log.push('text' in heard ? { task: TRANSCRIBE, answered: true } : { task: TRANSCRIBE, answered: false, why: heard.refused });
+      if (!('text' in heard)) throw new StoreError(501, heard.refused);
+      return heard.text;
     },
   };
 }
