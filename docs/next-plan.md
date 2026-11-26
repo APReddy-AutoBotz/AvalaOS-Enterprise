@@ -12,6 +12,35 @@ Proven on real documents so far: two of the owner's own processes (Questionnaire
 
 Releases (owner, 17 November 2026): 65 Netlify credits are left, about 15 a production deploy, so about 4 deploys; 1,000 credits are added on 22 November 2026. From then credits no longer limit releases; changes are still bundled so each release is reviewed on the preview first.
 
+**Update, 26 November 2026: the twelfth release.** What was in `next` after the eleventh release is live: #239 to #244 and #246 (merge commit `28fa072` on `main`, merged by the review chat on the owner's yes at 04:30 UTC). There was no release's own commit: no date changed and "Release dates set" passed as it was. It carries:
+- package B's pull requests 3, 4a, 4b and 5a: the discovery session kept for everyone, spoken answers in Ask Avala's Questions tab, the Discovery tab, a gap a person closed staying closed (with Reopen), re-readings that do not pile up questions, and the review's plainer words;
+- the content security policy, report-only (#242; see "Content security policy" in `AGENTS.md`);
+- the Tiptap upgrade, with "Save with no change saves nothing" (#244);
+- the eleventh release's notes (#240).
+
+Where a section below says "in review", "built", "in `next`" or "waits for the release" about these, read "released". **No migration** came with it: `discovery_sessions` had been applied on 24 November 2026.
+
+**The functions.** All five were redeployed from `main` at `28fa072` by "Deploy edge functions" (run `45755637910`, 04:30:31 to 04:30:53 UTC): `journey-ai` version 79, `journey-extract` 82, `journey-invite` 16, `journey-notify` 16, `journey-inquiry` 8. Only `journey-ai` and `journey-notify` load changed files (`triage.ts`, `closedGaps.ts`, `edits.ts`). The functions as they were before it: the branch `claude/functions-before-twelfth-release` at `58ae491`, for all five. CI on `28fa072` passed, the browser tests included.
+
+**Seen signed out on avalaos.com straight after:**
+- the report-only policy on `/`, `/privacy`, `/terms`, `/security`, `/demo` and `/signin`, naming the Supabase project and Sentry's EU host, with no enforced header;
+- the other headers unchanged, and `/_headers` answering 404;
+- no content security policy message in the console on the public pages or any stage of the demo, the section and flow editors opened and closed.
+
+`main` and `next` hold the same code. The extraction check was not run: `journey-extract`'s code did not change.
+
+**The owner's walk** (avalaos.com, "Avala check" only, 05:39 to 11:10 UTC, confirmed from the database by the review chat): 19 AI calls, 86,344 tokens, none failed, nothing approved. That was one reading of two sources (about 51,000), five readings of answers, one draft, three spoken answers on `gpt-transcribe`, and one Ask Avala question (11,853).
+
+**For the next walk:** a reading of a short spoken description and one PDF cost about 51,000 tokens, not the 10,000 to 35,000 the notes estimated. Count a reading of two short sources at about 50,000.
+
+**The content security policy's 14 days** of report-only run from 26 November to 10 December 2026. Enforcement is asked separately, in its own release.
+
+**Sentry, read by the owner on 26 November 2026:** one issue only, `AVALAOS-WEB-2`, "frame-src would block https://app.netlify.com (/.netlify/scripts/cdp)", 10 events, all on previews (Netlify's preview toolbar, left as it is by the owner's choice). **None from production.**
+
+**Still open:** the first weekday email from `journey-notify` 16 (27 November 2026, 03:30 UTC).
+
+**Asked separately, not done:** the migration that closes `model_approve`; revoking TRUNCATE from `authenticated`; the user guide's chapters; package 16's line in `platform.ts` with the full Ask Avala measure on 1 December 2026.
+
 **Update, 24 November 2026: the eleventh release.** What was in `next` after the tenth release is live: #227 to #237, and the release's own commit #238 (`9343e80`), which set `UPDATED.security` and `EVIDENCE_KEPT_SINCE` to 24 November 2026 (merge commit `58ae491` on `main`, merged by the review chat on the owner's yes at 05:18 UTC). It carries:
 - package 14's screens (pull requests 3, 4 and 5: approving keeps the documents, earlier approvals and "Keep it as it reads now", the evidence pack's versions, History's lines, the two numbers, Ask Avala's line; section 3f);
 - package 16 (closing questions from the Assessment stage; section 3g);
@@ -654,6 +683,7 @@ Added by the owner on 18 November 2026, with his go on part B: the coverage rule
 - Done on 20 November 2026 for the ninth release: the branch `claude/functions-before-ninth-release` points at `bab6440`, whose message has no `[deploy]`; the release's own commit set the three dates to 20 November 2026. Released the same day (merge commit `943c89c`); what was checked straight after is in section 1, "Update, 20 November 2026".
 - Done on 22 November 2026 for the tenth release: the branch `claude/functions-before-tenth-release` points at `943c89c`, whose message has no `[deploy]`; `journey-extract`, live then from `aa588d2`, goes back with the branch `claude/reading-within-one-answer`. The release's own commit (#226) set `UPDATED.privacy` to 23 November 2026, the release's day; the other dates were unchanged. Released on 23 November 2026 (merge commit `0c93807`); what was checked straight after is in section 1, "Update, 23 November 2026".
 - Done on 24 November 2026 for the eleventh release: the branch `claude/functions-before-eleventh-release` points at `0c93807`, whose message has no `[deploy]`; it puts all five functions back (all five were still the tenth release's deploys). The release's own commit (#238) set `UPDATED.security` and `EVIDENCE_KEPT_SINCE` to 24 November 2026; the other dates were unchanged. Released the same day (merge commit `58ae491`); what was checked straight after is in section 1, "Update, 24 November 2026".
+- Done on 26 November 2026 for the twelfth release: the branch `claude/functions-before-twelfth-release` points at `58ae491`, whose message has no `[deploy]`; it puts all five functions back (all five were still the eleventh release's deploys). No release's own commit: no date changed. Released the same day (merge commit `28fa072`); what was checked straight after is in section 1, "Update, 26 November 2026".
 - In the release's own commit: set `COVERAGE_RULE.since` in `domain/assess/coverage.ts` to the release date, and the same date as `UPDATED.privacy` and `UPDATED.security` in `domain/site/trust.ts` (since PR 3 of the marketing package the privacy date, and since package 14's pull request 5 the security date, may be that date or later; `EVIDENCE_KEPT_SINCE` in `domain/docs/versions.ts` is that release's date).
 - In the release's own commit (from the release that carries the teardowns' counting, marketing package PR 3): set `UPDATED.privacy` in `domain/site/trust.ts` to the release date. Until then the privacy page shows "[release date]" (owner, 21 November 2026).
 - The check "Release dates set" (`.github/workflows/release-dates.yml`, owner, 21 November 2026) runs on the pull request into `main` only and fails, naming each one, while any of these dates or `UPDATED.terms` is empty; it blocks the merge only once the owner adds it to the rule on `main` in the repository's settings.
