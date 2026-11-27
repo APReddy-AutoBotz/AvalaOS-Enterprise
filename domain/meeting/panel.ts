@@ -10,6 +10,13 @@
 // if the notes answer it, so the panel does not suggest what is about to be said); the next question (a follow-up to
 // the last two notes first, at most one in a row, then the list, then other raised questions, then what was
 // skipped; only questions someone on the call can answer). The same notes, list and replies give the same result.
+//
+// Measure 1's fix (owner, 27 November 2026; plan `claude/measure-1-plan-27-nov.md`): a reading keeps at most the 4
+// questions asked most recently (F1); a question, from the list or raised from the notes, is suggested only once it
+// has been read against every note a reading has read (F2), and a reading sends the earlier notes again for the
+// questions that have not seen them at most once every two minutes, the readings between sending the new notes
+// only. When no question has been read so far, the panel says it is checking and a reading starts at once. Once the
+// cap stops the minute readings, or a reading's answer call fails, the next question follows the list as before.
 import type { Segment } from '../ai/gateway.ts';
 import type { ProcessModel } from '../processModel/types.ts';
 import { notesSegments, proposalsFrom, type NoteFinding } from '../questions/notes.ts';
@@ -18,7 +25,7 @@ import type { Card } from '../discovery/card.ts';
 import { coveringItem } from '../discovery/queue.ts';
 import { noticeSegments, readNotice, type NoticeCall, type NoticeReply } from '../discovery/notice.ts';
 import type { BriefItem } from './briefing.ts';
-import { afterCallUse, CALLS_A_READING, READ_EVERY_MS, roomAtEnd, roomDuringCall } from './limits.ts';
+import { afterCallUse, CALLS_A_READING, capReachedDuringCall, READ_EVERY_MS, roomAtEnd, roomDuringCall } from './limits.ts';
 import type { CallNote, CallState, Found, Raised } from './kept.ts';
 import { clock } from './words.ts';
 
@@ -26,18 +33,43 @@ import { clock } from './words.ts';
 export const CALL_SOURCE = 'call-notes';
 /** A held question is ready after one reading, or after this long with no reading. */
 export const HOLD_MS = 120_000;
-export const READING_LIMITS = { list: 12, held: 3, endBatch: 30, endBatches: 2 } as const;
+/**
+ * One reading: at most 12 questions from the list, of them at most the 4 asked most recently (F1, a working default);
+ * at most 3 raised questions being held, and the 2 ready raised questions next in line to be suggested (F2).
+ */
+export const READING_LIMITS = { list: 12, asked: 4, held: 3, ready: 2, endBatch: 30, endBatches: 2 } as const;
+/** A reading sends the earlier notes again at most this often; the readings between send the new notes only. */
+export const CATCH_UP_EVERY_MS = 120_000;
 
 const flat = (s: string) => s.replace(/\s+/g, ' ').trim();
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export const unread = (s: CallState): CallNote[] => s.notes.filter(n => !s.read.includes(n.id));
 
-/** Whether a reading is due: unread notes, a minute since the last one (unless the analyst pressed "Read now"), and room under the cap. */
-export function readingDue(s: CallState, now: string, manual = false): boolean {
-  if (!unread(s).length || !roomDuringCall(s.use, CALLS_A_READING, s.minutes)) return false;
+/**
+ * Whether a reading is due: room under the cap; and either the panel is checking its notes for the next question
+ * (`waiting`) and a reading may send the earlier notes again, which starts it at once, or there are unread notes and
+ * a minute has passed since the last reading (unless the analyst pressed "Read now").
+ */
+export function readingDue(s: CallState, now: string, manual = false, waiting?: { list: BriefItem[]; triage: Triage }): boolean {
+  if (!roomDuringCall(s.use, CALLS_A_READING, s.minutes)) return false;
+  if (waiting && catchUpAllowed(s, now) && panelLine(s, waiting.list, waiting.triage, now) === 'checking') return true;
+  if (!unread(s).length) return false;
   return manual || !s.lastReadAt || Date.parse(now) - Date.parse(s.lastReadAt) >= READ_EVERY_MS;
 }
+
+/** How many notes, from the first, the readings have read: up to the first note no reading has read yet. */
+export function notesRead(s: CallState): number {
+  const i = s.notes.findIndex(n => !s.read.includes(n.id));
+  return i < 0 ? s.notes.length : i;
+}
+
+/** Whether a question has been read against every note a reading has read. */
+export const readSoFar = (s: CallState, key: string): boolean => (s.readThrough[key] ?? 0) >= notesRead(s);
+
+/** Whether a reading may send the earlier notes again: none has for two minutes. */
+export const catchUpAllowed = (s: CallState, now: string): boolean =>
+  !s.lastCatchUpAt || Date.parse(now) - Date.parse(s.lastCatchUpAt) >= CATCH_UP_EVERY_MS;
 
 /** The notes a reading sends: those not read yet, and the one before the first of them as context. */
 export function readingNotes(s: CallState): CallNote[] {
@@ -86,10 +118,16 @@ export const isAnswered = (s: CallState, key: string): boolean => s.found.some(f
 const isDone = (s: CallState, card: Card, t: Triage) => s.asked.includes(card.key) || s.leftWith.some(l => l.key === card.key) || isAnswered(s, answerKey(card, t));
 
 export interface ReadingPrep {
+  /** The notes not read yet, with the one before as context: what noticing reads, and what the reading marks read. */
   notes: CallNote[];
-  /** `answerFromNotes`' call; null when there is no question to read the notes against. */
-  answers: { items: TriageItem[]; ids: Map<string, string>; segments: Segment[] } | null;
-  notice: NoticeCall;
+  /**
+   * `answerFromNotes`' call; null when there is no question to read the notes against. It reads the notes from
+   * `from` to the last: the new notes with the one before, or, when a question in it has not been read against the
+   * earlier notes and none has been sent again for two minutes, from the first note that question has not seen.
+   */
+  answers: { items: TriageItem[]; ids: Map<string, string>; segments: Segment[]; notes: CallNote[]; from: number; catchUp: boolean } | null;
+  /** Noticing's call; null when there are no new notes (a reading started only to catch up). */
+  notice: NoticeCall | null;
   /** Held raised questions sent this reading: the card key and the key their answer is kept under. */
   held: { cardKey: string; answerKey: string }[];
 }
@@ -104,6 +142,8 @@ export interface PrepContext {
    */
   asked: readonly string[];
   timeZone?: string;
+  /** Now, for the ready raised questions and for when earlier notes may be sent again; without it, they may. */
+  now?: string;
 }
 
 /** The questions the call already knows of, for noticing: the list, what was raised, the analyst's own, and `extra`. */
@@ -112,13 +152,25 @@ export const knownQuestions = (s: CallState, list: BriefItem[], extra: readonly 
 
 const saidOf = (n: CallNote, timeZone?: string) => ({ ref: n.id, text: flat(n.text), sourceId: CALL_SOURCE, locator: { timestamp: clock(n.at, timeZone), ...(n.speaker ? { speaker: n.speaker } : {}) } });
 
+/** The ready raised questions in the order `nextQuestion` would take them: from the last two notes, the latest first, then the rest. */
+function raisedInLine(s: CallState, t: Triage, now: string | undefined): Raised[] {
+  const kinds = new Set(s.attendees.map(a => a.kind));
+  const isReady = (r: Raised) => (now ? ready(r, now) : r.state === 'ready');
+  const open = s.raised.filter(r => r.state !== 'answered' && !isDone(s, r.card, t) && kinds.has(r.owner) && isReady(r));
+  const lastTwo = s.notes.slice(-2).map(n => n.id);
+  const recent = [...open].reverse().filter(r => lastTwo.includes(r.noteId));
+  const rest = open.filter(r => !recent.includes(r));
+  const notSkipped = (r: Raised) => !s.skipped.includes(r.card.key);
+  return [...recent, ...rest.filter(notSkipped), ...rest.filter(r => !notSkipped(r))];
+}
+
 /** The two calls of one reading, built from the call as it stands. */
 export function prepareReading(s: CallState, ctx: PrepContext): ReadingPrep {
   const notes = readingNotes(s);
   const t = ctx.triage;
   const open = ctx.list.filter(x => !isDone(s, x.card, t) || (s.asked.includes(x.card.key) && !isAnswered(s, answerKey(x.card, t))));
-  // Asked and not answered yet first, the latest asked first; then the list in its order.
-  const asked = open.filter(x => s.asked.includes(x.card.key)).sort((a, b) => s.asked.indexOf(b.card.key) - s.asked.indexOf(a.card.key));
+  // F1: the 4 asked most recently and not answered yet, the latest first; then the list in its order.
+  const asked = open.filter(x => s.asked.includes(x.card.key)).sort((a, b) => s.asked.indexOf(b.card.key) - s.asked.indexOf(a.card.key)).slice(0, READING_LIMITS.asked);
   const rest = open.filter(x => !s.asked.includes(x.card.key) && !s.leftWith.some(l => l.key === x.card.key));
   const items: TriageItem[] = [];
   const keys = new Set<string>();
@@ -130,9 +182,19 @@ export function prepareReading(s: CallState, ctx: PrepContext): ReadingPrep {
     const it = readingItemFor(r.card, r.owner, t);
     if (it && push(it)) held.push({ cardKey: r.card.key, answerKey: it.key });
   }
-  const text = notes.map(n => flat(n.text)).join('\n\n');
-  const answers = items.length && notes.length ? { items, ...notesSegments(ctx.model, items, text) } : null;
-  const notice = noticeSegments(ctx.model, notes.map(n => saidOf(n, ctx.timeZone)), knownQuestions(s, ctx.list, ctx.asked));
+  // F2: the ready raised questions next in line are read too, so they can be suggested.
+  let inLine = 0;
+  for (const r of raisedInLine(s, t, ctx.now)) { if (inLine >= READING_LIMITS.ready) break; if (push(readingItemFor(r.card, r.owner, t))) inLine++; }
+  // The answer call's notes: from the earliest note a question in it has not seen, when earlier notes may be sent
+  // again; else the new notes with the one before. Never past the call's own notes.
+  const newFrom = notes.length ? s.notes.indexOf(notes[0]!) : s.notes.length;
+  const behind = items.length ? Math.min(...items.map(it => s.readThrough[it.key] ?? 0)) : s.notes.length;
+  const catchUp = behind < newFrom && (!ctx.now || catchUpAllowed(s, ctx.now));
+  const from = catchUp ? Math.max(0, behind - 1) : newFrom;
+  const answerNotes = s.notes.slice(from);
+  const text = answerNotes.map(n => flat(n.text)).join('\n\n');
+  const answers = items.length && answerNotes.length ? { items, ...notesSegments(ctx.model, items, text), notes: answerNotes, from, catchUp } : null;
+  const notice = notes.length ? noticeSegments(ctx.model, notes.map(n => saidOf(n, ctx.timeZone)), knownQuestions(s, ctx.list, ctx.asked)) : null;
   return { notes, answers, notice, held };
 }
 
@@ -165,19 +227,28 @@ function mergeFound(s: CallState, items: TriageItem[], ids: Map<string, string>,
  * statements are kept. The notes are marked read only when both calls came back; a failed call is counted against
  * the cap all the same, and its notes are sent again with the next reading.
  */
-export function applyReading(s: CallState, prep: ReadingPrep, r: { answers: CallResult | null; notice: CallResult }, ctx: { model: ProcessModel; at: string; asked: readonly string[]; list: BriefItem[] }): CallState {
+export function applyReading(s: CallState, prep: ReadingPrep, r: { answers: CallResult | null; notice: CallResult | null }, ctx: { model: ProcessModel; at: string; asked: readonly string[]; list: BriefItem[] }): CallState {
   let use = s.use;
   for (const x of [r.answers, r.notice]) if (x) use = afterCallUse(use, x === 'failed' ? null : x.usage);
+  const answered = Boolean(prep.answers && r.answers && r.answers !== 'failed');
   let found = s.found;
-  if (prep.answers && r.answers && r.answers !== 'failed') found = mergeFound(s, prep.answers.items, prep.answers.ids, r.answers.data, prep.notes, ctx.model, ctx.at);
+  if (prep.answers && answered) found = mergeFound(s, prep.answers.items, prep.answers.ids, (r.answers as Exclude<CallResult, 'failed'>).data, prep.answers.notes, ctx.model, ctx.at);
+  // Each question the answer call read is read through the last note, when the notes sent began at or before the
+  // first it had not seen; a question the call skipped over keeps what it had.
+  let readThrough = s.readThrough;
+  if (prep.answers && answered) {
+    readThrough = { ...s.readThrough };
+    const to = prep.answers.from + prep.answers.notes.length;
+    for (const it of prep.answers.items) if (prep.answers.from <= (readThrough[it.key] ?? 0)) readThrough[it.key] = to;
+  }
   const reading = s.readings + 1;
   let raised = s.raised.map(x => {
     const h = prep.held.find(y => y.cardKey === x.card.key);
-    if (!h || !r.answers || r.answers === 'failed') return x;
+    if (!h || !answered) return x;
     return { ...x, state: found.some(f => f.itemKey === h.answerKey) ? 'answered' as const : 'ready' as const };
   });
   let wanted = s.wanted;
-  if (r.notice !== 'failed') {
+  if (prep.notice && r.notice && r.notice !== 'failed') {
     const read = readNotice(ctx.model, prep.notice, (r.notice.data ?? { questions: [], wanted: [] }) as NoticeReply, { asked: knownQuestions(s, ctx.list, ctx.asked), wantedSoFar: s.wanted.map(w => w.excerpt) });
     const added: Raised[] = [];
     for (const card of read.cards) {
@@ -189,10 +260,14 @@ export function applyReading(s: CallState, prep: ReadingPrep, r: { answers: Call
     wanted = [...wanted, ...read.wanted.map(w => ({ excerpt: w.excerpt, noteId: noteOf(prep.notes, w.excerpt)?.id ?? '' })).filter(w => w.noteId)];
   }
   const ok = r.notice !== 'failed' && r.answers !== 'failed';
+  const failed = Boolean(prep.answers) && r.answers === 'failed';
+  const { lastFailed: _was, ...rest } = s;
   return {
-    ...s, use, found, raised, wanted, lastReadAt: ctx.at, changedAt: ctx.at,
+    ...rest, use, found, raised, wanted, readThrough, lastReadAt: ctx.at, changedAt: ctx.at,
     readings: reading,
     read: ok ? [...new Set([...s.read, ...prep.notes.map(n => n.id)])] : s.read,
+    ...(prep.answers?.catchUp && answered ? { lastCatchUpAt: ctx.at } : {}),
+    ...(failed ? { lastFailed: true } : {}),
   };
 }
 
@@ -210,20 +285,33 @@ export interface Suggestion {
 
 const ready = (r: Raised, now: string) => r.state === 'ready' || (r.state === 'held' && Date.parse(now) - Date.parse(r.heldSince) >= HOLD_MS);
 
-/** The one question to ask next, or null when nothing is left for the people on the call. */
-export function nextQuestion(s: CallState, list: BriefItem[], t: Triage, now: string): Suggestion | null {
+/**
+ * Whether a question may be suggested yet: read against every note a reading has read (F2). Not asked of a question
+ * a reading cannot send (no words), nor while the gate is off.
+ */
+function readyToSuggest(s: CallState, card: Card, owner: QOwner, t: Triage): boolean {
+  const it = readingItemFor(card, owner, t);
+  return !it || readSoFar(s, it.key);
+}
+
+/** Whether the next question waits for its notes to be read: not once the cap stops the minute readings, nor after a reading's answer call failed. */
+const gateOn = (s: CallState): boolean => !capReachedDuringCall(s.use, s.minutes) && !s.lastFailed;
+
+function pick(s: CallState, list: BriefItem[], t: Triage, now: string, gated: boolean): Suggestion | null {
   const kinds = new Set(s.attendees.map(a => a.kind));
   const nameFor = (k: QOwner) => s.attendees.find(a => a.kind === k && a.name)?.name;
   const fromRaised = (r: Raised, from: Suggestion['from']): Suggestion => ({ card: r.card, owner: r.owner, ...(nameFor(r.owner) ? { name: nameFor(r.owner) } : {}), from, noteId: r.noteId });
+  const ok = (card: Card, owner: QOwner) => !gated || readyToSuggest(s, card, owner, t);
   const open = s.raised.filter(r => r.state !== 'answered' && !isDone(s, r.card, t) && kinds.has(r.owner));
+  // "Ask it now" is the analyst's own choice: it is never held back.
   if (s.pinned) { const p = open.find(r => r.card.key === s.pinned); if (p) return fromRaised(p, 'pinned'); }
-  const readyRaised = open.filter(r => ready(r, now));
+  const readyRaised = open.filter(r => ready(r, now) && ok(r.card, r.owner));
   const lastTwo = s.notes.slice(-2).map(n => n.id);
   if (s.followUpsInRow < 1) {
     const f = [...readyRaised].reverse().find(r => lastTwo.includes(r.noteId));
     if (f) return fromRaised(f, 'note');
   }
-  const pending = list.filter(x => !isDone(s, x.card, t));
+  const pending = list.filter(x => !isDone(s, x.card, t) && ok(x.card, x.owner));
   const first = pending.find(x => !s.skipped.includes(x.card.key));
   if (first) return { card: first.card, owner: first.owner, ...(first.name ? { name: first.name } : {}), from: 'list', ...(first.own ? { own: true } : {}) };
   const other = readyRaised.find(r => !s.skipped.includes(r.card.key));
@@ -232,6 +320,28 @@ export function nextQuestion(s: CallState, list: BriefItem[], t: Triage, now: st
   if (skipped) return { card: skipped.card, owner: skipped.owner, ...(skipped.name ? { name: skipped.name } : {}), from: 'list', ...(skipped.own ? { own: true } : {}) };
   const skippedRaised = s.skipped.map(k => readyRaised.find(r => r.card.key === k)).find(Boolean);
   return skippedRaised ? fromRaised(skippedRaised, 'raised') : null;
+}
+
+/**
+ * The one question to ask next, or null when nothing is left for the people on the call, or while the panel checks
+ * its notes for the next one (`panelLine` says which). A question is suggested only once it has been read against
+ * every note a reading has read, except once the cap stops the minute readings or a reading's answer call failed:
+ * then the list's order, as before.
+ */
+export function nextQuestion(s: CallState, list: BriefItem[], t: Triage, now: string): Suggestion | null {
+  return pick(s, list, t, now, gateOn(s));
+}
+
+/**
+ * The panel's one line about the next question, when there is one to say: "capped" once the cap stops the minute
+ * readings (CALL_WORDS.capReached; questions follow the list); "failed" after a reading's answer call failed
+ * (CALL_WORDS.readFailed; the list until a reading comes back); "checking" while no question left has been read
+ * against every note so far (CALL_WORDS.checking; a reading starts at once, `readingDue` with `waiting`).
+ */
+export function panelLine(s: CallState, list: BriefItem[], t: Triage, now: string): 'capped' | 'failed' | 'checking' | null {
+  if (capReachedDuringCall(s.use, s.minutes)) return 'capped';
+  if (s.lastFailed) return 'failed';
+  return !pick(s, list, t, now, true) && pick(s, list, t, now, false) ? 'checking' : null;
 }
 
 /** "Asked": the question moves to Asked; a follow-up counts towards the one allowed in a row, anything else resets it. */

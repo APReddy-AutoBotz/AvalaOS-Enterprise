@@ -79,6 +79,8 @@ export const CALL_WORDS = {
   reading: 'Reading your last notes…',
   readAt: (time: string) => `Read at ${time}.`,
   readFailed: 'Your last notes could not be read. They are kept, and Avala OS tries again with your next note.',
+  /** Measure 1's fix (F2): no question has been read against every note yet; a reading starts at once. */
+  checking: 'Checking your notes for the next question.',
   readNow: 'Read now',
   foundHeading: (n: number) => `Found in your notes (${n})`,
   mayAnswer: (q: string) => `May answer: ${q}`,
