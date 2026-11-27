@@ -123,6 +123,8 @@ export const CALL_WORDS = {
   answersHeading: (n: number) => `Answers (${n})`,
   willRecord: (v: string) => `This will record: ${v}`,
   needsPeriod: 'Say the period this figure is for before you keep it.',
+  chooseHeading: (n: number) => `Your notes seem to answer these: pick the answer (${n})`,
+  chooseLine: 'Pick the answer the notes give. Nothing is picked for you, and nothing is kept until you pick.',
   keepOpenHeading: (n: number) => `Questions to keep open (${n})`,
   askedNotAnswered: 'Asked in the call, not answered.',
   leftWithHeading: (n: number) => `Left with someone (${n})`,

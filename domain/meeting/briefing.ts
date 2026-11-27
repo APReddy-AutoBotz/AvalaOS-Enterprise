@@ -1,8 +1,11 @@
 // The briefing before a requirements call (package C, plan `claude/package-c-plan-26-nov.md`, section 4.1): what is
 // open on the process, in the order to ask it, for the kinds of person on the call, fitted to the call's length,
 // with everyone else's questions under "Not for this call". Rules only: no AI is asked and nothing is saved. The
-// order is the Discovery session's (`discoveryQueue`), so the same record, the same people and the same length give
-// the same briefing.
+// order is the Discovery session's (`discoveryQueue`), with the owner's two changes of 26 November 2026: the
+// briefing leaves out "What do you want from this process?" (the organisation's own choice, not a question for the
+// client), and on a process that already has an assessment the questions that could change the recommendation come
+// first, then the conflicts, then the shape of the process (`ASSESSED_ORDER`). The same record, the same people and
+// the same length give the same briefing.
 import type { ProcessModel } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { APPROACH_LABEL } from '../assess/scoring.ts';
@@ -18,6 +21,19 @@ import { CALL_WORDS } from './words.ts';
 /** The opening of a call, then the time a question takes (decision 5: working defaults the owner may change). */
 export const OPENING_MINUTES = 5;
 export const MINUTES_A_QUESTION = 3;
+
+/** The card the briefing never lists: what is wanted from the process is the organisation's own choice (owner, 26 November 2026). */
+export const NOT_FOR_A_CALL = ['start:purpose'] as const;
+
+/**
+ * The order of the groups on a process that already has an assessment (owner, 26 November 2026): what could change
+ * the recommendation (or settles the decided approach) first, then the conflicts, then the shape of the process; the
+ * rest as Discovery has it. Without an assessment the order stays Discovery's.
+ */
+export const ASSESSED_ORDER: Record<Card['group'], number> = { decides: 0, settles: 0, conflict: 1, start: 2, shape: 2, said: 3, input: 4, signoff: 5 };
+
+/** Whether the process already has an assessment: steps assessed, and not a process documented as it is. */
+export const hasAssessment = (m: ProcessModel, a: ProcessAssessment): boolean => a.assessed > 0 && purposeOf(m) !== 'as_is';
 
 /** How many questions fit a call of this length: 8, 13 and 18 for 30, 45 and 60 minutes. */
 export const fits = (minutes: number): number => Math.max(1, Math.floor((minutes - OPENING_MINUTES) / MINUTES_A_QUESTION));
@@ -149,8 +165,14 @@ export function buildBriefing(i: BriefingInput): Briefing {
     .filter((x): x is BriefItem => x !== null);
   // 2. The analyst's own questions.
   const own = (i.own ?? []).map(q => { const c = ownCard(q); return c ? item(c, { owner: 'business', own: true }) : null; }).filter((x): x is BriefItem => x !== null);
-  // 3. The Discovery order, for the kinds of person on the call.
-  const queue = discoveryQueue({ model: m, assessment: i.assessment, asksPurpose: i.asksPurpose, triage: t }).map(c => item(c)).filter(x => kinds.has(x.owner));
+  // 3. The Discovery order, for the kinds of person on the call, without what is not for a call; on a process that
+  // already has an assessment, what could change the recommendation first, then the conflicts, then the shape.
+  const discovery = discoveryQueue({ model: m, assessment: i.assessment, asksPurpose: i.asksPurpose, triage: t })
+    .filter(c => !(NOT_FOR_A_CALL as readonly string[]).includes(c.key));
+  const ordered = hasAssessment(m, i.assessment)
+    ? discovery.map((c, n) => ({ c, n })).sort((x, y) => ASSESSED_ORDER[x.c.group] - ASSESSED_ORDER[y.c.group] || x.n - y.n).map(x => x.c)
+    : discovery;
+  const queue = ordered.map(c => item(c)).filter(x => kinds.has(x.owner));
   const seen = new Set<string>();
   const all = [...withThem, ...own, ...queue].filter(x => (seen.has(x.card.key) ? false : (seen.add(x.card.key), true)));
   const { kept, leftOut } = arrange(all, i.arranged);

@@ -9,7 +9,8 @@ import { addQuestion, deferQuestion, type OpResult } from '../processModel/patch
 import { all, buildAnswer, record, type Op } from '../questions/answer.ts';
 import type { Triage, TriageItem } from '../questions/triage.ts';
 import type { Card } from '../discovery/card.ts';
-import { coveringItem } from '../discovery/queue.ts';
+import { coveringItem, triageCard } from '../discovery/queue.ts';
+import { chooseEdit } from '../discovery/flow.ts';
 import { answerAgainstConfirmed, answersKey } from '../discovery/answers.ts';
 import { inputEdit, periodFrom, type InputCard, type Period } from '../discovery/inputs.ts';
 import type { BriefItem } from './briefing.ts';
@@ -47,7 +48,7 @@ type Origin = { item: TriageItem; card?: Card; raised?: Raised; kind: 'item' | '
 function originOf(key: string, s: CallState, ctx: { list: BriefItem[]; triage: Triage }): Origin | null {
   const t = ctx.triage;
   const tri = t.items.find(i => i.key === key);
-  if (tri) return { item: tri, kind: 'item' };
+  if (tri) return tri.kind === 'choice' ? null : { item: tri, kind: 'item' };
   const fromList = ctx.list.find(x => answerKey(x.card, t) === key);
   if (fromList) {
     const item = itemFor(fromList.card, fromList.owner, t);
@@ -78,11 +79,29 @@ export interface ReviewAnswer {
   needsPeriod: boolean;
 }
 
+/**
+ * A choice the notes seem to answer ("Is the work done today?", a conflict, a fact to pick): read only to learn that
+ * it is answered (owner, 26 November 2026). Nothing is picked for the analyst: it is kept only with the answer they pick.
+ */
+export interface ReviewChoose { id: string; key: string; question: string; quote: string; noteId: string; time: string; choices: [string, string][]; ticked: false }
+
+/** The card and item a choice's answer is written through, when the key is a choice's. */
+function chooseOf(key: string, ctx: ReviewContext): { card: Card; item?: TriageItem } | null {
+  const t = ctx.triage;
+  const tri = t.items.find(i => i.key === key);
+  if (tri?.kind === 'choice') { const card = ctx.list.find(x => coveringItem(x.card, t)?.key === key)?.card ?? triageCard(tri, ctx.model); return card ? { card, item: tri } : null; }
+  const fromList = ctx.list.find(x => answerKey(x.card, t) === key);
+  if (fromList && !itemFor(fromList.card, fromList.owner, t)) return { card: fromList.card, ...(coveringItem(fromList.card, t) ? { item: coveringItem(fromList.card, t)! } : {}) };
+  return null;
+}
+
 export interface ReviewKeep { id: string; key: string; question: string; quote?: string; time?: string; asked: boolean; ticked: boolean; own: boolean }
 export interface ReviewLeft { id: string; key: string; question: string; name: string; ticked: boolean }
 
 export interface Review {
   answers: ReviewAnswer[];
+  /** Choices the notes seem to answer: the analyst picks the answer, or leaves it. */
+  choose: ReviewChoose[];
   /** Questions raised from the notes and not answered: ticked when asked in the call, not when never asked. */
   keepOpen: ReviewKeep[];
   /** The analyst's own questions not answered. */
@@ -100,15 +119,19 @@ const DRAFT_REF = (excerpt: string): SourceRef => ({ sourceId: 'call-notes', exc
 export function buildReview(s: CallState, ctx: ReviewContext): Review {
   const note = (id: string) => s.notes.find(n => n.id === id);
   const answers: ReviewAnswer[] = [];
+  const choose: ReviewChoose[] = [];
   for (const f of s.found) {
-    const o = originOf(f.itemKey, s, ctx);
     const n = note(f.noteId);
-    if (!o || !n) continue;
+    if (!n) continue;
+    const ch = chooseOf(f.itemKey, ctx);
+    if (ch) { choose.push({ id: `choose:${f.itemKey}`, key: f.itemKey, question: ch.card.question, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), choices: ch.card.choices ?? ch.item?.choices ?? [], ticked: false }); continue; }
+    const o = originOf(f.itemKey, s, ctx);
+    if (!o) continue;
     const needsPeriod = f.itemKey === 'input:volume' && !periodFrom(n.text);
     const out = o.kind === 'item' ? answerAgainstConfirmed(ctx.model, { target: o.item.target, label: o.item.question, said: { value: f.display, quote: DRAFT_REF(f.quote) }, write: x => ({ model: x, patch: [] }) }) : null;
     answers.push({ id: `answer:${f.itemKey}`, key: f.itemKey, question: o.item.question, display: f.display, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), certainty: f.certainty, ticked: f.certainty === 'stated' && !needsPeriod, line: out?.line ?? null, needsPeriod });
   }
-  const answered = new Set(answers.map(a => a.key));
+  const answered = new Set([...answers.map(a => a.key), ...choose.map(c => c.key)]);
   const left = new Set(s.leftWith.map(l => l.key));
   const t = ctx.triage;
   const keepOpen: ReviewKeep[] = s.raised.filter(r => r.state !== 'answered' && !answered.has(answerKey(r.card, t)) && !left.has(r.card.key)).map(r => {
@@ -124,7 +147,7 @@ export function buildReview(s: CallState, ctx: ReviewContext): Review {
   const question = (key: string) => ctx.list.find(x => x.card.key === key)?.card.question ?? s.raised.find(r => r.card.key === key)?.card.question;
   const leftWith: ReviewLeft[] = s.leftWith.filter(l => question(l.key) && !answered.has(cardAnswerKey(l.key, s, ctx))).map(l => ({ id: `left:${l.key}`, key: l.key, question: question(l.key)!, name: l.name, ticked: true }));
   const shape = s.raised.some(r => r.card.target.kind === 'meta') || answers.some(a => ctx.list.some(x => answerKey(x.card, t) === a.key && x.card.group === 'shape'));
-  return { answers, keepOpen, own, leftWith, shape };
+  return { answers, choose, keepOpen, own, leftWith, shape };
 }
 
 const cardAnswerKey = (cardKey: string, s: CallState, ctx: { list: BriefItem[]; triage: Triage }) => {
@@ -139,6 +162,8 @@ export interface SaveChoice {
   ticked: ReadonlySet<string>;
   /** The period said in the review for a number of cases whose note gave none. */
   periods?: Readonly<Record<string, Period>>;
+  /** The answer the analyst picked for a choice the notes seem to answer, by its key; none is picked for them. */
+  picks?: Readonly<Record<string, string>>;
 }
 
 /** A question added only when the record does not already hold it open on the same target. */
@@ -157,7 +182,7 @@ export interface CallEdit { op: Op; summary: string; counts: { answers: number; 
  * the Inputs view's own operation; a question raised from the notes recorded with the words that raised it;
  * questions kept open added with them; questions left with someone deferred to that name.
  */
-export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: ReviewContext & { source: NotesSource; date: string }): CallEdit {
+export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: ReviewContext & { source: NotesSource; date: string; /** Who saves, for a choice that keeps who chose. */ by?: { id: string | null; name: string }; at?: string }): CallEdit {
   const m = ctx.model;
   const key = ctx.source.key;
   const ref = (noteId: string, excerpt: string): SourceRef => {
@@ -190,6 +215,13 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
       if (built) op = answerAgainstConfirmed(m, { target: o.item.target, label: o.item.question, said: { value: f.display, quote: ref(f.noteId, f.quote) }, write: built.op }).op;
     }
     if (op) { ops.push(op); counts.answers++; }
+  }
+  for (const c of review.choose) {
+    const pick = choice.picks?.[c.key];
+    const ch = pick ? chooseOf(c.key, ctx) : null;
+    if (!pick || !ch) continue;
+    const edit = chooseEdit(ch.card, m, pick, { me: ctx.by?.id ?? null, name: ctx.by?.name ?? '', at: ctx.at ?? s.endedAt ?? s.changedAt, ...(ch.item ? { item: ch.item } : {}) });
+    if (edit) { ops.push(edit.op); counts.answers++; }
   }
   for (const k of [...review.keepOpen, ...review.own].filter(x => choice.ticked.has(x.id))) {
     if (k.own) ops.push(addOnce({ target: { kind: 'meta', field: 'flow' }, question: k.question, whyItMatters: 'Asked in a call.' }));
