@@ -120,3 +120,17 @@ test('the cap scales with the call: 150,000 tokens and 70 calls for each 30 minu
   assert.deepEqual(afterCallUse({ tokens: 10, calls: 1 }, { input: 100, output: 20 }), { tokens: 130, calls: 2 });
   assert.deepEqual(afterCallUse({ tokens: 10, calls: 1 }, null), { tokens: 10, calls: 2 }, 'a call with no usage still counts as a call');
 });
+
+test('how far each question was read is kept, read back without trusting it, and merged by the lesser of two copies', () => {
+  const at = (m: number) => new Date(Date.UTC(2026, 10, 27, 10, m)).toISOString();
+  let s = newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business' }], minutes: 30 });
+  for (const [i, text] of ['Made-up note one.', 'Made-up note two.', 'Made-up note three.'].entries()) s = addNote(s, { id: `n${i + 1}`, at: at(i + 1), text }) as CallState;
+  s = { ...s, readThrough: { a: 3, b: 1 }, lastCatchUpAt: at(3), lastFailed: true };
+  assert.deepEqual(readCall(JSON.stringify(s), 'p-1'), s);
+  const odd = readCall(JSON.stringify({ ...s, readThrough: { a: 99, b: 'x', c: -2, d: 2.7 }, lastCatchUpAt: 'never', lastFailed: 'yes' }), 'p-1')!;
+  assert.deepEqual(odd.readThrough, { a: 3, d: 2 }, 'never past the notes kept; anything not a count is left out');
+  assert.ok(!('lastCatchUpAt' in odd) && !('lastFailed' in odd));
+  const other = { ...s, changedAt: at(9), readThrough: { a: 2, c: 3 } };
+  assert.deepEqual(mergeCalls(s, other).readThrough, { a: 2, b: 1, c: 3 });
+  assert.deepEqual(newCall({ processId: 'p-1', at: at(0), attendees: [], minutes: 30 }).readThrough, {});
+});

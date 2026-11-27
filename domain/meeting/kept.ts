@@ -69,6 +69,16 @@ export interface CallState {
   removed: string[];
   /** Ids of notes read by a reading that came back. */
   read: string[];
+  /**
+   * For each question read during the call, by the key its answer is kept under: how many of the notes, from the
+   * first, it has been read against. A question is suggested only once it has been read against every note a reading
+   * has read (measure 1's fix, F2; owner, 27 November 2026).
+   */
+  readThrough: Record<string, number>;
+  /** When a reading last sent earlier notes again for a question that had not been read against them. */
+  lastCatchUpAt?: string;
+  /** The last reading's answer call failed: the next question follows the list until a reading comes back. */
+  lastFailed?: boolean;
   lastReadAt: string | null;
   readings: number;
   found: Found[];
@@ -93,7 +103,7 @@ export interface CallState {
 export function newCall(a: { processId: string; at: string; attendees: Attendee[]; minutes: CallLength; arranged?: CallState['arranged']; own?: OwnQuestion[] }): CallState {
   return {
     version: 1, processId: a.processId, startedAt: a.at, changedAt: a.at, attendees: a.attendees, minutes: a.minutes,
-    arranged: a.arranged ?? { order: [], leftOut: [] }, own: a.own ?? [], notes: [], removed: [], read: [], lastReadAt: null, readings: 0,
+    arranged: a.arranged ?? { order: [], leftOut: [] }, own: a.own ?? [], notes: [], removed: [], read: [], readThrough: {}, lastReadAt: null, readings: 0,
     found: [], raised: [], wanted: [], asked: [], skipped: [], leftWith: [], dismissed: [], followUpsInRow: 0, use: { ...NO_CALL_USE },
   };
 }
@@ -134,6 +144,8 @@ export function readCall(raw: unknown, processId: string): CallState | null {
     arranged: { order: strs(arranged.order), leftOut: strs(arranged.leftOut) },
     own: objs(o.own).filter(q => str(q.key) && str(q.question).trim()).map(q => ({ key: str(q.key), question: str(q.question).trim().slice(0, 200) })),
     notes, removed: strs(o.removed), read: strs(o.read).filter(id => ids.has(id)),
+    readThrough: Object.fromEntries(Object.entries(isObj(o.readThrough) ? o.readThrough : {}).map(([k, v]) => [k, Math.min(Math.floor(num(v)), notes.length)] as const).filter(([k, v]) => k && v > 0)),
+    ...(isTime(o.lastCatchUpAt) ? { lastCatchUpAt: str(o.lastCatchUpAt) } : {}), ...(o.lastFailed === true ? { lastFailed: true } : {}),
     lastReadAt: isTime(o.lastReadAt) ? str(o.lastReadAt) : null, readings: num(o.readings),
     found: objs(o.found).filter(isProposal).map(f => f as unknown as Found),
     raised: objs(o.raised).filter(r => isCard(r.card) && ids.has(str(r.noteId)) && ['held', 'ready', 'answered'].includes(str(r.state))).map(r => ({
@@ -173,6 +185,8 @@ export function mergeCalls(mine: CallState, theirs: CallState): CallState {
   return {
     ...base, notes, removed,
     read: union(base.read, other.read).filter(id => ids.has(id)),
+    // Read against fewer notes in either copy counts: a question is never taken as read further than it was.
+    readThrough: Object.fromEntries([...new Set([...Object.keys(base.readThrough), ...Object.keys(other.readThrough)])].map(k => [k, Math.min(base.readThrough[k] ?? Infinity, other.readThrough[k] ?? Infinity, notes.length)])),
     lastReadAt: later(base.lastReadAt ?? undefined, other.lastReadAt ?? undefined) ?? null,
     readings: Math.max(base.readings, other.readings),
     found: byKey([...base.found, ...other.found], f => f.itemKey).filter(f => ids.has(f.noteId)),
@@ -210,12 +224,18 @@ export function editNote(s: CallState, id: string, text: string, at: string): Ca
   const was = s.notes.find(n => n.id === id);
   if (!was) return s;
   if (total(s.notes) - was.text.length + t.length > CALL_LIMITS.chars) return 'full';
-  return dropFrom({ ...s, notes: s.notes.map(n => (n.id === id ? { ...n, text: t, editedAt: at } : n)), read: s.read.filter(x => x !== id), changedAt: at }, id);
+  // Every question read past the note is read again from it.
+  const i = s.notes.findIndex(n => n.id === id);
+  const readThrough = Object.fromEntries(Object.entries(s.readThrough).map(([k, v]) => [k, Math.min(v, i)]));
+  return dropFrom({ ...s, notes: s.notes.map(n => (n.id === id ? { ...n, text: t, editedAt: at } : n)), read: s.read.filter(x => x !== id), readThrough, changedAt: at }, id);
 }
 
 /** Removes a note, and what was found in it or raised from it. */
 export function removeNote(s: CallState, id: string, at: string): CallState {
-  return dropFrom({ ...s, notes: s.notes.filter(n => n.id !== id), removed: union(s.removed, [id]), read: s.read.filter(x => x !== id), changedAt: at }, id);
+  // The notes after it move up one place; nothing needs reading again.
+  const i = s.notes.findIndex(n => n.id === id);
+  const readThrough = i < 0 ? s.readThrough : Object.fromEntries(Object.entries(s.readThrough).map(([k, v]) => [k, v > i ? v - 1 : v]));
+  return dropFrom({ ...s, notes: s.notes.filter(n => n.id !== id), removed: union(s.removed, [id]), read: s.read.filter(x => x !== id), readThrough, changedAt: at }, id);
 }
 
 const dropFrom = (s: CallState, id: string): CallState => ({ ...s, found: s.found.filter(f => f.noteId !== id), raised: s.raised.filter(r => r.noteId !== id), wanted: s.wanted.filter(w => w.noteId !== id) });

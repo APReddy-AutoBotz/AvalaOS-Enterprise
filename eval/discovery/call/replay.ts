@@ -18,7 +18,7 @@ import { discoveryQuestions } from '../../../domain/discovery/notice.ts';
 import { hasOrigin } from '../../../domain/discovery/card.ts';
 import { buildBriefing, type BriefItem } from '../../../domain/meeting/briefing.ts';
 import { addNote, newCall, type Attendee, type CallNote, type CallState } from '../../../domain/meeting/kept.ts';
-import { applyEnd, applyReading, answerKey, isAnswered, itemFor, markAsked, nextQuestion, noteOf, prepareEnd, prepareReading, readingItemFor, type CallResult, type Suggestion } from '../../../domain/meeting/panel.ts';
+import { applyEnd, applyReading, answerKey, isAnswered, itemFor, markAsked, nextQuestion, noteOf, panelLine, prepareEnd, prepareReading, readingDue, readingItemFor, type CallResult, type Suggestion } from '../../../domain/meeting/panel.ts';
 import { CALL_CAP } from '../../../domain/meeting/limits.ts';
 import { WINDOW, windows, type Ask, type Passage, ReplayStop } from '../replay.ts';
 
@@ -56,7 +56,12 @@ export type Said = 'stated' | 'inferred' | 'no';
  * or the quote matched no one note.
  */
 export type History = 'never' | 'without' | 'with' | 'unmatched';
-export interface Suggested { window: number; key: string; question: string; from: Suggestion['from']; hasOrigin: boolean; hasTarget: boolean; alreadySaid: Said | null; history?: History | null }
+/**
+ * For one read, but never with the note that answers it: that note came before the question's first reading (for a
+ * raised question, before or as it was raised), after its last reading, or between two of its readings.
+ */
+export type Where = 'before' | 'after' | 'between';
+export interface Suggested { window: number; key: string; question: string; from: Suggestion['from']; hasOrigin: boolean; hasTarget: boolean; alreadySaid: Said | null; history?: History | null; where?: Where | null }
 export interface RaisedQ { window: number; readyAt: number | null; question: string; noteId: string; passage: number; answeredLater: boolean | null }
 
 export interface CallCaseResult {
@@ -69,7 +74,7 @@ export interface CallCaseResult {
   /** Every answer found at the end, by its question's key, with what it would record, whether the notes state it, and the note's passage number. */
   found: { key: string; display: string; certainty: 'stated' | 'inferred'; passage: number }[];
   wanted: { passage: number; excerpt: string }[];
-  /** The time each reading took, both calls together, in milliseconds. */
+  /** For each window read, the time from its notes to the next suggestion: its readings, both calls together, in milliseconds. */
   readingMs: number[];
   tokens: number;
   calls: number;
@@ -86,6 +91,12 @@ export interface CallCaseResult {
   maxAsked: number;
   /** Notes the call did not keep, its notes being full (CALL_LIMITS). */
   notesNotKept: number;
+  /** Readings that sent the earlier notes again; of them, those started at once because the panel was checking. */
+  catchUps: number;
+  checkingReadings: number;
+  /** Windows where the panel was still checking its notes and suggested nothing; windows after the cap stopped the readings. */
+  checkingWindows: number;
+  cappedWindows: number;
 }
 
 /** The call's list for a case: the briefing for its people, 60 minutes long so every question is on it. */
@@ -104,7 +115,7 @@ export async function replayCall(c: CallCase, ask: Ask, opts: { judge?: boolean 
   const secondsOf = (p: Passage, i: number) => (p.seconds ?? i * 24) * 1000;
   let s: CallState = newCall({ processId: c.id, at: iso(0), attendees: c.attendees, minutes: 60 });
   const judging = opts.judge === false ? 'none' : opts.judge === 'said' ? 'said' : 'all';
-  const out: CallCaseResult = { id: c.id, passages: c.passages.length, windows: ws.length, seconds: null, suggested: [], raised: [], found: [], wanted: [], readingMs: [], tokens: 0, calls: 0, judgingTokens: 0, failures: 0, listKeys: list.map(x => x.card.key), judged: judging, readingsWithList: 0, crowded: 0, maxAsked: 0, notesNotKept: 0 };
+  const out: CallCaseResult = { id: c.id, passages: c.passages.length, windows: ws.length, seconds: null, suggested: [], raised: [], found: [], wanted: [], readingMs: [], tokens: 0, calls: 0, judgingTokens: 0, failures: 0, listKeys: list.map(x => x.card.key), judged: judging, readingsWithList: 0, crowded: 0, maxAsked: 0, notesNotKept: 0, catchUps: 0, checkingReadings: 0, checkingWindows: 0, cappedWindows: 0 };
   const times = c.passages.map(p => p.seconds).filter((x): x is number => x !== undefined);
   if (times.length > 1) out.seconds = times[times.length - 1]! - times[0]!;
   const passageOfNote = new Map<string, number>();
@@ -132,24 +143,32 @@ export async function replayCall(c: CallCase, ask: Ask, opts: { judge?: boolean 
     notesUpTo.push([...s.notes]);
     const last = ws[w]![ws[w]!.length - 1]!;
     const now = iso(secondsOf(last, last.n) + 1000);
-    const prep = prepareReading(s, { model: c.model, list, triage, asked: [], timeZone: 'UTC' });
-    if (prep.notes.length) {
+    const ctx = { model: c.model, list, triage, asked: [] as string[], timeZone: 'UTC', now };
+    const read = async (prep: ReturnType<typeof prepareReading>): Promise<number> => {
       const began = clock();
       const [answers, notice] = await Promise.all([
         prep.answers ? run(answerFromNotes.id, prep.answers.segments) : Promise.resolve(null),
-        run(discoveryQuestions.id, prep.notice.segments),
+        prep.notice ? run(discoveryQuestions.id, prep.notice.segments) : Promise.resolve(null),
       ]);
-      out.readingMs.push(clock() - began);
+      const ms = clock() - began;
       const sent = new Set(prep.answers?.items.map(i => i.key) ?? []);
       const unasked = openUnasked(s);
       if (unasked.length) { out.readingsWithList++; if (!unasked.some(k => sent.has(k))) out.crowded++; }
       const asked = new Set(list.filter(x => s.asked.includes(x.card.key) && !isAnswered(s, answerKey(x.card, triage))).map(x => answerKey(x.card, triage)));
       out.maxAsked = Math.max(out.maxAsked, [...sent].filter(k => asked.has(k)).length);
       if (prep.answers && answers && answers !== 'failed') {
-        for (const it of prep.answers.items) { const set = readWith.get(it.key) ?? new Set<string>(); for (const n of prep.notes) set.add(n.id); readWith.set(it.key, set); }
+        if (prep.answers.catchUp) out.catchUps++;
+        for (const it of prep.answers.items) { const set = readWith.get(it.key) ?? new Set<string>(); for (const n of prep.answers.notes) set.add(n.id); readWith.set(it.key, set); }
       }
       s = applyReading(s, prep, { answers, notice }, { model: c.model, at: now, asked: [], list });
-    }
+      return ms;
+    };
+    let ms = 0;
+    const prep = prepareReading(s, ctx);
+    if (prep.notes.length || prep.answers) ms += await read(prep);
+    // "Checking your notes for the next question.": the screen starts a reading at once when one may send the earlier notes.
+    if (panelLine(s, list, triage, now) === 'checking' && readingDue(s, now, true, { list, triage })) { out.checkingReadings++; ms += await read(prepareReading(s, ctx)); }
+    if (ms) out.readingMs.push(ms);
     for (const r of s.raised) {
       if (!raisedSeen.has(r.card.key)) { raisedSeen.set(r.card.key, out.raised.length); out.raised.push({ window: w, readyAt: null, question: r.card.question, noteId: r.noteId, passage: passageOfNote.get(r.noteId) ?? 0, answeredLater: null }); }
       const x = out.raised[raisedSeen.get(r.card.key)!]!;
@@ -157,6 +176,9 @@ export async function replayCall(c: CallCase, ask: Ask, opts: { judge?: boolean 
     }
     // The replay's analyst asks what the panel suggests, one question a window.
     const sug = nextQuestion(s, list, triage, now);
+    const line = panelLine(s, list, triage, now);
+    if (line === 'checking') out.checkingWindows++;
+    if (line === 'capped') out.cappedWindows++;
     if (sug) {
       out.suggested.push({ window: w, key: sug.card.key, question: sug.card.question, from: sug.from, hasOrigin: hasOrigin(sug.card.origin), hasTarget: Boolean(sug.card.target.kind === 'meta' ? sug.card.target.field : sug.card.target.id), alreadySaid: null });
       readBefore.push(new Set(readWith.get(answerKey(sug.card, triage)) ?? []));
@@ -196,12 +218,15 @@ async function answered(c: CallCase, items: TriageItem[], notes: string[], ask: 
   } catch (e) { if (stops(e)) throw e; out.failures++; return null; }
 }
 
-/** Where a suggestion already answered stood before it was suggested: see `History`. */
-export function historyOf(readBefore: ReadonlySet<string>, notes: CallNote[], quote: string): History {
+/** Where a suggestion already answered stood before it was suggested: see `History` and `Where`. */
+export function historyOf(readBefore: ReadonlySet<string>, notes: CallNote[], quote: string): { history: History; where: Where | null } {
   const n = noteOf(notes, quote);
-  if (!n) return 'unmatched';
-  if (!readBefore.size) return 'never';
-  return readBefore.has(n.id) ? 'with' : 'without';
+  if (!n) return { history: 'unmatched', where: null };
+  if (!readBefore.size) return { history: 'never', where: null };
+  if (readBefore.has(n.id)) return { history: 'with', where: null };
+  const at = notes.indexOf(n);
+  const seen = notes.map((x, i) => (readBefore.has(x.id) ? i : -1)).filter(i => i >= 0);
+  return { history: 'without', where: !seen.length ? null : at < Math.min(...seen) ? 'before' : at > Math.max(...seen) ? 'after' : 'between' };
 }
 
 async function judge(out: CallCaseResult, c: CallCase, ws: Passage[][], notesUpTo: CallNote[][], readBefore: Set<string>[], list: BriefItem[], t: Triage, ask: Ask, judging: 'all' | 'said'): Promise<void> {
@@ -214,7 +239,9 @@ async function judge(out: CallCaseResult, c: CallCase, ws: Passage[][], notesUpT
     if (!r) continue;
     const a = r.get(item.key);
     x.alreadySaid = a ? a.certainty : 'no';
-    x.history = a ? historyOf(readBefore[i] ?? new Set(), notes, a.quote) : null;
+    const h = a ? historyOf(readBefore[i] ?? new Set(), notes, a.quote) : null;
+    x.history = h?.history ?? null;
+    x.where = h?.where ?? null;
   }
   if (judging === 'said') return;
   // 2. Each raised question once it was ready (after the hold): do the next two windows answer it?
@@ -249,7 +276,11 @@ export interface CallScorecard {
     from: Record<Suggestion['from'], { suggested: number; judged: number; stated: number; inferred: number }>;
     /** Before it was suggested, for those stated and apart for those inferred. */
     history: Record<'stated' | 'inferred', Record<History, number>>;
+    /** Of those read but never with the note that answers them, where that note came. */
+    where: Record<'stated' | 'inferred', Record<Where, number>>;
   };
+  /** Readings that sent the earlier notes again, those started at once while checking, windows checking, windows after the cap. */
+  catchUp: { readings: number; atOnce: number; checkingWindows: number; cappedWindows: number };
   /** Readings while some list question was open and not asked, those that read none of them, and the most asked questions in one reading. */
   crowding: { readings: number; crowded: number; maxAsked: number };
   notesNotKept: number;
@@ -287,7 +318,13 @@ export function scoreCalls(results: CallCaseResult[], answers: CallAnswers[] = [
     for (const x of judged1) if (x.alreadySaid === c && x.history) h[x.history]++;
     return h;
   };
+  const whereOf = (c: 'stated' | 'inferred') => {
+    const h: Record<Where, number> = { before: 0, after: 0, between: 0 };
+    for (const x of judged1) if (x.alreadySaid === c && x.where) h[x.where]++;
+    return h;
+  };
   const shareOf = (n: number) => (judged1.length ? n / judged1.length : 0);
+  const sum = (f: (r: CallCaseResult) => number) => results.reduce((t, r) => t + f(r), 0);
   const raised = results.flatMap(r => r.raised).filter(x => x.answeredLater !== null);
   const early = raised.filter(x => x.answeredLater).length;
   const noQuote = sug.filter(x => !x.hasOrigin || !x.hasTarget).length;
@@ -327,7 +364,8 @@ export function scoreCalls(results: CallCaseResult[], answers: CallAnswers[] = [
   const t30 = per30(tokens), c30 = per30(calls);
   return {
     cases: results.length, suggested: sug.length,
-    alreadySaid: { stated: said, inferred: implied, judged: judged1.length, share: shareOf(said), inferredShare: shareOf(implied), bothShare: shareOf(said + implied), from: byFrom, history: { stated: hist('stated'), inferred: hist('inferred') } },
+    alreadySaid: { stated: said, inferred: implied, judged: judged1.length, share: shareOf(said), inferredShare: shareOf(implied), bothShare: shareOf(said + implied), from: byFrom, history: { stated: hist('stated'), inferred: hist('inferred') }, where: { stated: whereOf('stated'), inferred: whereOf('inferred') } },
+    catchUp: { readings: sum(r => r.catchUps), atOnce: sum(r => r.checkingReadings), checkingWindows: sum(r => r.checkingWindows), cappedWindows: sum(r => r.cappedWindows) },
     crowding: { readings: results.reduce((t, r) => t + r.readingsWithList, 0), crowded: results.reduce((t, r) => t + r.crowded, 0), maxAsked: results.reduce((t, r) => Math.max(t, r.maxAsked), 0) },
     notesNotKept: results.reduce((t, r) => t + r.notesNotKept, 0),
     tooEarly: { answered: early, judged: raised.length, share: raised.length ? early / raised.length : 0, notJudged: results.length > 0 && results.every(r => r.judged !== 'all') },
@@ -360,6 +398,8 @@ export function renderCallScorecard(s: CallScorecard, label: string): string {
     `1. "Ask next" already answered, stated in the notes before it: ${a.stated} of ${a.judged} (${pct(a.share)}; working threshold ${pct(CALL_THRESHOLDS.alreadySaid)} or fewer): ${mark(s.passed.alreadySaid)}. Answered only by inference, reported apart: ${a.inferred} of ${a.judged} (${pct(a.inferredShare)}). Both together, as counted before 27 November: ${a.stated + a.inferred} of ${a.judged} (${pct(a.bothShare)}).`,
     `   By where it came from (stated, inferred, of those judged): the list ${from('list')}; a follow-up to the last two notes ${from('note')}; raised from the notes ${from('raised')}; "Ask it now" ${from('pinned')}, which the replay's analyst never presses.`,
     `   Before it was suggested, those stated: ${hist('stated')}. Those inferred: ${hist('inferred')}.`,
+    `   Of those read, but never with the note that answers them, that note came: before the question's first reading (for a raised question, before or as it was raised) ${a.where.stated.before} stated, ${a.where.inferred.before} inferred; after its last reading ${a.where.stated.after}, ${a.where.inferred.after}; between two of its readings ${a.where.stated.between}, ${a.where.inferred.between}.`,
+    `   Readings that sent the earlier notes again: ${s.catchUp.readings}, of them started at once while the panel was checking its notes: ${s.catchUp.atOnce}. Windows where it was still checking and suggested nothing: ${s.catchUp.checkingWindows}. Windows after the cap stopped the minute readings: ${s.catchUp.cappedWindows}.`,
     `   Readings that read no open list question not yet asked: ${s.crowding.crowded} of the ${s.crowding.readings} readings while there was one; the most asked and unanswered questions read in one reading: ${s.crowding.maxAsked}. Notes the call did not keep, its notes being full: ${s.notesNotKept}.`,
     s.tooEarly.notJudged ? '2. Raised from the notes and answered within the next two windows, after the hold: not judged in this run.' : `2. Raised from the notes and answered within the next two windows, after the hold: ${s.tooEarly.answered} of ${s.tooEarly.judged} (${pct(s.tooEarly.share)}; working threshold ${pct(CALL_THRESHOLDS.tooEarly)} or fewer): ${mark(s.passed.tooEarly)}.`,
     `3. A suggestion with no quote or gap, or no target: ${s.noQuoteOrTarget} (must be none): ${mark(s.passed.noQuoteOrTarget)}.`,

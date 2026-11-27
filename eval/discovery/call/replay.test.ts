@@ -28,7 +28,7 @@ function recorded(replies: Partial<Record<string, (segments: Segment[]) => unkno
   return ask;
 }
 const notes = (segments: Segment[]) => segments.filter(s => s.id.startsWith('n:'));
-const COUNTS = { judged: 'all' as const, readingsWithList: 0, crowded: 0, maxAsked: 0, notesNotKept: 0 };
+const COUNTS = { judged: 'all' as const, readingsWithList: 0, crowded: 0, maxAsked: 0, notesNotKept: 0, catchUps: 0, checkingReadings: 0, checkingWindows: 0, cappedWindows: 0 };
 const qOf = (segments: Segment[], phrase: string) => segments.find(s => s.id.startsWith('q:') && s.text.includes(phrase))?.id;
 
 test('every file of the call replay is made up, and every question the call could answer has a hand-written answer', () => {
@@ -134,7 +134,7 @@ test('the report holds numbers only: no note, question, quote or value', async (
   for (const x of [...r.suggested.map(y => y.question), ...r.found.map(y => y.display)]) assert.ok(!report.includes(x));
   assert.ok(!report.includes('Site coordinator'));
   assert.match(report, /^Call replay: set dry\. 1 call, \d+ questions? suggested\./);
-  assert.equal(report.split('\n').length, 12);
+  assert.equal(report.split('\n').length, 14);
   assert.equal(CALL_THRESHOLDS.tokensPerThirtyMinutes, 150_000);
   assert.equal(CALL_THRESHOLDS.callsPerThirtyMinutes, 70);
 });
@@ -175,13 +175,15 @@ test('measure 1 counts what the notes state; inferred answers are reported apart
   assert.equal(ok.passed.alreadySaid, true, 'an answer only inferred does not count against the threshold');
 });
 
-test('where an answered suggestion stood: never read, read without the note that answers it, read with it, or no one note', () => {
+test('where an answered suggestion stood: never read, read without the note that answers it (before, after or between its readings), read with it, or no one note', () => {
   const n = (id: string, text: string) => ({ id, at: '2026-01-01T09:00:00.000Z', text });
   const notesSoFar = [n('p1', 'The clerk files every claim.'), n('p2', 'About 400 claims a month.'), n('p3', 'Payroll runs on Fridays.')];
-  assert.equal(historyOf(new Set(), notesSoFar, 'About 400 claims'), 'never');
-  assert.equal(historyOf(new Set(['p1']), notesSoFar, 'About 400 claims'), 'without');
-  assert.equal(historyOf(new Set(['p1', 'p2']), notesSoFar, 'about 400 CLAIMS'), 'with', 'matched as the panel matches a quote');
-  assert.equal(historyOf(new Set(['p1', 'p2']), notesSoFar, 'Nobody said this'), 'unmatched');
+  assert.deepEqual(historyOf(new Set(), notesSoFar, 'About 400 claims'), { history: 'never', where: null });
+  assert.deepEqual(historyOf(new Set(['p1']), notesSoFar, 'About 400 claims'), { history: 'without', where: 'after' }, 'the note came after its last reading');
+  assert.deepEqual(historyOf(new Set(['p3']), notesSoFar, 'About 400 claims'), { history: 'without', where: 'before' }, 'the note came before its first reading');
+  assert.deepEqual(historyOf(new Set(['p1', 'p3']), notesSoFar, 'About 400 claims'), { history: 'without', where: 'between' });
+  assert.deepEqual(historyOf(new Set(['p1', 'p2']), notesSoFar, 'about 400 CLAIMS'), { history: 'with', where: null }, 'matched as the panel matches a quote');
+  assert.deepEqual(historyOf(new Set(['p1', 'p2']), notesSoFar, 'Nobody said this'), { history: 'unmatched', where: null });
 });
 
 test('a replayed call records each suggestion\'s readings, the crowding of the readings, and judges measure 1 alone when asked', async () => {
@@ -214,6 +216,9 @@ test('a replayed call records each suggestion\'s readings, the crowding of the r
   const report = renderCallScorecard(scoreCalls([r], answers), 'set dry');
   assert.match(report, /^2\. Raised from the notes and answered within the next two windows, after the hold: not judged in this run\.$/m);
   assert.match(report, /the list 1, \d+ of \d+/);
+  assert.ok(r.catchUps >= 0 && r.checkingWindows >= 0 && r.cappedWindows === 0);
+  assert.match(report, /that note came: before the question's first reading \(for a raised question, before or as it was raised\) \d+ stated, \d+ inferred; after its last reading \d+, \d+; between two of its readings \d+, \d+\./);
+  assert.match(report, /Readings that sent the earlier notes again: \d+, of them started at once while the panel was checking its notes: \d+\. Windows where it was still checking and suggested nothing: \d+\. Windows after the cap stopped the minute readings: 0\./);
 });
 
 test('notes past the call\'s limit are not kept, and counted', async () => {
