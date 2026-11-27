@@ -9,7 +9,7 @@ on:
   pull_request:
     branches: [main]
     # "edited" runs it again when a pull request's base is changed to main.
-    types: [opened, synchronize, reopened, edited]
+    types: [opened, synchronize, reopened, edited, ready_for_review]
 
 permissions:
   contents: read
@@ -17,6 +17,9 @@ permissions:
 jobs:
   release-dates:
     name: Release dates set
+    # A draft pull request into main is only a Netlify preview of a branch whose own pull request into next
+    # runs these checks; it runs none until it is marked ready for review, which runs them all.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && github.base_ref == 'main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
