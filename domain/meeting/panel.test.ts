@@ -13,10 +13,10 @@ import { answerFromNotes } from '../questions/notes.ts';
 import { discoveryQuestions } from '../discovery/notice.ts';
 import { hasOrigin } from '../discovery/card.ts';
 import { buildBriefing } from './briefing.ts';
-import { addNote, newCall, type Attendee, type CallState } from './kept.ts';
+import { addNote, editNote, newCall, removeNote, type Attendee, type CallState } from './kept.ts';
 import {
   answerKey, applyEnd, applyReading, askedList, askNow, CALL_SOURCE, dismissFound, HOLD_MS, isAnswered, leaveWithName, markAsked, nextQuestion, prepareEnd, prepareReading, raisedToShow,
-  readingDue, readingNotes, skipQuestion, type ReadingPrep,
+  notesRead, panelLine, readingDue, readingItemFor, readingNotes, readSoFar, skipQuestion, type ReadingPrep,
 } from './panel.ts';
 import { buildReview, callEdit, callNotesSource, CALL_NOTES_KIND } from './review.ts';
 
@@ -59,8 +59,8 @@ test('a whole call: found answers, the hold, the next question, the review and t
   const p1 = prepareReading(s, ctx);
   assert.ok(p1.answers!.items.length <= 15);
   assert.ok(p1.answers!.items.every(i => i.kind !== 'choice'), 'a choice is chosen, never read from notes');
-  assert.ok(p1.notice.segments.some(x => x.id === 'n:1' && x.locator === '14:04 Priya'), 'noticing gets the time and who said it as the passage\'s place');
-  const noticeSegs = p1.notice.segments;
+  assert.ok(p1.notice!.segments.some(x => x.id === 'n:1' && x.locator === '14:04 Priya'), 'noticing gets the time and who said it as the passage\'s place');
+  const noticeSegs = p1.notice!.segments;
   const r1 = {
     answers: verified(answerFromNotes, p1.answers!.segments, { answers: [{ questionId: qid(p1, MATCH), value: 'Buyer (Procurement)', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'The buyer does the three-way match' }] }),
     notice: verified(discoveryQuestions, noticeSegs, { questions: [{ segmentId: 'n:1', excerpt: 'when the buyer is away someone covers for them', pattern: 'who_handles', about: '', question: 'Who covers for the buyer when they are away, and how do they know?', whyItMatters: 'Someone must do the match every day.' }], wanted: [] }),
@@ -167,7 +167,7 @@ test('a value a person confirmed is never overwritten: the review says so and Sa
 test('a held question the next reading answers is dropped as answered; after two minutes with no reading it is ready', () => {
   let s = note(start(), 'n1', 2, 'Credit notes go to the AP lead first.');
   const p1 = prepareReading(s, ctx);
-  s = applyReading(s, p1, { answers: { data: { answers: [] } }, notice: verified(discoveryQuestions, p1.notice.segments, { questions: [{ segmentId: 'n:1', excerpt: 'Credit notes go to the AP lead first', pattern: 'who_handles', about: '', question: 'What does the AP lead do with a credit note, and who posts it?', whyItMatters: 'It decides the steps for credit notes.' }], wanted: [] }) }, { model: gold, at: at(2, 30), asked: [], list });
+  s = applyReading(s, p1, { answers: { data: { answers: [] } }, notice: verified(discoveryQuestions, p1.notice!.segments, { questions: [{ segmentId: 'n:1', excerpt: 'Credit notes go to the AP lead first', pattern: 'who_handles', about: '', question: 'What does the AP lead do with a credit note, and who posts it?', whyItMatters: 'It decides the steps for credit notes.' }], wanted: [] }) }, { model: gold, at: at(2, 30), asked: [], list });
   assert.equal(s.raised[0]!.state, 'held');
   assert.equal(raisedToShow(s, new Date(Date.parse(at(2, 30)) + HOLD_MS).toISOString())[0]!.holding, false, 'ready after two minutes');
   s = note(s, 'n2', 3, 'The lead checks the credit note and the clerk posts it in SAP.');
@@ -270,4 +270,139 @@ test('a choice the notes already answer is not suggested again; the analyst pick
   assert.equal(picked.op(gold).model.meta.brief?.doneToday?.value, 'yes');
   assert.equal(picked.counts.answers, 1);
   assert.deepEqual(errorsOf(validateModel(picked.op(gold).model)), []);
+});
+
+// ---------------------------------------------------------------- measure 1's fix (owner, 27 November 2026)
+
+/** The sample's list with the buyer's match question 13th, after twelve others. */
+const matchCard = list.find(x => answerKey(x.card, t) === MATCH)!;
+const list13 = [...list.filter(x => answerKey(x.card, t) !== MATCH).slice(0, 12), matchCard, ...list.filter(x => answerKey(x.card, t) !== MATCH).slice(12)];
+const ctx13 = { ...ctx, list: list13 };
+const nothing = { answers: { data: { answers: [] }, usage: { input: 100, output: 10 } }, notice: { data: { questions: [], wanted: [] }, usage: { input: 100, output: 10 } } };
+const readIt = (s: CallState, now: string, reply: Parameters<typeof applyReading>[2] = nothing) => {
+  const p = prepareReading(s, { ...ctx13, now });
+  return { p, s: applyReading(s, p, reply, { model: gold, at: now, asked: [], list: list13 }) };
+};
+const askTwelve = (s: CallState, min: number) => list13.slice(0, 12).reduce((x, y, i) => markAsked(x, { card: y.card, from: 'list' }, at(min, i)), s);
+
+test('F2: the 13th question, answered in an earlier note, is not suggested until a reading has read it with that note, and then never', () => {
+  assert.ok(list13.length > 13 && answerKey(list13[12]!.card, t) === MATCH);
+  let s = note(note(note(start(), 'n1', 1, 'Invoices arrive by email.'), 'n2', 1, 'They are scanned the same day.'), 'n3', 1, 'Nobody checks the scan.');
+  ({ s } = readIt(s, at(1, 20)));
+  assert.ok(!s.lastCatchUpAt, 'the first reading reads every note: there is nothing earlier to send again');
+  s = note(s, 'n4', 2, 'The buyer does the three-way match.');
+  const second = readIt(s, at(2, 20));
+  assert.deepEqual(second.p.answers!.notes.map(n => n.id), ['n3', 'n4'], 'the new note and the one before');
+  assert.ok(!second.p.answers!.items.some(i => i.key === MATCH), 'the 13th question is not in the twelve');
+  s = askTwelve(second.s, 3);
+  // Every question before it is asked: it is next on the list, but has never been read against the note that answers it.
+  assert.equal(nextQuestion(s, list13, t, at(4)), null);
+  assert.equal(panelLine(s, list13, t, at(4)), 'checking');
+  assert.ok(readingDue(s, at(4), false, { list: list13, triage: t }), 'a reading starts at once, with no new note');
+  assert.ok(!readingDue(s, at(4)), 'without the panel checking, nothing new to read');
+  const p3 = prepareReading(s, { ...ctx13, now: at(4) });
+  assert.equal(p3.notice, null, 'no new notes: noticing is not asked');
+  assert.ok(p3.answers!.catchUp);
+  assert.deepEqual(p3.answers!.notes.map(n => n.id), ['n1', 'n2', 'n3', 'n4'], 'every note, and never more than the call holds');
+  assert.ok(p3.answers!.items.some(i => i.key === MATCH));
+  const reply = { answers: verified(answerFromNotes, p3.answers!.segments, { answers: [{ questionId: qid(p3, MATCH), value: 'Buyer (Procurement)', interface: '', certainty: 'stated', segmentId: p3.answers!.segments.find(x => x.text.includes('three-way match'))!.id, excerpt: 'The buyer does the three-way match' }] }), notice: null };
+  s = applyReading(s, p3, reply, { model: gold, at: at(4, 10), asked: [], list: list13 });
+  assert.ok(isAnswered(s, MATCH));
+  assert.equal(s.lastCatchUpAt, at(4, 10));
+  assert.equal(s.use.calls, 5, 'two readings of two calls, and one of one');
+  const next = nextQuestion(s, list13, t, at(4, 20))!;
+  assert.ok(next && answerKey(next.card, t) !== MATCH, 'the question the notes answered is never suggested');
+  assert.notEqual(panelLine(s, list13, t, at(4, 20)), 'checking', 'the line never shows twice in a row');
+});
+
+test('F1: a reading keeps the 4 questions asked most recently, newest first; the end reading still reads every one', () => {
+  let s = note(start(), 'n1', 1, 'Invoices arrive by email.');
+  s = list13.slice(0, 6).reduce((x, y, i) => markAsked(x, { card: y.card, from: 'list' }, at(2, i)), s);
+  const p = prepareReading(s, { ...ctx13, now: at(3) });
+  const askedKeys = list13.slice(0, 6).map(x => readingItemFor(x.card, x.owner, t)!.key);
+  assert.deepEqual(p.answers!.items.slice(0, 4).map(i => i.key), askedKeys.slice(2).reverse());
+  assert.ok(!p.answers!.items.some(i => askedKeys.slice(0, 2).includes(i.key)), 'the two asked first give up their places');
+  assert.equal(p.answers!.items.filter(i => !askedKeys.includes(i.key)).length, 8, 'the rest of the twelve go to the list');
+  const end = prepareEnd(s, { model: gold, list: list13, triage: t });
+  const read = end.batches.flatMap(x => x.items.map(i => i.key));
+  assert.ok(askedKeys.every(k => read.includes(k)));
+});
+
+test('F2: earlier notes are sent again at most once every two minutes; the readings between send the new notes only', () => {
+  let s = note(note(start(), 'n1', 1, 'Invoices arrive by email.'), 'n2', 1, 'They are scanned.');
+  ({ s } = readIt(s, at(1, 20)));
+  s = askTwelve(note(s, 'n3', 2, 'Payment runs on Fridays.'), 2);
+  let r = readIt(s, at(2, 30));
+  assert.ok(r.p.answers!.catchUp, 'the 13th question has seen no note: they are all sent');
+  s = askTwelve(r.s, 3);
+  s = list13.slice(12, 14).reduce((x, y, i) => markAsked(x, { card: y.card, from: 'list' }, at(3, 30 + i)), s);
+  s = note(s, 'n4', 3, 'Exceptions go to the controller.');
+  r = readIt(s, at(3, 40));
+  assert.ok(!r.p.answers!.catchUp, 'within two minutes of the last');
+  assert.deepEqual(r.p.answers!.notes.map(n => n.id), ['n3', 'n4']);
+  assert.ok(!readingDue(r.s, at(4), false, { list: list13, triage: t }), 'nor at once while checking');
+  s = note(r.s, 'n5', 4, 'The controller signs off.');
+  // One question in the reading that has not seen the earlier notes.
+  const behind = readingItemFor(list13[14]!.card, list13[14]!.owner, t)!.key;
+  s = { ...s, readThrough: Object.fromEntries(Object.entries(s.readThrough).filter(([k]) => k !== behind)) };
+  assert.ok(!prepareReading(s, { ...ctx13, now: at(4, 20) }).answers!.catchUp, 'not yet: 1 minute 50 seconds after the last');
+  r = readIt(s, at(4, 31));
+  assert.ok(r.p.answers!.catchUp, 'two minutes after the last');
+  assert.equal(r.p.answers!.notes[0]!.id, 'n1');
+});
+
+test('a failed answer call moves nothing and the list comes back; the cap stops the readings and the list comes back', () => {
+  let s = note(note(note(start(), 'n1', 1, 'Invoices arrive by email.'), 'n2', 1, 'They are scanned.'), 'n3', 1, 'Nobody checks.');
+  ({ s } = readIt(s, at(1, 20)));
+  s = askTwelve(s, 2);
+  const before = { ...s.readThrough };
+  const p = prepareReading(s, { ...ctx13, now: at(2, 30) });
+  const failed = applyReading(s, p, { answers: 'failed', notice: null }, { model: gold, at: at(2, 40), asked: [], list: list13 });
+  assert.deepEqual(failed.readThrough, before);
+  assert.ok(!failed.lastCatchUpAt);
+  assert.equal(panelLine(failed, list13, t, at(2, 50)), 'failed');
+  assert.equal(answerKey(nextQuestion(failed, list13, t, at(2, 50))!.card, t), MATCH, 'the list order, without waiting');
+  const back = applyReading(failed, prepareReading(failed, { ...ctx13, now: at(4) }), nothing, { model: gold, at: at(4), asked: [], list: list13 });
+  assert.ok(!back.lastFailed, 'a reading that comes back ends it');
+
+  const capped = { ...s, use: { tokens: 140_000, calls: 10 } };
+  assert.equal(panelLine(capped, list13, t, at(3)), 'capped');
+  assert.equal(answerKey(nextQuestion(capped, list13, t, at(3))!.card, t), MATCH, 'never silent: the list order');
+  assert.ok(!readingDue(capped, at(3), true, { list: list13, triage: t }));
+});
+
+test('F2: a ready raised question is read with the reading, and suggested only once read against every note', () => {
+  let s = note(note(note(start(), 'n1', 1, 'Invoices arrive by email.'), 'n2', 1, 'They are scanned.'), 'n3', 1, 'When the buyer is away someone covers for them.', 'Priya');
+  const p1 = prepareReading(s, { ...ctx13, now: at(1, 20) });
+  const raise = { questions: [{ segmentId: p1.notice!.segments.find(x => x.text.includes('someone covers'))!.id, excerpt: 'someone covers for them', pattern: 'who_handles', about: '', question: 'Who covers for the buyer when they are away?', whyItMatters: 'The match must be done every day.' }], wanted: [] };
+  s = applyReading(s, p1, { answers: nothing.answers, notice: verified(discoveryQuestions, p1.notice!.segments, raise) }, { model: gold, at: at(1, 20), asked: [], list: list13 });
+  const r = s.raised[0]!;
+  const key = answerKey(r.card, t);
+  s = { ...note(s, 'n4', 2, 'The scan goes to the inbox.'), lastCatchUpAt: at(1, 50) };
+  const p2 = prepareReading(s, { ...ctx13, now: at(2, 20) });
+  assert.ok(!p2.answers!.catchUp);
+  s = applyReading(s, p2, nothing, { model: gold, at: at(2, 20), asked: [], list: list13 });
+  assert.equal(s.raised[0]!.state, 'ready');
+  assert.ok((s.readThrough[key] ?? 0) < 4, 'its reading sent only the new notes');
+  assert.equal(nextQuestion(s, list13, t, at(2, 30))!.from, 'list', 'not suggested as a follow-up yet');
+  const p3 = prepareReading(s, { ...ctx13, now: at(4) });
+  assert.ok(p3.answers!.items.some(i => i.key === key), 'the ready raised question next in line is read');
+  assert.ok(p3.answers!.catchUp);
+  s = applyReading(s, p3, nothing, { model: gold, at: at(4), asked: [], list: list13 });
+  assert.equal(nextQuestion(s, list13, t, at(4, 10))!.from, 'note');
+});
+
+test('an edited note is read again by every question read past it; a removed one moves the rest up', () => {
+  let s = note(note(note(start(), 'n1', 1, 'Invoices arrive by email.'), 'n2', 1, 'They are scanned.'), 'n3', 1, 'Nobody checks.');
+  ({ s } = readIt(s, at(1, 20)));
+  const k = Object.keys(s.readThrough)[0]!;
+  assert.equal(s.readThrough[k], 3);
+  const edited = editNote(s, 'n2', 'They are scanned by the clerk.', at(2)) as CallState;
+  assert.equal(edited.readThrough[k], 1);
+  assert.equal(notesRead(edited), 1, 'the edited note is read as a new one');
+  assert.ok(readSoFar(edited, k));
+  const p = prepareReading(edited, { ...ctx13, now: at(2, 10) });
+  assert.deepEqual(p.answers!.notes.map(n => n.id), ['n1', 'n2', 'n3'], 'from the note before it to the last');
+  assert.equal(applyReading(edited, p, nothing, { model: gold, at: at(2, 10), asked: [], list: list13 }).readThrough[k], 3);
+  assert.equal(removeNote(s, 'n2', at(2)).readThrough[k], 2);
 });
