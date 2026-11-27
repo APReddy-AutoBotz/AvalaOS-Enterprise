@@ -9,7 +9,7 @@ export interface Usage { input: number; output: number }
 /** Why an AI call or a stage failed. */
 export type FailureCode =
   | 'TRUNCATED' | 'TIMEOUT' | 'UNREACHABLE' | 'PROVIDER_ERROR' | 'REFUSED' | 'INVALID_OUTPUT'
-  | 'SETUP' | 'STOPPED' | 'OTHER';
+  | 'SETUP' | 'STOPPED' | 'NO_STEPS' | 'OTHER';
 
 /** A task that failed, with its code and the tokens its calls used, so they are counted all the same (F03). */
 export class TaskError extends Error {
@@ -33,6 +33,7 @@ export function classify(message: string): { code: FailureCode; detail: string }
   if (setup) return { code: 'SETUP', detail: message.slice(setup[0].length) };
   if (/^TIMEOUT\b/.test(message)) return { code: 'TIMEOUT', detail: '' };
   if (/^AI provider unreachable\b/.test(message)) return { code: 'UNREACHABLE', detail: '' };
+  if (/^NO_STEPS\b/.test(message)) return { code: 'NO_STEPS', detail: '' };
   const m = /^[A-Za-z0-9_]+: (TRUNCATED|REFUSED|INVALID_OUTPUT|PROVIDER_ERROR)\b ?(.*)$/s.exec(message);
   if (m) return { code: m[1] as FailureCode, detail: m[2].trim() };
   return { code: 'OTHER', detail: '' };
@@ -85,6 +86,9 @@ export function reasonFor(step: ReadingStep, code: FailureCode, detail = '', twi
       return lowerFirst(endWithStop(clip(detail || 'the AI connection is not set up for this.', 300)));
     case 'STOPPED':
       return 'the server stopped this step before it finished, at the time limit for one step. Try again; if it happens again, try fewer sources at a time.';
+    case 'NO_STEPS':
+      // The sources gave steps, but the merge's answer could not be matched to them, twice (pipeline.ts).
+      return 'the sources gave steps, but they could not be put together into a process, twice. Nothing in the process was changed. Read the sources again; if it happens again, add another source or let us know.';
     case 'OTHER':
       return 'something went wrong on our side. Try again; if it happens again, let us know.';
   }

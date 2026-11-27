@@ -29,7 +29,7 @@ import {
   TaskError, classify, codeOf, isStalled, plainFailure, spentOn, stepOfRun, STALL_MS, type FailureCode, type ReadingStep,
 } from '../../../domain/extract/failure.ts';
 import { reviewListing } from '../../../domain/extract/review.ts';
-import { finish } from '../../../domain/extract/pipeline.ts';
+import { finish, finishAgain, FLOW_AGAIN_PART, gaveNoSteps } from '../../../domain/extract/pipeline.ts';
 import { score } from '../../../eval/scorer.ts';
 import { CASES, GOLD, checkCaseFiles } from '../../../eval/corpus/cases.ts';
 import { parseDrawio } from '../../../domain/flowchart/drawio.ts';
@@ -388,7 +388,20 @@ async function stageAssemble(run: Run) {
   const facts = parts.find(p => p.part === 'merge:facts')?.output;
   const review = parts.find(p => p.part === 'review:flow')?.output ?? null;
   const name = run.kind === 'eval' ? CASES[run.case_id!].processName : run.input.processName ?? 'Process';
-  const { model, report } = finish(name, set, flow, facts, review);
+  let { model, report } = finish(name, set, flow, facts, review);
+  // Steps in the sources but none in the process: the flow merge's answer named no candidate the process could
+  // use. Asked once more, kept as its own part (a repeated assembly reuses it), assembled without the review;
+  // still none, and the run ends with a sentence a person can act on (NO_STEPS, domain/extract/failure.ts).
+  if (gaveNoSteps(set, model)) {
+    let again = parts.find(p => p.part === FLOW_AGAIN_PART)?.output;
+    if (!again) {
+      const conn = await connectionFor(run);
+      const r = await counted(run, conn, mergeFlow.id, () => runTask(conn, mergeFlow, { listing: flowListing(set) }));
+      await putPart(run.id, FLOW_AGAIN_PART, r.data, r.usage);
+      again = r.data;
+    }
+    ({ model, report } = finishAgain(name, set, again, facts));
+  }
   const result: Record<string, unknown> = { model, report: { ...report, droppedQuotes: dropped, candidates: set.items.length }, model_name: MODEL };
   if (run.kind === 'eval') {
     const gold = run.input.gold;
