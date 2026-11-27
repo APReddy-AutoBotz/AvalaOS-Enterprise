@@ -134,3 +134,24 @@ test('how far each question was read is kept, read back without trusting it, and
   assert.deepEqual(mergeCalls(s, other).readThrough, { a: 2, b: 1, c: 3 });
   assert.deepEqual(newCall({ processId: 'p-1', at: at(0), attendees: [], minutes: 30 }).readThrough, {});
 });
+
+test('two copies merged: a note only one copy had is never counted as read by the other\'s questions', () => {
+  const at = (m: number) => new Date(Date.UTC(2026, 10, 27, 10, m)).toISOString();
+  let mine = newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business' }], minutes: 30 });
+  mine = addNote(mine, { id: 'n1', at: at(1), text: 'Made-up note one.' }) as CallState;
+  mine = addNote(mine, { id: 'n3', at: at(3), text: 'Made-up note three.' }) as CallState;
+  mine = { ...mine, read: ['n1', 'n3'], readThrough: { q: 2 }, changedAt: at(4) };
+  // The other tab typed a note at 10:02 that this copy never had, and read nothing.
+  let theirs = newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business' }], minutes: 30 });
+  theirs = addNote(theirs, { id: 'n1', at: at(1), text: 'Made-up note one.' }) as CallState;
+  theirs = addNote(theirs, { id: 'n2', at: at(2), text: 'Made-up note two, from the other tab.' }) as CallState;
+  theirs = { ...theirs, changedAt: at(5) };
+  const m = mergeCalls(mine, theirs);
+  assert.deepEqual(m.notes.map(n => n.id), ['n1', 'n2', 'n3']);
+  assert.deepEqual(m.readThrough, { q: 1 }, 'read through n1 only: n2 came from the other copy');
+  // A note changed in the other copy is not read either.
+  const changed = { ...theirs, notes: [theirs.notes[0]!, { ...mine.notes[1]!, text: 'Made-up note three, changed.', editedAt: at(6) }], changedAt: at(6) };
+  assert.deepEqual(mergeCalls(mine, changed).readThrough, { q: 1 });
+  // With nothing new from the other copy, nothing changes.
+  assert.deepEqual(mergeCalls(mine, { ...mine, changedAt: at(7) }).readThrough, { q: 2 });
+});

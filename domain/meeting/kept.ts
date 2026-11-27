@@ -185,8 +185,7 @@ export function mergeCalls(mine: CallState, theirs: CallState): CallState {
   return {
     ...base, notes, removed,
     read: union(base.read, other.read).filter(id => ids.has(id)),
-    // Read against fewer notes in either copy counts: a question is never taken as read further than it was.
-    readThrough: Object.fromEntries([...new Set([...Object.keys(base.readThrough), ...Object.keys(other.readThrough)])].map(k => [k, Math.min(base.readThrough[k] ?? Infinity, other.readThrough[k] ?? Infinity, notes.length)])),
+    readThrough: mergedReadThrough(base, other, notes),
     lastReadAt: later(base.lastReadAt ?? undefined, other.lastReadAt ?? undefined) ?? null,
     readings: Math.max(base.readings, other.readings),
     found: byKey([...base.found, ...other.found], f => f.itemKey).filter(f => ids.has(f.noteId)),
@@ -196,6 +195,24 @@ export function mergeCalls(mine: CallState, theirs: CallState): CallState {
     leftWith: byKey([...base.leftWith, ...other.leftWith], l => l.key),
     use: { tokens: Math.max(base.use.tokens, other.use.tokens), calls: Math.max(base.use.calls, other.use.calls) },
   };
+}
+
+/**
+ * How far each question was read, in the merged notes: in each copy, the merged notes from the first up to the first
+ * one that copy had not read for it (a note it never had, or one changed since), so notes that came only from the
+ * other copy are never counted as read; the lesser of the two copies that read it.
+ */
+function mergedReadThrough(a: CallState, b: CallState, notes: CallNote[]): Record<string, number> {
+  const upTo = (c: CallState, n: number) => {
+    const seen = new Set(c.notes.slice(0, n).map(x => `${x.id}\u0000${x.text}`));
+    const i = notes.findIndex(x => !seen.has(`${x.id}\u0000${x.text}`));
+    return i < 0 ? notes.length : i;
+  };
+  const out: Record<string, number> = {};
+  for (const k of new Set([...Object.keys(a.readThrough), ...Object.keys(b.readThrough)])) {
+    out[k] = Math.min(...[a, b].filter(c => k in c.readThrough).map(c => upTo(c, c.readThrough[k]!)));
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- notes
