@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { keysToForget } from '../site/storage.ts';
 import { addNote, CALL_KEY_PREFIX, CALL_LIMITS, callAgeDays, callKey, continueCall, editNote, mergeCalls, newCall, notesFile, notesFileName, readCall, removeNote, STALE_DAYS, unfinishedLine, type CallState } from './kept.ts';
-import { afterCallUse, CALL_CAP, capReachedDuringCall, roomAtEnd, roomDuringCall } from './limits.ts';
+import { afterCallUse, CALL_CAP, capFor, capReachedDuringCall, roomAtEnd, roomDuringCall } from './limits.ts';
 
 const at = (min: number) => new Date(Date.UTC(2026, 10, 26, 14, 2 + min)).toISOString();
 const start = () => newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business', name: 'Priya' }], minutes: 30 });
@@ -98,15 +98,25 @@ test('"Download my notes": one line per note, nothing else', () => {
   assert.equal(notesFile(start()), '');
 });
 
-test('the cap: 150,000 tokens and 50 calls, with 20,000 tokens and 3 calls kept for the end reading', () => {
-  assert.deepEqual(CALL_CAP, { tokens: 150_000, calls: 50, keptForEnd: { tokens: 20_000, calls: 3 } });
-  assert.ok(roomDuringCall({ tokens: 129_999, calls: 45 }, 2));
-  assert.ok(!roomDuringCall({ tokens: 130_000, calls: 0 }, 2), 'readings stop at 130,000 tokens');
-  assert.ok(!roomDuringCall({ tokens: 0, calls: 46 }, 2), 'or when a reading would take the calls past 47');
-  assert.ok(capReachedDuringCall({ tokens: 130_000, calls: 0 }));
-  assert.ok(roomAtEnd({ tokens: 130_000, calls: 47 }, 2), 'the end reading still runs');
-  assert.ok(!roomAtEnd({ tokens: 150_000, calls: 0 }, 1));
-  assert.ok(!roomAtEnd({ tokens: 0, calls: 49 }, 2));
+test('the cap scales with the call: 150,000 tokens and 70 calls for each 30 minutes, with the end reading\'s share scaled the same way', () => {
+  assert.deepEqual(CALL_CAP, { tokens: 150_000, calls: 70, keptForEnd: { tokens: 20_000, calls: 3 } });
+  assert.deepEqual(capFor(30), { tokens: 150_000, calls: 70, keptForEnd: { tokens: 20_000, calls: 3 } });
+  assert.deepEqual(capFor(45), { tokens: 225_000, calls: 105, keptForEnd: { tokens: 30_000, calls: 5 } });
+  assert.deepEqual(capFor(60), { tokens: 300_000, calls: 140, keptForEnd: { tokens: 40_000, calls: 6 } });
+  // 30 minutes: readings stop at 130,000 tokens, or when a reading would take the calls past 67.
+  assert.ok(roomDuringCall({ tokens: 129_999, calls: 65 }, 2, 30));
+  assert.ok(!roomDuringCall({ tokens: 130_000, calls: 0 }, 2, 30));
+  assert.ok(!roomDuringCall({ tokens: 0, calls: 66 }, 2, 30));
+  assert.ok(capReachedDuringCall({ tokens: 130_000, calls: 0 }, 30));
+  // 60 minutes: twice the room.
+  assert.ok(roomDuringCall({ tokens: 259_999, calls: 132 }, 2, 60));
+  assert.ok(!roomDuringCall({ tokens: 260_000, calls: 0 }, 2, 60));
+  assert.ok(!roomDuringCall({ tokens: 0, calls: 133 }, 2, 60));
+  // The end reading still runs within the whole cap.
+  assert.ok(roomAtEnd({ tokens: 130_000, calls: 67 }, 2, 30));
+  assert.ok(!roomAtEnd({ tokens: 150_000, calls: 0 }, 1, 30));
+  assert.ok(!roomAtEnd({ tokens: 0, calls: 69 }, 2, 30));
+  assert.ok(roomAtEnd({ tokens: 299_999, calls: 138 }, 2, 60));
   assert.deepEqual(afterCallUse({ tokens: 10, calls: 1 }, { input: 100, output: 20 }), { tokens: 130, calls: 2 });
   assert.deepEqual(afterCallUse({ tokens: 10, calls: 1 }, null), { tokens: 10, calls: 2 }, 'a call with no usage still counts as a call');
 });

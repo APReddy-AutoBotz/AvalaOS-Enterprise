@@ -6,7 +6,7 @@ import { buildCandidates, factsListing, flowListing, type CandidateSet, type Sou
 import { assembleModel, type MergeFactsOutput, type MergeFlowOutput } from './assemble.ts';
 import { FACTS_TASKS, mergeFlow, reviewFlow, sourceFacts, sourceSteps } from './tasks.ts';
 import { factsProgress, joinFacts, listingKinds, splitAfter, startParts, type FactsStart } from './factsParts.ts';
-import { codeOf, spentOn } from './failure.ts';
+import { codeOf, spentOn, TaskError } from './failure.ts';
 import { applyReview, reviewListing, type ReviewOutput } from './review.ts';
 
 export interface Usage { input: number; output: number }
@@ -78,7 +78,28 @@ export async function runReviewStage(run: RunTask, flow: MergeFlowOutput, set: C
 export function finish(processName: string, set: CandidateSet, flow: MergeFlowOutput, facts: MergeFactsOutput, review: ReviewOutput | null) {
   const reviewed = review ? applyReview(flow, review, set) : { flow, applied: [], skipped: [] };
   const { model, report } = assembleModel(processName, set, reviewed.flow, facts);
-  return { model, report: { ...report, review: { applied: reviewed.applied, skipped: reviewed.skipped } } };
+  return { model, report: { ...report, review: { applied: reviewed.applied, skipped: reviewed.skipped }, flowMergedAgain: false } };
+}
+
+/**
+ * A reading whose sources gave steps never ends with none (27 November 2026): when the candidates hold a step
+ * and the process has none, the flow merge's answer named no candidate the process could use, and the merge
+ * is asked once more (`FLOW_AGAIN_PART` on the server).
+ */
+export const gaveNoSteps = (set: CandidateSet, model: { steps: unknown[] }) => set.items.some(c => c.kind === 'step') && model.steps.length === 0;
+/** Where the server keeps the second flow merge's answer: a merge part that moves no stage on. */
+export const FLOW_AGAIN_PART = 'merge:flow:again';
+/** The failure when the second answer gives no step either (failure.ts says it in plain words). */
+export const noStepsError = () => new TaskError('NO_STEPS: the sources gave step candidates, but no step came together after a second flow merge', { input: 0, output: 0 }, 'NO_STEPS');
+
+/**
+ * Assembly with the second flow merge's answer. The review is not applied: its keys name the first answer's
+ * steps. Throws NO_STEPS when there is still no step.
+ */
+export function finishAgain(processName: string, set: CandidateSet, flow: MergeFlowOutput, facts: MergeFactsOutput) {
+  const out = finish(processName, set, flow, facts, null);
+  if (gaveNoSteps(set, out.model)) throw noStepsError();
+  return { model: out.model, report: { ...out.report, flowMergedAgain: true } };
 }
 
 /** The whole pipeline in one call, for tests and local runs. */
@@ -87,7 +108,13 @@ export async function extractProcessModel(run: RunTask, processName: string, sou
   const set = buildCandidates(sources, stage1.map(r => r.output), sources.flatMap(s => s.segments));
   const merged = await runMergeStage(run, set, start);
   const reviewed = await runReviewStage(run, merged.flow, set);
-  const { model, report } = finish(processName, set, merged.flow, merged.facts, reviewed.review);
-  const usage = [...stage1.map(r => r.usage), merged.usage, reviewed.usage].reduce(addUsage, { input: 0, output: 0 });
+  let { model, report } = finish(processName, set, merged.flow, merged.facts, reviewed.review);
+  const used = [...stage1.map(r => r.usage), merged.usage, reviewed.usage];
+  if (gaveNoSteps(set, model)) {
+    const again = await run(mergeFlow, { listing: flowListing(set) });
+    used.push(again.usage);
+    ({ model, report } = finishAgain(processName, set, again.data as MergeFlowOutput, merged.facts));
+  }
+  const usage = used.reduce(addUsage, { input: 0, output: 0 });
   return { model, report: { ...report, droppedQuotes: stage1.flatMap(r => r.dropped), candidates: set.items.length }, usage, factsParts: merged.factsParts };
 }

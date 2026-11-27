@@ -6,7 +6,7 @@
 //
 // The rules, in order: when to read (at most once a minute, the notes added since the last reading with the one
 // before as context); what one reading asks (at most 12 questions from the list, those marked Asked first, and at
-// most 3 being held); the hold (a question raised from the notes waits one reading, or two minutes, and is dropped
+// most 3 being held; a choice is asked as a plain question only to learn whether it is answered); the hold (a question raised from the notes waits one reading, or two minutes, and is dropped
 // if the notes answer it, so the panel does not suggest what is about to be said); the next question (a follow-up to
 // the last two notes first, at most one in a row, then the list, then other raised questions, then what was
 // skipped; only questions someone on the call can answer). The same notes, list and replies give the same result.
@@ -35,7 +35,7 @@ export const unread = (s: CallState): CallNote[] => s.notes.filter(n => !s.read.
 
 /** Whether a reading is due: unread notes, a minute since the last one (unless the analyst pressed "Read now"), and room under the cap. */
 export function readingDue(s: CallState, now: string, manual = false): boolean {
-  if (!unread(s).length || !roomDuringCall(s.use, CALLS_A_READING)) return false;
+  if (!unread(s).length || !roomDuringCall(s.use, CALLS_A_READING, s.minutes)) return false;
   return manual || !s.lastReadAt || Date.parse(now) - Date.parse(s.lastReadAt) >= READ_EVERY_MS;
 }
 
@@ -65,6 +65,21 @@ export function itemFor(card: Card, owner: QOwner, t: Triage): TriageItem | null
   if (card.key.startsWith('input:')) return card.key === 'input:volume' || card.key === 'input:time' ? { ...base, kind: 'number' } : null;
   return { ...base, kind: 'free' };
 }
+
+/**
+ * The question a reading sends for a card. A choice (the first cards, a conflict, a fact to pick) is sent as a plain
+ * question only to learn whether the notes already answer it, so it is not suggested again (owner, 26 November 2026,
+ * on the dry run); the analyst still picks the answer in the review. Everything else is `itemFor`'s question.
+ */
+export function readingItemFor(card: Card, owner: QOwner, t: Triage): TriageItem | null {
+  const it = itemFor(card, owner, t);
+  if (it) return it;
+  if (!card.question.trim()) return null;
+  return { key: answerKey(card, t), question: card.question, target: card.target, questionIds: [], group: 'detail', owner, affects: card.updates, kind: 'free', assignedTo: null, deferred: false };
+}
+
+/** A triage item that is a choice, as a plain question, for the same reason. */
+const plainItem = (it: TriageItem): TriageItem => (it.kind === 'choice' ? { ...it, kind: 'free' } : it);
 
 const dismissKey = (f: Pick<Found, 'itemKey' | 'noteId'>) => `${f.itemKey}@${f.noteId}`;
 export const isAnswered = (s: CallState, key: string): boolean => s.found.some(f => f.itemKey === key);
@@ -108,11 +123,11 @@ export function prepareReading(s: CallState, ctx: PrepContext): ReadingPrep {
   const items: TriageItem[] = [];
   const keys = new Set<string>();
   const push = (it: TriageItem | null) => { if (it && !keys.has(it.key)) { keys.add(it.key); items.push(it); return true; } return false; };
-  for (const x of [...asked, ...rest]) { if (items.length >= READING_LIMITS.list) break; push(itemFor(x.card, x.owner, t)); }
+  for (const x of [...asked, ...rest]) { if (items.length >= READING_LIMITS.list) break; push(readingItemFor(x.card, x.owner, t)); }
   const held: ReadingPrep['held'] = [];
   for (const r of s.raised.filter(x => x.state === 'held').sort((a, b) => a.heldAt - b.heldAt)) {
     if (held.length >= READING_LIMITS.held) break;
-    const it = itemFor(r.card, r.owner, t);
+    const it = readingItemFor(r.card, r.owner, t);
     if (it && push(it)) held.push({ cardKey: r.card.key, answerKey: it.key });
   }
   const text = notes.map(n => flat(n.text)).join('\n\n');
@@ -275,16 +290,16 @@ export function prepareEnd(s: CallState, ctx: { model: ProcessModel; list: Brief
   const keys = new Set<string>();
   const push = (it: TriageItem | null) => { if (it && !keys.has(it.key) && !isAnswered(s, it.key)) { keys.add(it.key); all.push(it); } };
   const byKey = (k: string) => ctx.list.find(x => x.card.key === k);
-  for (const k of [...s.asked].reverse()) { const x = byKey(k); if (x) push(itemFor(x.card, x.owner, t)); const r = s.raised.find(y => y.card.key === k); if (r) push(itemFor(r.card, r.owner, t)); }
-  for (const x of ctx.list) push(itemFor(x.card, x.owner, t));
-  for (const r of s.raised.filter(y => y.state !== 'answered')) push(itemFor(r.card, r.owner, t));
-  for (const it of [...t.items].filter(y => !y.deferred).sort((a, b) => (a.group === 'decides' ? 0 : 1) - (b.group === 'decides' ? 0 : 1))) push(it.kind === 'choice' ? null : it);
+  for (const k of [...s.asked].reverse()) { const x = byKey(k); if (x) push(readingItemFor(x.card, x.owner, t)); const r = s.raised.find(y => y.card.key === k); if (r) push(readingItemFor(r.card, r.owner, t)); }
+  for (const x of ctx.list) push(readingItemFor(x.card, x.owner, t));
+  for (const r of s.raised.filter(y => y.state !== 'answered')) push(readingItemFor(r.card, r.owner, t));
+  for (const it of [...t.items].filter(y => !y.deferred).sort((a, b) => (a.group === 'decides' ? 0 : 1) - (b.group === 'decides' ? 0 : 1))) push(plainItem(it));
   const cap = READING_LIMITS.endBatch * READING_LIMITS.endBatches;
   const picked = all.slice(0, cap);
   const text = s.notes.map(n => flat(n.text)).join('\n\n');
   const batches = [];
   for (let i = 0; i < picked.length && s.notes.length; i += READING_LIMITS.endBatch) {
-    if (!roomAtEnd(s.use, batches.length + 1)) break;
+    if (!roomAtEnd(s.use, batches.length + 1, s.minutes)) break;
     const items = picked.slice(i, i + READING_LIMITS.endBatch);
     batches.push({ items, ...notesSegments(ctx.model, items, text) });
   }
