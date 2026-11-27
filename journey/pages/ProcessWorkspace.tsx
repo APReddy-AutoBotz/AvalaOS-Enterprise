@@ -14,6 +14,8 @@ import { revisionStatus, STAGES, type StageId } from '../../domain/workspace/rou
 import { offMessage, stagesFor } from '../../domain/workspace/modules.ts';
 import { offersPurpose, purposeOf, purposeOffMessage, stagesForProcess, whatFollows } from '../../domain/plan/purpose.ts';
 import { openItemsNow } from '../../domain/questions/closedGaps.ts';
+import { GAPS_MARK, questionsLanding } from '../../domain/work/home.ts';
+import { openGaps } from '../process/openGaps.ts';
 import type { ProcessModel } from '../../domain/processModel/types.ts';
 import type { JourneyStore, ProcessRow, RevisionRow, Workspace } from '../store/types.ts';
 import type { Nav } from '../JourneyApp.tsx';
@@ -140,6 +142,21 @@ export function ProcessWorkspace({ store: base, nav, processId, stage, onWorkspa
   // A process opened by a link may belong to another workspace than the one the top bar shows: it follows.
   const processWorkspace = data && data !== 'missing' && data.workspace ? data.workspace.id : null;
   React.useEffect(() => { if (processWorkspace) onWorkspace?.(processWorkspace); }, [processWorkspace, onWorkspace]);
+  // A link from the weekday email to questions (?gaps=all): Closing the gaps where this process answers them,
+  // on Documents or, without that stage (the "Assess" set-up), on the Assessment stage (questionsLanding). Once,
+  // and the marker leaves the address, so a reload opens the stage alone.
+  const gapsAsked = React.useRef(typeof location !== 'undefined' && new URLSearchParams(location.search).get(GAPS_MARK.name) === GAPS_MARK.value);
+  React.useEffect(() => {
+    if (!gapsAsked.current || !shown) return;
+    gapsAsked.current = false;
+    const params = new URLSearchParams(location.search);
+    params.delete(GAPS_MARK.name);
+    const rest = params.toString();
+    history.replaceState(history.state, '', `${location.pathname}${rest ? `?${rest}` : ''}${location.hash}`);
+    const landing = questionsLanding(stagesForProcess(shown.workspace?.modules, shown.model));
+    if (landing.gaps) openGaps(processId, landing.gaps, 'all');
+    if (landing.stage !== stage) nav.go({ page: 'process', processId, stage: landing.stage }, { replace: true });
+  }, [shown, processId, stage, nav]);
   // On a narrow screen the stage rail scrolls sideways: keep the open stage in view.
   const loaded = Boolean(data && data !== 'missing');
   React.useEffect(() => {

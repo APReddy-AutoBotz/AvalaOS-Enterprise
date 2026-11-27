@@ -3,6 +3,7 @@
 // merged steps pool their candidates and systems; removed steps are bypassed in the flow.
 import { procedureSection, type CandidateSet } from './candidates.ts';
 import type { MergeFlowOutput } from './assemble.ts';
+import { memberReader } from './members.ts';
 
 export interface ReviewOutput {
   merges: { step: string; into: string; reason: string }[];
@@ -15,10 +16,11 @@ export const MAX_REVIEW_SHARE = 0.4;
 const clip = (s: unknown, n: number) => { const t = String(s ?? '').replace(/\s+/g, ' ').trim(); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 
 export function reviewListing(flow: MergeFlowOutput, set: CandidateSet): string {
-  const byId = new Map(set.items.map(c => [c.id, c]));
+  // Members by id or by the place the listing prints, as assembly reads them (members.ts).
+  const reader = memberReader(set);
   const role = new Map(flow.roles.map(r => [r.key, r.name]));
   const steps = flow.steps.map(s => {
-    const from = s.members.map(id => byId.get(id)).filter(Boolean).map(c => `"${clip(c!.data.name, 60)}" (${c!.sourceId})`);
+    const from = reader.readAll(s.members, ['step']).map(c => `"${clip(c.data.name, 60)}" (${c.sourceId})`);
     const shown = from.slice(0, 5).join(', ') + (from.length > 5 ? `, and ${from.length - 5} more` : '');
     return `${s.key} ${clip(s.name, 80)} — ${clip(s.description, 160)} | roles: ${s.roles.map(k => role.get(k) ?? k).join(', ') || '—'} | from: ${shown || '—'}`;
   });
@@ -35,8 +37,8 @@ export function reviewListing(flow: MergeFlowOutput, set: CandidateSet): string 
  */
 export function applyReview(flow: MergeFlowOutput, review: ReviewOutput, set?: CandidateSet): { flow: MergeFlowOutput; applied: string[]; skipped: string[] } {
   const out: MergeFlowOutput = structuredClone(flow);
-  const byId = new Map((set?.items ?? []).map(c => [c.id, c]));
-  const sectionsOf = (members: string[]) => new Set(members.map(id => byId.get(id)).filter(Boolean).map(c => procedureSection(c!)).filter((x): x is string => !!x));
+  const reader = memberReader(set ?? { sources: [], items: [] });
+  const sectionsOf = (members: string[]) => new Set(reader.readAll(members, ['step']).map(c => procedureSection(c)).filter((x): x is string => !!x));
   /** True when `key` is the only remaining step built from one of its procedure sections. */
   const ownsSection = (key: string) => {
     const mine = sectionsOf(steps.get(key)?.members ?? []);

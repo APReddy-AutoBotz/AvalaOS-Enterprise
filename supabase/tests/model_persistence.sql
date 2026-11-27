@@ -8,6 +8,18 @@
 -- Group 7 replays patches produced by domain/processModel/patch.ts and compares the stored model
 -- with the model the domain code produced. Regenerate them if patch.ts changes how it diffs.
 
+-- Approving, through the shared body model_approve called until the migration model_approve_refusal (it now
+-- asks for a reload; the site approves through approve_version, tested in approved_versions.sql). Called under
+-- the caller's sign-in claims, which it reads, and returned to the role authenticated.
+create function pg_temp.approve_revision(target uuid, seq bigint) returns jsonb language plpgsql as $$
+declare r jsonb;
+begin
+  execute 'reset role';
+  r := app_private.approve_revision(target, seq);
+  execute 'set local role authenticated';
+  return r;
+end $$;
+
 do $test$
 declare
   admin_u uuid := gen_random_uuid();
@@ -133,7 +145,7 @@ begin
   if jsonb_array_length(public.model_history(p) -> 'revisions') <> 0 then raise exception 'TEST FAIL 5e: outsider sees history'; end if;
   perform set_config('request.jwt.claims', json_build_object('sub', editor_u, 'role', 'authenticated')::text, true);
   begin
-    perform public.model_approve(rev1, 1);
+    perform pg_temp.approve_revision(rev1, 1);
     raise exception 'TEST FAIL 5f: editor without approval rights approved';
   exception when sqlstate 'PT403' then null;
   end;
@@ -153,11 +165,11 @@ begin
   -- 6. Approval: approved revisions are frozen; a new draft copies the approved model; approving again supersedes.
   perform set_config('request.jwt.claims', json_build_object('sub', admin_u, 'role', 'authenticated')::text, true);
   begin
-    perform public.model_approve(rev1, 0);
+    perform pg_temp.approve_revision(rev1, 0);
     raise exception 'TEST FAIL 6: approved a stale draft';
   exception when sqlstate 'PT409' then null;
   end;
-  r := public.model_approve(rev1, 1);
+  r := pg_temp.approve_revision(rev1, 1);
   begin
     perform public.model_save_patch(rev1, 1, '[{"op":"replace","path":"/meta/name","value":"After approval"}]'::jsonb);
     raise exception 'TEST FAIL 6b: edited an approved revision';
@@ -169,7 +181,7 @@ begin
   if (select based_on from public.process_model_revisions where id = rev2) <> rev1 then raise exception 'TEST FAIL 6d: based_on'; end if;
   perform public.model_save_patch(rev2, 0, '[{"op":"replace","path":"/meta/name","value":"Vendor invoice processing (India)"}]'::jsonb);
   if (select model -> 'meta' ->> 'name' from public.process_model_revisions where id = rev1) <> 'Vendor invoice processing' then raise exception 'TEST FAIL 6e: editing the draft changed the approved revision'; end if;
-  perform public.model_approve(rev2, 1);
+  perform pg_temp.approve_revision(rev2, 1);
   if (select state from public.process_model_revisions where id = rev1) <> 'superseded' or (select state from public.process_model_revisions where id = rev2) <> 'approved' then raise exception 'TEST FAIL 6f: states after second approval'; end if;
   select count(*) into n from public.process_model_revisions where process_id = p and state = 'working';
   if n <> 0 then raise exception 'TEST FAIL 6g: % working drafts after approval', n; end if;

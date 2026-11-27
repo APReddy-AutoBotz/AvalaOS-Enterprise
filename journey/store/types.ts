@@ -284,7 +284,6 @@ export interface JourneyStore {
   startDraft(processId: string): Promise<Draft>;
   /** Saves one edit to the working draft. 409 when the draft moved on or was approved: reload and redo. */
   savePatch(revisionId: string, expectedSeq: number, patch: JsonPatchOp[], origin: 'user' | 'extraction' | 'diagram' | 'import', summary: string): Promise<{ seq: number }>;
-  approve(revisionId: string, expectedSeq: number): Promise<void>;
   /** Package 14: where each process of a workspace (or one process) stands with its approved versions. */
   versionStates(workspaceId: string, processId?: string): Promise<VersionStateRow[]>;
   /** Approves and keeps the documents in one step: both happen or neither. Approvers only. 409 when someone saved or approved meanwhile. */

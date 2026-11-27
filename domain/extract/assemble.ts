@@ -4,6 +4,7 @@
 // - an interface is only "confirmed" when every candidate behind it says so;
 // - missing information becomes open questions (merge questions plus the deterministic gap pass);
 // - the result must pass validateModel.
+import { memberReader, type MemberCounts } from './members.ts';
 import type { AccessMethod, AccessMethodKind, AccessStatus, BusinessRule, Conflict, ElementTarget, ExceptionPath, Flow, Gateway, Metric, OpenQuestion, ProcessEvent, ProcessModel, Role, SourceRef, Step, SystemRef } from '../processModel/types.ts';
 import { PROCESS_MODEL_SCHEMA_VERSION } from '../processModel/types.ts';
 import { validateModel, errorsOf } from '../processModel/validate.ts';
@@ -46,6 +47,8 @@ export interface AssembleReport {
   questionsFromGaps: number;
   /** Ways in whose status assembly corrected (notSwitchedOn), each with the passage that decided it. */
   corrected: AccessCorrection[];
+  /** Members read by the place the listing prints in place of the id, and members that named no candidate (members.ts). */
+  members: MemberCounts;
 }
 
 // ---- small helpers --------------------------------------------------------------------------
@@ -133,10 +136,10 @@ export function asksAvailabilityOf(question: string, a: AccessMethod): boolean {
 // ---- assemble -------------------------------------------------------------------------------
 
 export function assembleModel(processName: string, set: CandidateSet, flow: MergeFlowOutput, facts: MergeFactsOutput): { model: ProcessModel; report: AssembleReport } {
-  const byId = new Map(set.items.map(c => [c.id, c]));
   const dropped: string[] = [];
-  /** Members that exist and are of an allowed kind. */
-  const membersOf = (ids: string[], kinds: Candidate['kind'][]) => [...new Set(ids)].map(id => byId.get(id)).filter((c): c is Candidate => !!c && kinds.includes(c.kind));
+  /** Members that name a candidate of an allowed kind: by id, or by the place the listing prints (members.ts). */
+  const reader = memberReader(set);
+  const membersOf = (ids: string[], kinds: Candidate['kind'][]) => reader.readAll(ids, kinds);
   const refs = (cs: Candidate[]) => dedupeRefs(cs.map(c => c.ref));
   const used = new Set<string>();
   const nextId = (prefix: string) => { let n = 1; while (used.has(`${prefix}-${n}`)) n++; used.add(`${prefix}-${n}`); return `${prefix}-${n}`; };
@@ -362,7 +365,7 @@ export function assembleModel(processName: string, set: CandidateSet, flow: Merg
 
   const v = validateModel(model);
   if (!v.valid) throw new Error(`Assembled model is invalid: ${errorsOf(v).slice(0, 5).map(e => `${e.path} ${e.message}`).join('; ')}`);
-  return { model, report: { dropped, questionsFromGaps: questions.length - before, corrected: corrections } };
+  return { model, report: { dropped, questionsFromGaps: questions.length - before, corrected: corrections, members: { ...reader.counts } } };
 }
 
 /** An element supported only by sources read from images is "inferred", not "stated". */
