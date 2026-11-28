@@ -8,7 +8,7 @@ import type { ElementTarget, ProcessModel, SourceLocator } from '../processModel
 import { orderedSteps } from '../processModel/selectors.ts';
 import { sameQuestion } from '../questions/triage.ts';
 import { makeCard, type Card } from './card.ts';
-import { asksAboutFuture, hasWantedCue, ruleNotKept, sentenceAround } from './wanted.ts';
+import { hasWantedCue, ruleNotKept, sentenceAround } from './wanted.ts';
 
 const str = { type: 'string' } as const;
 
@@ -152,9 +152,10 @@ export interface NoticeContext {
  * was given to; a question that is too long or carries a link, address or number; one already asked or
  * settled; more than five; a wanted statement without a wanting word. A statement that something should happen
  * and goes on with "but in practice" or the like is a rule of today's work that is not kept (`ruleNotKept`): it is
- * asked about ("What happens today when this is not done: …?"), never marked wanted. A question whose words lie
- * inside, or hold, a statement of what is wanted (in this reply or kept before), or that asks about the future ("in
- * future", "would like", "ideally" …, `asksAboutFuture`), is about the wish and not raised. What is left becomes cards, in
+ * asked about ("What happens today when this is not done: …?"), never marked wanted. A question whose quoted words lie
+ * inside, or hold, a statement of what is wanted (in this reply or kept before) is about the wish and not raised; the
+ * question's own words are not judged (review, 28 November 2026: "Who reviews a new application …?" is about today).
+ * What is left becomes cards, in
  * the order said, each quoting the words that raised it.
  */
 export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply, ctx: NoticeContext): Noticed {
@@ -183,7 +184,7 @@ export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply
       : !question || question.length > NOTICE_LIMITS.question || why.length > NOTICE_LIMITS.why ? 'too_long'
       : CONTACT.test(question) || CONTACT.test(why) ? 'contact_or_link'
       : asked.some(a => sameQuestion(a, question)) ? 'already_asked'
-      : onAWish(excerpt) || asksAboutFuture(question) ? 'about_wanted'
+      : onAWish(excerpt) ? 'about_wanted'
       : null;
     if (reason) { dropped.push({ what: 'question', reason }); continue; }
     const target = targetFor(m, q.pattern as Pattern, q.about ?? '');

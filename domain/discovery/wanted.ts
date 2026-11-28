@@ -18,19 +18,6 @@ export const WANTED_CUES: readonly RegExp[] = [
 export const hasWantedCue = (text: string): boolean => WANTED_CUES.some(re => re.test(text));
 
 /**
- * Words that put a question in the future (owner's walk, 28 November 2026: "What is needed for … to be ordered
- * automatically in future?" was raised beside the wish it asked about). Narrower than `WANTED_CUES`: "should",
- * "will", "want" and "needs to" are common in questions about today's work ("Who needs to approve it?").
- */
-export const FUTURE_CUES: readonly RegExp[] = [
-  /\bin\s+(the\s+)?future\b/i, /\bgoing\s+forward\b/i, /\bfrom\s+now\s+on\b/i, /\bwould\s+like\b/i, /\bideally\b/i, /\bwish\b/i,
-  /\bnew\s+(system|tool|application|app|process|portal)\b/i, /\bonce\s+(it|the\s+\w+)\s+is\s+(live|built|in\s+place)\b/i,
-];
-
-/** A question about what is wanted in future, not about the work done today. */
-export const asksAboutFuture = (question: string): boolean => FUTURE_CUES.some(re => re.test(question));
-
-/**
  * A rule of today's work that is not kept (measure 4 of the replay, the owner's choice of 26 November 2026): a
  * sentence that says something "should" (or is supposed to) happen and goes on with "but in practice", "but today"
  * or the like says how the work goes today, not what is wanted in future ("The badge should be cancelled, but in
