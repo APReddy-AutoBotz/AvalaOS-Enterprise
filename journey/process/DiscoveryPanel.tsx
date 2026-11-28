@@ -42,6 +42,8 @@ import {
 import { removeStep } from '../../domain/processModel/patch.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
 import { FieldInput } from './InputField.tsx';
+import { openCall } from './openCall.ts';
+import { CALL_WORDS } from '../../domain/meeting/words.ts';
 import { ChangeReview, coarsePatch } from './SourcesStage.tsx';
 import { REVIEW_WORDS } from '../../domain/extract/reviewWords.ts';
 import { useVoice, voiceProps } from './voice.ts';
@@ -570,7 +572,7 @@ function FirstReading({ store, process, run, lastRead, heldBack, noticing, readi
   );
 }
 
-function Cards({ model, asksPurpose, skipped, raised, onActed, onSaid, waitingKeys, keys, capped, boxVoice, saved, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
+function Cards({ process, model, asksPurpose, skipped, raised, onActed, onSaid, waitingKeys, keys, capped, boxVoice, saved, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
   /** Questions raised from what was said, not yet acted on (5b). */
   raised: Card[]; onActed: (card: Card) => Promise<void>; onSaid: (card: Card, words: string) => void;
   store: JourneyStore; process: ProcessRow; model: ProcessModel; asksPurpose: boolean; skipped: string[]; waitingKeys: string[]; keys: string[];
@@ -593,14 +595,14 @@ function Cards({ model, asksPurpose, skipped, raised, onActed, onSaid, waitingKe
           callAi={callAi} saveOp={saveOp} commit={commit} addWords={addWords} onAllowance={onAllowance} onNotice={onNotice} onError={onError} onOpenStage={onOpenStage} waiting={waitingKeys.length}
           onActed={() => onActed(card)} onSaid={words => onSaid(card, words)} /></React.Fragment>
       ) : (
-        <Summary summary={summary} onOpenStage={onOpenStage} />
+        <Summary summary={summary} onOpenStage={onOpenStage} onPrepareCall={() => openCall(process.id)} />
       )}
       {card && <button type="button" className="mt-4 text-sm font-medium text-[#002C4B] underline decoration-[#FFBC03] decoration-2 underline-offset-4" onClick={() => setShowSummary(s => !s)}>{showSummary ? 'Back to the questions' : 'Where discovery stands'}</button>}
     </>
   );
 }
 
-function Summary({ summary, onOpenStage }: { summary: ReturnType<typeof sessionSummary>; onOpenStage: (stage: 'sources' | 'process' | 'gaps') => void }) {
+function Summary({ summary, onOpenStage, onPrepareCall }: { summary: ReturnType<typeof sessionSummary>; onOpenStage: (stage: 'sources' | 'process' | 'gaps') => void; onPrepareCall: () => void }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4" data-testid="discovery-summary">
       <h3 className="font-display text-lg font-semibold text-slate-900">Where discovery stands</h3>
@@ -608,7 +610,10 @@ function Summary({ summary, onOpenStage }: { summary: ReturnType<typeof sessionS
       <p className="mt-2 text-sm leading-6 text-slate-700">{summary.closing}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant="secondary" onClick={() => onOpenStage('gaps')}>Send questions to the people who know</Button>
+        <Button variant="secondary" onClick={onPrepareCall}>{CALL_WORDS.prepare}</Button>
       </div>
+      {/* Package C, C4a: a call with the people who know, from where discovery stands. */}
+      <p className="mt-2 text-xs leading-5 text-slate-500" data-testid="discovery-prepare-call">{CALL_WORDS.prepareFromDiscovery}</p>
     </div>
   );
 }

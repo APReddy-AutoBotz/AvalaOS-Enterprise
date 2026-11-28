@@ -5,7 +5,8 @@
 // written through the existing operations. Pure rules here: the screen applies the edit when the analyst saves.
 import type { IngestSegment } from '../ingest/segment.ts';
 import type { ElementTarget, ProcessModel, RaisedBy, SourceLocator, SourceRef } from '../processModel/types.ts';
-import { addQuestion, deferQuestion, type OpResult } from '../processModel/patch.ts';
+import { addQuestion, deferQuestion, keepWanted, type OpResult } from '../processModel/patch.ts';
+import { holdsBackWanted, insideWanted } from '../discovery/wanted.ts';
 import { all, buildAnswer, record, type Op } from '../questions/answer.ts';
 import type { Triage, TriageItem } from '../questions/triage.ts';
 import type { Card } from '../discovery/card.ts';
@@ -83,6 +84,11 @@ export interface ReviewAnswer {
    * operation, which keeps no quote, so the record does not cite the note (preview walk, 28 November 2026).
    */
   input: boolean;
+  /**
+   * Its every quote lies inside a statement of what should change (C4a): not ticked, since it is not part of the work
+   * done today; the statement itself is listed under "What you want to change".
+   */
+  heldBack: boolean;
   /** When it differs from a value a person confirmed: what Save does instead. */
   line: string | null;
   /** A number of cases with no period in its note: the period is asked before it can be kept. */
@@ -114,6 +120,9 @@ function chooseOf(key: string, ctx: ReviewContext): { card: Card; item?: TriageI
   return null;
 }
 
+/** A statement of what should change, noticed in the notes (C4a): not ticked by default (owner, 28 November 2026). */
+export interface ReviewWanted { id: string; excerpt: string; noteId: string; time: string; ticked: false }
+
 export interface ReviewKeep { id: string; key: string; question: string; quote?: string; time?: string; asked: boolean; ticked: boolean; own: boolean }
 export interface ReviewLeft { id: string; key: string; question: string; name: string; ticked: boolean }
 
@@ -126,6 +135,8 @@ export interface Review {
   /** The analyst's own questions not answered. */
   own: ReviewKeep[];
   leftWith: ReviewLeft[];
+  /** "What you want to change": what the notes say should change, never a step or an answer about today's work. */
+  wanted: ReviewWanted[];
   /** Whether the notes raised or answered something about the shape of the process (the line under "About the shape"). */
   shape: boolean;
 }
@@ -139,6 +150,10 @@ export function buildReview(s: CallState, ctx: ReviewContext): Review {
   const note = (id: string) => s.notes.find(n => n.id === id);
   const answers: ReviewAnswer[] = [];
   const choose: ReviewChoose[] = [];
+  // What should change, as quotes of their notes: an answer quoted from inside one is held back (as Discovery holds back
+  // a reading's step), only where the work is done today, as there.
+  const wantedQuotes = s.wanted.map(w => ({ sourceId: w.noteId, excerpt: w.excerpt }));
+  const heldBack = (f: { noteId: string; quote: string }) => holdsBackWanted(ctx.model) && insideWanted({ sourceId: f.noteId, excerpt: f.quote }, wantedQuotes);
   for (const f of s.found) {
     const n = note(f.noteId);
     if (!n) continue;
@@ -151,10 +166,11 @@ export function buildReview(s: CallState, ctx: ReviewContext): Review {
     const o = originOf(f.itemKey, s, ctx);
     if (!o) continue;
     const needs = o.kind === 'input' ? figureNeeds(f.itemKey, n.text) : null;
+    const held = heldBack(f);
     const out = o.kind === 'item' ? answerAgainstConfirmed(ctx.model, { target: o.item.target, label: o.item.question, said: { value: f.display, quote: DRAFT_REF(f.quote) }, write: x => ({ model: x, patch: [] }) }) : null;
     answers.push({
       id: `answer:${f.itemKey}`, key: f.itemKey, question: o.item.question, display: f.display, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), certainty: f.certainty,
-      ticked: f.certainty === 'stated' && !needs, record: o.kind === 'input' ? figureText(f.itemKey, f.display, { period: periodFrom(n.text), unit: unitFrom(n.text) }) : f.display,
+      ticked: f.certainty === 'stated' && !needs && !held, heldBack: held, record: o.kind === 'input' ? figureText(f.itemKey, f.display, { period: periodFrom(n.text), unit: unitFrom(n.text) }) : f.display,
       input: o.kind === 'input', line: out?.line ?? null, needsPeriod: needs === 'period', needsUnit: needs === 'unit',
     });
   }
@@ -174,7 +190,8 @@ export function buildReview(s: CallState, ctx: ReviewContext): Review {
   const question = (key: string) => ctx.list.find(x => x.card.key === key)?.card.question ?? s.raised.find(r => r.card.key === key)?.card.question;
   const leftWith: ReviewLeft[] = s.leftWith.filter(l => question(l.key) && !answered.has(cardAnswerKey(l.key, s, ctx))).map(l => ({ id: `left:${l.key}`, key: l.key, question: question(l.key)!, name: l.name, ticked: true }));
   const shape = s.raised.some(r => r.card.target.kind === 'meta') || answers.some(a => ctx.list.some(x => answerKey(x.card, t) === a.key && x.card.group === 'shape'));
-  return { answers, choose, keepOpen, own, leftWith, shape };
+  const wanted: ReviewWanted[] = s.wanted.filter(w => note(w.noteId)).map((w, i) => ({ id: `wanted:${i}`, excerpt: w.excerpt, noteId: w.noteId, time: clock(note(w.noteId)!.at, ctx.timeZone), ticked: false }));
+  return { answers, choose, keepOpen, own, leftWith, wanted, shape };
 }
 
 const cardAnswerKey = (cardKey: string, s: CallState, ctx: { list: BriefItem[]; triage: Triage }) => {
@@ -205,7 +222,9 @@ const addOnce = (a: { target: ElementTarget; question: string; whyItMatters?: st
   return { model: r.model, patch: r.patch };
 };
 
-export interface CallEdit { op: Op; summary: string; counts: { answers: number; kept: number; left: number } }
+/** What Save writes, counted: answers, questions kept open, left with someone, and statements of what should change kept. */
+export interface CallCounts { answers: number; kept: number; left: number; wanted?: number }
+export interface CallEdit { op: Op; summary: string; counts: CallCounts }
 
 /**
  * The one edit of the record Save writes, with the notes already kept as `source`. Answers through `buildAnswer`
@@ -227,7 +246,7 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
   };
   const note = (excerpt: string) => `from ${key}: "${flat(excerpt).slice(0, 160)}"`;
   const ops: Op[] = [];
-  const counts = { answers: 0, kept: 0, left: 0 };
+  const counts: CallCounts = { answers: 0, kept: 0, left: 0, wanted: 0 };
 
   for (const a of review.answers.filter(x => choice.ticked.has(x.id))) {
     const f = s.found.find(x => x.itemKey === a.key);
@@ -284,6 +303,13 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
     const by = r ? raisedBy(r) : undefined;
     ops.push(m2 => deferQuestion(m2, { questionIds: item?.questionIds ?? [], owner: l.name, gap: { target: card.target, question: card.question, ...(by ? { raisedBy: by } : {}) } }));
     counts.left++;
+  }
+  // What should change, ticked in the review: kept with a quote of its note, as Discovery's Keep keeps it. It never
+  // becomes a step, a rule or an answer about the work done today.
+  for (const w of (review.wanted ?? []).filter(x => choice.ticked.has(x.id))) {
+    const q = ref(w.noteId, w.excerpt);
+    ops.push(m2 => { const r = keepWanted(m2, { statement: w.excerpt, sources: [q] }); return { model: r.model, patch: r.patch }; });
+    counts.wanted = (counts.wanted ?? 0) + 1;
   }
   const op: Op = ops.length ? all(...ops) : (x: ProcessModel): OpResult => ({ model: x, patch: [] });
   return { op, summary: callSummary(ctx.date, counts), counts };

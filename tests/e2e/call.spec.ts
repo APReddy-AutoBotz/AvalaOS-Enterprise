@@ -230,6 +230,55 @@ test('the review: a time with its unit, the change expected picked with its own 
   expect([time.value, time.unit]).toEqual([40, 'minutes']);
 });
 
+test('What you want to change: noticed in the notes, listed in the review not ticked, kept on Save in The brief only', async ({ page, context }) => {
+  test.setTimeout(150_000);
+  const wish = 'In future the system should match the invoices on its own';
+  await withStandIns(context, {
+    answerFromNotes: [{ answers: [] }],
+    discoveryQuestions: [{ questions: [], wanted: [{ segmentId: 'n:1', excerpt: wish }] }, { questions: [], wanted: [] }],
+  });
+  const processUrl = await processWithRecord(page);
+  const call = await prepareCall(page, processUrl);
+  await startPanel(call);
+  await addNote(call, `${wish}, without the clerk.`);
+  await expect.poll(async () => (await standInLog(call)).filter(c => c.task === 'discoveryQuestions').length, { timeout: 20_000 }).toBeGreaterThan(0);
+  const before = (await memory(call)).revisions.find((r: { state: string }) => r.state === 'working').model;
+
+  await call.getByTestId('end-call').click();
+  await call.getByTestId('end-and-review').click();
+  const review = call.getByTestId('call-review');
+  await expect(review).toBeVisible({ timeout: 20_000 });
+  const wanted = review.getByTestId('review-wanted');
+  await expect(wanted).toContainText('What you want to change (1)');
+  await expect(wanted).toContainText(wish);
+  const box = wanted.getByRole('checkbox');
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await review.getByTestId('save-call').click();
+  await expect(call.getByTestId('call-saved')).toContainText('Saved: 1 change you want kept.');
+
+  const after = (await memory(call)).revisions.find((r: { state: string }) => r.state === 'working').model;
+  expect(after.meta.wanted.at(-1).statement).toBe(wish);
+  // Never the work done today: the steps, rules and flows are as they were.
+  expect([after.steps, after.rules, after.flows]).toEqual([before.steps, before.rules, before.flows]);
+});
+
+test('"Prepare a call" in Discovery\'s "Where discovery stands" opens the same call window', async ({ page, context }) => {
+  await withStandIns(context, replies);
+  const processUrl = await processWithRecord(page);
+  await page.goto(`${processUrl}/process`);
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  const panel = page.getByTestId('ask-panel');
+  await panel.getByRole('tab', { name: 'Discovery' }).click();
+  const discovery = panel.getByTestId('discovery');
+  await discovery.getByRole('button', { name: 'Where discovery stands' }).click();
+  const summary = discovery.getByTestId('discovery-summary');
+  await expect(summary.getByTestId('discovery-prepare-call')).toContainText('Ask the people who know in a call');
+  const [call] = await Promise.all([page.waitForEvent('popup'), summary.getByRole('button', { name: 'Prepare a call' }).click()]);
+  await expect(call).toHaveURL(/\/process\/[0-9a-f-]{36}\/call$/);
+  await expect(call.getByTestId('call-briefing')).toBeVisible();
+});
+
 test('Discard writes nothing and forgets the call', async ({ page, context }) => {
   await withStandIns(context, replies);
   const processUrl = await processWithRecord(page);

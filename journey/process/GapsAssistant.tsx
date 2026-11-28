@@ -2,6 +2,7 @@
 // for each. Every answer is written to the process model, so the assessment and the documents
 // update at once. Nothing is written without the person pressing save.
 import { CALL_WORDS } from '../../domain/meeting/words.ts';
+import { openCall } from './openCall.ts';
 import React from 'react';
 import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
@@ -384,12 +385,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
  * prefix the journey runs under (the demo's too). If the browser blocks the window, the page opens here with a line.
  */
 function PrepareCall({ processId }: { processId: string }) {
-  const open = () => {
-    const prefix = window.location.pathname.split('/process/')[0] ?? '';
-    const href = `${prefix}/process/${processId}/call`;
-    const w = window.open(href, `avala-call-${processId}`);
-    if (!w) window.location.href = `${href}?opened=here`;
-  };
+  const open = () => openCall(processId);
   return (
     <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4" data-testid="prepare-call">
       <div>
