@@ -81,3 +81,22 @@ test('every card answered, left with someone or not applicable: done, and the cl
   // A closed gap is still in the model, so counting every shape card would have said there was more to ask.
   assert.ok(shapeCards(m).length > 0);
 });
+
+// Owner's walk, 28 November 2026: the summary's count and the card's "Question 1 of N" must not read as a contradiction.
+test('"still to ask" counts the cards the screen asks, and says how many of them must be settled', async () => {
+  const { stillToAskLine } = await import('./summary.ts');
+  const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
+  const a = assessProcess(gold);
+  const queue = discoveryQueue({ model: gold, assessment: a, asksPurpose: true });
+  const must = queue.filter(c => ['shape', 'decides', 'settles'].includes(c.group)).length;
+  assert.ok(queue.length > must && must > 0);
+  const s = sessionSummary(gold, a, 0, 0, queue);
+  assert.equal(s.closing, `You stopped with ${queue.length} questions still to ask; ${must} of them are about the shape of the process or could change the recommendation. Carry on whenever you like.`);
+  // Every card one the session must settle: one count.
+  const onlyMust = queue.filter(c => ['shape', 'decides'].includes(c.group));
+  assert.equal(stillToAskLine(gold, onlyMust), `You stopped with ${onlyMust.length} questions still to ask. Carry on whenever you like.`);
+  assert.equal(stillToAskLine(gold, queue.filter(c => c.group === 'input').slice(0, 1)), 'You stopped with 1 question still to ask; it is not needed to end the session. Carry on whenever you like.');
+  assert.equal(stillToAskLine(gold, queue.filter(c => c.group === 'input').slice(0, 2)), 'You stopped with 2 questions still to ask; none of them is needed to end the session. Carry on whenever you like.');
+  // Without the queue, as the released screen calls it, the line is unchanged.
+  assert.match(sessionSummary(gold, a, 0).closing, /^You stopped with \d+ questions? still to ask\. Carry on/);
+});

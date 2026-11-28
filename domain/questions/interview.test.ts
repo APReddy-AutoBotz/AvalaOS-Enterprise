@@ -72,7 +72,7 @@ test('no value: one follow-up by kind, then nothing is recorded; a value that fi
   const { ids } = interviewSegments(m, role, 'Not sure.');
   const first = readInterview(m, role, ids, [], 1, 'Not sure.');
   assert.equal(first.kind, 'followUp');
-  if (first.kind === 'followUp') assert.match(first.question, /^I could not tell which role from that\. Which of these does it: .*AP Clerk/);
+  if (first.kind === 'followUp') assert.equal(first.question, 'I could not tell which role from that. Choose one below, or "Someone else" and type their role.');
   assert.deepEqual(readInterview(m, role, ids, [], 2, 'Not sure.'), { kind: 'unanswered', message: UNANSWERED });
   // A role the process does not have is not recorded, however it was said.
   assert.equal(readInterview(m, role, ids, [finding({ value: 'Chief Robot Officer', excerpt: 'Not sure' })], 1, 'Chief Robot Officer.').kind, 'followUp');

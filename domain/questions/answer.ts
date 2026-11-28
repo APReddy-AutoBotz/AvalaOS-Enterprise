@@ -2,8 +2,8 @@
 // so the Ask Avala interview and that screen share one rule). The value goes to the question's target
 // through the patch operations, and the question is closed with the answer in words, so the record keeps
 // where the value came from. Nothing here runs on its own: the screens apply the edit when a person saves.
-import type { AccessStatus, ProcessModel, RaisedBy } from '../processModel/types.ts';
-import { addQuestion, answerQuestion, closeQuestions, routeException, setAccessStatus, setStepTrait, setSystemUiStable, updateFact, type OpResult, type TraitName } from '../processModel/patch.ts';
+import type { AccessStatus, ProcessModel, RaisedBy, RoleKind } from '../processModel/types.ts';
+import { addQuestion, addRole, addSystem, answerQuestion, closeQuestions, routeException, setAccessStatus, setStepTrait, setSystemUiStable, updateFact, type OpResult, type TraitName } from '../processModel/patch.ts';
 import type { JsonPatchOp } from '../processModel/jsonPatch.ts';
 import type { TriageItem } from './triage.ts';
 import { waysEdit, waysNote } from './ways.ts';
@@ -36,19 +36,68 @@ export const record = (item: TriageItem, answer: string, status: 'answered' | 'd
 };
 
 
+/**
+ * "Someone else" (owner's walk, 28 November 2026): the answer to "Who does …?" or "Which application …?" is often a
+ * role or an application not in the process yet. The pick `SOMEONE_ELSE` with a typed name adds it and records the
+ * answer in one edit; a name already in the process (ignoring case and punctuation) is that one, and nothing is added.
+ */
+export const SOMEONE_ELSE = 'someone-else';
+export interface Named { name: string; kind?: RoleKind }
+export type AnswerInput = { pick?: string; text?: string; statuses?: Record<number, AccessStatus>; named?: Named };
+export const NAMED_KINDS: [RoleKind, string][] = [['person_role', 'A role'], ['team', 'A team'], ['external', 'An outside party']];
+const nameKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+const typedName = (n?: Named) => (n?.name ?? '').replace(/\s+/g, ' ').trim().slice(0, 120);
+
+/** What a role or application answer chooses: one already in the process, or a new one by its typed name. */
+export function namedChoice(item: TriageItem, model: ProcessModel, a: AnswerInput): { id?: string; name: string; isNew: boolean; kind?: RoleKind } | null {
+  if (item.kind !== 'role' && item.kind !== 'system') return null;
+  const options: { id: string; name: string }[] = item.kind === 'role' ? model.roles : model.systems;
+  if (a.pick && a.pick !== SOMEONE_ELSE) { const hit = options.find(o => o.id === a.pick); return hit ? { id: hit.id, name: hit.name, isNew: false } : null; }
+  if (a.pick !== SOMEONE_ELSE) return null;
+  const name = typedName(a.named);
+  if (!name || !nameKey(name)) return null;
+  const same = options.find(o => nameKey(o.name) === nameKey(name));
+  if (same) return { id: same.id, name: same.name, isNew: false };
+  return { name, isNew: true, ...(item.kind === 'role' ? { kind: a.named?.kind ?? 'person_role' } : {}) };
+}
+
+/** Before Save, in words: what a role or application answer will record (and add). Null when nothing would be. */
+export function namedRecordLine(item: TriageItem, model: ProcessModel, a: AnswerInput): string | null {
+  const c = namedChoice(item, model, a);
+  if (!c) return null;
+  const t = item.target;
+  const step = t.kind === 'step' ? model.steps.find(x => x.id === t.id)?.name : undefined;
+  const exc = t.kind === 'exception' ? model.exceptions.find(x => x.id === t.id)?.name : undefined;
+  const what = item.kind === 'role'
+    ? (step ? `${c.name} does “${step}”` : exc ? `${c.name} handles “${exc}”` : c.name)
+    : (step ? `“${step}” is done in ${c.name}` : c.name);
+  const added = !c.isNew ? ''
+    : item.kind === 'role' ? ` ${c.name} is added to the roles, as ${(NAMED_KINDS.find(k => k[0] === c.kind)?.[1] ?? 'A role').toLowerCase()}.`
+    : ` ${c.name} is added to the applications. How the automation reaches it is not recorded yet, so that is asked about.`;
+  return `This will record: ${what}.${added}`;
+}
+
 /** The edit an answer makes: the value written to its target and the question closed. Null when the answer is not complete. */
-export function buildAnswer(item: TriageItem, model: ProcessModel, a: { pick?: string; text?: string; statuses?: Record<number, AccessStatus> }, sourceNote = ''): { op: Op; summary: string } | null {
+export function buildAnswer(item: TriageItem, model: ProcessModel, a: AnswerInput, sourceNote = ''): { op: Op; summary: string } | null {
   const t = item.target;
   const note = (a.text ?? '').trim();
   const withSource = (s: string) => (sourceNote ? `${s} (${sourceNote})` : s);
   switch (item.kind) {
     case 'role':
     case 'system': {
-      const options = item.kind === 'role' ? model.roles : model.systems;
-      const hit = options.find(o => o.id === a.pick);
-      if (!hit) return null;
-      const write: Op = t.kind === 'exception' ? m => routeException(m, { exceptionId: t.id!, roleId: hit.id }) : m => updateFact(m, { target: t, value: [hit.id] });
-      return { op: all(write, record(item, withSource(note ? `${hit.name}. ${note}` : hit.name))), summary: `Answered: ${item.question}` };
+      const c = namedChoice(item, model, a);
+      if (!c) return null;
+      const write = (id: string): Op => t.kind === 'exception' ? m => routeException(m, { exceptionId: t.id!, roleId: id }) : m => updateFact(m, { target: t, value: [id] });
+      const closing = record(item, withSource(note ? `${c.name}. ${note}` : c.name));
+      if (!c.isNew) return { op: all(write(c.id!), closing), summary: `Answered: ${item.question}` };
+      // A role or application not in the process yet: added, written and recorded in one edit.
+      const op: Op = m => {
+        const added = item.kind === 'role' ? addRole(m, { name: c.name, kind: c.kind! }) : addSystem(m, { name: c.name, kind: 'other' });
+        const id = 'roleId' in added ? added.roleId : added.systemId;
+        const rest = all(write(id), closing)(added.model);
+        return { model: rest.model, patch: [...added.patch, ...rest.patch] };
+      };
+      return { op, summary: `Answered: ${item.question} (${item.kind === 'role' ? 'role' : 'application'} ${c.name} added)` };
     }
     case 'number': {
       const n = Number(note.replace(/,/g, ''));
