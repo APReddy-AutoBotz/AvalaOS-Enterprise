@@ -12,6 +12,35 @@ Proven on real documents so far: two of the owner's own processes (Questionnaire
 
 Releases (owner, 17 November 2026): 65 Netlify credits are left, about 15 a production deploy, so about 4 deploys; 1,000 credits are added on 22 November 2026. From then credits no longer limit releases; changes are still bundled so each release is reviewed on the preview first.
 
+**Update, 28 November 2026: the fourteenth release.** #254, #258, #262 to #264 and #266 to #270 are live (pull request #271, merge commit `3203083` on `main`, merged by the review chat on the owner's yes at 05:46 UTC, from `next` at `0fa2ede`). The release's own commit is #270 (the privacy page dated 28 November 2026). It carries:
+- package B 5b (#254): Discovery notices what a person said and raises questions from it, and keeps "what you want to change" apart from the work done today ("Make it a requirement" in The brief);
+- the limit on starting readings (#258): one reading at a time per process, at most 6 an hour per person, and Discovery's answers left unread after a refused update;
+- "Someone else" and "Another application" on role and application questions, and three findings of the owner's walk (#267);
+- a first Discovery reading with no steps says so, with "Read it again" and "Add to what I said" (#268);
+- package C's C3a rules (#269), nothing on screen;
+- tools and notes: #262, #263 (measure 1's counts), #264 (a draft into `main` runs no checks), #266 (the call replay's independent check).
+
+Where a section below says "in review", "built", "in `next`" or "waits for the release" about these, read "released". **No migration at the release:** `extraction_start_limit` was applied the same morning, recorded as `20261128025256`, and confirmed by the review chat; from this release `journey-extract` starts every reading through `public.extraction_start`.
+
+**The functions.** All five were redeployed from `main` at `3203083` by "Deploy edge functions" (run `46113576710`, 05:46:03 to 05:46:26 UTC): `journey-ai` 81, `journey-extract` 84, `journey-invite` 18, `journey-notify` 18, `journey-inquiry` 10. `journey-ai`, `journey-extract`, `journey-notify` and `journey-inquiry` load changed files; `journey-invite` none. The functions as they were before it: the branch `claude/functions-before-fourteenth-release` at `ea822fa`, for all five. CI on `3203083` passed, the browser tests included (run `46113576844`). `main` and `next` hold the same code.
+
+**Checked straight after** (the review chat): the privacy page shows "Last updated 28 November 2026"; the reading limit, tried at 05:53 UTC: two starts within a second from two tabs gave one run.
+
+**The extraction check after it** (the builder, on the owner's yes):
+- **The run:** "Extraction check" on `main` at `3203083`, case `ap-invoice`, on the platform key, check `46a08733` (GitHub run `46121737101`), 28 November 2026, 07:33 UTC, 1 minute 47 seconds, 72,823 tokens in and 44,580 out.
+- **Every published target passed,** read beside check `c2f1fb99` (27 November):
+  - steps found 95.2% (target 90%; 90.5% before);
+  - steps correct 100% (90%; 95%);
+  - roles 95% (85%; 94.7%);
+  - applications 89.2% (85%; 86.8%);
+  - quotes 100% of 241 (100%);
+  - open questions 90% (80%; 80%);
+  - ways in overclaimed 0 (0).
+- **Missed:** "Return invoice to vendor"; no step more than the gold. Steps found and open questions, exactly on target in the run before, are back above it.
+- **Members:** none read by place, one left unread; the flow merge was not asked twice. Nothing was dropped for want of members. The run dropped three figures with no number and one conflict with fewer than two values, as the run before dropped three figures.
+- **Ways in corrected by assembly: none.** SAP S/4HANA's `API_SUPPLIERINVOICE_PROCESS_SRV` came out "reported", as the gold has it ("unknown" the day before).
+- **Not judged:** rules 77.8%, figures 84.6%, exceptions 81.8%, conflicts 100%. Questions listed 27, conflicts listed 13 (5 to 8 before), exception groups 22 (15 to 21).
+
 **Update, 27 November 2026: the thirteenth release.** A small release, by the owner's decision, without waiting for package B's pull request 5b. #249 to #253, #256, #257, #259 and #260 are live (pull request #261, merge commit `ea822fa` on `main`, merged by the review chat on the owner's yes at 15:05:47 UTC). Not in it: #254 (package B 5b) and #258 (the reading limit; its migration `extraction_start_limit` is neither applied nor released). There was no release's own commit: no date changed and "Release dates set" passed as it was. It carries:
 - a description read alone gives its steps again (#260): live since the twelfth release, a process read from a description in own words only came out with no steps, because the flow merge named its members by their place in the listing ("own-1 #1") in place of their ids;
 - the weekday email's link for questions opens Closing the gaps (#252);
@@ -716,6 +745,7 @@ Added by the owner on 18 November 2026, with his go on part B: the coverage rule
 - Done on 22 November 2026 for the tenth release: the branch `claude/functions-before-tenth-release` points at `943c89c`, whose message has no `[deploy]`; `journey-extract`, live then from `aa588d2`, goes back with the branch `claude/reading-within-one-answer`. The release's own commit (#226) set `UPDATED.privacy` to 23 November 2026, the release's day; the other dates were unchanged. Released on 23 November 2026 (merge commit `0c93807`); what was checked straight after is in section 1, "Update, 23 November 2026".
 - Done on 24 November 2026 for the eleventh release: the branch `claude/functions-before-eleventh-release` points at `0c93807`, whose message has no `[deploy]`; it puts all five functions back (all five were still the tenth release's deploys). The release's own commit (#238) set `UPDATED.security` and `EVIDENCE_KEPT_SINCE` to 24 November 2026; the other dates were unchanged. Released the same day (merge commit `58ae491`); what was checked straight after is in section 1, "Update, 24 November 2026".
 - Done on 26 November 2026 for the twelfth release: the branch `claude/functions-before-twelfth-release` points at `58ae491`, whose message has no `[deploy]`; it puts all five functions back (all five were still the eleventh release's deploys). No release's own commit: no date changed. Released the same day (merge commit `28fa072`); what was checked straight after is in section 1, "Update, 26 November 2026".
+- Done on 28 November 2026 for the fourteenth release: the branch `claude/functions-before-fourteenth-release` points at `ea822fa`, whose message has no `[deploy]`; it puts all five functions back. The release's own commit (#270) set `UPDATED.privacy` to 28 November 2026. Released the same day (merge commit `3203083`); what was checked straight after is in section 1, "Update, 28 November 2026".
 - Done on 27 November 2026 for the thirteenth release: the branch `claude/functions-before-thirteenth-release` points at `28fa072`, whose message has no `[deploy]`; it puts all five functions back (all five were still the twelfth release's deploys). No release's own commit: no date changed. Released the same day (merge commit `ea822fa`); what was checked straight after is in section 1, "Update, 27 November 2026".
 - In the release's own commit: set `COVERAGE_RULE.since` in `domain/assess/coverage.ts` to the release date, and the same date as `UPDATED.privacy` and `UPDATED.security` in `domain/site/trust.ts` (since PR 3 of the marketing package the privacy date, and since package 14's pull request 5 the security date, may be that date or later; `EVIDENCE_KEPT_SINCE` in `domain/docs/versions.ts` is that release's date).
 - In the release's own commit (from the release that carries the teardowns' counting, marketing package PR 3): set `UPDATED.privacy` in `domain/site/trust.ts` to the release date. Until then the privacy page shows "[release date]" (owner, 21 November 2026).
