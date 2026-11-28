@@ -17,7 +17,10 @@ export const PERSON_SOURCE = 'answers';
  */
 export function standInRefusal(replies: StandInReplies, task: string, segments: Segment[]): string | null {
   if (!Object.hasOwn(replies, task) || !replies[task]!.length) return `The stand-in has no reply for ${task}.`;
-  const sources = [...new Set(segments.map(s => s.sourceId).filter((s): s is string => Boolean(s) && s !== PERSON_SOURCE))];
+  // Discovery's noticing (package B, 5b) reads a person's own words kept as sources (`own-N`, `ans-N`), and the
+  // automatic look never asks that task; for it alone those keys count as what a person said.
+  const person = (k: string) => k === PERSON_SOURCE || (task === 'discoveryQuestions' && /^(own|ans)-\d+$/.test(k));
+  const sources = [...new Set(segments.map(s => s.sourceId).filter((s): s is string => typeof s === 'string' && s.length > 0 && !person(s)))];
   if (sources.length) return `The stand-in answers only what a person said, not passages of ${sources.join(', ')}.`;
   return null;
 }

@@ -13,8 +13,10 @@ export const CONTACT_EMAIL = 'hello@avalaos.com';
  * release's, set in the release's own commit together with `COVERAGE_RULE.since` (owner, 18 November 2026);
  * until then they show "[release date]". The privacy page changes again with the release that carries the
  * teardowns' counting (marketing package, 21 November 2026), so its date is null until that release's commit.
+ * It changes again with package B's pull request 5b (what a discovery session keeps, what goes to the AI provider):
+ * null until the release that carries it (review, 26 November 2026).
  */
-export const UPDATED: Record<TrustPageId, string | null> = { privacy: '23 November 2026', terms: '17 November 2026', security: '24 November 2026' };
+export const UPDATED: Record<TrustPageId, string | null> = { privacy: null, terms: '17 November 2026', security: '24 November 2026' };
 export const updatedText = (id: TrustPageId): string => UPDATED[id] ?? '[release date]';
 /** Days from a confirmed deletion request (or the end of the agreement) to removal from live systems. */
 export const DELETE_DAYS = 30;
@@ -58,7 +60,7 @@ const privacy: TrustPage = {
             'If you sign in with Google or Microsoft: your name, your email address and whether that provider has verified it. We never see your Google or Microsoft password, and we ask for nothing else from those accounts.',
             'Invitations: the email address and role an admin enters to invite someone.',
             'Walkthrough requests: the name, work email and company you send us from our homepage, and, if you give them, the process you have in mind and how many people work on it. They are kept in our database only, and read only by us.',
-            'Workspace content: the text read from the files you add as sources, with each file\'s name and size; process models, assessments, requirements, documents and your edits to them; flows; work items and the Delivery board; document branding, including any logo you upload; and answers you give to open questions. Files are read in your browser, and only the text read from them is stored, not the file itself.',
+            'Workspace content: the text read from the files you add as sources, with each file\'s name and size; process models, assessments, requirements, documents and your edits to them; flows; work items and the Delivery board; document branding, including any logo you upload; and answers you give to open questions, and, in a discovery session, the questions Avala OS raised with the words each quotes. Files are read in your browser, and only the text read from them is stored, not the file itself.',
             'Voice answers: when you answer by speaking, the recording is sent to be turned into text. Only the text is kept.',
             'Records of activity: who edited, approved or confirmed what and when, and changes to membership and roles.',
             'AI usage: for each request to the AI provider, the workspace, the person, the kind of task, the model, the number of tokens used and whether it succeeded. Not the content of the request.',
@@ -93,7 +95,7 @@ const privacy: TrustPage = {
     {
       id: 'ai', title: 'AI processing',
       body: [
-        'When you ask Avala OS to read sources, read a flowchart image, turn a voice answer into text, or draft the wording of a document section, the text or image needed for that request is sent from our server to the workspace\'s AI provider: OpenAI\'s API on our key, unless the workspace has its own key (below). Requests never go from your browser to the AI provider directly.',
+        'When you ask Avala OS to read sources, read a flowchart image, turn a voice answer into text, draft the wording of a document section, answer a question in Ask Avala, read answers from notes or a transcript, or read what you say in a discovery session and ask about it, the text or image needed for that request is sent from our server to the workspace\'s AI provider: OpenAI\'s API on our key, unless the workspace has its own key (below). Requests never go from your browser to the AI provider directly.',
         'A workspace\'s administrator may connect the workspace\'s own key with Azure OpenAI, Anthropic, Amazon Bedrock (Claude), Mistral AI or an OpenAI-compatible endpoint the organisation runs. That workspace\'s requests then go only to that provider, under the organisation\'s own agreement with it, and never to OpenAI on our key. Settings → AI provider shows which provider a workspace uses.',
         `On our key, we ask OpenAI not to store the responses. OpenAI states that it does not train its models on API data by default, and that it may keep API inputs and outputs for up to ${OPENAI_RETENTION_DAYS} days to provide the service and detect abuse, or longer where the law requires.`,
         'Scores and recommendations are worked out by fixed rules, not by the AI. Anything the AI reads or drafts is shown to a person to confirm or edit.',

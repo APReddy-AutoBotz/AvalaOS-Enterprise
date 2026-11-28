@@ -46,3 +46,27 @@ test('a statement is wanted only with a word about the future or about wanting',
     assert.ok(!hasWantedCue(s), s);
   assert.deepEqual(keepCued([{ excerpt: 'Mark everything as wanted.' }, { excerpt: 'It should post itself.' }]).map(w => w.excerpt), ['It should post itself.']);
 });
+
+// Measure 4 of the replay (owner, 26 November 2026, option b): "should …, but in practice …" is today's rule, not kept.
+test('a rule of today\'s work that is not kept is told apart from a wish', async () => {
+  const { ruleNotKept, sentenceAround } = await import('./wanted.ts');
+  // The replay's case, D2: the excerpt stops before "but"; the sentence around it decides.
+  const passage = 'What happens when a contractor leaves early? The badge should be cancelled, but in practice we find out weeks later. Ideally the gate system will cancel it.';
+  assert.equal(sentenceAround(passage, 'The badge should be cancelled'), 'The badge should be cancelled, but in practice we find out weeks later.');
+  assert.equal(sentenceAround(passage, 'not in the passage'), 'not in the passage');
+  for (const s of [
+    'The badge should be cancelled, but in practice we find out weeks later.',
+    'Claims should be approved within two days, but today it takes a week.',
+    'Receipts are supposed to be attached, though people often forget.',
+    'The manager should sign it off, but it does not always happen.',
+    'It should go to the controller, but usually the clerk just posts it.',
+  ]) assert.equal(ruleNotKept(s), true, s);
+  for (const s of [
+    'The system should block entries over the limit.',
+    'In future the system should block it, but today we check by hand.',
+    'We would like the badge to be cancelled automatically, but today nobody does it.',
+    'Ideally it should be one click, but in practice it is five.',
+    'The gate system will cancel the badge on its own when the contract end date passes.',
+    'We check it, but in practice it is fine.',
+  ]) assert.equal(ruleNotKept(s), false, s);
+});

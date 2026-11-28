@@ -107,3 +107,24 @@ test('targets by rule, and which answers are worth noticing', () => {
   assert.equal(worthNoticing('500 a month', '500'), false);
   assert.equal(worthNoticing('The buyer does it, and when the buyer is away someone from the AP team covers for them, usually after two days', 'Buyer'), true);
 });
+
+test('"should …, but in practice …": asked about with its words, never marked wanted; a wish beside it stays wanted', () => {
+  const words: Said[] = [{ ref: 'own-1:1', sourceId: 'own-1', locator: { lineStart: 1 }, text: 'When a contractor leaves early, the badge should be cancelled, but in practice we find out weeks later. Ideally the gate system will cancel the badge on its own.' }];
+  const c = noticeSegments(gold, words, []);
+  const reply: NoticeReply = { questions: [], wanted: [{ segmentId: 'n:1', excerpt: 'the badge should be cancelled' }, { segmentId: 'n:1', excerpt: 'Ideally the gate system will cancel the badge on its own.' }] };
+  const r = readNotice(gold, c, reply, { asked: [] });
+  assert.deepEqual(r.wanted.map(w => w.excerpt), ['Ideally the gate system will cancel the badge on its own.']);
+  assert.deepEqual(r.dropped, [{ what: 'wanted', reason: 'rule_not_kept' }]);
+  assert.equal(r.cards.length, 1);
+  const card = r.cards[0]!;
+  assert.equal(card.question, 'What happens today when this is not done: “the badge should be cancelled”?');
+  assert.deepEqual([card.group, card.target, card.answer], ['said', { kind: 'meta', field: 'flow' }, 'waits']);
+  assert.equal(originLine(card.origin), 'You said: “the badge should be cancelled”');
+  // Asked once: the same statement again, or already asked, raises nothing more; it counts within the five questions.
+  assert.equal(readNotice(gold, c, reply, { asked: [card.question] }).cards.length, 0);
+  const many = { questions: ['Who tells security that a contractor has left?', 'Which application holds the contract end date?', 'How long does a badge stay active after the last day?', 'Who checks the gate logs afterwards?', 'What does the agency send when a contract ends?']
+    .map(x => q('n:1', 'When a contractor leaves early', 'who_handles', '', x)), wanted: reply.wanted };
+  const capped = readNotice(gold, c, many, { asked: [] });
+  assert.equal(capped.cards.length, NOTICE_LIMITS.questions);
+  assert.ok(capped.dropped.some(d => d.reason === 'over_limit'));
+});
