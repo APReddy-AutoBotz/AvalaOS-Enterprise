@@ -170,3 +170,21 @@ test('an open question with no card of its own joins the queue as a plain questi
   const skipped = discoveryQueue({ model: m, assessment: a, asksPurpose: true, skipped: [card.key] });
   assert.equal(skipped.at(-1)!.key, card.key);
 });
+
+// Owner's walk, 28 November 2026: once every card had been skipped once, Skip did nothing.
+test('Skip on a card skipped before moves it to the end again: skip every card, then the first again, and the second leads', async () => {
+  const { skip, emptyState } = await import('./session.ts');
+  const keys = queue(gold).map(c => c.key);
+  assert.ok(keys.length > 3);
+  let s = emptyState();
+  for (const k of keys) s = skip(k)(s);
+  const after = (st: typeof s) => discoveryQueue({ model: gold, assessment: assessProcess(gold), asksPurpose: true, skipped: st.skipped }).map(c => c.key);
+  assert.deepEqual(after(s), keys, 'all skipped once: the same order');
+  s = skip(keys[0]!)(s);
+  assert.deepEqual(after(s), [...keys.slice(1), keys[0]]);
+  // Pressing Skip again and again walks through every card, never holding one.
+  const seen = new Set<string>();
+  for (let i = 0; i < keys.length; i++) { const first = after(s)[0]!; seen.add(first); s = skip(first)(s); }
+  assert.equal(seen.size, keys.length);
+  assert.equal(s.skipped.length, keys.length, 'each key once');
+});
