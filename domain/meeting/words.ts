@@ -138,12 +138,27 @@ export const CALL_WORDS = {
   ownHeadingReview: (n: number) => `Your own questions (${n})`,
   shapeHeading: 'About the shape of the process',
   shapeLine: 'Your notes say things about the steps, people or applications that the draft does not hold yet. They come into the draft when the notes are read as a source, after you save.',
-  notesKept: (title: string) => `Your notes are kept as a source, "${title}", so every answer can quote them.`,
+  /**
+   * Preview walk, 28 November 2026: an answer to one of the assessment's inputs is written by the Inputs view's own
+   * operation, which keeps no quote, so the line no longer says every answer quotes the notes.
+   */
+  notesKept: (title: string) => `Your notes are kept as a source, "${title}". An answer to an open question quotes the note it came from; a figure or another input of the assessment is recorded without a quote.`,
+  inputNoQuote: 'Recorded in the assessment\'s inputs, which keep no quote: this answer will not cite your note.',
+  needsUnit: 'Say whether this time is in minutes or hours before you keep it.',
   save: 'Save',
   discardCall: 'Discard the call',
   discardAsk: 'Discard the call? Your notes and everything found in them are removed from this device. Nothing was saved.',
   notSaved: (message: string, key: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Your notes are kept as source ${key}; nothing else changed. Try again.`,
-  saved: (result: string) => `Saved. ${result}.`,
+  notSavedNothing: (message: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Nothing changed, and your notes are still on this device. Try again.`,
+  /** Preview walk, 28 November 2026: what Save recorded comes first, so an answer to an input never reads as nothing saved. */
+  saved: (counts: { answers: number; kept: number; left: number }, result: string) => {
+    const parts = [
+      counts.answers && plural(counts.answers, 'answer') + ' recorded',
+      counts.kept && `${plural(counts.kept, 'question')} kept open`,
+      counts.left && `${counts.left} left with someone`,
+    ].filter(Boolean);
+    return `Saved: ${parts.length ? parts.join(', ') : 'your notes are kept as a source'}. ${result}.`;
+  },
   stillOpen: 'Still open, by who to ask:',
   sendFiles: 'Send questions to the people who know',
   readIntoDraft: 'Read the notes into the draft',

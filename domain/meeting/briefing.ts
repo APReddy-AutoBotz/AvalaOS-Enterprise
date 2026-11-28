@@ -32,6 +32,21 @@ export const NOT_FOR_A_CALL = ['start:purpose'] as const;
  */
 export const ASSESSED_ORDER: Record<Card['group'], number> = { decides: 0, settles: 0, conflict: 1, start: 2, shape: 2, said: 3, input: 4, signoff: 5 };
 
+/** Discovery's own order of the groups (`GROUP_RANK` in domain/discovery/queue.ts), for the plain questions put among its cards. */
+const DISCOVERY_ORDER: Record<Card['group'], number> = { start: 0, shape: 1, conflict: 2, decides: 3, settles: 3, said: 4, input: 5, signoff: 6 };
+
+/**
+ * An open question Discovery gives no card (preview walk, 28 November 2026: a reading's questions about the process
+ * as a whole, target `meta` with no field, q-1 to q-12): a plain question answered in words, as Closing the gaps
+ * answers it. Its card stands for the triage item by key (`itemKey`), so the panel reads it from the notes and the
+ * review records the answer on the stored question; the target stays the question's own.
+ */
+export function plainCard(item: TriageItem, m: ProcessModel): Card | null {
+  if (item.kind === 'choice' || item.kind === 'ways') return null;
+  const c = triageCard({ ...item, target: { kind: 'meta', field: 'flow' } }, m);
+  return c ? { ...c, target: item.target, answer: 'words' } : null;
+}
+
 /** Whether the process already has an assessment: steps assessed, and not a process documented as it is. */
 export const hasAssessment = (m: ProcessModel, a: ProcessAssessment): boolean => a.assessed > 0 && purposeOf(m) !== 'as_is';
 
@@ -131,11 +146,15 @@ function standing(i: BriefingInput): string[] {
   return lines;
 }
 
-function openLine(m: ProcessModel, t: Triage, shape: number): string | null {
+/**
+ * "What is open". "Needed for sign-off" counts the questions the list labels so (cards of the group `signoff`), for
+ * everyone, not the triage group of that name, which is narrower (review chat, 28 November 2026: the header said 2
+ * while the list labelled 11).
+ */
+function openLine(m: ProcessModel, t: Triage, shape: number, signoff: number): string | null {
   const open = t.items.filter(x => !x.deferred);
   const decides = open.filter(couldChange).length;
   const conflicts = conflictCards(m).length;
-  const signoff = open.filter(x => x.group === 'signoff').length;
   const left = t.items.filter(x => x.deferred).length;
   const parts = [
     decides && `${decides} could change the recommendation`,
@@ -167,11 +186,13 @@ export function buildBriefing(i: BriefingInput): Briefing {
   const own = (i.own ?? []).map(q => { const c = ownCard(q); return c ? item(c, { owner: 'business', own: true }) : null; }).filter((x): x is BriefItem => x !== null);
   // 3. The Discovery order, for the kinds of person on the call, without what is not for a call; on a process that
   // already has an assessment, what could change the recommendation first, then the conflicts, then the shape.
-  const discovery = discoveryQueue({ model: m, assessment: i.assessment, asksPurpose: i.asksPurpose, triage: t })
+  // Every open question Discovery asks without a card of its own joins as a plain question, in its group's place.
+  const parts = askedParts(m, t);
+  const plain = parts.items.filter(x => !triageCard(x, m)).map(x => plainCard(x, m)).filter((c): c is Card => c !== null);
+  const discovery = [...discoveryQueue({ model: m, assessment: i.assessment, asksPurpose: i.asksPurpose, triage: t }), ...plain]
     .filter(c => !(NOT_FOR_A_CALL as readonly string[]).includes(c.key));
-  const ordered = hasAssessment(m, i.assessment)
-    ? discovery.map((c, n) => ({ c, n })).sort((x, y) => ASSESSED_ORDER[x.c.group] - ASSESSED_ORDER[y.c.group] || x.n - y.n).map(x => x.c)
-    : discovery;
+  const rank = hasAssessment(m, i.assessment) ? ASSESSED_ORDER : DISCOVERY_ORDER;
+  const ordered = discovery.map((c, n) => ({ c, n })).sort((x, y) => rank[x.c.group] - rank[y.c.group] || x.n - y.n).map(x => x.c);
   const queue = ordered.map(c => item(c)).filter(x => kinds.has(x.owner));
   const seen = new Set<string>();
   const all = [...withThem, ...own, ...queue].filter(x => (seen.has(x.card.key) ? false : (seen.add(x.card.key), true)));
@@ -179,11 +200,14 @@ export function buildBriefing(i: BriefingInput): Briefing {
   const n = fits(i.minutes);
 
   // Everyone else's questions, by who to ask: the kinds of person not on the call, and what is left with someone not on it.
+  // What is still asked: the items Discovery asks, those its shape cards answer, and what is left with someone; a gap
+  // a person closed is not asked anywhere (`askedParts`).
   const listed = new Set(kept.concat(leftOut).map(x => coveringItem(x.card, t)?.key).filter(Boolean));
-  const elsewhere = whoToAsk(t.items.filter(x => !listed.has(x.key) && (x.deferred ? !(x.assignedTo && names.some(nm => same(nm, x.assignedTo!))) : !kinds.has(x.owner))));
+  const asked = new Set([...parts.items.map(x => x.key), ...parts.shape.map(c => coveringItem(c, t)?.key).filter((k): k is string => Boolean(k))]);
+  const elsewhere = whoToAsk(t.items.filter(x => !listed.has(x.key) && (x.deferred ? !(x.assignedTo && names.some(nm => same(nm, x.assignedTo!))) : asked.has(x.key) && !kinds.has(x.owner))));
 
   return {
-    standing: standing(i), openLine: openLine(m, t, askedParts(m, t).shape.length),
+    standing: standing(i), openLine: openLine(m, t, parts.shape.length, discovery.filter(c => c.group === 'signoff').length),
     forCall: kept.slice(0, n), ifTime: kept.slice(n), leftOut, elsewhere, fits: n,
   };
 }

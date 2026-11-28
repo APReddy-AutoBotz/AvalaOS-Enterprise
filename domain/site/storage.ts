@@ -5,7 +5,8 @@
 // a map across the page) stay. The sign-in itself is cleared by the sign-in library.
 
 /** Keys whose name starts with one of these are removed at sign-out. */
-export const SIGN_OUT_FORGETS = ['avala:source-look:', 'avala:dismissed:', 'avala:map-shape:', 'avala.journey.workspace'] as const;
+// A call kept on the device (package C, `avala:call:{process}`) is removed too: the person is asked first when one is not finished.
+export const SIGN_OUT_FORGETS = ['avala:source-look:', 'avala:dismissed:', 'avala:map-shape:', 'avala.journey.workspace', 'avala:call:'] as const;
 
 /** The keys among those the browser holds that sign-out removes. */
 export function keysToForget(keys: readonly string[]): string[] {

@@ -22,7 +22,7 @@ const MAX_SECONDS = 600;
 
 const readAsDataUrl = (blob: Blob) => new Promise<string>((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result)); r.onerror = () => bad(r.error); r.readAsDataURL(blob); });
 
-function useRecorder(onAudio: (dataUrl: string) => void) {
+function useRecorder(onAudio: (dataUrl: string) => void, maxSeconds = MAX_SECONDS) {
   const [state, setState] = React.useState<'idle' | 'recording' | 'unsupported'>(() => (typeof MediaRecorder === 'undefined' ? 'unsupported' : 'idle'));
   const [seconds, setSeconds] = React.useState(0);
   const rec = React.useRef<MediaRecorder | null>(null);
@@ -45,7 +45,7 @@ function useRecorder(onAudio: (dataUrl: string) => void) {
     r.start();
     setSeconds(0);
     setState('recording');
-    timer.current = window.setInterval(() => setSeconds(s => { if (s + 1 >= MAX_SECONDS) stop(); return s + 1; }), 1000);
+    timer.current = window.setInterval(() => setSeconds(s => { if (s + 1 >= maxSeconds) stop(); return s + 1; }), 1000);
   };
   React.useEffect(() => () => { if (timer.current) clearInterval(timer.current); }, []);
   return { state, seconds, start, stop };
@@ -58,7 +58,7 @@ const Mic = ({ className }: { className?: string }) => (
 );
 
 /** One place to answer: type, or press the microphone and speak. What is said is written into the box to check before saving. */
-export function AnswerBox({ value, onChange, label, placeholder, rows = 4, transcribe, voiceLine, maxLength, disabled, id }: {
+export function AnswerBox({ value, onChange, label, placeholder, rows = 4, transcribe, voiceLine, maxLength, disabled, id, maxSeconds, onKeyDown, onSpoken }: {
   value: string; onChange: (v: string) => void; label: string; placeholder: string; rows?: number;
   /** Absent when speech cannot be turned into text here (local mode, or a provider that cannot: journey/process/voice.ts). */
   transcribe?: (audioDataUrl: string) => Promise<string>;
@@ -66,6 +66,11 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
   voiceLine?: string;
   /** The most characters the answer may hold; spoken words beyond it are cut there. */
   maxLength?: number; disabled?: boolean; id?: string;
+  /** The longest a recording may run before it stops by itself (the call's notes: a minute); ten minutes when not given. */
+  maxSeconds?: number;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  /** Told when spoken words were written into the box (the call marks such a note "(spoken)"). */
+  onSpoken?: () => void;
 }) {
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -79,18 +84,18 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
     try {
       const text = (await transcribe(audio)).trim();
       const next = text ? (latest.current.trim() ? `${latest.current.trim()}\n${text}` : text) : '';
-      if (next) { onChange(maxLength ? next.slice(0, maxLength) : next); setCut(Boolean(maxLength && next.length > maxLength)); }
+      if (next) { onChange(maxLength ? next.slice(0, maxLength) : next); setCut(Boolean(maxLength && next.length > maxLength)); if (text) onSpoken?.(); }
     }
     catch (e) { setError(messageOf(e)); }
     finally { setBusy(false); }
-  });
+  }, maxSeconds);
   const recording = recorder.state === 'recording';
   const mmss = (x: number) => `${Math.floor(x / 60)}:${String(x % 60).padStart(2, '0')}`;
   const canSpeak = Boolean(transcribe) && recorder.state !== 'unsupported';
   return (
     <div>
       <div className={cx('relative rounded-xl border bg-white transition focus-within:border-[#002C4B] focus-within:ring-2 focus-within:ring-[#002C4B]/20', recording ? 'border-rose-300 ring-2 ring-rose-100' : 'border-slate-300')}>
-        <textarea id={id} aria-label={label} rows={rows} value={value} maxLength={maxLength} onChange={e => { setCut(false); onChange(e.target.value); }} disabled={disabled || busy || recording} placeholder={placeholder}
+        <textarea id={id} aria-label={label} rows={rows} value={value} maxLength={maxLength} onChange={e => { setCut(false); onChange(e.target.value); }} onKeyDown={onKeyDown} disabled={disabled || busy || recording} placeholder={placeholder}
           className="block w-full resize-y rounded-xl bg-transparent px-3.5 py-3 pr-16 text-sm leading-6 focus:outline-none disabled:text-slate-500" />
         {canSpeak && (
           <button type="button" onClick={() => (recording ? recorder.stop() : recorder.start().catch(e => setError(microphoneProblem((e as { name?: string })?.name))))} disabled={disabled || busy}
@@ -102,7 +107,7 @@ export function AnswerBox({ value, onChange, label, placeholder, rows = 4, trans
         )}
       </div>
       <p className="mt-1.5 min-h-[1.25rem] text-xs text-slate-500" role="status">
-        {recording ? <span className="font-semibold text-rose-700"><span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-rose-600" />Listening {mmss(recorder.seconds)}. Press the square to stop.</span>
+        {recording ? <span className="font-semibold text-rose-700"><span className="mr-1.5 inline-block h-2 w-2 animate-pulse rounded-full bg-rose-600" />Listening {mmss(recorder.seconds)}{maxSeconds ? ` of ${mmss(maxSeconds)}` : ''}. Press the square to stop.</span>
           : busy ? 'Writing down what you said…'
           : error ? <span className="text-red-700">{error}</span>
           : cut ? <span className="text-amber-800" data-testid="answer-cut">{cutLine(maxLength!)}</span>
