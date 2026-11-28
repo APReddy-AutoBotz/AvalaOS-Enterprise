@@ -19,6 +19,7 @@ import { ACCEPT, ingestFile } from './ingestFile.ts';
 import { InlineText } from './widgets.tsx';
 import { StartInOwnWords } from './StartInOwnWords.tsx';
 import { StartFromTypical } from './StartFromTypical.tsx';
+import { IN_PROGRESS_LINE, runUnderWay } from '../../domain/extract/startLimit.ts';
 
 const STATUS_TEXT: Record<ExtractionRow['status'], string> = {
   queued: 'Starting…', running: 'Reading each source…', merging: 'Combining what the sources say…', reviewing: 'Checking the flow…',
@@ -107,12 +108,20 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
     onSourcesChanged();
   };
 
+  // A reading someone else started, which this page follows: a second one was refused meanwhile (one at a time
+  // per process, domain/extract/startLimit.ts).
+  const [following, setFollowing] = React.useState(false);
   const extract = async () => {
     setError(null);
+    const queued = (id: string) => ({ id, status: 'queued' as const, error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
     try {
       const { runId } = await store.startExtraction(workspaceId, processId, [...chosen]);
-      setRun({ id: runId, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
-    } catch (e) { setError(messageOf(e)); }
+      setFollowing(false);
+      setRun(queued(runId));
+    } catch (e) {
+      const under = runUnderWay(e);
+      if (under) { setFollowing(true); setRun(queued(under)); } else setError(messageOf(e));
+    }
   };
 
   if (!sources) return error ? <ErrorNote message={error} /> : <p className="p-6 text-sm text-slate-500">Loading sources…</p>;
@@ -199,15 +208,15 @@ export function SourcesStage({ store, processId, workspaceId, canEdit, onModelCh
       )}
 
       {canEdit && active.length > 0 && (
-        <ExtractionPanel store={store} run={run} chosenCount={chosen.size} onExtract={extract} processId={processId}
+        <ExtractionPanel store={store} run={run} chosenCount={chosen.size} onExtract={extract} processId={processId} following={following}
           onApplied={() => { onModelChanged(); goToProcess(); }} />
       )}
     </div>
   );
 }
 
-function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onApplied }: {
-  store: JourneyStore; run: ExtractionRow | null; chosenCount: number; onExtract: () => void; processId: string; onApplied: () => void;
+function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onApplied, following = false }: {
+  store: JourneyStore; run: ExtractionRow | null; chosenCount: number; onExtract: () => void; processId: string; onApplied: () => void; following?: boolean;
 }) {
   const running = run && run.status !== 'done' && run.status !== 'failed';
   return (
@@ -228,6 +237,7 @@ function ExtractionPanel({ store, run, chosenCount, onExtract, processId, onAppl
         ? <DemoFilesNote />
         : <p className="text-sm text-slate-500">Extraction runs on the server and is not available in local mode.</p>)}
       {running && <p role="status" className="text-sm text-slate-600">{STATUS_TEXT[run!.status]} This takes a few minutes; you can leave this page and come back.</p>}
+      {running && following && <p className="text-sm text-slate-600" data-testid="reading-under-way">{IN_PROGRESS_LINE}</p>}
       {run?.status === 'failed' && <ErrorNote message={failedLine(run.error)} />}
       {run?.status === 'done' && run.model && <ChangeReview store={store} processId={processId} extracted={run.model} finishedAt={run.updatedAt} onApplied={onApplied} />}
     </section>
