@@ -7,13 +7,15 @@
 import fs from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
 import { signInAndCreateProcess } from './helpers.ts';
+import { emptyModel } from '../../domain/processModel/empty.ts';
 
 const KEY = 'avala.journey.memory.v1';
 const gold = JSON.parse(fs.readFileSync('eval/corpus/ap-invoice/expected.model.json', 'utf8'));
 const ends = new Set(gold.events.filter((e: { kind: string }) => e.kind === 'end').map((e: { id: string }) => e.id));
 const first = { ...gold, events: gold.events.filter((e: { id: string }) => !ends.has(e.id)), flows: gold.flows.filter((f: { from: string; to: string }) => !ends.has(f.from) && !ends.has(f.to)) };
 // The reading found no step (roles and applications only, as on the owner's walk of 27 November 2026).
-const noSteps = { ...gold, steps: [], flows: [], gateways: [], events: [], rules: [], exceptions: [], openQuestions: [], conflicts: [] };
+// A valid model, so that a step held back can be taken out of it (removeStep checks the model).
+const noSteps = { ...emptyModel('Supplier invoices'), roles: gold.roles.slice(0, 2), systems: gold.systems.slice(0, 2) };
 const WORDS = 'Supplier invoices arrive in the AP shared mailbox. An AP clerk checks the mandatory fields, then matches each invoice against the purchase order and the goods receipt in SAP.';
 const NO_STEPS = 'I did not find any steps in what you said. Your words are kept. Read them again, or add who does what, one step after another.';
 const FAILED = 'Putting the process together: the sources gave steps, but they could not be put together into a process, twice. Nothing in the process was changed. Read the sources again; if it happens again, add another source or let us know. Reference: abcdef12.';

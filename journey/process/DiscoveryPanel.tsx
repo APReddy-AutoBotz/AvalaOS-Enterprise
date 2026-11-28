@@ -486,7 +486,8 @@ function FirstReading({ store, process, run, lastRead, heldBack, noticing, readi
   }
   const held = heldBack.filter(s => !addBack.includes(s.id));
   // The reading without what is held back: the draft starts from today's work only.
-  const extracted = held.reduce((x, s) => removeStep(x, { stepId: s.id }).model, run.model!);
+  // A step that cannot be taken out (a reading the check refuses) stays in, rather than stopping the screen.
+  const extracted = held.reduce((x, s) => { try { return removeStep(x, { stepId: s.id }).model; } catch { return x; } }, run.model!);
   const rows = stepsWithWords(extracted);
   // No step of today's work: the reading found none, or everything it found is what the person wants in future.
   const none = run.model.steps.length === 0;
