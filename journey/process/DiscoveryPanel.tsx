@@ -12,7 +12,8 @@ import type { AccessStatus, ProcessModel, Step } from '../../domain/processModel
 import { emptyModel } from '../../domain/processModel/empty.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { triage, type TriageItem } from '../../domain/questions/triage.ts';
-import { ACCESS, type Op } from '../../domain/questions/answer.ts';
+import { ACCESS, buildAnswer, namedChoice, type Op } from '../../domain/questions/answer.ts';
+import { emptyNamed, NamedChoice, takesNamed, type NamedValue } from './NamedChoice.tsx';
 import { answerFromNotes, type NoteFinding } from '../../domain/questions/notes.ts';
 import { interviewAnswer, interviewSegments, readInterview, type Reading } from '../../domain/questions/interview.ts';
 import { NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../domain/questions/ways.ts';
@@ -35,7 +36,7 @@ import {
 } from '../../domain/discovery/session.ts';
 import { discoveryQuestions, noticeSegments, readNotice, worthNoticing, type NoticeReply, type Said } from '../../domain/discovery/notice.ts';
 import {
-  cardItem, chooseEdit, keptLine, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
+  cardItem, chooseEdit, confirmedLine, keptLine, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
   answerSaid, descriptionSaid, heldBackSteps, keepWantedEdit, noticeAsked,
 } from '../../domain/discovery/flow.ts';
 import { removeStep } from '../../domain/processModel/patch.ts';
@@ -548,7 +549,8 @@ function Cards({ model, asksPurpose, skipped, raised, onActed, onSaid, waitingKe
   const assessment = React.useMemo(() => assessProcess(model), [model]);
   const t = React.useMemo(() => triage(model, assessment), [model, assessment]);
   const queue = React.useMemo(() => discoveryQueue({ model, assessment, asksPurpose, skipped, triage: t, raised }).filter(c => !waitingKeys.includes(c.key)), [model, assessment, asksPurpose, skipped, t, waitingKeys, raised]);
-  const summary = sessionSummary(model, assessment, saved, later.length);
+  // The closing line counts the cards this screen asks, as "Question 1 of N" does.
+  const summary = sessionSummary(model, assessment, saved, later.length, queue);
   const [showSummary, setShowSummary] = React.useState(false);
   const card = queue[0];
   return (
@@ -602,6 +604,8 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
   const [asked, setAsked] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [field, setField] = React.useState<InputValue>({});
+  // "Someone else" (owner's walk, 28 November 2026): who does it, or which application, when the words did not say one in the process.
+  const [named, setNamed] = React.useState<NamedValue>(emptyNamed);
   const ways = item && (item.kind === 'ways' || item.kind === 'access');
   const way = card.answer === 'words' && !item ? 'waits' : card.answer;
 
@@ -641,6 +645,15 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
     if (await saveOp(op, `Discovery: ${card.question}`)) done(null);
   });
   const chosenReady = ways ? Boolean(waysRecordLine(model, item!, { pick, statuses })) : Boolean(pick);
+  const showNamed = way === 'words' && takesNamed(item) && (Boolean(followUp) || reading?.r.kind === 'unanswered');
+  const namedHeld = showNamed ? confirmedLine(model, item!.target) : null;
+  const namedReady = showNamed && !namedHeld && Boolean(buildAnswer(item!, model, named));
+  const saveNamed = () => run(async () => {
+    const what = namedChoice(item!, model, named)?.name;
+    const e = chooseEdit(card, model, named.pick, { ...who, at: new Date().toISOString(), item, named: named.named, words: followUp?.first ?? reading?.said });
+    if (!e || !what) { onError('Choose who does it, or type the name.'); return; }
+    if (await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(`Recorded: ${what}`); }
+  });
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4" data-testid="discovery-card">
@@ -688,6 +701,9 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
           </>
         )}
         {reading?.r.kind === 'unanswered' && <p className="text-sm text-slate-700">{reading.r.message}</p>}
+        {showNamed && (namedHeld
+          ? <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950" data-testid="discovery-confirmed">{namedHeld}</p>
+          : <NamedChoice item={item!} model={model} value={named} onChange={setNamed} id={`named-${card.key}`} />)}
         {reading && (reading.r.kind === 'record' || reading.r.kind === 'confirm') && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2" data-testid="discovery-record">
             <p className="text-sm font-semibold text-sky-950">This will record</p>
@@ -702,7 +718,8 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
         {way === 'choose' && <Button onClick={choose} disabled={busy || !chosenReady}>Save</Button>}
         {way === 'field' && <Button onClick={fieldSave} disabled={busy}>Save</Button>}
         {way === 'waits' && <Button onClick={keep} disabled={busy || text.trim().length < 2}>Save</Button>}
-        {way === 'words' && !reading && <Button onClick={readWords} disabled={busy || capped || text.trim().length < 2}>Read my answer</Button>}
+        {showNamed && !namedHeld && <Button onClick={saveNamed} disabled={busy || !namedReady}>Save</Button>}
+        {way === 'words' && !reading && <Button variant={showNamed ? 'secondary' : undefined} onClick={readWords} disabled={busy || capped || text.trim().length < 2}>Read my answer</Button>}
         {way === 'words' && capped && text.trim().length > 1 && <Button variant="secondary" onClick={() => run(async () => { if (await commit(keepLater({ key: card.key, question: card.question, words: text.trim(), at: new Date().toISOString() }))) done('Your words are kept with this session, to read later.', false); })}>Keep my words to read later</Button>}
         {reading && (reading.r.kind === 'record' || reading.r.kind === 'confirm') && <>
           <Button onClick={() => saveWords(reading.r as Extract<Reading, { kind: 'record' | 'confirm' }>)} disabled={busy}>Save</Button>

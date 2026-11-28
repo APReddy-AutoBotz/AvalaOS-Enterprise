@@ -25,6 +25,8 @@ import { previewImpact, useImpactContext } from './ImpactNote.tsx';
 import { announceProcessChanged } from '../processChanged.ts';
 import { Button, ErrorNote, messageOf } from '../ui.tsx';
 import { AnswerBox } from './AnswerFromNotes.tsx';
+import { buildAnswer, namedChoice } from '../../domain/questions/answer.ts';
+import { emptyNamed, NamedChoice, takesNamed, type NamedValue } from './NamedChoice.tsx';
 import { useVoice, voiceProps } from './voice.ts';
 
 type Phase =
@@ -59,6 +61,8 @@ export function InterviewPanel({ store, process, workspace, model, working, star
   const [phase, setPhase] = React.useState<Phase>({ kind: 'answer', attempt: 1, first: '' });
   const [error, setError] = React.useState<string | null>(null);
   const [recorded, setRecorded] = React.useState(0);
+  // "Someone else" (owner's walk, 28 November 2026): on a role or application question that the words did not settle.
+  const [named, setNamed] = React.useState<NamedValue>(emptyNamed);
 
   React.useEffect(() => {
     let live = true;
@@ -123,7 +127,24 @@ export function InterviewPanel({ store, process, workspace, model, working, star
 
   const position = Math.max(1, queue.indexOf(item) + 1);
   const waits = plan.held[item.key] ? holdReason(plan.held[item.key]) : '';
-  const skip = () => { setSkipped(s => [...s, item.key]); setPhase({ kind: 'answer', attempt: 1, first: '' }); };
+  const skip = () => { setSkipped(s => [...s, item.key]); setPhase({ kind: 'answer', attempt: 1, first: '' }); setNamed(emptyNamed()); };
+  const saveNamed = async (first: string) => {
+    const words = first.replace(/\s+/g, ' ').trim().slice(0, 160);
+    const edit = buildAnswer(item, editor.model, named, words ? `in their words: "${words}"` : '');
+    if (!edit) { setError('Choose who does it, or type their name.'); return; }
+    const what = namedChoice(item, editor.model, named)?.name ?? '';
+    if (await editor.apply(edit.op, edit.summary)) {
+      setRecorded(n => n + 1);
+      setNamed(emptyNamed());
+      setPhase({ kind: 'saved', what });
+    }
+  };
+  const namedBlock = (first: string) => takesNamed(item) && (
+    <div className="mt-4 space-y-3 rounded-xl border border-slate-200 bg-white p-4" data-testid="interview-named">
+      <NamedChoice item={item} model={editor.model} value={named} onChange={setNamed} id="interview-named" />
+      <Button variant="accent" onClick={() => saveNamed(first)} disabled={editor.saving || !buildAnswer(item, editor.model, named)}>{editor.saving ? 'Saving…' : 'Save'}</Button>
+    </div>
+  );
 
   const read = async (attempt: 1 | 2, first: string) => {
     const said = attempt === 1 ? interviewAnswer(text) : interviewAnswer(first, text);
@@ -185,6 +206,7 @@ export function InterviewPanel({ store, process, workspace, model, working, star
           <p className="text-xs text-slate-500">Nothing is recorded until you press Save.</p>
         </form>
       )}
+      {canEdit && phase.kind === 'answer' && phase.followUp && namedBlock(phase.first)}
 
       {canEdit && phase.kind === 'reading' && <p className="mt-4 text-sm text-slate-500" role="status">Reading your answer…</p>}
 
@@ -225,6 +247,7 @@ export function InterviewPanel({ store, process, workspace, model, working, star
       {canEdit && phase.kind === 'read' && phase.reading.kind === 'unanswered' && (
         <div className="mt-4 space-y-3" data-testid="interview-unanswered">
           <p className="rounded-lg bg-slate-50 px-3 py-2 text-sm leading-6 text-slate-700 ring-1 ring-inset ring-slate-200">{phase.reading.message}</p>
+          {namedBlock(phase.first)}
           <Button variant="secondary" onClick={skip}>Next question</Button>
         </div>
       )}
