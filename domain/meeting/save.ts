@@ -6,7 +6,7 @@
 import type { ProcessModel } from '../processModel/types.ts';
 import type { Op } from '../questions/answer.ts';
 import type { CallState } from './kept.ts';
-import { callEdit, callNotesSource, type NotesSource, type Review, type ReviewContext, type SaveChoice } from './review.ts';
+import { callEdit, callNotesSource, type CallCounts, type NotesSource, type Review, type ReviewContext, type SaveChoice } from './review.ts';
 import { CALL_WORDS } from './words.ts';
 
 /** A name for the notes' title: the person's name, else none (the title then names no one); never an email address. */
@@ -23,7 +23,7 @@ export interface SaveWrites {
 }
 
 export type SaveResult =
-  | { ok: true; key: string; before: ProcessModel; after: ProcessModel; counts: { answers: number; kept: number; left: number } }
+  | { ok: true; key: string; before: ProcessModel; after: ProcessModel; counts: CallCounts }
   | { ok: false; key: string | null; error: string };
 
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e));

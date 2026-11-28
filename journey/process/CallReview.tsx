@@ -55,6 +55,7 @@ export function CallReview({ review, model, notesTitle, limited, busy, error, on
                     <span className="block text-xs italic text-slate-500">{W.quoteAt(a.quote, a.time)}</span>
                     {a.line && <span className="block text-xs text-amber-900">{a.line}</span>}
                     {a.input && <span className="block text-xs text-slate-500">{W.inputNoQuote}</span>}
+                    {a.heldBack && <span className="block text-xs text-amber-900" data-testid="held-back">{W.heldBackLine}</span>}
                   </span>
                 </label>
                 {a.needsUnit && (
@@ -127,6 +128,17 @@ export function CallReview({ review, model, notesTitle, limited, busy, error, on
         <section className={cx(CARD, 'p-5')} data-testid="review-own">
           <h2 className="text-sm font-semibold text-slate-900">{W.ownHeadingReview(review.own.length)}</h2>
           <ul className="mt-2 space-y-2">{review.own.map(o => <li key={o.id}><label className="flex gap-3 text-sm">{box(o.id)}<span>{o.question}</span></label></li>)}</ul>
+        </section>
+      )}
+
+      {review.wanted.length > 0 && (
+        <section className={cx(CARD, 'p-5')} data-testid="review-wanted">
+          <h2 className="text-sm font-semibold text-slate-900">{W.wantedHeading(review.wanted.length)}</h2>
+          <p className="mt-1 text-xs text-slate-600">{W.wantedLine}</p>
+          <ul className="mt-2 space-y-2">{review.wanted.map(w => (
+            <li key={w.id}><label className="flex gap-3 text-sm">{box(w.id)}<span><span className="block text-slate-900">{w.excerpt}</span>
+              <span className="block text-xs text-slate-500">{W.noteAt(w.time)}</span></span></label></li>
+          ))}</ul>
         </section>
       )}
 

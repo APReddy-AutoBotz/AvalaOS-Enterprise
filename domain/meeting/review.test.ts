@@ -144,3 +144,54 @@ test('a question Discovery gives no card is read and answered on its stored ques
   assert.equal(q.status, 'answered');
   assert.ok(q.answer?.includes('Held until the new month opens'));
 });
+
+// C4a: what the notes say should change, in the review (owner, 28 November 2026: not ticked by default).
+import { buildPdd } from '../docs/pdd.ts';
+import type { DocInput } from '../docs/common.ts';
+import { emptyDecisions } from '../assess/decisions.ts';
+import { deriveRequirements } from '../requirements/derive.ts';
+import { reconcile } from '../requirements/register.ts';
+import { flowPicture } from '../flowchart/svg.ts';
+
+const WISH = 'In future the system should match the invoices on its own';
+const withWish = () => {
+  const x = callWith(gold, [{ key: 'gap:step_without_role:step:s-match:roleIds', note: `The AP Clerk does the three-way match. ${WISH}, without the clerk.`, display: 'AP Clerk', quote: 'The AP Clerk does the three-way match', pick: 'r-clerk' }]);
+  return { ...x, s: { ...x.s, wanted: [{ excerpt: WISH, noteId: 'n1' }] } };
+};
+const pddInput = (m: ProcessModel): DocInput => {
+  const a = assessProcess(m);
+  return { model: m, assessment: a, decisions: emptyDecisions(), sources: [], requirements: reconcile(deriveRequirements(m, a), []).requirements, revision: { label: 'r', state: 'working', date: 'd' } };
+};
+
+test('"What you want to change" in the review: listed with its note, not ticked; kept on Save with a quote of the note', () => {
+  const x = withWish();
+  const nothing = save(gold, x, { ticked: new Set() });
+  assert.deepEqual(nothing.review.wanted.map(w => [w.excerpt, w.time, w.ticked]), [[WISH, '09:01', false]]);
+  assert.equal(nothing.after.meta.wanted?.length ?? 0, gold.meta.wanted?.length ?? 0, 'not kept unless ticked');
+
+  const kept = save(gold, x, { ticked: new Set(['wanted:0']) });
+  const w = kept.after.meta.wanted!.at(-1)!;
+  assert.equal(w.statement, WISH);
+  assert.deepEqual(w.sources.map(q => [q.sourceId, q.excerpt, q.locator.timestamp]), [['ans-1', WISH, '09:01']], 'it quotes its note in the call notes');
+  assert.equal(kept.edit.counts.wanted, 1);
+  assert.match(kept.edit.summary, /, 1 change you want kept$/);
+  assert.equal(CALL_WORDS.saved(kept.edit.counts, '0 of 14 open questions closed'), 'Saved: 1 change you want kept. 0 of 14 open questions closed.');
+});
+
+test('a wish never becomes the work done today: the As-Is map and section 2 of the PDD are unchanged after Save', () => {
+  const x = withWish();
+  const kept = save(gold, x, { ticked: new Set(['wanted:0']) });
+  assert.equal(flowPicture(kept.after).svg, flowPicture(gold).svg, 'the As-Is map');
+  assert.deepEqual(buildPdd(pddInput(kept.after)).sections[1], buildPdd(pddInput(gold)).sections[1], 'section 2 of the PDD');
+  assert.deepEqual([kept.after.steps.length, kept.after.rules.length, kept.after.flows.length], [gold.steps.length, gold.rules.length, gold.flows.length]);
+});
+
+test('an answer quoted from inside what should change is held back, not ticked; one outside it is ticked', () => {
+  const inside = callWith(gold, [{ key: 'gap:step_without_role:step:s-match:roleIds', note: `${WISH}, the AP Clerk would then only check.`, display: 'AP Clerk', quote: 'the system should match the invoices', pick: 'r-clerk' }]);
+  const s = { ...inside.s, wanted: [{ excerpt: WISH, noteId: 'n1' }] };
+  const r = buildReview(s, { model: gold, list: inside.list, triage: inside.t, timeZone: 'UTC' });
+  assert.deepEqual([r.answers[0]!.heldBack, r.answers[0]!.ticked], [true, false]);
+  assert.equal(CALL_WORDS.heldBackLine, 'From what you want to change: not part of the work done today.');
+  const outside = buildReview(withWish().s, { model: gold, list: inside.list, triage: inside.t, timeZone: 'UTC' });
+  assert.deepEqual([outside.answers[0]!.heldBack, outside.answers[0]!.ticked], [false, true]);
+});
