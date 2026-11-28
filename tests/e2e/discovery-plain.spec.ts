@@ -52,7 +52,12 @@ test('a question about the process as a whole is a card: counted in "Question 1 
   expect(seen).toContain(QUESTION);
   expect(seen).toHaveLength(n);
   // On its card, under the group that could change the recommendation.
-  for (let i = 0; i < n && (await question.textContent()) !== QUESTION; i++) await card.getByRole('button', { name: 'Skip' }).click();
+  // After one round the queue is back at its first card: Skip on to the question, card by card.
+  await expect(question).toHaveText(seen[0]!);
+  for (const q of seen.slice(1, seen.indexOf(QUESTION) + 1)) {
+    await card.getByRole('button', { name: 'Skip' }).click();
+    await expect(question).toHaveText(q);
+  }
   await expect(question).toHaveText(QUESTION);
   await expect(heading).toHaveText(`Question 1 of ${n} · Changes the recommendation`);
   await expect(card.getByTestId('discovery-waits')).toHaveCount(0);
