@@ -291,10 +291,6 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
       if (error) fail(error);
       return { seq: Number((data as any).seq) };
     },
-    async approve(revisionId, expectedSeq) {
-      const { error } = await db.rpc('model_approve', { target_revision: revisionId, expected_seq: expectedSeq });
-      if (error) fail(error);
-    },
     async versionStates(workspaceId, processId) {
       const { data, error } = await db.rpc('version_states', { target_workspace: workspaceId, target_process: processId ?? null });
       if (error) fail(error);

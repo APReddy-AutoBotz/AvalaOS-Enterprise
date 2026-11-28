@@ -6,6 +6,8 @@ name: Dependency check
 on:
   pull_request:
     branches: [next, main]
+    # ready_for_review: a draft into main runs nothing (below) until it is marked ready.
+    types: [opened, synchronize, reopened, ready_for_review]
   schedule:
     - cron: '17 4 * * 1' # Mondays, 09:47 in India
   workflow_dispatch:
@@ -16,6 +18,9 @@ permissions:
 jobs:
   audit:
     name: Dependency check
+    # A draft pull request into main is only a Netlify preview of a branch whose own pull request into next
+    # runs these checks; it runs none until it is marked ready for review, which runs them all.
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.draft && github.base_ref == 'main') }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

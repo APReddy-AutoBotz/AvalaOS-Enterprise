@@ -354,6 +354,8 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   // The brief, read from the sources on request (part A): the reading task in journey-ai, then by rule.
   const [reading, setReading] = React.useState(false);
   const [readError, setReadError] = React.useState<string | null>(null);
+  // "Make it a requirement" on what a person wants to change (package B, 5b): the register of this process.
+  const wantedRequirements = React.useMemo(() => ({ list: () => store.listRequirements(processId), save: (rows: Parameters<typeof store.saveRequirements>[1]) => store.saveRequirements(processId, rows) }), [store, processId]);
   const readBriefNow = async () => {
     setReading(true); setReadError(null);
     try {
@@ -369,7 +371,8 @@ function ProcessStage({ store, processId, workspaceId, model, working, canEdit, 
   return (
     <>
       <ErrorNote message={readError} />
-      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} purpose={askPurpose ? { ...people, onSwitched } : undefined} />
+      <BriefPanel editor={editor} canEdit={canEdit} sourceTitle={title} reading={reading} onRead={canEdit && store.aiAvailable ? readBriefNow : undefined} purpose={askPurpose ? { ...people, onSwitched } : undefined}
+        requirements={wantedRequirements} />
       <TypicalPanel editor={editor} canEdit={canEdit} />
       <ProcessEditor processId={processId} editor={editor} canEdit={canEdit} me={me} sourceTitle={title} impact={impact} appList={appList} />
     </>

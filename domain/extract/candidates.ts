@@ -72,6 +72,11 @@ export function formatMetric(m: any): string {
 /** A numbered procedure section ("6.12") when the quote has one, otherwise the position in the source. */
 export const procedureSection = (c: Candidate) => (c.ref.locator.section && c.ref.locator.section.includes('.') ? c.ref.locator.section : undefined);
 const where = (c: Candidate) => (procedureSection(c) ? `§${procedureSection(c)}` : `#${c.order + 1}`);
+/**
+ * Where a candidate is, as the listings print it after its id: the source and its place there, "own-1 #1" or
+ * "sop §6.12". The merge sometimes answers with this in place of the id (members.ts reads it back).
+ */
+export const positionOf = (c: Candidate) => `${c.sourceId} ${where(c)}`;
 
 function header(set: CandidateSet): string {
   return ['SOURCES', ...set.sources.map(s => `${s.sourceId}: ${s.title} (${s.kind})`)].join('\n');
@@ -79,7 +84,7 @@ function header(set: CandidateSet): string {
 
 function section(set: CandidateSet, kind: CandidateKind, title: string, line: (c: Candidate) => string): string {
   const xs = set.items.filter(c => c.kind === kind);
-  return [`${title} (${xs.length})`, ...xs.map(c => `${c.id} [${c.sourceId} ${where(c)}] ${line(c)}`)].join('\n');
+  return [`${title} (${xs.length})`, ...xs.map(c => `${c.id} [${positionOf(c)}] ${line(c)}`)].join('\n');
 }
 
 /** The candidate listing for merge_flow. */

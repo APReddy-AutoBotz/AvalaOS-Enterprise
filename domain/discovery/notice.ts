@@ -8,7 +8,7 @@ import type { ElementTarget, ProcessModel, SourceLocator } from '../processModel
 import { orderedSteps } from '../processModel/selectors.ts';
 import { sameQuestion } from '../questions/triage.ts';
 import { makeCard, type Card } from './card.ts';
-import { hasWantedCue } from './wanted.ts';
+import { hasWantedCue, ruleNotKept, sentenceAround } from './wanted.ts';
 
 const str = { type: 'string' } as const;
 
@@ -97,7 +97,7 @@ export interface NoticeReply {
   wanted: { segmentId: string; excerpt: string }[];
 }
 
-export type DropReason = 'not_their_words' | 'repeats_the_question' | 'unknown_pattern' | 'too_long' | 'contact_or_link' | 'already_asked' | 'already_known' | 'over_limit' | 'no_wanting_word' | 'repeated' | 'no_card';
+export type DropReason = 'not_their_words' | 'repeats_the_question' | 'unknown_pattern' | 'too_long' | 'contact_or_link' | 'already_asked' | 'already_known' | 'over_limit' | 'no_wanting_word' | 'rule_not_kept' | 'repeated' | 'no_card';
 
 export interface Noticed {
   /** Cards raised from what was said, in the order said, at most `NOTICE_LIMITS.questions`. */
@@ -107,6 +107,7 @@ export interface Noticed {
   dropped: { what: 'question' | 'wanted'; reason: DropReason }[];
 }
 
+const quoteOf = (said: Said, excerpt: string) => ({ excerpt, ...(said.sourceId ? { sourceId: said.sourceId } : {}), ...(said.locator ? { locator: said.locator } : {}), ...(said.answerTo ? { answerTo: said.answerTo } : {}) });
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 const CONTACT = /https?:\/\/|www\.|\b[\w.+-]+@[\w-]+\.[\w.]+\b|\+?\d[\d\s().-]{7,}\d/i;
 
@@ -149,8 +150,10 @@ export interface NoticeContext {
  * The rules after the task. The gateway has already dropped any item whose quote is not in the passage it
  * names. Here: a quote from anything but a person's words, or one that repeats the question their answer
  * was given to; a question that is too long or carries a link, address or number; one already asked or
- * settled; more than five; a wanted statement without a wanting word. What is left becomes cards, in the
- * order said, each quoting the words that raised it.
+ * settled; more than five; a wanted statement without a wanting word. A statement that something should happen
+ * and goes on with "but in practice" or the like is a rule of today's work that is not kept (`ruleNotKept`): it is
+ * asked about ("What happens today when this is not done: …?"), never marked wanted. What is left becomes cards, in
+ * the order said, each quoting the words that raised it.
  */
 export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply, ctx: NoticeContext): Noticed {
   const dropped: Noticed['dropped'] = [];
@@ -175,7 +178,7 @@ export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply
     if (reason) { dropped.push({ what: 'question', reason }); continue; }
     const target = targetFor(m, q.pattern as Pattern, q.about ?? '');
     if (settled(m, target) || m.openQuestions.some(x => sameQuestion(x.question, question) && JSON.stringify(x.target) === JSON.stringify(target))) { dropped.push({ what: 'question', reason: 'already_known' }); continue; }
-    const quote = { excerpt, ...(said!.sourceId ? { sourceId: said!.sourceId } : {}), ...(said!.locator ? { locator: said!.locator } : {}), ...(said!.answerTo ? { answerTo: said!.answerTo } : {}) };
+    const quote = quoteOf(said!, excerpt);
     const card = makeCard({
       key: `said:${norm(question).slice(0, 80)}`, group: 'said', origin: { kind: 'quote', quote }, question, why, target,
       updates: target.kind === 'meta' ? ['The draft, when it is updated from your answers'] : [target.kind === 'step' ? 'The step' : target.kind === 'system' ? 'How the application is used' : target.kind === 'metric' ? 'The figure' : 'The role'],
@@ -185,8 +188,6 @@ export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply
     asked.push(question);
     cards.push({ card, at: order(q.segmentId, excerpt) });
   }
-  cards.sort((a, b) => a.at - b.at);
-  for (const extra of cards.splice(NOTICE_LIMITS.questions)) { void extra; dropped.push({ what: 'question', reason: 'over_limit' }); }
 
   const wanted: { w: Noticed['wanted'][number]; at: number }[] = [];
   const seen = new Set((ctx.wantedSoFar ?? []).map(norm));
@@ -198,9 +199,24 @@ export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply
       : !hasWantedCue(excerpt) ? 'no_wanting_word'
       : seen.has(norm(excerpt)) ? 'repeated' : null;
     if (reason) { dropped.push({ what: 'wanted', reason }); continue; }
+    // "It should …, but in practice …": a rule of today's work that is not kept, asked about, never marked wanted.
+    if (ruleNotKept(sentenceAround(said!.text, excerpt))) {
+      dropped.push({ what: 'wanted', reason: 'rule_not_kept' });
+      const question = `What happens today when this is not done: “${excerpt.length > 120 ? `${excerpt.slice(0, 117).trimEnd()}…` : excerpt}”?`;
+      if (asked.some(a => sameQuestion(a, question))) continue;
+      const card = makeCard({
+        key: `said:rule:${norm(excerpt).slice(0, 74)}`, group: 'said', origin: { kind: 'quote', quote: quoteOf(said!, excerpt) }, question,
+        why: 'You said it does not always happen, so the work today goes another way.', target: { kind: 'meta', field: 'flow' },
+        updates: ['The draft, when it is updated from your answers'], answer: 'waits',
+      });
+      if (card) { asked.push(question); cards.push({ card, at: order(w.segmentId, excerpt) }); }
+      continue;
+    }
     seen.add(norm(excerpt));
     wanted.push({ w: { excerpt, ...(said!.sourceId ? { sourceId: said!.sourceId } : {}), ...(said!.locator ? { locator: said!.locator } : {}), ...(said!.answerTo ? { answerTo: said!.answerTo } : {}) }, at: order(w.segmentId, excerpt) });
   }
+  cards.sort((a, b) => a.at - b.at);
+  for (const extra of cards.splice(NOTICE_LIMITS.questions)) { void extra; dropped.push({ what: 'question', reason: 'over_limit' }); }
   wanted.sort((a, b) => a.at - b.at);
   for (const extra of wanted.splice(NOTICE_LIMITS.wanted)) { void extra; dropped.push({ what: 'wanted', reason: 'over_limit' }); }
   return { cards: cards.map(c => c.card), wanted: wanted.map(w => w.w), dropped };

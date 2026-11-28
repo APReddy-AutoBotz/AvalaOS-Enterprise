@@ -154,6 +154,29 @@ export async function setBCases(get: RestGet): Promise<{ id: string; process: st
 
 export interface CaseAnswers { id: string; wanted: string[]; planted: { passage: number; never: string[] }[] }
 
+/**
+ * On the made-up set only (cases with hand-written answers, never set B): which hand-written wanted statements
+ * were matched, by their number in answers.json, and the marked statements that matched none. The made-up text
+ * may be printed; set B's never is (review, 26 November 2026).
+ */
+export function wantedMatches(results: CaseResult[], answers: CaseAnswers[]): { id: string; matched: number[]; missed: number[]; extra: string[] }[] {
+  const match = (x: string, y: string) => norm(x).includes(norm(y)) || norm(y).includes(norm(x));
+  return results.filter(r => !r.id.startsWith('B')).flatMap(r => {
+    const a = answers.find(x => x.id === r.id);
+    if (!a) return [];
+    const matched = a.wanted.flatMap((e, i) => (r.wanted.some(w => match(w.excerpt, e)) ? [i + 1] : []));
+    return [{ id: r.id, matched, missed: a.wanted.flatMap((_, i) => (matched.includes(i + 1) ? [] : [i + 1])), extra: r.wanted.filter(w => !a.wanted.some(e => match(w.excerpt, e))).map(w => w.excerpt) }];
+  });
+}
+
+/** The line for one made-up case: "D1, wanted statements: 1 and 2 of 2 matched; marked and not in the answers: "…"." */
+export function wantedLine(m: { id: string; matched: number[]; missed: number[]; extra: string[] }): string {
+  const of = m.matched.length + m.missed.length;
+  const matched = m.matched.length ? `${m.matched.join(' and ')} of ${of} matched` : `none of ${of} matched`;
+  const extra = m.extra.length ? `; marked and not in the answers: ${m.extra.map(e => `"${e}"`).join(', ')}` : '; nothing marked beyond the answers';
+  return `${m.id}, wanted statements: ${matched}${extra}.`;
+}
+
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 export interface Scorecard {

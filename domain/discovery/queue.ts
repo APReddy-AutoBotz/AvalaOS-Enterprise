@@ -96,7 +96,23 @@ export function discoveryQueue(i: QueueInput): Card[] {
   const parts = askedParts(m, t);
   const shape = parts.shape;
   const items = parts.items.map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
-  const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...(i.raised ?? []), ...inputCards(m, i.assessment)];
+  // Questions raised from what was said (pull request 5b): one card per target. A raised question on a field another
+  // card already asks about becomes that card, with the person's words as where it came from; one on a target a
+  // person closed or left is not asked; the rest are cards of their own.
+  // Only a target that holds one answer (who does a step, its application, an application's access, a figure's
+  // unit) is "the same question": raised questions about the process as a whole, or a step's description, share a
+  // target and are told apart by their words (notice.ts drops repeats).
+  const oneAnswer = (t: Card['target']) => t.kind !== 'meta' && ['roleIds', 'systemIds', 'access', 'unit'].includes(t.field ?? '');
+  const settledAt = new Set(m.openQuestions.filter(q => q.status !== 'open').map(q => at(q.target)));
+  const fielded = [...shape, ...items];
+  const raised: Card[] = [];
+  for (const r of i.raised ?? []) {
+    if (oneAnswer(r.target) && settledAt.has(at(r.target))) continue;
+    const same = oneAnswer(r.target) ? fielded.find(c => at(c.target) === at(r.target)) : undefined;
+    if (same) { if (same.origin.kind === 'gap') same.origin = r.origin; continue; }
+    raised.push(r);
+  }
+  const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...raised, ...inputCards(m, i.assessment)];
   // One card per key, the first kept; a stable sort by group keeps each group's own order.
   const seen = new Set<string>();
   const unique = all.filter(c => (seen.has(c.key) ? false : (seen.add(c.key), true)));

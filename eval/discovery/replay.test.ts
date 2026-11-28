@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { verifyExcerpts, type Segment } from '../../domain/ai/gateway.ts';
 import { TASKS } from '../../domain/ai/tasks.ts';
-import { MADE_UP, readTranscript, renderScorecard, replayCase, ReplayStop, scoreReplay, SET_B_NOT_ON_PLATFORM, setBAllowed, setBCases, windows, type Ask, type CaseAnswers, type RestGet } from './replay.ts';
+import { MADE_UP, readTranscript, renderScorecard, replayCase, ReplayStop, scoreReplay, SET_B_NOT_ON_PLATFORM, setBAllowed, setBCases, wantedLine, wantedMatches, windows, type Ask, type CaseAnswers, type RestGet } from './replay.ts';
 
 const dir = new URL('./', import.meta.url);
 const answers = (JSON.parse(readFileSync(new URL('answers.json', dir), 'utf8')) as { cases: (CaseAnswers & { file: string; process: string })[] }).cases;
@@ -146,4 +146,12 @@ test('set B only on the platform key; a stop the run expects ends it, any other 
   const broken: Ask = async () => { throw new Error('unexpected token in "secret words"'); };
   const r = await replayCase('D1', 'Expense claims', d1, broken);
   assert.equal(r.failures, windows(d1).length);
+});
+
+test('the made-up set names which hand-written wanted statements matched; set B is never named', () => {
+  const r = (id: string, wanted: string[]) => ({ id, passages: 1, windows: 1, seconds: null, raised: [], proposed: [], wanted: wanted.map(excerpt => ({ passage: 1, excerpt })), droppedByGateway: 0, droppedByRule: {}, tokens: 0, judgingTokens: 0, failures: 0 });
+  const answers: CaseAnswers[] = [{ id: 'D1', wanted: ['The system should reject a claim', 'drivers to photograph receipts'], planted: [] }];
+  const m = wantedMatches([r('D1', ['the system should reject a claim straight away', 'We want weekly reports']), r('B1', ['anything real'])], answers);
+  assert.deepEqual(m, [{ id: 'D1', matched: [1], missed: [2], extra: ['We want weekly reports'] }]);
+  assert.equal(wantedLine(m[0]!), 'D1, wanted statements: 1 of 2 matched; marked and not in the answers: "We want weekly reports".');
 });

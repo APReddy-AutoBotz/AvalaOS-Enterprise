@@ -165,3 +165,14 @@ test('kept, edited, removed; a conflict needs words on each side', () => {
   assert.equal(c.model.conflicts.find(x => x.id === c.conflictId)!.resolution, null);
   assert.equal(c.model.meta.owner.value, gold.meta.owner.value);
 });
+
+// Pull request 5b: a session's state holding `raised` and `wanted` is read by the released tab's `readState` and kept
+// through the steps it takes; proved on 26 November 2026 against `main` at `28fa072` with a throwaway script
+// (the same steps, main's own code), kept here for the code that follows.
+test('a session holding raised and wanted keeps them through the steps the released tab takes', async () => {
+  const s = await import('./session.ts');
+  const raw = JSON.parse(JSON.stringify({ ...s.emptyState(), raised: [{ key: 'said:x', question: 'Who?', target: { kind: 'meta', field: 'flow' } }], wanted: [{ excerpt: 'The system should block entries.', sourceId: 'own-1', at: 'x' }] }));
+  let state = s.readState(raw);
+  for (const step of [s.skip('gap:x'), s.keepAnswer({ key: 'shape:end', words: 'Posted.', question: 'When is a case finished?', at: 'now' }), s.usedCall({ input: 1, output: 1 }), s.countSaved, s.startedReading('run-1', ['src']), s.reviewedReading('run-1')]) state = s.readState(JSON.parse(JSON.stringify(step(state))));
+  assert.deepEqual([state.raised, state.wanted], [raw.raised, raw.wanted]);
+});

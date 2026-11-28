@@ -47,11 +47,39 @@ test('only the kinds of person on the call; everyone else\'s questions under "No
   assert.deepEqual(brief(gold, everyone).elsewhere, [], 'with everyone on the call, nothing is for someone else');
 });
 
-test('the order is the Discovery order: the first cards, the shape, conflicts, then what could change the recommendation', () => {
+test('"What do you want from this process?" is never on the list: it is the organisation\'s own choice', () => {
+  for (const m of [gold, { ...structuredClone(gold), steps: [], flows: [], gateways: [], events: [] }]) {
+    const b = brief(m, everyone, { minutes: 60 });
+    assert.ok(![...b.forCall, ...b.ifTime, ...b.leftOut].some(x => x.card.key === 'start:purpose'));
+    assert.ok(!agendaText(b).includes('What do you want from this process?'));
+  }
+});
+
+test('with an assessment: what could change the recommendation first, then the conflicts, then the shape', () => {
   const b = brief(gold, everyone, { minutes: 60 });
   const groups = [...b.forCall, ...b.ifTime].map(x => x.card.group);
-  const rank = { start: 0, shape: 1, conflict: 2, decides: 3, settles: 3, said: 4, input: 5, signoff: 6 } as const;
+  assert.ok(assessProcess(gold).assessed > 0);
+  assert.deepEqual(groups.slice(0, 2), ['decides', 'decides'], 'the SAP and ServiceNow interfaces open the list');
+  const rank = { decides: 0, settles: 0, conflict: 1, start: 2, shape: 2, said: 3, input: 4, signoff: 5 } as const;
   assert.deepEqual(groups, [...groups].sort((a, b2) => rank[a] - rank[b2]));
+  assert.ok(groups.indexOf('conflict') < groups.indexOf('shape'));
+  // On a 30-minute call with the process owner and IT, both now fit, where Discovery's order put them 9th and 10th.
+  const thirty = brief(gold, [{ kind: 'business' }, { kind: 'it' }]);
+  assert.deepEqual(thirty.forCall.slice(0, 2).map(x => x.card.key), ['item:system:sys-sap', 'item:system:sys-servicenow']);
+});
+
+test('without an assessment the order stays Discovery\'s: the first cards, the shape, conflicts, then the rest', () => {
+  const empty = { ...structuredClone(gold), steps: [], flows: [], gateways: [], events: [] };
+  assert.equal(assessProcess(empty).assessed, 0);
+  const b = brief(empty, everyone, { minutes: 60 });
+  const groups = [...b.forCall, ...b.ifTime].map(x => x.card.group);
+  const rank = { start: 0, shape: 1, conflict: 2, decides: 3, settles: 3, said: 4, input: 5, signoff: 6 } as const;
+  assert.ok(groups.length > 0);
+  assert.deepEqual(groups, [...groups].sort((a, b2) => rank[a] - rank[b2]));
+  // Documented as it is: no assessment, so Discovery's order too.
+  const asIs = setPurpose(gold, { value: 'as_is', by: null, at: '2026-11-26T10:00:00.000Z' }).model;
+  const g2 = [...brief(asIs, everyone, { minutes: 60 }).forCall, ...brief(asIs, everyone, { minutes: 60 }).ifTime].map(x => x.card.group);
+  assert.deepEqual(g2, [...g2].sort((a, b2) => rank[a] - rank[b2]));
 });
 
 test('a question left with a person who is on the call comes first, and says so', () => {

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { keysToForget } from '../site/storage.ts';
 import { addNote, CALL_KEY_PREFIX, CALL_LIMITS, callAgeDays, callKey, continueCall, editNote, mergeCalls, newCall, notesFile, notesFileName, readCall, removeNote, STALE_DAYS, unfinishedLine, type CallState } from './kept.ts';
-import { afterCallUse, CALL_CAP, capReachedDuringCall, roomAtEnd, roomDuringCall } from './limits.ts';
+import { afterCallUse, CALL_CAP, capFor, capReachedDuringCall, roomAtEnd, roomDuringCall } from './limits.ts';
 
 const at = (min: number) => new Date(Date.UTC(2026, 10, 26, 14, 2 + min)).toISOString();
 const start = () => newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business', name: 'Priya' }], minutes: 30 });
@@ -98,15 +98,60 @@ test('"Download my notes": one line per note, nothing else', () => {
   assert.equal(notesFile(start()), '');
 });
 
-test('the cap: 150,000 tokens and 50 calls, with 20,000 tokens and 3 calls kept for the end reading', () => {
-  assert.deepEqual(CALL_CAP, { tokens: 150_000, calls: 50, keptForEnd: { tokens: 20_000, calls: 3 } });
-  assert.ok(roomDuringCall({ tokens: 129_999, calls: 45 }, 2));
-  assert.ok(!roomDuringCall({ tokens: 130_000, calls: 0 }, 2), 'readings stop at 130,000 tokens');
-  assert.ok(!roomDuringCall({ tokens: 0, calls: 46 }, 2), 'or when a reading would take the calls past 47');
-  assert.ok(capReachedDuringCall({ tokens: 130_000, calls: 0 }));
-  assert.ok(roomAtEnd({ tokens: 130_000, calls: 47 }, 2), 'the end reading still runs');
-  assert.ok(!roomAtEnd({ tokens: 150_000, calls: 0 }, 1));
-  assert.ok(!roomAtEnd({ tokens: 0, calls: 49 }, 2));
+test('the cap scales with the call: 150,000 tokens and 70 calls for each 30 minutes, with the end reading\'s share scaled the same way', () => {
+  assert.deepEqual(CALL_CAP, { tokens: 150_000, calls: 70, keptForEnd: { tokens: 20_000, calls: 3 } });
+  assert.deepEqual(capFor(30), { tokens: 150_000, calls: 70, keptForEnd: { tokens: 20_000, calls: 3 } });
+  assert.deepEqual(capFor(45), { tokens: 225_000, calls: 105, keptForEnd: { tokens: 30_000, calls: 5 } });
+  assert.deepEqual(capFor(60), { tokens: 300_000, calls: 140, keptForEnd: { tokens: 40_000, calls: 6 } });
+  // 30 minutes: readings stop at 130,000 tokens, or when a reading would take the calls past 67.
+  assert.ok(roomDuringCall({ tokens: 129_999, calls: 65 }, 2, 30));
+  assert.ok(!roomDuringCall({ tokens: 130_000, calls: 0 }, 2, 30));
+  assert.ok(!roomDuringCall({ tokens: 0, calls: 66 }, 2, 30));
+  assert.ok(capReachedDuringCall({ tokens: 130_000, calls: 0 }, 30));
+  // 60 minutes: twice the room.
+  assert.ok(roomDuringCall({ tokens: 259_999, calls: 132 }, 2, 60));
+  assert.ok(!roomDuringCall({ tokens: 260_000, calls: 0 }, 2, 60));
+  assert.ok(!roomDuringCall({ tokens: 0, calls: 133 }, 2, 60));
+  // The end reading still runs within the whole cap.
+  assert.ok(roomAtEnd({ tokens: 130_000, calls: 67 }, 2, 30));
+  assert.ok(!roomAtEnd({ tokens: 150_000, calls: 0 }, 1, 30));
+  assert.ok(!roomAtEnd({ tokens: 0, calls: 69 }, 2, 30));
+  assert.ok(roomAtEnd({ tokens: 299_999, calls: 138 }, 2, 60));
   assert.deepEqual(afterCallUse({ tokens: 10, calls: 1 }, { input: 100, output: 20 }), { tokens: 130, calls: 2 });
   assert.deepEqual(afterCallUse({ tokens: 10, calls: 1 }, null), { tokens: 10, calls: 2 }, 'a call with no usage still counts as a call');
+});
+
+test('how far each question was read is kept, read back without trusting it, and merged by the lesser of two copies', () => {
+  const at = (m: number) => new Date(Date.UTC(2026, 10, 27, 10, m)).toISOString();
+  let s = newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business' }], minutes: 30 });
+  for (const [i, text] of ['Made-up note one.', 'Made-up note two.', 'Made-up note three.'].entries()) s = addNote(s, { id: `n${i + 1}`, at: at(i + 1), text }) as CallState;
+  s = { ...s, readThrough: { a: 3, b: 1 }, lastCatchUpAt: at(3), lastFailed: true };
+  assert.deepEqual(readCall(JSON.stringify(s), 'p-1'), s);
+  const odd = readCall(JSON.stringify({ ...s, readThrough: { a: 99, b: 'x', c: -2, d: 2.7 }, lastCatchUpAt: 'never', lastFailed: 'yes' }), 'p-1')!;
+  assert.deepEqual(odd.readThrough, { a: 3, d: 2 }, 'never past the notes kept; anything not a count is left out');
+  assert.ok(!('lastCatchUpAt' in odd) && !('lastFailed' in odd));
+  const other = { ...s, changedAt: at(9), readThrough: { a: 2, c: 3 } };
+  assert.deepEqual(mergeCalls(s, other).readThrough, { a: 2, b: 1, c: 3 });
+  assert.deepEqual(newCall({ processId: 'p-1', at: at(0), attendees: [], minutes: 30 }).readThrough, {});
+});
+
+test('two copies merged: a note only one copy had is never counted as read by the other\'s questions', () => {
+  const at = (m: number) => new Date(Date.UTC(2026, 10, 27, 10, m)).toISOString();
+  let mine = newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business' }], minutes: 30 });
+  mine = addNote(mine, { id: 'n1', at: at(1), text: 'Made-up note one.' }) as CallState;
+  mine = addNote(mine, { id: 'n3', at: at(3), text: 'Made-up note three.' }) as CallState;
+  mine = { ...mine, read: ['n1', 'n3'], readThrough: { q: 2 }, changedAt: at(4) };
+  // The other tab typed a note at 10:02 that this copy never had, and read nothing.
+  let theirs = newCall({ processId: 'p-1', at: at(0), attendees: [{ kind: 'business' }], minutes: 30 });
+  theirs = addNote(theirs, { id: 'n1', at: at(1), text: 'Made-up note one.' }) as CallState;
+  theirs = addNote(theirs, { id: 'n2', at: at(2), text: 'Made-up note two, from the other tab.' }) as CallState;
+  theirs = { ...theirs, changedAt: at(5) };
+  const m = mergeCalls(mine, theirs);
+  assert.deepEqual(m.notes.map(n => n.id), ['n1', 'n2', 'n3']);
+  assert.deepEqual(m.readThrough, { q: 1 }, 'read through n1 only: n2 came from the other copy');
+  // A note changed in the other copy is not read either.
+  const changed = { ...theirs, notes: [theirs.notes[0]!, { ...mine.notes[1]!, text: 'Made-up note three, changed.', editedAt: at(6) }], changedAt: at(6) };
+  assert.deepEqual(mergeCalls(mine, changed).readThrough, { q: 1 });
+  // With nothing new from the other copy, nothing changes.
+  assert.deepEqual(mergeCalls(mine, { ...mine, changedAt: at(7) }).readThrough, { q: 2 });
 });
