@@ -13,6 +13,10 @@
 // hand-written answers matched, by their keys only: the notes and their keys are made up. Set B keeps every guard of
 // the discovery replay (setBCases, setBAllowed): only on the platform's key, counted first by ids, held in memory,
 // never stored, logged or printed. The connection is the discovery replay's, repeated here so its file is unchanged.
+import { compareCall, compareLong, renderCompare, renderLong, type CompareResult } from './compare.ts';
+
+/** The long made-up call compared (owner, 28 November 2026): set A's longest, the sample's first call, and how many of its questions. */
+export const LONG = { id: 'A1', questions: 20 } as const;
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,7 +101,7 @@ async function main() {
     console.log('Set B (the two transcripts of "Project time writing") is read only in a live run, in the workflow.');
     return;
   }
-  if (args.includes('--live') && !['dry', 'a', 'b', 'b1', 'all'].includes(set)) throw new ReplayStop('--set is dry, a, b, b1 or all.');
+  if (args.includes('--live') && !['dry', 'a', 'b', 'b1', 'all', 'compare', 'long'].includes(set)) throw new ReplayStop('--set is dry, a, b, b1, all, compare or long.');
   if (judging !== 'all' && judging !== 'said') throw new ReplayStop('--judge is all or said.');
   const withB = set === 'b' || set === 'b1' || set === 'all';
   const server = await connect();
@@ -106,8 +110,21 @@ async function main() {
   console.log(`Signed in. AI use counts against the chosen workspace, on ${a.json.source === 'workspace' ? 'its own' : "the platform's"} ${a.json.provider} key${a.json.budget ? `: ${a.json.used} of ${a.json.budget} tokens used this month` : ''}.`);
   if (args.includes('--check')) return;
   if (withB && !setBAllowed(a.json.source)) throw new ReplayStop(SET_B_NOT_ON_PLATFORM);
-  console.log(judging === 'said' ? 'Judged: measure 1 alone.' : 'Judged: measures 1 and 2.');
   const ask = askVia(server);
+  // long: one long made-up call of set A, read from the repository's own files; set B is never read here.
+  if (set === 'long') {
+    const c = (await setA()).find(x => x.id === LONG.id)!;
+    console.log(renderLong(await compareLong(c, ask, LONG.questions)));
+    return;
+  }
+  // compare: the independent check on set M alone, each question read alone and together, against the hand-written answers.
+  if (set === 'compare') {
+    const out: CompareResult[] = [];
+    for (const c of setM()) out.push(await compareCall(c, answers.find(x => x.id === c.id)!, ask));
+    console.log(renderCompare(out));
+    return;
+  }
+  console.log(judging === 'said' ? 'Judged: measure 1 alone.' : 'Judged: measures 1 and 2.');
   const cases = [
     ...(set === 'b' || set === 'b1' ? [] : setM()),
     ...(set === 'a' || set === 'all' ? await setA() : []),
