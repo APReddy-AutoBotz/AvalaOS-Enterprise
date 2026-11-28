@@ -223,3 +223,13 @@ test('a refused write is said in plain words on the card', () => {
   assert.equal(notSavedLine('This question is already open.'), 'Not saved: This question is already open. Nothing was changed.');
   assert.equal(notSavedLine('The draft was changed elsewhere'), 'Not saved: The draft was changed elsewhere. Nothing was changed.');
 });
+
+test('"Read it again" stops at the session\'s three readings, or its tokens, and says which', async () => {
+  const { readAgainStopped, WORDS } = await import('./flow.ts');
+  assert.equal(readAgainStopped({ tokens: 0, calls: 0, readings: 2 }), null);
+  assert.equal(readAgainStopped({ tokens: 0, calls: 0, readings: 3 }), WORDS.readingsUsed);
+  assert.equal(WORDS.readingsUsed, 'This session has used its three readings. Add to what I said is still open; the words you add are kept for the next reading.');
+  assert.match(readAgainStopped({ tokens: 250_000, calls: 0, readings: 1 })!, /^This session has used what it may read\./);
+  // The panel's own calls do not stop a reading (they have their own cap).
+  assert.equal(readAgainStopped({ tokens: 0, calls: 60, readings: 1 }), null);
+});

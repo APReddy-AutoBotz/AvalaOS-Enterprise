@@ -588,7 +588,9 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
       const last = runs[runs.length - 1];
       if (!last) return null;
       if (last.status === 'running' && Date.now() - Date.parse(last.createdAt) > 1500) {
-        Object.assign(last, { status: 'done', model: last.done, updatedAt: now(), tokens: 30_000 });
+        // A recorded reading may end as failed, with the sentence the server would store (browser tests only).
+        const failedWith = (last.done as { failedWith?: unknown } | null)?.failedWith;
+        Object.assign(last, typeof failedWith === 'string' ? { status: 'failed', error: failedWith, model: null, updatedAt: now(), tokens: 30_000 } : { status: 'done', model: last.done, updatedAt: now(), tokens: 30_000 });
         save();
       }
       const c = structuredClone(last);
