@@ -8,7 +8,7 @@ import { errorsOf, validateModel } from '../../../domain/processModel/validate.t
 import { itemFor } from '../../../domain/meeting/panel.ts';
 import { MADE_UP, readTranscript, type Ask } from '../replay.ts';
 import { DRAFTS } from './drafts.ts';
-import { asNote, CALL_THRESHOLDS, callList, historyOf, matchedKeys, renderCallScorecard, replayCall, scoreCalls, type CallAnswers, type CallCase, type CallCaseResult } from './replay.ts';
+import { asNote, CALL_THRESHOLDS, callList, historyOf, matchedKeys, renderCallScorecard, replayCall, scoreCalls, strictOf, togetherItems, TOGETHER_AT_MOST, type CallAnswers, type CallCase, type CallCaseResult, type Suggested } from './replay.ts';
 
 const dir = new URL('./', import.meta.url);
 type Entry = CallAnswers & { file: string; draft: string; process: string; attendees: CallCase['attendees'] };
@@ -134,7 +134,8 @@ test('the report holds numbers only: no note, question, quote or value', async (
   for (const x of [...r.suggested.map(y => y.question), ...r.found.map(y => y.display)]) assert.ok(!report.includes(x));
   assert.ok(!report.includes('Site coordinator'));
   assert.match(report, /^Call replay: set dry\. 1 call, \d+ questions? suggested\./);
-  assert.equal(report.split('\n').length, 15);
+  // 15 lines, and the stricter judge's two beside measure 1 (its count, and its hand-written score on set M).
+  assert.equal(report.split('\n').length, 17);
   assert.equal(CALL_THRESHOLDS.tokensPerThirtyMinutes, 150_000);
   assert.equal(CALL_THRESHOLDS.callsPerThirtyMinutes, 70);
 });
@@ -227,4 +228,92 @@ test('notes past the call\'s limit are not kept, and counted', async () => {
   const r = await replayCall(c, recorded({}), { judge: false });
   assert.equal(r.notesNotKept, 10, '20,000 characters hold twenty notes of 1,000');
   assert.equal(r.judged, 'none');
+});
+
+// The stricter judge for measure 1 (plan `claude/measure-1-strict-judge-plan-28-nov.md`): shown beside today's.
+test('the stricter judge: the same stated answer alone and together, from the same note; else why not', () => {
+  const ns = [{ id: 'p1', at: '2026-11-28T09:01:00Z', text: 'The clerk checks every claim form.' }, { id: 'p2', at: '2026-11-28T09:02:00Z', text: 'Later the team lead checks the claim form again.' }];
+  const alone = { quote: 'The clerk checks every claim form' };
+  assert.equal(strictOf(ns, alone, { certainty: 'stated', quote: 'clerk checks every claim' }), 'agree', 'the same note, in other words');
+  assert.equal(strictOf(ns, alone, undefined), 'none');
+  assert.equal(strictOf(ns, alone, { certainty: 'inferred', quote: 'The clerk checks every claim form' }), 'inferred');
+  assert.equal(strictOf(ns, alone, { certainty: 'stated', quote: 'the team lead checks the claim form again' }), 'other');
+  assert.equal(strictOf(ns, { quote: 'Nobody said this' }, { certainty: 'stated', quote: 'The clerk checks every claim form' }), 'other', 'a quote no one note holds is not the same note');
+});
+
+test('the together read: the call\'s list in its order, at most 30, always with the suggestion\'s own question', () => {
+  const a = answers.find(x => x.id === 'M1')!;
+  const c = caseOf(a);
+  const { list, triage } = callList(c);
+  const readable = list.map(x => itemFor(x.card, x.owner, triage)).filter((x): x is NonNullable<typeof x> => x !== null);
+  const first = readable[0]!;
+  const items = togetherItems(first, list, triage);
+  assert.ok(items.length <= TOGETHER_AT_MOST);
+  assert.equal(items[0]!.key, first.key, 'in the briefing\'s order');
+  assert.equal(new Set(items.map(x => x.key)).size, items.length, 'each once');
+  const own = { ...first, key: 'own:x', question: 'A question of the analyst\'s own?' };
+  assert.equal(togetherItems(own, list, triage).at(-1)!.key, 'own:x', 'a question not on the list is read with it');
+});
+
+test('a replayed call judges measure 1 by both judges; the together read is made only for what today\'s judge counts as stated', async () => {
+  const a = answers.find(x => x.id === 'M1')!;
+  const c = caseOf(a);
+  let alone = 0, together = 0;
+  // Read alone, the first suggestion is stated from the first note and the rest are inferred. Read together, the
+  // first note answers the first question asked alone, stated.
+  const ask = recorded({
+    answerFromNotes: segs => {
+      const qs = segs.filter(x => x.id.startsWith('q:'));
+      const first = notes(segs)[0];
+      if (!first || !qs.length) return { answers: [] };
+      const excerpt = first.text.split(/\s+/).slice(0, 4).join(' ');
+      if (qs.length === 1) return { answers: [{ questionId: qs[0]!.id, value: 'x', interface: '', certainty: alone++ === 0 ? 'stated' : 'inferred', segmentId: first.id, excerpt }] };
+      // The panel's own readings, before the judging starts, find nothing.
+      if (alone === 0) return { answers: [] };
+      together++;
+      return { answers: qs.map(q => ({ questionId: q.id, value: 'x', interface: '', certainty: 'stated', segmentId: first.id, excerpt })) };
+    },
+  });
+  const r = await replayCall(c, ask, { judge: 'said' });
+  assert.equal(r.suggested[0]!.alreadySaid, 'stated');
+  assert.equal(r.suggested[0]!.strict, 'agree');
+  assert.equal(together, 1, 'one together read: only the stated suggestion gets one');
+  assert.ok(r.suggested.slice(1).every(x => x.strict === undefined), 'none for what today\'s judge does not count as stated');
+  const s = scoreCalls([r]);
+  assert.deepEqual([s.alreadySaid.stated, s.alreadySaid.strict.stated], [1, 1]);
+  assert.deepEqual(s.alreadySaid.strict.notCounted, { none: 0, inferred: 0, other: 0 });
+  assert.equal(s.passed.alreadySaid, s.alreadySaid.share <= CALL_THRESHOLDS.alreadySaid, 'the threshold is judged on today\'s figure');
+});
+
+test('the stricter judge in the scorecard and the report: its count, why the rest are not counted, and the hand-written score', () => {
+  const base: CallCaseResult = { id: 'M1', passages: 1, windows: 1, seconds: null, suggested: [], raised: [], found: [], wanted: [], readingMs: [], tokens: 0, calls: 0, judgingTokens: 0, failures: 0, listKeys: [], ...COUNTS };
+  const m1 = answers.find(x => x.id === 'M1')!;
+  const [rightKey, rightWords] = Object.entries(m1.expected).find(([, e]) => Array.isArray(e)) as [string, string[]];
+  const nullKey = Object.entries(m1.expected).find(([, e]) => e === null)?.[0];
+  const sug = (strict: Suggested['strict'], alreadySaid: Suggested['alreadySaid'], extra: Partial<Suggested> = {}): Suggested =>
+    ({ window: 0, key: 'k', question: 'q', from: 'list', hasOrigin: true, hasTarget: true, alreadySaid, history: 'with', strict, ...extra });
+  const suggested: Suggested[] = [
+    sug('agree', 'stated', { answerKey: rightKey, alone: rightWords[0], together: rightWords[0] }),
+    sug('none', 'stated', ...(nullKey ? [{ answerKey: nullKey, alone: 'something' }] : [{}])),
+    sug('inferred', 'stated'),
+    sug('other', 'stated'),
+    sug(null, 'stated'),
+    sug(undefined, 'inferred'),
+    sug(undefined, 'no'),
+    sug(undefined, 'no'),
+  ];
+  const s = scoreCalls([{ ...base, suggested }], answers);
+  assert.deepEqual([s.alreadySaid.stated, s.alreadySaid.judged, s.alreadySaid.strict.stated], [5, 8, 1]);
+  assert.equal(s.alreadySaid.strict.share, 1 / 8);
+  assert.deepEqual(s.alreadySaid.strict.notCounted, { none: 1, inferred: 1, other: 1 });
+  assert.equal(s.alreadySaid.strict.notJudged, 1);
+  assert.deepEqual(s.alreadySaid.handWritten!.today, { right: 1, wrong: nullKey ? 1 : 0 });
+  assert.deepEqual(s.alreadySaid.handWritten!.strict, { right: 1, wrong: 0 });
+  const report = renderCallScorecard(s, 'set M');
+  assert.match(report, /The stricter judge, shown beside it .*: 1 of 8 \(12\.5%\)\. Counted by today's judge and not by it: read together, no answer 1; only an inferred one 1; an answer from another note 1\. Not judged by it, its read having failed: 1\. The threshold is judged on today's figure\./);
+  assert.match(report, new RegExp(`today's judge 1 right, ${nullKey ? 1 : 0} wrong; the stricter judge 1 right, 0 wrong\\.`));
+  // Numbers only: no hand-written words, no key.
+  assert.ok(!report.includes(rightWords[0]!) && !report.includes(rightKey));
+  // Without hand-written answers, no such line.
+  assert.ok(!renderCallScorecard(scoreCalls([{ ...base, id: 'B1', suggested }], answers), 'set b1').includes('hand-written answers ('));
 });
