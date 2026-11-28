@@ -5,7 +5,8 @@ import React from 'react';
 import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
 import { closeQuestions, deferQuestion, reopenQuestions } from '../../domain/processModel/patch.ts';
-import { ACCESS, all, buildAnswer, record, type Op } from '../../domain/questions/answer.ts';
+import { ACCESS, all, buildAnswer, record, SOMEONE_ELSE, type Named, type Op } from '../../domain/questions/answer.ts';
+import { NamedChoice, takesNamed } from './NamedChoice.tsx';
 import { groupLabel, OWNER_LABEL, type QGroup, type QOwner, type TriageItem } from '../../domain/questions/triage.ts';
 import { holdReason, nowHeading, planSummary } from '../../domain/questions/firstList.ts';
 import { lookSummary } from '../../domain/assistant/sourceLook.ts';
@@ -256,11 +257,12 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
   const voice = useVoice(notes?.store, notes?.workspaceId);
   const [text, setText] = React.useState('');
   const [pick, setPick] = React.useState('');
+  // "Someone else" on a role or application question (owner's walk, 28 November 2026).
+  const [named, setNamed] = React.useState<Named>({ name: '', kind: 'person_role' });
   const [statuses, setStatuses] = React.useState<Record<number, AccessStatus>>(() => Object.fromEntries((item.interfaces ?? []).map(x => [x.index, x.access])));
   const [assignee, setAssignee] = React.useState(item.assignedTo ?? '');
   const [mode, setMode] = React.useState<'answer' | 'later'>('answer');
   const t = item.target;
-  const options = item.kind === 'role' ? model.roles : item.kind === 'system' ? model.systems : [];
 
   const [said, setSaid] = React.useState('');
   const [filling, setFilling] = React.useState<string | null>(null);
@@ -276,6 +278,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
       if (!p) {
         setFilling(item.kind === 'ways'
           ? `Your words do not say how the automation reaches ${model.systems.find(x => x.id === item.target.id)?.name ?? 'it'}, so nothing is recorded yet. Choose a way in, or "${NO_WAY_IN_LABEL}".`
+          : takesNamed(item) ? `Your answer does not name one of these. Choose below, or ${item.kind === 'role' ? '"Someone else"' : '"Another application"'} and type the name.`
           : 'Your answer does not settle this question. Choose below, or say it differently.');
         return;
       }
@@ -285,7 +288,7 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
       setFilling(`Filled in from “${p.quote}”. Check it, then save.`);
     } catch (e) { setFilling(messageOf(e)); }
   };
-  const answerOp = () => buildAnswer(item, model, { pick, text: structured ? (item.kind === 'number' ? text : said || text) : text, statuses });
+  const answerOp = () => buildAnswer(item, model, { pick, text: structured ? (item.kind === 'number' ? text : said || text) : text, statuses, ...(pick === SOMEONE_ELSE ? { named } : {}) });
   const ready = answerOp() !== null;
   const save = async () => { const a = answerOp(); if (a) await onApply(a.op, a.summary); };
 
@@ -311,11 +314,8 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
               {(item.choices ?? []).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           )}
-          {(item.kind === 'role' || item.kind === 'system') && (
-            <select aria-label="Answer" value={pick} onChange={e => setPick(e.target.value)} className={input}>
-              <option value="">{item.kind === 'role' ? 'Choose the role' : 'Choose the system'}</option>
-              {options.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
+          {takesNamed(item) && (
+            <NamedChoice item={item} model={model} value={{ pick, named }} onChange={v => { setPick(v.pick); setNamed(v.named); }} id={`gap-${item.key}`} />
           )}
           {(item.kind === 'access' || item.kind === 'ways') && (
             <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200" aria-label={item.kind === 'ways' ? 'Ways in' : undefined}>

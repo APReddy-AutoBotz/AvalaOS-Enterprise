@@ -114,3 +114,18 @@ test('an application with no way in recorded is a card to choose from, never pla
   // An application whose ways in are listed but unknown is still read from words.
   assert.equal(queue(gold).find(c => c.itemKey === 'system:sys-servicenow')!.answer, 'words');
 });
+
+// Owner's walk, 28 November 2026: "About how many cases …?" left with a named person was asked again after a reload.
+test('an input card left with someone, or not applicable, is not asked again; the others still are', async () => {
+  const { leaveWith, notApplicable } = await import('./flow.ts');
+  const cards = queue(gold).filter(c => c.group === 'input');
+  const time = cards.find(c => c.key === 'input:time')!, change = cards.find(c => c.key === 'input:change')!;
+  assert.ok(time && change);
+  const left = leaveWith(time, undefined, 'Priya in finance')!.op(gold).model;
+  assert.equal(left.openQuestions.at(-1)!.status, 'deferred');
+  const after = queue(left).map(c => c.key);
+  assert.ok(!after.includes('input:time'));
+  assert.ok(after.includes('input:change'));
+  const closed = notApplicable(change, undefined).op(left).model;
+  assert.ok(!queue(closed).map(c => c.key).includes('input:change'));
+});

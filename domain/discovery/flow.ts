@@ -9,7 +9,7 @@ import type { Said } from './notice.ts';
 import { raisedOf, wantedOf, type NoticedWanted, type SessionState } from './session.ts';
 import { heldBack, type WantedQuote } from './wanted.ts';
 import { orderedSteps } from '../processModel/selectors.ts';
-import { buildAnswer, record, type Op } from '../questions/answer.ts';
+import { buildAnswer, record, type Named, type Op } from '../questions/answer.ts';
 import { OWNER_LABEL, type Triage, type TriageItem } from '../questions/triage.ts';
 import { ANSWER_TO, answersKey, answerAgainstConfirmed, type AnswerOutcome } from './answers.ts';
 import type { Card } from './card.ts';
@@ -124,6 +124,8 @@ export interface Edit { op: Op; summary: string; line?: string }
 export function chooseEdit(card: Card, m: ProcessModel, pick: string, ctx: {
   /** The signed-in person's id, and their name as the other screens store a chooser's (`chosenBy`): who chose is kept. */
   me: string | null; name: string; at: string; item?: TriageItem; statuses?: Record<number, AccessStatus>;
+  /** "Someone else" on a role or application card: the typed name (and a role's kind), with the person's words if any. */
+  named?: Named; words?: string;
 }): Edit | null {
   if (card.key === 'start:purpose') {
     if (pick !== 'assess' && pick !== 'as_is') return null;
@@ -139,7 +141,8 @@ export function chooseEdit(card: Card, m: ProcessModel, pick: string, ctx: {
     return { op: x => resolveConflict(x, { conflictId: c.id, chosen: pick, by: ctx.name.trim() || 'Not recorded', ...(ctx.me ? { byId: ctx.me } : {}), reason: 'Chosen in a discovery session.', ...conflictValue(x, c, pick) }), summary: `Conflict resolved: ${c.summary}` };
   }
   if (ctx.item) {
-    const built = buildAnswer(ctx.item, m, { pick, statuses: ctx.statuses });
+    const words = (ctx.words ?? '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    const built = buildAnswer(ctx.item, m, { pick, statuses: ctx.statuses, ...(ctx.named ? { named: ctx.named } : {}) }, words ? `in their words: "${words}"` : '');
     return built && { op: built.op, summary: built.summary };
   }
   return null;

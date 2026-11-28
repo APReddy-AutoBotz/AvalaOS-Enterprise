@@ -112,7 +112,11 @@ export function discoveryQueue(i: QueueInput): Card[] {
     if (same) { if (same.origin.kind === 'gap') same.origin = r.origin; continue; }
     raised.push(r);
   }
-  const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...raised, ...inputCards(m, i.assessment)];
+  // An input card a person left with someone or closed is not asked again (owner's walk, 28 November 2026: "About how
+  // many cases …?" left with a named person came back as the first card): its stored question on the same target is
+  // no longer open, while the input itself is still missing from the assessment.
+  const inputs = inputCards(m, i.assessment).filter(c => !settledAt.has(at(c.target)));
+  const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...raised, ...inputs];
   // One card per key, the first kept; a stable sort by group keeps each group's own order.
   const seen = new Set<string>();
   const unique = all.filter(c => (seen.has(c.key) ? false : (seen.add(c.key), true)));
