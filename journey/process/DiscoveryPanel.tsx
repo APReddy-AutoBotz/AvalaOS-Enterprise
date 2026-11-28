@@ -35,7 +35,7 @@ import {
 } from '../../domain/discovery/session.ts';
 import { discoveryQuestions, noticeSegments, readNotice, worthNoticing, type NoticeReply, type Said } from '../../domain/discovery/notice.ts';
 import {
-  cardItem, chooseEdit, keptLine, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
+  cardItem, chooseEdit, keptLine, readAgainStopped, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
   answerSaid, descriptionSaid, heldBackSteps, keepWantedEdit, noticeAsked,
 } from '../../domain/discovery/flow.ts';
 import { removeStep } from '../../domain/processModel/patch.ts';
@@ -318,11 +318,24 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
       {stage === 'first' && (
         <FirstReading store={store} process={process} run={run ?? null} lastRead={sourcesRead(state, run?.id)} boxVoice={boxVoice} busy={busy} active={active}
           heldBack={run?.model ? heldBackSteps(m, run.model, state) : []} noticing={noticing}
+          readings={readingsStarted(state).length} stopped={readAgainStopped(state.use)}
           onRead={async ids => { setBusy(true); setError(null); try { await read(ids); } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); } }}
+          onReadAgain={async ids => {
+            // "Read it again" on a reading with no steps: the hourly limit is said in its own box (#258's words);
+            // a reading already under way is followed (read); anything else is the panel's error.
+            setBusy(true); setError(null);
+            try { await read(ids); return null; } catch (e) {
+              if (e instanceof StoreError && e.code === 'READINGS_PER_HOUR') return e.message;
+              if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e));
+              return null;
+            } finally { setBusy(false); }
+          }}
           onAdd={async words => {
             setBusy(true); setError(null);
             try {
               const row = await store.addSource(process.id, ownWordsSource(words, sources.map(s => s.key), sourceDate()));
+              // With no reading left in the session, the words are kept as a source and read at the next reading.
+              if (readAgainStopped(state.use)) { setNotice(WORDS.addedNotRead); return; }
               const latest = await store.listSources(process.id);
               await read(updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), row.id));
             } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
@@ -444,14 +457,19 @@ function Describe({ m, asksPurpose, boxVoice, capped, busy, onSave, onSources }:
   );
 }
 
-function FirstReading({ store, process, run, lastRead, heldBack, noticing, boxVoice, busy, active, onRead, onAdd, onStarted }: {
+function FirstReading({ store, process, run, lastRead, heldBack, noticing, readings, stopped, boxVoice, busy, active, onRead, onReadAgain, onAdd, onStarted }: {
   store: JourneyStore; process: ProcessRow; run: ExtractionRow | null; lastRead: string[]; boxVoice: BoxVoice; busy: boolean; active: SourceRow[];
   /** Steps whose every quote lies inside what the person said they want in future (5b): not steps of today's work. */
   heldBack: Step[];
   /** While what was said is being noticed, the process cannot be started from the reading. */
   noticing: boolean;
+  /** Readings this session started, and why another cannot start (the session's cap), or null. */
+  readings: number; stopped: string | null;
   onRead: (ids: string[]) => void; onAdd: (words: string) => void; onStarted: () => void;
+  /** "Read it again": the hourly limit's words when it was refused for that, else null. */
+  onReadAgain: (ids: string[]) => Promise<string | null>;
 }) {
+  const [limited, setLimited] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
   const [words, setWords] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
@@ -470,6 +488,10 @@ function FirstReading({ store, process, run, lastRead, heldBack, noticing, boxVo
   // The reading without what is held back: the draft starts from today's work only.
   const extracted = held.reduce((x, s) => removeStep(x, { stepId: s.id }).model, run.model!);
   const rows = stepsWithWords(extracted);
+  // No step of today's work: the reading found none, or everything it found is what the person wants in future.
+  const none = run.model.steps.length === 0;
+  const empty = extracted.steps.length === 0;
+  const again = () => void onReadAgain(lastRead.length ? lastRead : active.map(s => s.id)).then(setLimited);
   const start = async () => {
     setSaving(true); setError(null);
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -490,8 +512,16 @@ function FirstReading({ store, process, run, lastRead, heldBack, noticing, boxVo
   return (
     <div className="space-y-3" data-testid="discovery-first">
       <h3 className="font-display text-lg font-semibold text-slate-900">What I understand so far</h3>
-      <p className="text-sm leading-6 text-slate-600">From what you said: {extracted.steps.length} {extracted.steps.length === 1 ? 'step' : 'steps'}, {extracted.roles.length} {extracted.roles.length === 1 ? 'role' : 'roles'} and {extracted.systems.length} {extracted.systems.length === 1 ? 'application' : 'applications'}. Each step shows the words it came from.</p>
-      <ol className="space-y-2" data-testid="discovery-steps">
+      {empty && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-no-steps">
+          <p className="text-sm leading-6 text-amber-950">{none ? WORDS.noSteps : WORDS.allHeld}</p>
+          {none && readings > 1 && <p className="text-sm leading-6 text-amber-950" data-testid="discovery-no-steps-again">{WORDS.noStepsAgain}</p>}
+          {none && stopped && <p className="text-sm leading-6 text-amber-950" data-testid="discovery-readings-used">{stopped}</p>}
+          {none && limited && <p role="alert" className="text-sm leading-6 text-amber-950" data-testid="discovery-read-limit">{limited}</p>}
+        </div>
+      )}
+      {!empty && <p className="text-sm leading-6 text-slate-600">From what you said: {extracted.steps.length} {extracted.steps.length === 1 ? 'step' : 'steps'}, {extracted.roles.length} {extracted.roles.length === 1 ? 'role' : 'roles'} and {extracted.systems.length} {extracted.systems.length === 1 ? 'application' : 'applications'}. Each step shows the words it came from.</p>}
+      {!empty && <ol className="space-y-2" data-testid="discovery-steps">
         {rows.map((r, i) => (
           <li key={i} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
             <p className="text-sm font-semibold text-slate-900">{i + 1}. {r.name}</p>
@@ -499,7 +529,7 @@ function FirstReading({ store, process, run, lastRead, heldBack, noticing, boxVo
             {r.words && <p className="mt-1 text-sm leading-6 text-slate-700">From your words: “{r.words}”</p>}
           </li>
         ))}
-      </ol>
+      </ol>}
       {heldBack.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-held-back">
           <p className="text-sm font-semibold text-amber-950">Held back: what you want to change</p>
@@ -522,14 +552,15 @@ function FirstReading({ store, process, run, lastRead, heldBack, noticing, boxVo
       {noticing && <p role="status" className="text-sm text-slate-600" data-testid="discovery-noticing">Looking at what you said for questions and for what you want to change…</p>}
       <ErrorNote message={error} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="accent" onClick={start} disabled={saving || noticing || !extracted.steps.length}>Start the process from this</Button>
+        {!empty && <Button variant="accent" onClick={start} disabled={saving || noticing}>Start the process from this</Button>}
+        {empty && none && !stopped && <Button variant="accent" onClick={again} disabled={busy}>Read it again</Button>}
         <Button variant="secondary" onClick={() => setAdding(a => !a)}>Add to what I said</Button>
       </div>
-      <p className="text-xs text-slate-500">It becomes a working draft you can edit. Nothing is approved yet.</p>
+      {!empty && <p className="text-xs text-slate-500">It becomes a working draft you can edit. Nothing is approved yet.</p>}
       {adding && (
         <div className="space-y-2">
           <AnswerBox label="What to add" value={words} onChange={setWords} rows={4} placeholder="What else happens, who does it, in which application…" {...boxVoice} />
-          <Button disabled={busy || words.trim().length < 2} onClick={() => onAdd(words)}>Save and read it again</Button>
+          <Button disabled={busy || words.trim().length < 2} onClick={() => onAdd(words)}>{stopped ? 'Save my words' : 'Save and read it again'}</Button>
         </div>
       )}
     </div>
