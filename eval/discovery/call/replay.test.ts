@@ -134,7 +134,7 @@ test('the report holds numbers only: no note, question, quote or value', async (
   for (const x of [...r.suggested.map(y => y.question), ...r.found.map(y => y.display)]) assert.ok(!report.includes(x));
   assert.ok(!report.includes('Site coordinator'));
   assert.match(report, /^Call replay: set dry\. 1 call, \d+ questions? suggested\./);
-  assert.equal(report.split('\n').length, 14);
+  assert.equal(report.split('\n').length, 15);
   assert.equal(CALL_THRESHOLDS.tokensPerThirtyMinutes, 150_000);
   assert.equal(CALL_THRESHOLDS.callsPerThirtyMinutes, 70);
 });

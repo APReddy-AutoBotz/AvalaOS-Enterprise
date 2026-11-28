@@ -16,8 +16,10 @@ import { buildBriefing } from './briefing.ts';
 import { addNote, editNote, newCall, removeNote, type Attendee, type CallState } from './kept.ts';
 import {
   answerKey, applyEnd, applyReading, askedList, askNow, CALL_SOURCE, dismissFound, HOLD_MS, isAnswered, leaveWithName, markAsked, nextQuestion, prepareEnd, prepareReading, raisedToShow,
-  notesRead, panelLine, readingDue, readingItemFor, readingNotes, readSoFar, skipQuestion, type ReadingPrep,
+  isStated, notesRead, panelLine, readingDue, readingItemFor, readingNotes, readSoFar, skipQuestion, type ReadingPrep,
 } from './panel.ts';
+import { callAsked } from './asked.ts';
+import { CALL_WORDS } from './words.ts';
 import { buildReview, callEdit, callNotesSource, CALL_NOTES_KIND } from './review.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
@@ -405,4 +407,59 @@ test('an edited note is read again by every question read past it; a removed one
   assert.deepEqual(p.answers!.notes.map(n => n.id), ['n1', 'n2', 'n3'], 'from the note before it to the last');
   assert.equal(applyReading(edited, p, nothing, { model: gold, at: at(2, 10), asked: [], list: list13 }).readThrough[k], 3);
   assert.equal(removeNote(s, 'n2', at(2)).readThrough[k], 2);
+});
+
+// ---------------------------------------------------------------- C3a (owner, 28 November 2026)
+
+test('C3a: an answer found only by inference keeps the question suggested, to confirm it; a stated one settles it', () => {
+  const lst = ctx.list;
+  const askBefore = (x: CallState) => lst.slice(0, lst.findIndex(y => answerKey(y.card, t) === MATCH)).reduce((st, y, i) => markAsked(st, { card: y.card, from: 'list' }, at(2, i)), x);
+  const s0 = note(start(), 'n1', 1, 'The buyer does the three-way match.');
+  const p = prepareReading(s0, { ...ctx, now: at(1, 20) });
+  const reply = (certainty: 'stated' | 'inferred') => ({ answers: verified(answerFromNotes, p.answers!.segments, { answers: [{ questionId: qid(p, MATCH), value: 'Buyer (Procurement)', interface: '', certainty, segmentId: p.answers!.segments.find(x => x.text.includes('three-way match'))!.id, excerpt: 'The buyer does the three-way match' }] }), notice: nothing.notice });
+  const inferred = applyReading(s0, p, reply('inferred'), { model: gold, at: at(1, 20), asked: [], list: lst });
+  assert.ok(isAnswered(inferred, MATCH) && !isStated(inferred, MATCH));
+  // Every question before it asked: it is next, with its inferred answer to confirm.
+  const s = askBefore(inferred);
+  const sug = nextQuestion(s, lst, t, at(3))!;
+  assert.equal(answerKey(sug.card, t), MATCH, 'in its own place in the list');
+  assert.equal(sug.toConfirm?.noteId, 'n1');
+  assert.match(sug.toConfirm!.display, /Buyer/);
+  assert.ok(prepareEnd(s, { model: gold, list: lst, triage: t }).batches.flatMap(b => b.items).some(i => i.key === MATCH), 'the end reading still reads it');
+  const stated = askBefore(applyReading(s0, p, reply('stated'), { model: gold, at: at(1, 20), asked: [], list: lst }));
+  const next = nextQuestion(stated, lst, t, at(3));
+  assert.ok(!next || answerKey(next.card, t) !== MATCH, 'settled: not suggested');
+  assert.ok(!next?.toConfirm);
+  assert.ok(!prepareEnd(stated, { model: gold, list: lst, triage: t }).batches.flatMap(b => b.items).some(i => i.key === MATCH));
+  const p2 = prepareReading(note(stated, 'n2', 3, 'Payment runs on Fridays.'), { ...ctx, now: at(3, 20) });
+  assert.ok(!p2.answers || !p2.answers.items.some(i => i.key === MATCH), 'a settled question is not read again during the call');
+  // A later inferred answer never replaces a stated one.
+  const later = applyReading(stated, p, reply('inferred'), { model: gold, at: at(4), asked: [], list: lst });
+  assert.ok(isStated(later, MATCH));
+  assert.equal(CALL_WORDS.toConfirmLine('Buyer', 'The buyer does it', '14:09'), 'Your notes suggest "Buyer", but do not say it outright: "The buyer does it" · your note at 14:09.');
+});
+
+test('C3a: with no reading possible (the allowance used up, or no AI), the list\'s order and its line; never silent', () => {
+  let s = note(note(note(start(), 'n1', 1, 'Invoices arrive by email.'), 'n2', 1, 'They are scanned.'), 'n3', 1, 'Nobody checks.');
+  ({ s } = readIt(s, at(1, 20)));
+  s = askTwelve(s, 2);
+  assert.equal(nextQuestion(s, list13, t, at(3)), null, 'with readings, it waits for the 13th to be read');
+  for (const r of ['allowance', 'noAi'] as const) {
+    assert.equal(panelLine(s, list13, t, at(3), r), r);
+    assert.equal(answerKey(nextQuestion(s, list13, t, at(3), r)!.card, t), MATCH, 'the list\'s next question');
+  }
+  assert.equal(panelLine(s, list13, t, at(3), 'ok'), 'checking');
+});
+
+test('C3a: what noticing must not raise again is 5b\'s own list: the record\'s questions, and an open Discovery session\'s', () => {
+  const fromRecord = callAsked(gold);
+  assert.deepEqual(fromRecord, [...new Set(gold.openQuestions.map(q => q.question))]);
+  const session = { waiting: [{ question: 'Made-up waiting question?' }], later: [{ question: 'Made-up later question?' }] } as unknown as Parameters<typeof callAsked>[1];
+  const both = callAsked(gold, session);
+  assert.ok(both.includes('Made-up waiting question?') && both.includes('Made-up later question?'));
+  assert.ok(fromRecord.every(q => both.includes(q)));
+  // Passed as the context's `asked`, noticing is told every one of them.
+  const s = note(start(), 'n1', 1, 'Invoices arrive by email.');
+  const p = prepareReading(s, { ...ctx13, asked: both, now: at(1, 20) });
+  assert.ok(p.notice!.segments.some(x => x.text.includes('Made-up later question?')));
 });

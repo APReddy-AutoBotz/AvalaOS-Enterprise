@@ -61,7 +61,7 @@ export type History = 'never' | 'without' | 'with' | 'unmatched';
  * raised question, before or as it was raised), after its last reading, or between two of its readings.
  */
 export type Where = 'before' | 'after' | 'between';
-export interface Suggested { window: number; key: string; question: string; from: Suggestion['from']; hasOrigin: boolean; hasTarget: boolean; alreadySaid: Said | null; history?: History | null; where?: Where | null }
+export interface Suggested { window: number; key: string; question: string; from: Suggestion['from']; hasOrigin: boolean; hasTarget: boolean; alreadySaid: Said | null; history?: History | null; where?: Where | null; toConfirm?: boolean }
 export interface RaisedQ { window: number; readyAt: number | null; question: string; noteId: string; passage: number; answeredLater: boolean | null }
 
 export interface CallCaseResult {
@@ -180,7 +180,7 @@ export async function replayCall(c: CallCase, ask: Ask, opts: { judge?: boolean 
     if (line === 'checking') out.checkingWindows++;
     if (line === 'capped') out.cappedWindows++;
     if (sug) {
-      out.suggested.push({ window: w, key: sug.card.key, question: sug.card.question, from: sug.from, hasOrigin: hasOrigin(sug.card.origin), hasTarget: Boolean(sug.card.target.kind === 'meta' ? sug.card.target.field : sug.card.target.id), alreadySaid: null });
+      out.suggested.push({ window: w, key: sug.card.key, question: sug.card.question, from: sug.from, hasOrigin: hasOrigin(sug.card.origin), hasTarget: Boolean(sug.card.target.kind === 'meta' ? sug.card.target.field : sug.card.target.id), alreadySaid: null, ...(sug.toConfirm ? { toConfirm: true } : {}) });
       readBefore.push(new Set(readWith.get(answerKey(sug.card, triage)) ?? []));
       s = markAsked(s, sug, now);
     }
@@ -283,6 +283,8 @@ export interface CallScorecard {
   catchUp: { readings: number; atOnce: number; checkingWindows: number; cappedWindows: number };
   /** Readings while some list question was open and not asked, those that read none of them, and the most asked questions in one reading. */
   crowding: { readings: number; crowded: number; maxAsked: number };
+  /** Suggestions made to confirm an answer the notes gave only by inference (C3). */
+  toConfirm: number;
   notesNotKept: number;
   tooEarly: { answered: number; judged: number; share: number; notJudged: boolean };
   noQuoteOrTarget: number;
@@ -368,6 +370,7 @@ export function scoreCalls(results: CallCaseResult[], answers: CallAnswers[] = [
     catchUp: { readings: sum(r => r.catchUps), atOnce: sum(r => r.checkingReadings), checkingWindows: sum(r => r.checkingWindows), cappedWindows: sum(r => r.cappedWindows) },
     crowding: { readings: results.reduce((t, r) => t + r.readingsWithList, 0), crowded: results.reduce((t, r) => t + r.crowded, 0), maxAsked: results.reduce((t, r) => Math.max(t, r.maxAsked), 0) },
     notesNotKept: results.reduce((t, r) => t + r.notesNotKept, 0),
+    toConfirm: sug.filter(x => x.toConfirm).length,
     tooEarly: { answered: early, judged: raised.length, share: raised.length ? early / raised.length : 0, notJudged: results.length > 0 && results.every(r => r.judged !== 'all') },
     noQuoteOrTarget: noQuote, corrected, plantedFollowed: planted,
     tokens: { total: tokens, perThirtyMinutes: t30, calls, callsPerThirtyMinutes: c30, judging: results.reduce((t, r) => t + r.judgingTokens, 0) },
@@ -396,6 +399,7 @@ export function renderCallScorecard(s: CallScorecard, label: string): string {
   return [
     `Call replay: ${label}. ${s.cases} ${s.cases === 1 ? 'call' : 'calls'}, ${s.suggested} ${s.suggested === 1 ? 'question' : 'questions'} suggested.`,
     `1. "Ask next" already answered, stated in the notes before it: ${a.stated} of ${a.judged} (${pct(a.share)}; working threshold ${pct(CALL_THRESHOLDS.alreadySaid)} or fewer): ${mark(s.passed.alreadySaid)}. Answered only by inference, reported apart: ${a.inferred} of ${a.judged} (${pct(a.inferredShare)}). Both together, as counted before 27 November: ${a.stated + a.inferred} of ${a.judged} (${pct(a.bothShare)}).`,
+    `   Suggested to confirm an answer the notes gave only by inference: ${s.toConfirm} of ${s.suggested}.`,
     `   By where it came from (stated, inferred, of those judged): the list ${from('list')}; a follow-up to the last two notes ${from('note')}; raised from the notes ${from('raised')}; "Ask it now" ${from('pinned')}, which the replay's analyst never presses.`,
     `   Before it was suggested, those stated: ${hist('stated')}. Those inferred: ${hist('inferred')}.`,
     `   Of those read, but never with the note that answers them, that note came: before the question's first reading (for a raised question, before or as it was raised) ${a.where.stated.before} stated, ${a.where.inferred.before} inferred; after its last reading ${a.where.stated.after}, ${a.where.inferred.after}; between two of its readings ${a.where.stated.between}, ${a.where.inferred.between}.`,

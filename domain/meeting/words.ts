@@ -59,6 +59,10 @@ export const CALL_WORDS = {
   privateLine: 'Private to you. In the meeting, share another window, not this one. Nothing is saved until you end the call and confirm.',
   gotIt: 'Got it',
   askNext: (heading: string) => `Ask next · ${heading}`,
+  /** C3 (owner, 28 November 2026): a question suggested only to confirm an answer the notes give by inference. */
+  toConfirm: 'To confirm',
+  toConfirmLine: (value: string, quote: string, time: string) => `Your notes suggest "${value}", but do not say it outright: "${quote}" · your note at ${time}.`,
+  toConfirmAsk: 'Ask to confirm it.',
   fromNote: (time: string, excerpt: string) => `From your note at ${time}: '${excerpt}'`,
   fromRecord: (excerpt: string, title?: string) => `From the record: '${excerpt}'${title ? ` (${title})` : ''}`,
   missing: (gap: string) => `Missing: ${gap.replace(/^Missing:\s*/, '')}`,
