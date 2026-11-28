@@ -193,3 +193,33 @@ test('every open question of a kind on the call is on the list; one with no card
   const askOwner = it.elsewhere.find(g => g.owner === 'business')!;
   assert.equal(askOwner.items.filter(i => i.key.startsWith('q-u')).length, 3);
 });
+
+test('the plain questions come from Discovery\'s queue: the briefing is what it was when it added them itself', async () => {
+  const { addQuestion } = await import('../processModel/patch.ts');
+  const { discoveryQueue, plainCard, triageCard } = await import('../discovery/queue.ts');
+  const { ASSESSED_ORDER, hasAssessment, ownerOf } = await import('./briefing.ts');
+  // The briefing's composition before the rule moved (package C, C3b): Discovery's cards, then the plain questions,
+  // in Discovery's order of the groups, or the assessed order on a process that has an assessment.
+  const DISCOVERY_ORDER = { start: 0, shape: 1, conflict: 2, decides: 3, settles: 3, said: 4, input: 5, signoff: 6 } as const;
+  const before = (m: ProcessModel, attendees: Attendee[]) => {
+    const a = assessProcess(m), t = triage(m, a);
+    const plain = askedParts(m, t).items.filter(x => !triageCard(x, m)).map(x => plainCard(x, m)!).filter(Boolean);
+    const cards = discoveryQueue({ model: m, assessment: a, asksPurpose: true, triage: t }).filter(c => !plain.some(p => p.key === c.key));
+    const rank: Record<string, number> = hasAssessment(m, a) ? ASSESSED_ORDER : DISCOVERY_ORDER;
+    const kinds = new Set(attendees.map(x => x.kind));
+    return [...cards, ...plain].filter(c => c.key !== 'start:purpose').map((c, n) => ({ c, n })).sort((x, y) => rank[x.c.group]! - rank[y.c.group]! || x.n - y.n)
+      .map(x => x.c).filter(c => kinds.has(ownerOf(c, t))).map(c => c.key);
+  };
+  let meta = gold;
+  for (const q of ['Which system holds the vendor master today?', 'How are duplicate invoices noticed today?', 'What happens at month end?'])
+    meta = addQuestion(meta, { target: { kind: 'meta' }, question: q, whyItMatters: 'w' }).model;
+  const purposes = [setPurpose(meta, { value: 'assess', by: null, at: '2026-11-26T10:00:00.000Z' }).model, setPurpose(meta, { value: 'as_is', by: null, at: '2026-11-26T10:00:00.000Z' }).model];
+  let plainSeen = 0;
+  for (const m of [gold, meta, ...purposes]) for (const people of [everyone, [{ kind: 'business' } as Attendee], [{ kind: 'it' } as Attendee]]) {
+    const b = brief(m, people, { minutes: 60 });
+    assert.deepEqual(keys([...b.forCall, ...b.ifTime]), before(m, people));
+    const t = triage(m, assessProcess(m));
+    plainSeen += [...b.forCall, ...b.ifTime].filter(x => { const i = x.card.itemKey ? t.items.find(y => y.key === x.card.itemKey) : undefined; return i && !triageCard(i, m); }).length;
+  }
+  assert.ok(plainSeen > 0, 'the fixtures hold plain questions');
+});

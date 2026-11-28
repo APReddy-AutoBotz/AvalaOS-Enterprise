@@ -20,7 +20,8 @@ const sound = (cards: Card[]) => {
   assert.ok(cards.length > 0);
   for (const c of cards) {
     assert.ok(hasOrigin(c.origin), `${c.key} says where it came from`);
-    assert.ok(c.target.kind === 'meta' ? c.target.field : c.target.id, `${c.key} has a target`);
+    // A target, or (a plain question, with no card of its own) the stored question it stands for, by key.
+    assert.ok((c.target.kind === 'meta' ? c.target.field : c.target.id) || (c.answer === 'words' && c.itemKey), `${c.key} has a target`);
     assert.ok(c.question.length > 0 && c.question.length <= 200, `${c.key} has a question`);
     assert.ok(originLine(c.origin).length > 0);
   }
@@ -128,4 +129,44 @@ test('an input card left with someone, or not applicable, is not asked again; th
   assert.ok(after.includes('input:change'));
   const closed = notApplicable(change, undefined).op(left).model;
   assert.ok(!queue(closed).map(c => c.key).includes('input:change'));
+});
+
+test('an open question with no card of its own joins the queue as a plain question, in its group\'s place', async () => {
+  const { plainCard, askedParts } = await import('./queue.ts');
+  // A reading's questions about the process as a whole (target meta, no field; preview walk, 28 November 2026): one
+  // that could change the recommendation, one needed for sign-off.
+  let m = addQuestion(gold, { target: { kind: 'meta' }, question: 'Which system holds the vendor master today?', whyItMatters: 'w' }).model;
+  m = addQuestion(m, { target: { kind: 'meta' }, question: 'How are duplicate invoices noticed today?', whyItMatters: 'w' }).model;
+  const a = assessProcess(m);
+  const t = triage(m, a);
+  const said = makeCard({ key: 'said:x', group: 'said', origin: { kind: 'quote', quote: { sourceId: 's', excerpt: 'We also chase late approvals.' } }, question: 'Who chases late approvals?', why: 'w', target: { kind: 'meta', field: 'flow' }, updates: [], answer: 'words' })!;
+  const queue = discoveryQueue({ model: m, assessment: a, asksPurpose: true, raised: [said] });
+  const keyOf = (q: string) => `item:${t.items.find(i => i.question === q)!.key}`;
+  const decides = queue.findIndex(c => c.key === keyOf('Which system holds the vendor master today?'));
+  const signoff = queue.findIndex(c => c.key === keyOf('How are duplicate invoices noticed today?'));
+  assert.ok(decides >= 0 && signoff >= 0, 'both are asked');
+  const card = queue[decides]!;
+  assert.equal(card.group, 'decides');
+  assert.equal(card.answer, 'words');
+  assert.deepEqual(card.target, { kind: 'meta' }, 'the question\'s own target');
+  assert.equal(card.itemKey, t.items.find(i => i.question === 'Which system holds the vendor master today?')!.key);
+  assert.equal(queue[signoff]!.group, 'signoff');
+  // In its group's place: after the conflicts and the other questions that could change the recommendation, before
+  // what was said; the one for sign-off with sign-off.
+  const idx = (k: string) => queue.findIndex(c => c.key === k);
+  assert.ok(queue.slice(0, decides).every(c => ['start', 'shape', 'conflict', 'decides', 'settles'].includes(c.group)));
+  assert.ok(decides < idx('said:x') && idx('said:x') < signoff);
+  assert.ok(queue.slice(signoff + 1).every(c => c.group === 'signoff'));
+  // Every question the session asks is now on a card: the queue asks what askedParts counts.
+  const onCards = new Set(queue.map(c => c.itemKey).filter(Boolean));
+  assert.ok(askedParts(m, t).items.every(i => onCards.has(i.key)), 'nothing asked without a card');
+  // Closed or left with someone: not asked.
+  const id = (q: string) => m.openQuestions.find(x => x.question === q)!.id;
+  const left = deferQuestion(m, { questionIds: [id('Which system holds the vendor master today?')], owner: 'IT' }).model;
+  assert.ok(!discoveryQueue({ model: left, assessment: assessProcess(left), asksPurpose: true }).some(c => c.question === 'Which system holds the vendor master today?'));
+  // A choice, or an application's ways in, is never a plain question: it has its own card.
+  for (const i of t.items.filter(x => x.kind === 'choice' || x.kind === 'ways')) assert.equal(plainCard(i, m), null);
+  // Skipped, a plain question goes last like any card.
+  const skipped = discoveryQueue({ model: m, assessment: a, asksPurpose: true, skipped: [card.key] });
+  assert.equal(skipped.at(-1)!.key, card.key);
 });
