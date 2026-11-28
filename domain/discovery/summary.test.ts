@@ -100,3 +100,44 @@ test('"still to ask" counts the cards the screen asks, and says how many of them
   // Without the queue, as the released screen calls it, the line is unchanged.
   assert.match(sessionSummary(gold, a, 0).closing, /^You stopped with \d+ questions? still to ask\. Carry on/);
 });
+
+test('a question with no card of its own that could change the recommendation: a plain card asks it, and the session can end once it is answered', async () => {
+  const { stillToAskLine } = await import('./summary.ts');
+  const { addQuestion } = await import('../processModel/patch.ts');
+  const { coveringItem } = await import('./queue.ts');
+  const { notApplicable } = await import('./flow.ts');
+  const { buildAnswer } = await import('../questions/answer.ts');
+  // Everything the session must settle on the sample, closed: done.
+  let closed: ProcessModel = gold;
+  for (let n = 0; n < 40; n++) {
+    const a = assessProcess(closed);
+    const c = discoveryQueue({ model: closed, assessment: a, asksPurpose: false }).find(x => ['shape', 'decides', 'settles'].includes(x.group));
+    if (!c) break;
+    closed = notApplicable(c, coveringItem(c, triage(closed, a))).op(closed).model;
+  }
+  assert.equal(sessionDone(closed, assessProcess(closed)), true);
+  // A reading's question about the process as a whole (target meta, no field) that could change the recommendation.
+  const m = addQuestion(closed, { target: { kind: 'meta' }, question: 'Which system holds the vendor master today?', whyItMatters: 'It decides where the automation reads.' }).model;
+  const a = assessProcess(m);
+  assert.equal(deciding(m, a), 1);
+  assert.equal(sessionDone(m, a), false);
+  // Before, no card asked it, so the session could never end. Now a plain card asks it, as one the session must settle.
+  const queue = discoveryQueue({ model: m, assessment: a, asksPurpose: false });
+  const card = queue.find(c => c.group === 'decides');
+  assert.ok(card, 'a card asks it');
+  assert.equal(card!.question, 'Which system holds the vendor master today?');
+  assert.equal(card!.answer, 'words');
+  assert.deepEqual(card!.target, { kind: 'meta' });
+  assert.match(stillToAskLine(m, queue), /; 1 of them is about the shape of the process or could change the recommendation\./);
+  // Answered in words, on the stored question, with no copy added: done.
+  const item = coveringItem(card!, triage(m, a))!;
+  const after = buildAnswer(item, m, { text: 'The vendor master is kept in SAP.' })!.op(m).model;
+  assert.equal(after.openQuestions.length, m.openQuestions.length, 'no second copy');
+  assert.equal(after.openQuestions.find(q => q.question.startsWith('Which system holds'))!.status, 'answered');
+  assert.equal(sessionDone(after, assessProcess(after)), true);
+  // One no card can ask (too long for a card) does not keep the session open; it stays in Closing the gaps.
+  const long = addQuestion(closed, { target: { kind: 'meta' }, question: `Which system holds the vendor master today, ${'and for every company code '.repeat(8)}?`, whyItMatters: 'w' }).model;
+  assert.equal(deciding(long, assessProcess(long)), 0);
+  assert.equal(sessionDone(long, assessProcess(long)), true);
+  assert.ok(triage(long, assessProcess(long)).items.some(i => i.question.startsWith('Which system holds')));
+});

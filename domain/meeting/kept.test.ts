@@ -16,8 +16,8 @@ const add = (s: CallState, id: string, min: number, text: string, speaker?: stri
 test('one key per process, with a prefix sign-out can remove', () => {
   assert.equal(callKey('p-1'), 'avala:call:p-1');
   assert.ok(callKey('p-1').startsWith(CALL_KEY_PREFIX));
-  // The prefix joins SIGN_OUT_FORGETS with the screens (C3); until then sign-out does not know it.
-  assert.deepEqual(keysToForget([callKey('p-1')]), []);
+  // Since the screens (C3b), sign-out removes a call kept on this device (after asking, journey/TopBar.tsx).
+  assert.deepEqual(keysToForget([callKey('p-1')]), [callKey('p-1')]);
 });
 
 test('a call survives being written out and read back; anything else is not a call', () => {

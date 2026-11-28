@@ -131,11 +131,15 @@ function standing(i: BriefingInput): string[] {
   return lines;
 }
 
-function openLine(m: ProcessModel, t: Triage, shape: number): string | null {
+/**
+ * "What is open". "Needed for sign-off" counts the questions the list labels so (cards of the group `signoff`), for
+ * everyone, not the triage group of that name, which is narrower (review chat, 28 November 2026: the header said 2
+ * while the list labelled 11).
+ */
+function openLine(m: ProcessModel, t: Triage, shape: number, signoff: number): string | null {
   const open = t.items.filter(x => !x.deferred);
   const decides = open.filter(couldChange).length;
   const conflicts = conflictCards(m).length;
-  const signoff = open.filter(x => x.group === 'signoff').length;
   const left = t.items.filter(x => x.deferred).length;
   const parts = [
     decides && `${decides} could change the recommendation`,
@@ -167,6 +171,9 @@ export function buildBriefing(i: BriefingInput): Briefing {
   const own = (i.own ?? []).map(q => { const c = ownCard(q); return c ? item(c, { owner: 'business', own: true }) : null; }).filter((x): x is BriefItem => x !== null);
   // 3. The Discovery order, for the kinds of person on the call, without what is not for a call; on a process that
   // already has an assessment, what could change the recommendation first, then the conflicts, then the shape.
+  // Discovery's queue already holds every open question it asks with no card of its own, as a plain question in its
+  // group's place (`plainCard` in domain/discovery/queue.ts), so the two cannot drift.
+  const parts = askedParts(m, t);
   const discovery = discoveryQueue({ model: m, assessment: i.assessment, asksPurpose: i.asksPurpose, triage: t })
     .filter(c => !(NOT_FOR_A_CALL as readonly string[]).includes(c.key));
   const ordered = hasAssessment(m, i.assessment)
@@ -179,11 +186,14 @@ export function buildBriefing(i: BriefingInput): Briefing {
   const n = fits(i.minutes);
 
   // Everyone else's questions, by who to ask: the kinds of person not on the call, and what is left with someone not on it.
+  // What is still asked: the items Discovery asks, those its shape cards answer, and what is left with someone; a gap
+  // a person closed is not asked anywhere (`askedParts`).
   const listed = new Set(kept.concat(leftOut).map(x => coveringItem(x.card, t)?.key).filter(Boolean));
-  const elsewhere = whoToAsk(t.items.filter(x => !listed.has(x.key) && (x.deferred ? !(x.assignedTo && names.some(nm => same(nm, x.assignedTo!))) : !kinds.has(x.owner))));
+  const asked = new Set([...parts.items.map(x => x.key), ...parts.shape.map(c => coveringItem(c, t)?.key).filter((k): k is string => Boolean(k))]);
+  const elsewhere = whoToAsk(t.items.filter(x => !listed.has(x.key) && (x.deferred ? !(x.assignedTo && names.some(nm => same(nm, x.assignedTo!))) : asked.has(x.key) && !kinds.has(x.owner))));
 
   return {
-    standing: standing(i), openLine: openLine(m, t, askedParts(m, t).shape.length),
+    standing: standing(i), openLine: openLine(m, t, parts.shape.length, discovery.filter(c => c.group === 'signoff').length),
     forCall: kept.slice(0, n), ifTime: kept.slice(n), leftOut, elsewhere, fits: n,
   };
 }

@@ -21,6 +21,8 @@ test('journey paths parse and format both ways; other paths belong to the rest o
   assert.equal(journeyPath({ page: 'settings', section: 'parts' }), '/settings/parts');
   assert.equal(parseJourneyPath('/settings/billing'), null);
   assert.equal(journeyPath({ page: 'work' }), '/work');
+  assert.deepEqual(parseJourneyPath(`/process/${ID}/call`), { page: 'call', processId: ID });
+  assert.equal(journeyPath({ page: 'call', processId: ID }), `/process/${ID}/call`);
   for (const other of ['/', '/catalog', `/process/${ID}/v2`, '/process/not-a-uuid/sources', `/process/${ID}/sources/extra`, '/processes/x']) {
     assert.equal(parseJourneyPath(other), null, other);
   }

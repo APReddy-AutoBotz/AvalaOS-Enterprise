@@ -295,3 +295,33 @@ test('the demo shows what Discovery is, with nothing to press', async ({ page })
   await expect(panel.getByTestId('discovery-demo')).toContainText('Discovery asks about a process in conversation.');
   await expect(panel.getByTestId('discovery-demo').getByRole('button')).toHaveCount(0);
 });
+
+test('Skip on a card skipped before moves on: after every card is skipped once, Skip goes to the next one', async ({ page }) => {
+  // Owner's walk, 28 November 2026: six cards, all skipped once, then seven presses left the same card.
+  test.setTimeout(150_000);
+  await withStandIns(page, { extraction: [first] });
+  await signInAndCreateProcess(page);
+  await page.getByTestId('own-words-discovery').getByRole('button', { name: 'Start with Ask Avala' }).click();
+  const discovery = page.getByTestId('discovery');
+  await discovery.getByLabel('In your own words').fill(WORDS);
+  await discovery.getByRole('button', { name: 'Save and read it' }).click();
+  await discovery.getByRole('button', { name: 'Start the process from this' }).click({ timeout: 20_000 });
+  const card = discovery.getByTestId('discovery-card');
+  const question = card.getByTestId('discovery-question');
+  await expect(question).toBeVisible({ timeout: 20_000 });
+  const order: string[] = [];
+  for (let i = 0; i < 80; i++) {
+    const q = (await question.textContent())!.trim();
+    if (order.includes(q)) break;
+    order.push(q);
+    await card.getByRole('button', { name: 'Skip' }).click();
+    await expect(question).not.toHaveText(q);
+  }
+  expect(order.length).toBeGreaterThan(2);
+  // Every card skipped once: the first one skipped is back. Skip it again, and the second follows, then the third.
+  await expect(question).toHaveText(order[0]!);
+  await card.getByRole('button', { name: 'Skip' }).click();
+  await expect(question).toHaveText(order[1]!);
+  await card.getByRole('button', { name: 'Skip' }).click();
+  await expect(question).toHaveText(order[2]!);
+});
