@@ -31,6 +31,8 @@ export type JourneyRoute =
   | { page: 'processes' }
   | { page: 'settings'; section: SettingsSection }
   | { page: 'process'; processId: string; stage: StageId }
+  /** The call page (package C, C3b): the briefing, the panel and the review, in a window of its own, without the top bar. */
+  | { page: 'call'; processId: string }
   | { page: 'board'; projectId?: string; itemId?: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,6 +53,7 @@ export function parseJourneyPath(pathname: string): JourneyRoute | null {
   if (parts[0] === 'board' && parts.length <= 3 && (!parts[1] || UUID.test(parts[1])) && (!parts[2] || UUID.test(parts[2]))) {
     return { page: 'board', ...(parts[1] ? { projectId: parts[1].toLowerCase() } : {}), ...(parts[2] ? { itemId: parts[2].toLowerCase() } : {}) };
   }
+  if (parts[0] === 'process' && parts.length === 3 && UUID.test(parts[1]) && parts[2] === 'call') return { page: 'call', processId: parts[1].toLowerCase() };
   if (parts[0] === 'process' && parts.length >= 2 && parts.length <= 3 && UUID.test(parts[1])) {
     const stage = parts[2] ?? 'sources';
     return isStage(stage) ? { page: 'process', processId: parts[1].toLowerCase(), stage } : null;
@@ -66,6 +69,7 @@ export function journeyPath(route: JourneyRoute): string {
     case 'processes': return '/processes';
     case 'settings': return `/settings/${route.section}`;
     case 'process': return `/process/${route.processId}/${route.stage}`;
+    case 'call': return `/process/${route.processId}/call`;
     case 'board': return `/board${route.projectId ? `/${route.projectId}` : ''}${route.projectId && route.itemId ? `/${route.itemId}` : ''}`;
   }
 }
