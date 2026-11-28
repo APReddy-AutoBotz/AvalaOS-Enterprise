@@ -2,14 +2,22 @@
 // the notes as one "Call notes" source and one edit of the record (domain/meeting/review.ts). An answer stated in the
 // notes is ticked; one only inferred is not; a choice is kept only with the answer the analyst picks.
 import React from 'react';
+import type { ProcessModel } from '../../domain/processModel/types.ts';
+import type { InputValue, Period } from '../../domain/discovery/inputs.ts';
 import type { Review, SaveChoice } from '../../domain/meeting/review.ts';
+import { figureText, type TimeUnit } from '../../domain/meeting/figures.ts';
 import { CALL_WORDS as W } from '../../domain/meeting/words.ts';
 import { Button, CARD, cx } from '../ui.tsx';
+import { FieldInput } from './InputField.tsx';
 
 const PERIODS: [string, string][] = [['day', 'a day'], ['week', 'a week'], ['month', 'a month'], ['quarter', 'a quarter'], ['year', 'a year']];
+const UNITS: [TimeUnit, string][] = [['minutes', 'minutes'], ['hours', 'hours']];
 
-export function CallReview({ review, notesTitle, limited, busy, error, onSave, onDiscard, onDownload }: {
-  review: Review; notesTitle: string;
+export function CallReview({ review, model, notesTitle, limited, busy, error, onSave, onDiscard, onDownload }: {
+  review: Review;
+  /** The record, for the names of the steps an input's field lists. */
+  model: ProcessModel;
+  notesTitle: string;
   /** The end reading read against fewer questions than were open: how many it read. */
   limited: number | null;
   busy: boolean; error: string | null;
@@ -19,9 +27,11 @@ export function CallReview({ review, notesTitle, limited, busy, error, onSave, o
   const [ticked, setTicked] = React.useState<Set<string>>(initial);
   const [periods, setPeriods] = React.useState<Record<string, string>>({});
   const [picks, setPicks] = React.useState<Record<string, string>>({});
+  const [units, setUnits] = React.useState<Record<string, TimeUnit>>({});
+  const [inputs, setInputs] = React.useState<Record<string, InputValue>>({});
   const tick = (id: string, on: boolean) => { const n = new Set(ticked); on ? n.add(id) : n.delete(id); setTicked(n); };
   const box = (id: string, disabled = false) => <input type="checkbox" className="mt-1" checked={ticked.has(id)} disabled={disabled} onChange={e => tick(id, e.target.checked)} />;
-  const save = () => onSave({ ticked, periods: periods as SaveChoice['periods'], picks });
+  const save = () => onSave({ ticked, periods: periods as SaveChoice['periods'], picks, units, inputs });
 
   return (
     <div className="space-y-5" data-testid="call-review">
@@ -38,14 +48,22 @@ export function CallReview({ review, notesTitle, limited, busy, error, onSave, o
             {review.answers.map(a => (
               <li key={a.id}>
                 <label className="flex gap-3">
-                  {box(a.id, a.needsPeriod && !periods[a.key])}
+                  {box(a.id, (a.needsPeriod && !periods[a.key]) || (a.needsUnit && !units[a.key]))}
                   <span className="text-sm">
                     <span className="block font-semibold text-slate-900">{a.question}</span>
-                    <span className="block text-slate-800">{W.willRecord(a.display)} <span className={cx('ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset', a.certainty === 'stated' ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-amber-50 text-amber-900 ring-amber-200')}>{a.certainty === 'stated' ? W.stated : W.inferred}</span></span>
+                    <span className="block text-slate-800">{W.willRecord(a.needsPeriod || a.needsUnit ? figureText(a.key, a.display, { period: (periods[a.key] || null) as Period | null, unit: units[a.key] ?? null }) : a.record)} <span className={cx('ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset', a.certainty === 'stated' ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-amber-50 text-amber-900 ring-amber-200')}>{a.certainty === 'stated' ? W.stated : W.inferred}</span></span>
                     <span className="block text-xs italic text-slate-500">{W.quoteAt(a.quote, a.time)}</span>
                     {a.line && <span className="block text-xs text-amber-900">{a.line}</span>}
+                    {a.input && <span className="block text-xs text-slate-500">{W.inputNoQuote}</span>}
                   </span>
                 </label>
+                {a.needsUnit && (
+                  <label className="ml-7 mt-1 flex items-center gap-2 text-xs text-slate-700">{W.needsUnit}
+                    <select aria-label="Unit" value={units[a.key] ?? ''} onChange={e => setUnits({ ...units, [a.key]: e.target.value as TimeUnit })} className="rounded border border-slate-300 px-1.5 py-1">
+                      <option value="">Choose</option>{UNITS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                    </select>
+                  </label>
+                )}
                 {a.needsPeriod && (
                   <label className="ml-7 mt-1 flex items-center gap-2 text-xs text-slate-700">{W.needsPeriod}
                     <select aria-label="Period" value={periods[a.key] ?? ''} onChange={e => setPeriods({ ...periods, [a.key]: e.target.value })} className="rounded border border-slate-300 px-1.5 py-1">
@@ -68,12 +86,17 @@ export function CallReview({ review, notesTitle, limited, busy, error, onSave, o
               <li key={c.id} className="text-sm">
                 <p className="font-semibold text-slate-900">{c.question}</p>
                 <p className="text-xs italic text-slate-500">{W.quoteAt(c.quote, c.time)}</p>
-                <div className="mt-1 flex flex-wrap gap-2">
+                {c.field ? (
+                  <div className="mt-2" data-testid="review-field">
+                    <FieldInput name={c.id} field={c.field} model={model} value={inputs[c.key] ?? {}} onChange={v => setInputs({ ...inputs, [c.key]: v })} />
+                    <p className="mt-1 text-xs text-slate-500">{W.inputNoQuote}</p>
+                  </div>
+                ) : <div className="mt-1 flex flex-wrap gap-2">
                   {c.choices.map(([v, l]) => (
                     <button key={v} type="button" aria-pressed={picks[c.key] === v} onClick={() => setPicks({ ...picks, [c.key]: picks[c.key] === v ? '' : v })}
                       className={cx('rounded-lg px-2.5 py-1 text-xs font-semibold ring-1 ring-inset', picks[c.key] === v ? 'bg-[#002C4B] text-white ring-[#002C4B]' : 'bg-white text-slate-700 ring-slate-300')}>{l}</button>
                   ))}
-                </div>
+                </div>}
               </li>
             ))}
           </ul>

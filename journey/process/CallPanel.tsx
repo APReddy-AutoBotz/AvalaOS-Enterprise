@@ -8,6 +8,7 @@ import { itemHeading } from '../../domain/meeting/briefing.ts';
 import type { CallState } from '../../domain/meeting/kept.ts';
 import { askedList, nextQuestion, panelLine, raisedToShow, type Readings, type Suggestion } from '../../domain/meeting/panel.ts';
 import { capFor, SPOKEN_NOTE_SECONDS } from '../../domain/meeting/limits.ts';
+import { figureFromNote } from '../../domain/meeting/figures.ts';
 import { CALL_WORDS as W, clock } from '../../domain/meeting/words.ts';
 import { originLine, GROUP_HEADING } from '../../domain/discovery/card.ts';
 import type { Triage } from '../../domain/questions/triage.ts';
@@ -169,7 +170,7 @@ export function CallPanel({ process, s, list, triage, now, readings, status, zon
           {found.map(f => (
             <li key={`${f.itemKey}@${f.noteId}`} className="text-sm">
               <p className="font-semibold text-slate-900">{W.mayAnswer(f.question)}</p>
-              <p className="text-slate-700">{W.wouldRecord(f.display)} <span className={cx('ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset', f.certainty === 'stated' ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-amber-50 text-amber-900 ring-amber-200')}>{f.certainty === 'stated' ? W.stated : W.inferred}</span></p>
+              <p className="text-slate-700">{W.wouldRecord(figureFromNote(f.itemKey, f.display, s.notes.find(n => n.id === f.noteId)?.text ?? ''))} <span className={cx('ml-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ring-inset', f.certainty === 'stated' ? 'bg-emerald-50 text-emerald-900 ring-emerald-200' : 'bg-amber-50 text-amber-900 ring-amber-200')}>{f.certainty === 'stated' ? W.stated : W.inferred}</span></p>
               <p className="text-xs italic text-slate-500">{W.quoteAt(f.quote, timeOf(f.noteId))}</p>
               <button type="button" className="text-xs font-semibold text-[#002C4B] hover:underline" onClick={() => actions.dismiss(f.itemKey, f.noteId)}>{W.notRight}</button>
             </li>

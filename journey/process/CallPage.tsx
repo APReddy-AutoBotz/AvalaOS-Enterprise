@@ -91,6 +91,7 @@ function Call({ store, processId, me, data, onReload, stageHref }: { store: Jour
   const [limited, setLimited] = React.useState<number | null>(null);
   const [savedKey, setSavedKey] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<ReturnType<typeof meetingResult> | null>(null);
+  const [recorded, setRecorded] = React.useState({ answers: 0, kept: 0, left: 0 });
   const latest = React.useRef<CallState | null>(call);
   const reading = React.useRef(false);
 
@@ -214,6 +215,7 @@ function Call({ store, processId, me, data, onReload, stageHref }: { store: Jour
       if (!ok || !after) { setError(W.notSaved('The record could not be saved', key)); return; }
       forgetCall(processId); latest.current = null; setCallState(null);
       setResult(meetingResult(before, after));
+      setRecorded(edit.counts);
       setView('saved');
     } catch (e) { setError(savedKey ? W.notSaved(messageOf(e), savedKey) : W.notSavedNothing(messageOf(e))); }
     finally { setBusy(false); }
@@ -274,12 +276,12 @@ function Call({ store, processId, me, data, onReload, stageHref }: { store: Jour
     const review = buildReview(call, { model, list, triage, timeZone: ZONE });
     const title = callNotesSource(call, { takenKeys: data.sources.map(x => x.key), by: data.myName || me.email, endedAt: call.endedAt ?? nowIso(), timeZone: ZONE })?.title ?? '';
     const shown = error && editor.error ? `${error} ${editor.error}` : error;
-    return shell(<CallReview review={review} notesTitle={title} limited={limited} busy={busy} error={shown} onSave={save} onDiscard={discard} onDownload={download} />);
+    return shell(<CallReview review={review} model={model} notesTitle={title} limited={limited} busy={busy} error={shown} onSave={save} onDiscard={discard} onDownload={download} />);
   }
 
   return shell(
     <section className={cx(CARD, 'space-y-3 p-6')} data-testid="call-saved">
-      <p className="text-base font-semibold text-slate-900">{W.saved(result?.text ?? '')}</p>
+      <p className="text-base font-semibold text-slate-900">{W.saved(recorded, result?.text ?? '')}</p>
       {result && result.left.length > 0 && <>
         <p className="text-sm text-slate-700">{W.stillOpen}</p>
         <ul className="list-disc space-y-1 pl-5 text-sm text-slate-700">{result.left.map(g => <li key={g.owner}>{g.label}: {g.items.length}</li>)}</ul>

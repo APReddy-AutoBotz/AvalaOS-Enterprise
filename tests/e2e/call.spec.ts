@@ -87,16 +87,18 @@ test('the briefing: for each kind of person and length, in order, with the agend
   await call.getByRole('checkbox', { name: 'Process owner or SME', exact: true }).check();
   await expect(call.getByRole('button', { name: '30 minutes' })).toHaveAttribute('aria-pressed', 'true');
   await expect(call.getByRole('heading', { name: 'For this call (8)' })).toBeVisible();
-  await expect(call.getByRole('heading', { name: 'If there is time (5)' })).toBeVisible();
+  await expect(call.getByRole('heading', { name: 'If there is time (6)' })).toBeVisible();
   await expect(call.getByTestId('briefing-item').first()).toContainText(FIRST);
   await call.getByRole('button', { name: '45 minutes' }).click();
   await expect(call.getByRole('heading', { name: 'For this call (13)' })).toBeVisible();
-  await expect(call.getByRole('heading', { name: /^If there is time/ })).toHaveCount(0);
+  // The sample's figure question Discovery gives no card ("How long does a non-PO invoice take to handle?") is on the list too.
+  await expect(call.getByRole('heading', { name: 'If there is time (1)' })).toBeVisible();
+  await expect(call.getByTestId('briefing-item').last()).toContainText('How long does a non-PO invoice take to handle?');
   await call.getByRole('button', { name: '30 minutes' }).click();
 
   // Copy the agenda: the questions, numbered, and nothing of why or where from.
   await call.getByRole('button', { name: 'Copy the agenda' }).click();
-  await expect(call.getByRole('status').filter({ hasText: 'Copied: 13 questions' })).toBeVisible();
+  await expect(call.getByRole('status').filter({ hasText: 'Copied: 14 questions' })).toBeVisible();
   const agenda = await call.evaluate(() => navigator.clipboard.readText());
   expect(agenda.split('\n')[0]).toBe(`1. ${FIRST}`);
   expect(agenda).toContain(`5. ${MATCH}`);
@@ -189,6 +191,43 @@ test('a whole call: notes, a reading, Ask next, the end reading and the review; 
   const clerk = model.roles.find((r: { name: string }) => r.name === 'AP Clerk').id;
   expect(model.steps.find((s: { id: string }) => s.id === 's-match').roleIds).toContain(clerk);
   expect(await kept(call)).toEqual([]);
+});
+
+test('the review: a time with its unit, the change expected picked with its own field, and Save says what it recorded', async ({ page, context }) => {
+  test.setTimeout(150_000);
+  // Preview walk, 28 November 2026: "Do you expect the process to change …?" came with nothing to pick, and "40" with no unit.
+  const said = 'We expect a minor change to approvals next quarter, and each case takes about 40 minutes.';
+  await withStandIns(context, {
+    answerFromNotes: [{ answers: [
+      { questionId: 'q:8', value: '40', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'each case takes about 40 minutes' },
+      { questionId: 'q:9', value: 'A minor change to approvals', interface: '', certainty: 'stated', segmentId: 'n:1', excerpt: 'We expect a minor change to approvals next quarter' },
+    ] }, { answers: [] }],
+    discoveryQuestions: [{ questions: [], wanted: [] }],
+  });
+  const processUrl = await processWithRecord(page);
+  const call = await prepareCall(page, processUrl);
+  const panel = await startPanel(call);
+  await addNote(call, said);
+  await expect(panel.getByTestId('found')).toContainText('This would record: 40 minutes', { timeout: 20_000 });
+
+  await call.getByTestId('end-call').click();
+  await call.getByTestId('end-and-review').click();
+  const review = call.getByTestId('call-review');
+  await expect(review).toBeVisible({ timeout: 20_000 });
+  const answers = review.getByTestId('review-answers');
+  await expect(answers).toContainText('This will record: 40 minutes');
+  await expect(answers).toContainText("Recorded in the assessment's inputs, which keep no quote");
+  const choose = review.getByTestId('review-choose');
+  await expect(choose).toContainText('Do you expect the process to change in the next six months?');
+  await choose.getByTestId('review-field').getByLabel('Minor changes').check();
+  await expect(review.getByTestId('notes-kept')).toContainText('recorded without a quote');
+
+  await review.getByTestId('save-call').click();
+  await expect(call.getByTestId('call-saved')).toContainText('Saved: 2 answers recorded.');
+  const model = (await memory(call)).revisions.find((r: { state: string }) => r.state === 'working').model;
+  expect(model.meta.profile.processChange.value).toBe('minor');
+  const time = model.meta.metrics.find((x: { kind: string; appliesTo: string }) => x.kind === 'handling_time' && x.appliesTo === 'process');
+  expect([time.value, time.unit]).toEqual([40, 'minutes']);
 });
 
 test('Discard writes nothing and forgets the call', async ({ page, context }) => {
