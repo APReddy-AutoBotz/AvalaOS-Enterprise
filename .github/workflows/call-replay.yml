@@ -7,11 +7,13 @@
 # The set: "dry" (the two made-up sets of notes, set M), "a" (those, the made-up transcripts D1 and D2 as notes, and
 # the sample's three calls), "b" (the two transcripts of the process "Project time writing", read from the database at
 # run time, only on the platform's key), "b1" (the first of those two alone, under the same guards) or "all" (the
-# counting run). "said" after the set judges measure 1 alone (one transcript before and after a change). The log holds numbers only: never a passage, a
+# counting run). "said" after the set judges measure 1 alone (one transcript before and after a change).
+# "compare" is the independent check: set M alone, each question read alone and all together against the call's
+# notes, scored against the hand-written answers (numbers only). The log holds numbers only: never a passage, a
 # note, a question, a quote or a value; on set M it names which hand-written answers matched by their made-up keys.
 #
 # How to start it: "Run workflow" once this file is on the default branch; before that, a push to a `claude/` branch
-# whose commit message holds `[call-replay dry]` (or `a`, `b`, `b1`, `all`; with ` said` after the set, as in
+# whose commit message holds `[call-replay dry]` (or `a`, `b`, `b1`, `all`, `compare`; with ` said` after the set, as in
 # `[call-replay b1 said]`), as the Ask Avala measure is started. A push without that marker runs nothing.
 #
 # The AI use is counted against one workspace, "Test" unless named (owner, 26 November 2026). The run signs in as a
@@ -25,7 +27,7 @@ on:
   workflow_dispatch:
     inputs:
       set:
-        description: Which calls (dry, a, b, b1 or all)
+        description: Which calls (dry, a, b, b1, all or compare)
         default: dry
       judge:
         description: What is judged (all, or said for measure 1 alone)
@@ -64,13 +66,13 @@ jobs:
           REPLAY_SET="${REPLAY_SET_INPUT:-}"
           REPLAY_JUDGE="${REPLAY_JUDGE_INPUT:-}"
           if [ -z "$REPLAY_SET" ]; then
-            MARK="$(printf '%s' "$COMMIT_MESSAGE" | grep -oE '\[call-replay (dry|a|b|b1|all)( said)?\]' | head -1 || true)"
-            REPLAY_SET="$(printf '%s' "$MARK" | sed -E 's/\[call-replay (dry|a|b|b1|all)( said)?\]/\1/')"
+            MARK="$(printf '%s' "$COMMIT_MESSAGE" | grep -oE '\[call-replay (dry|a|b|b1|all|compare)( said)?\]' | head -1 || true)"
+            REPLAY_SET="$(printf '%s' "$MARK" | sed -E 's/\[call-replay (dry|a|b|b1|all|compare)( said)?\]/\1/')"
             REPLAY_SET="${REPLAY_SET:-dry}"
             case "$MARK" in *' said]') REPLAY_JUDGE=said ;; esac
           fi
           REPLAY_JUDGE="${REPLAY_JUDGE:-all}"
-          case "$REPLAY_SET" in dry|a|b|b1|all) ;; *) echo "::error::The set is dry, a, b, b1 or all."; exit 1 ;; esac
+          case "$REPLAY_SET" in dry|a|b|b1|all|compare) ;; *) echo "::error::The set is dry, a, b, b1, all or compare."; exit 1 ;; esac
           case "$REPLAY_JUDGE" in all|said) ;; *) echo "::error::What is judged is all or said."; exit 1 ;; esac
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
             echo "::error::SUPABASE_ACCESS_TOKEN is not set, so the replay cannot sign in. Nothing was asked."
