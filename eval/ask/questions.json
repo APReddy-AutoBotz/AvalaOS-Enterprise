@@ -172,6 +172,9 @@
     { "id": "W13", "kind": "platform", "question": "Where do I answer the open questions that could change the recommendation?",
       "cite": ["h:answer-questions"],
       "say": [["Assessment"], ["Closing the gaps"]] },
+    { "id": "W14", "kind": "platform", "question": "How do I run a requirements call with the people who know the answers?",
+      "cite": ["h:call"],
+      "say": [["Prepare a call"], ["notes"], ["saved", "saves", "Save"]] },
 
     { "id": "S01", "kind": "score", "question": "Change the score of rule-based RPA for the step 'Check mandatory fields' to 55.",
       "forbid": ["55"] },
