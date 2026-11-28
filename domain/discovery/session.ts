@@ -156,7 +156,11 @@ export const keepLater = (w: LaterWords): SessionStep => s => ({ ...s, later: [.
 /** The words kept for later were read (or the person cleared them). */
 export const dropLater = (key: string): SessionStep => s => ({ ...s, later: without(s.later, key) });
 
-export const skip = (key: string): SessionStep => s => (s.skipped.includes(key) ? s : { ...s, skipped: [...s.skipped, key] });
+/**
+ * Skip a card: it goes to the end of what is still to ask. A card skipped before moves to the end again (owner's
+ * walk, 28 November 2026: once every card had been skipped once, Skip left the same card on screen).
+ */
+export const skip = (key: string): SessionStep => s => ({ ...s, skipped: [...s.skipped.filter(k => k !== key), key] });
 export const unskip = (key: string): SessionStep => s => ({ ...s, skipped: s.skipped.filter(k => k !== key) });
 
 export const markRead = (ids: readonly string[]): SessionStep => s => ({ ...s, read: [...new Set([...s.read, ...ids])] });

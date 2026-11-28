@@ -61,7 +61,21 @@ export type History = 'never' | 'without' | 'with' | 'unmatched';
  * raised question, before or as it was raised), after its last reading, or between two of its readings.
  */
 export type Where = 'before' | 'after' | 'between';
-export interface Suggested { window: number; key: string; question: string; from: Suggestion['from']; hasOrigin: boolean; hasTarget: boolean; alreadySaid: Said | null; history?: History | null; where?: Where | null; toConfirm?: boolean }
+/**
+ * The stricter judge (plan `claude/measure-1-strict-judge-plan-28-nov.md`, 28 November 2026), for a suggestion today's
+ * judge counts as stated: the same question read with the call's other questions finds the same stated answer, from
+ * the same note (`agree`); finds no answer; finds only an inferred one; or finds a stated one from another note.
+ */
+export type Strict = 'agree' | 'none' | 'inferred' | 'other';
+/** How many of the call's list questions the together read reads at once: the end reading's batch. */
+export const TOGETHER_AT_MOST = 30;
+export interface Suggested {
+  window: number; key: string; question: string; from: Suggestion['from']; hasOrigin: boolean; hasTarget: boolean; alreadySaid: Said | null; history?: History | null; where?: Where | null; toConfirm?: boolean;
+  /** The stricter judge's finding; only for a suggestion today's judge counts as stated. */
+  strict?: Strict | null;
+  /** The key its answer is found under, and what each judge found, for the hand-written score (never printed). */
+  answerKey?: string; alone?: string; together?: string;
+}
 export interface RaisedQ { window: number; readyAt: number | null; question: string; noteId: string; passage: number; answeredLater: boolean | null }
 
 export interface CallCaseResult {
@@ -203,8 +217,8 @@ const freeItem = (key: string, question: string): TriageItem => ({ key, question
  * What the notes say to each question, by `answerFromNotes` with the quote check: one call. For each question
  * answered, whether any answer is stated (else inferred) and the quote of the first such answer.
  */
-async function answered(c: CallCase, items: TriageItem[], notes: string[], ask: Ask, out: CallCaseResult): Promise<Map<string, { certainty: 'stated' | 'inferred'; quote: string }> | null> {
-  const got = new Map<string, { certainty: 'stated' | 'inferred'; quote: string }>();
+async function answered(c: CallCase, items: TriageItem[], notes: string[], ask: Ask, out: CallCaseResult): Promise<Map<string, { certainty: 'stated' | 'inferred'; quote: string; display: string }> | null> {
+  const got = new Map<string, { certainty: 'stated' | 'inferred'; quote: string; display: string }>();
   if (!items.length || !notes.length) return got;
   const { segments, ids } = notesSegments(c.model, items, notes.join('\n\n'));
   try {
@@ -212,10 +226,33 @@ async function answered(c: CallCase, items: TriageItem[], notes: string[], ask: 
     out.judgingTokens += r.tokens;
     for (const p of proposalsFrom(c.model, items, ids, ((r.data as { answers?: NoteFinding[] } | null)?.answers) ?? [])) {
       const had = got.get(p.itemKey);
-      if (!had || (had.certainty === 'inferred' && p.certainty === 'stated')) got.set(p.itemKey, { certainty: p.certainty, quote: p.quote });
+      if (!had || (had.certainty === 'inferred' && p.certainty === 'stated')) got.set(p.itemKey, { certainty: p.certainty, quote: p.quote, display: p.display });
     }
     return got;
   } catch (e) { if (stops(e)) throw e; out.failures++; return null; }
+}
+
+/**
+ * The questions the together read reads: the call's list in the briefing's order, each as the panel reads it, at most
+ * `TOGETHER_AT_MOST`, always with the suggestion's own (in its place, or last in place of the list's last).
+ */
+export function togetherItems(item: TriageItem, list: BriefItem[], t: Triage): TriageItem[] {
+  const all: TriageItem[] = [];
+  for (const y of list) {
+    const it = itemFor(y.card, y.owner, t);
+    if (it && !all.some(z => z.key === it.key)) all.push(it);
+  }
+  const at = all.findIndex(z => z.key === item.key);
+  if (at < 0) return [...all.slice(0, TOGETHER_AT_MOST - 1), item];
+  return at < TOGETHER_AT_MOST ? all.slice(0, TOGETHER_AT_MOST) : [...all.slice(0, TOGETHER_AT_MOST - 1), all[at]!];
+}
+
+/** The stricter judge's finding from the two reads: the same stated answer, from the same note (`Strict`). */
+export function strictOf(notes: CallNote[], alone: { quote: string }, together: { certainty: 'stated' | 'inferred'; quote: string } | undefined): Strict {
+  if (!together) return 'none';
+  if (together.certainty !== 'stated') return 'inferred';
+  const a = noteOf(notes, alone.quote), b = noteOf(notes, together.quote);
+  return a && b && a.id === b.id ? 'agree' : 'other';
 }
 
 /** Where a suggestion already answered stood before it was suggested: see `History` and `Where`. */
@@ -239,9 +276,19 @@ async function judge(out: CallCaseResult, c: CallCase, ws: Passage[][], notesUpT
     if (!r) continue;
     const a = r.get(item.key);
     x.alreadySaid = a ? a.certainty : 'no';
+    x.answerKey = item.key;
+    if (a) x.alone = a.display;
     const h = a ? historyOf(readBefore[i] ?? new Set(), notes, a.quote) : null;
     x.history = h?.history ?? null;
     x.where = h?.where ?? null;
+    // The stricter judge: only for what today's judge counts as stated, the same question read with the call's others.
+    if (a?.certainty === 'stated') {
+      const together = await answered(c, togetherItems(item, list, t), notes.map(n => n.text), ask, out);
+      if (!together) continue;
+      const b = together.get(item.key);
+      if (b) x.together = b.display;
+      x.strict = strictOf(notes, a, b);
+    }
   }
   if (judging === 'said') return;
   // 2. Each raised question once it was ready (after the hold): do the next two windows answer it?
@@ -278,6 +325,17 @@ export interface CallScorecard {
     history: Record<'stated' | 'inferred', Record<History, number>>;
     /** Of those read but never with the note that answers them, where that note came. */
     where: Record<'stated' | 'inferred', Record<Where, number>>;
+    /**
+     * The stricter judge, shown beside today's (owner, 28 November 2026): those stated both alone and read with the
+     * call's other questions, from the same note, of all judged; those today's judge counts and it does not, by why;
+     * and those whose together read failed, so are not judged by it.
+     */
+    strict: { stated: number; share: number; notCounted: Record<Exclude<Strict, 'agree'>, number>; notJudged: number };
+    /**
+     * On the made-up notes, each judge's counted answers against the hand-written answers: right or wrong. It scores
+     * whether the answer is right, not whether it came early enough, since the hand-written answers cover the whole call.
+     */
+    handWritten: { today: { right: number; wrong: number }; strict: { right: number; wrong: number } } | null;
   };
   /** Readings that sent the earlier notes again, those started at once while checking, windows checking, windows after the cap. */
   catchUp: { readings: number; atOnce: number; checkingWindows: number; cappedWindows: number };
@@ -326,6 +384,31 @@ export function scoreCalls(results: CallCaseResult[], answers: CallAnswers[] = [
     return h;
   };
   const shareOf = (n: number) => (judged1.length ? n / judged1.length : 0);
+  const stated1 = judged1.filter(x => x.alreadySaid === 'stated');
+  const agree = stated1.filter(x => x.strict === 'agree').length;
+  const notCounted = { none: 0, inferred: 0, other: 0 };
+  for (const x of stated1) if (x.strict && x.strict !== 'agree') notCounted[x.strict]++;
+  // Each judge's counted answers against the hand-written ones, where the case has them.
+  const scoreOf = (pick: (x: Suggested) => string | undefined) => {
+    const k = { right: 0, wrong: 0 };
+    for (const r of results) {
+      const a = answers.find(y => y.id === r.id);
+      if (!a) continue;
+      for (const x of r.suggested) {
+        const said = pick(x);
+        if (said === undefined || !x.answerKey) continue;
+        const e = a.expected[x.answerKey];
+        if (e === '*' || e === undefined) continue;
+        if (e !== null && e.some(w => norm(said).includes(norm(w)))) k.right++; else k.wrong++;
+      }
+    }
+    return k;
+  };
+  const anyAnswers = results.some(r => answers.some(a => a.id === r.id));
+  const handWritten = anyAnswers ? {
+    today: scoreOf(x => (x.alreadySaid === 'stated' ? x.alone : undefined)),
+    strict: scoreOf(x => (x.alreadySaid === 'stated' && x.strict === 'agree' ? x.together ?? x.alone : undefined)),
+  } : null;
   const sum = (f: (r: CallCaseResult) => number) => results.reduce((t, r) => t + f(r), 0);
   const raised = results.flatMap(r => r.raised).filter(x => x.answeredLater !== null);
   const early = raised.filter(x => x.answeredLater).length;
@@ -366,7 +449,7 @@ export function scoreCalls(results: CallCaseResult[], answers: CallAnswers[] = [
   const t30 = per30(tokens), c30 = per30(calls);
   return {
     cases: results.length, suggested: sug.length,
-    alreadySaid: { stated: said, inferred: implied, judged: judged1.length, share: shareOf(said), inferredShare: shareOf(implied), bothShare: shareOf(said + implied), from: byFrom, history: { stated: hist('stated'), inferred: hist('inferred') }, where: { stated: whereOf('stated'), inferred: whereOf('inferred') } },
+    alreadySaid: { stated: said, inferred: implied, judged: judged1.length, share: shareOf(said), inferredShare: shareOf(implied), bothShare: shareOf(said + implied), from: byFrom, history: { stated: hist('stated'), inferred: hist('inferred') }, where: { stated: whereOf('stated'), inferred: whereOf('inferred') }, strict: { stated: agree, share: shareOf(agree), notCounted, notJudged: stated1.filter(x => !x.strict).length }, handWritten },
     catchUp: { readings: sum(r => r.catchUps), atOnce: sum(r => r.checkingReadings), checkingWindows: sum(r => r.checkingWindows), cappedWindows: sum(r => r.cappedWindows) },
     crowding: { readings: results.reduce((t, r) => t + r.readingsWithList, 0), crowded: results.reduce((t, r) => t + r.crowded, 0), maxAsked: results.reduce((t, r) => Math.max(t, r.maxAsked), 0) },
     notesNotKept: results.reduce((t, r) => t + r.notesNotKept, 0),
@@ -399,6 +482,8 @@ export function renderCallScorecard(s: CallScorecard, label: string): string {
   return [
     `Call replay: ${label}. ${s.cases} ${s.cases === 1 ? 'call' : 'calls'}, ${s.suggested} ${s.suggested === 1 ? 'question' : 'questions'} suggested.`,
     `1. "Ask next" already answered, stated in the notes before it: ${a.stated} of ${a.judged} (${pct(a.share)}; working threshold ${pct(CALL_THRESHOLDS.alreadySaid)} or fewer): ${mark(s.passed.alreadySaid)}. Answered only by inference, reported apart: ${a.inferred} of ${a.judged} (${pct(a.inferredShare)}). Both together, as counted before 27 November: ${a.stated + a.inferred} of ${a.judged} (${pct(a.bothShare)}).`,
+    `   The stricter judge, shown beside it (the same stated answer read alone and with the call's other questions, from the same note): ${a.strict.stated} of ${a.judged} (${pct(a.strict.share)}). Counted by today's judge and not by it: read together, no answer ${a.strict.notCounted.none}; only an inferred one ${a.strict.notCounted.inferred}; an answer from another note ${a.strict.notCounted.other}. Not judged by it, its read having failed: ${a.strict.notJudged}. The threshold is judged on today's figure.`,
+    ...(a.handWritten ? [`   Against the hand-written answers (whether the answer is right, not whether it came early enough): today's judge ${a.handWritten.today.right} right, ${a.handWritten.today.wrong} wrong; the stricter judge ${a.handWritten.strict.right} right, ${a.handWritten.strict.wrong} wrong.`] : []),
     `   Suggested to confirm an answer the notes gave only by inference: ${s.toConfirm} of ${s.suggested}.`,
     `   By where it came from (stated, inferred, of those judged): the list ${from('list')}; a follow-up to the last two notes ${from('note')}; raised from the notes ${from('raised')}; "Ask it now" ${from('pinned')}, which the replay's analyst never presses.`,
     `   Before it was suggested, those stated: ${hist('stated')}. Those inferred: ${hist('inferred')}.`,
