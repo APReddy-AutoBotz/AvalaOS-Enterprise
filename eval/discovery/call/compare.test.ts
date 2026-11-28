@@ -6,7 +6,7 @@ import { verifyExcerpts, type Segment } from '../../../domain/ai/gateway.ts';
 import { TASKS } from '../../../domain/ai/tasks.ts';
 import { readTranscript, type Ask } from '../replay.ts';
 import { DRAFTS } from './drafts.ts';
-import { compareCall, renderCompare, scoreAnswer, type ReadTally } from './compare.ts';
+import { compareCall, compareLong, renderCompare, renderLong, scoreAnswer, type ReadTally } from './compare.ts';
 import type { CallAnswers, CallCase } from './replay.ts';
 
 const dir = new URL('./', import.meta.url);
@@ -58,4 +58,36 @@ test('every question with a hand-written answer is read alone and together again
   assert.match(report, /Each question read alone: right \d+ of \d+/);
   assert.match(report, /All read together \(as the end reading\): right \d+ of \d+/);
   for (const w of [/\b400\b/, /claim/i, /tomás/i, /payroll/i]) assert.ok(!w.test(report), 'numbers only: no value or words of the notes');
+});
+
+test('the long call: agreements and disagreements are counted, stated and inferred apart, and each disagreement is printed', async () => {
+  const a = answers.find(x => x.id === 'M1')!;
+  const c = caseOf(a);
+  const reply = (q: Segment, n: Segment, value: string, certainty: string) => ({ questionId: q.id, value, interface: '', certainty, segmentId: n.id, excerpt: n.text.split(/\s+/).slice(0, 4).join(' ') });
+  // Together answers the volume only; alone answers the volume the same way, and the claim's start (stated) as well.
+  const ask: Ask = async (task: string, segments: Segment[]) => {
+    const qs = segments.filter(s => s.id.startsWith('q:'));
+    const ns = segments.filter(s => s.id.startsWith('n:'));
+    const vol = qs.find(s => /About how many cases/.test(s.text));
+    const start = qs.find(s => /What starts the work/.test(s.text));
+    const n400 = ns.find(s => /400/.test(s.text))!;
+    const answers = [];
+    if (vol) answers.push({ ...reply(vol, n400, '400', 'stated'), excerpt: 'About 400 claims' });
+    if (start && qs.length === 1) answers.push(reply(start, ns[0]!, 'A claim form', 'stated'));
+    const v = verifyExcerpts({ answers }, TASKS[task]!.verifyArrays ?? [], segments);
+    return { data: v.data, dropped: v.dropped.length, tokens: 1000 };
+  };
+  const r = await compareLong(c, ask, 10);
+  assert.equal(r.questions, 10);
+  assert.equal(r.alone.calls, 10);
+  assert.equal(r.together.calls, 1, 'the end reading\'s own first call');
+  const counted = r.same.stated + r.same.other + r.different + r.onlyAlone.stated + r.onlyAlone.inferred + r.onlyTogether.stated + r.onlyTogether.inferred + r.neither;
+  assert.equal(counted, r.questions, 'every question counted once');
+  assert.ok(r.same.stated >= 1, 'the volume: both stated, the same');
+  assert.equal(r.onlyAlone.stated, 1, 'the start: only reading alone');
+  assert.equal(r.disagreements.length, 1);
+  assert.equal(r.disagreements[0]!.together, null);
+  const report = renderLong(r);
+  assert.match(report, /Only reading alone found one: 1 stated, 0 inferred\./);
+  assert.match(report, /1\. What starts the work[^\n]*\n   Alone: "A claim form" \(stated\), from "[^"]+"\.\n   Together: no answer\./);
 });

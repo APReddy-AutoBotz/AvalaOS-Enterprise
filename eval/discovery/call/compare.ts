@@ -117,3 +117,84 @@ export function renderCompare(results: CompareResult[]): string {
     ...results.map(r => `${r.id}: ${r.questions} questions; alone right ${r.alone.right.stated + r.alone.right.inferred + r.alone.rightlyEmpty}, wrong ${r.alone.wrong.stated + r.alone.wrong.inferred}, missed ${r.alone.missed}; together right ${r.together.right.stated + r.together.right.inferred + r.together.rightlyEmpty}, wrong ${r.together.wrong.stated + r.together.wrong.inferred}, missed ${r.together.missed}.`),
   ].join('\n');
 }
+
+// ---------------------------------------------------------------- one long made-up call (owner, 28 November 2026)
+//
+// On set M, reading together already misses nothing, so reading alone cannot show as better there. So the same two
+// ways of reading are compared on one long made-up call of set A, where no hand-written answers exist: each of the
+// first questions the end reading would read is read alone against all the call's notes, and the end reading's own
+// first call reads them all together. The report counts where the two agree and disagree, stated and inferred apart,
+// and prints each disagreement in full (the question, both answers and their quotes) for the review chat to judge.
+// That text is made up and already in the repository. Nothing of set B is ever read in this mode.
+
+export interface LongAnswer { display: string; certainty: 'stated' | 'inferred'; quote: string }
+export interface Disagreement { question: string; alone: LongAnswer | null; together: LongAnswer | null }
+export interface LongResult {
+  id: string;
+  questions: number;
+  /** Both found the same answer (by its words); both found one, but not the same; only alone; only together; neither. */
+  same: { stated: number; other: number };
+  different: number;
+  onlyAlone: { stated: number; inferred: number };
+  onlyTogether: { stated: number; inferred: number };
+  neither: number;
+  disagreements: Disagreement[];
+  alone: { tokens: number; calls: number; failures: number };
+  together: { tokens: number; calls: number; failures: number };
+}
+
+/** The first answer to each question in one reply, by key, stated before inferred. */
+function answersIn(c: CallCase, items: TriageItem[], ids: Map<string, string>, data: unknown): Map<string, LongAnswer> {
+  const got = new Map<string, LongAnswer>();
+  for (const p of proposalsFrom(c.model, items, ids, ((data as { answers?: NoteFinding[] } | null)?.answers) ?? [])) {
+    const had = got.get(p.itemKey);
+    if (!had || (had.certainty === 'inferred' && p.certainty === 'stated')) got.set(p.itemKey, { display: p.display, certainty: p.certainty, quote: p.quote });
+  }
+  return got;
+}
+
+/** One long made-up call: the first `limit` questions of the end reading, each read alone and all together. */
+export async function compareLong(c: CallCase, ask: Ask, limit: number): Promise<LongResult> {
+  const { list, triage } = callList(c);
+  const s = allNotes(c);
+  const end = prepareEnd(s, { model: c.model, list, triage });
+  const first = end.batches[0];
+  const out: LongResult = { id: c.id, questions: 0, same: { stated: 0, other: 0 }, different: 0, onlyAlone: { stated: 0, inferred: 0 }, onlyTogether: { stated: 0, inferred: 0 }, neither: 0, disagreements: [], alone: { tokens: 0, calls: 0, failures: 0 }, together: { tokens: 0, calls: 0, failures: 0 } };
+  if (!first) return out;
+  const items = first.items.slice(0, limit);
+  out.questions = items.length;
+  // Together: the end reading's own first call, as it would make it (all its questions, the first `limit` compared).
+  out.together.calls++;
+  let together: Map<string, LongAnswer>;
+  try { const r = await ask(answerFromNotes.id, first.segments); out.together.tokens += r.tokens; together = answersIn(c, first.items, first.ids, r.data); }
+  catch (e) { if (stops(e)) throw e; out.together.failures++; return out; }
+  const text = s.notes.map(n => n.text.replace(/\s+/g, ' ').trim()).join('\n\n');
+  for (const it of items) {
+    const { segments, ids } = notesSegments(c.model, [it], text);
+    out.alone.calls++;
+    let alone: LongAnswer | undefined;
+    try { const r = await ask(answerFromNotes.id, segments); out.alone.tokens += r.tokens; alone = answersIn(c, [it], ids, r.data).get(it.key); }
+    catch (e) { if (stops(e)) throw e; out.alone.failures++; continue; }
+    const tog = together.get(it.key);
+    if (alone && tog && norm(alone.display) === norm(tog.display)) { if (alone.certainty === 'stated' && tog.certainty === 'stated') out.same.stated++; else out.same.other++; continue; }
+    if (!alone && !tog) { out.neither++; continue; }
+    if (alone && tog) out.different++;
+    else if (alone) out.onlyAlone[alone.certainty]++;
+    else out.onlyTogether[tog!.certainty]++;
+    out.disagreements.push({ question: it.question, alone: alone ?? null, together: tog ?? null });
+  }
+  return out;
+}
+
+/** The report for the long call: the counts, then each disagreement in full (made-up text from the repository). */
+export function renderLong(r: LongResult): string {
+  const ans = (a: LongAnswer | null) => (a ? `"${a.display}" (${a.certainty}), from "${a.quote}"` : 'no answer');
+  return [
+    `Long made-up call ${r.id}: ${r.questions} questions, each read alone and all read together against all of the call's notes.`,
+    `Both found the same answer: ${r.same.stated + r.same.other} (both stated ${r.same.stated}, otherwise ${r.same.other}). Both found an answer, not the same: ${r.different}.`,
+    `Only reading alone found one: ${r.onlyAlone.stated} stated, ${r.onlyAlone.inferred} inferred. Only reading together found one: ${r.onlyTogether.stated} stated, ${r.onlyTogether.inferred} inferred. Neither found one: ${r.neither}.`,
+    `Alone: ${r.alone.tokens} tokens in ${r.alone.calls} calls, ${r.alone.failures} failed. Together: ${r.together.tokens} tokens in ${r.together.calls} call, ${r.together.failures} failed.`,
+    ...(r.disagreements.length ? ['', 'Each disagreement (made-up text from the repository):'] : []),
+    ...r.disagreements.flatMap((d, i) => [`${i + 1}. ${d.question}`, `   Alone: ${ans(d.alone)}.`, `   Together: ${ans(d.together)}.`]),
+  ].join('\n');
+}
