@@ -111,16 +111,17 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     const { data, error } = await db.functions.invoke(name, { body });
     if (!error) return data;
     const res: Response | undefined = (error as any).context;
-    let message = error.message, status = 500, code: string | undefined;
+    let message = error.message, status = 500, code: string | undefined, runId: string | undefined;
     if (res && typeof res.json === 'function') {
       status = res.status;
       try {
         const j = await res.json();
         message = j?.error?.message ?? j?.message ?? message;
         if (typeof j?.error?.code === 'string') code = j.error.code;
+        if (typeof j?.error?.runId === 'string') runId = j.error.runId;
       } catch { /* keep the generic message */ }
     }
-    throw new StoreError(status, message, code);
+    throw new StoreError(status, message, code, { runId });
   }
 
   return {

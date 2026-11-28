@@ -11,7 +11,7 @@ import type { Segment } from '../../domain/ai/gateway.ts';
 import { EXTRACTION, standInReading, standInRefusal, standInReply, standInTranscript, TRANSCRIBE, type ReadSources, type StandInReplies } from '../../domain/ai/standIn.ts';
 import { StoreError } from './types.ts';
 
-export interface StandInCall { task: string; answered: boolean; why?: string; sources?: ReadSources[] }
+export interface StandInCall { task: string; answered: boolean; why?: string; sources?: ReadSources[]; /** Noticing (5b): the person's words it was given, segment by segment. */ said?: string[] }
 export interface StandIn { run(task: string, segments: Segment[]): { data: unknown }; transcribe(): string; read(sources: ReadSources[]): unknown }
 
 interface PageGlobals { __avalaStandIns?: StandInReplies; __avalaStandInLog?: StandInCall[] }
@@ -26,7 +26,8 @@ export function standInFromPage(): StandIn | undefined {
   return {
     run(task, segments) {
       const why = standInRefusal(replies, task, segments);
-      log.push(why ? { task, answered: false, why } : { task, answered: true });
+      const said = task === 'discoveryQuestions' ? { said: segments.filter(x => x.id.startsWith('n:')).map(x => x.text) } : {};
+      log.push(why ? { task, answered: false, why, ...said } : { task, answered: true, ...said });
       if (why) throw new StoreError(501, why);
       return { data: standInReply(replies, used, task) };
     },

@@ -107,3 +107,49 @@ test('targets by rule, and which answers are worth noticing', () => {
   assert.equal(worthNoticing('500 a month', '500'), false);
   assert.equal(worthNoticing('The buyer does it, and when the buyer is away someone from the AP team covers for them, usually after two days', 'Buyer'), true);
 });
+
+test('"should …, but in practice …": asked about with its words, never marked wanted; a wish beside it stays wanted', () => {
+  const words: Said[] = [{ ref: 'own-1:1', sourceId: 'own-1', locator: { lineStart: 1 }, text: 'When a contractor leaves early, the badge should be cancelled, but in practice we find out weeks later. Ideally the gate system will cancel the badge on its own.' }];
+  const c = noticeSegments(gold, words, []);
+  const reply: NoticeReply = { questions: [], wanted: [{ segmentId: 'n:1', excerpt: 'the badge should be cancelled' }, { segmentId: 'n:1', excerpt: 'Ideally the gate system will cancel the badge on its own.' }] };
+  const r = readNotice(gold, c, reply, { asked: [] });
+  assert.deepEqual(r.wanted.map(w => w.excerpt), ['Ideally the gate system will cancel the badge on its own.']);
+  assert.deepEqual(r.dropped, [{ what: 'wanted', reason: 'rule_not_kept' }]);
+  assert.equal(r.cards.length, 1);
+  const card = r.cards[0]!;
+  assert.equal(card.question, 'What happens today when this is not done: “the badge should be cancelled”?');
+  assert.deepEqual([card.group, card.target, card.answer], ['said', { kind: 'meta', field: 'flow' }, 'waits']);
+  assert.equal(originLine(card.origin), 'You said: “the badge should be cancelled”');
+  // Asked once: the same statement again, or already asked, raises nothing more; it counts within the five questions.
+  assert.equal(readNotice(gold, c, reply, { asked: [card.question] }).cards.length, 0);
+  const many = { questions: ['Who tells security that a contractor has left?', 'Which application holds the contract end date?', 'How long does a badge stay active after the last day?', 'Who checks the gate logs afterwards?', 'What does the agency send when a contract ends?']
+    .map(x => q('n:1', 'When a contractor leaves early', 'who_handles', '', x)), wanted: reply.wanted };
+  const capped = readNotice(gold, c, many, { asked: [] });
+  assert.equal(capped.cards.length, NOTICE_LIMITS.questions);
+  assert.ok(capped.dropped.some(d => d.reason === 'over_limit'));
+});
+
+// Owner's walk, 28 November 2026: one sentence gave a wish and a question about that wish (q-14), aimed at today's
+// step. Review, 28 November 2026: only the quote decides; a question's own words about "new" or "would like" do not.
+test('a question on the words of a wish is not raised; questions about today, whatever their words, are', () => {
+  const today = 'Today the clerk orders the supplies by email from the ordering template.';
+  const wish = 'in future we want the supplies or ordering template to be ordered automatically.';
+  const words: Said[] = [{ ref: 'own-1:1', sourceId: 'own-1', locator: { lineStart: 1 }, text: `${today} And ${wish}` }];
+  const c = noticeSegments(gold, words, []);
+  const walk = q('n:1', 'ordering template to be ordered automatically', 'who_handles', '', 'What is needed for the supplies or ordering template to be ordered automatically in future?');
+  const kept = [
+    'Who reviews a new application before it is approved?',
+    'Which team sets up access when a new system user is requested?',
+    'The customer would like a refund: who approves it today?',
+    'Who handles the new process step when a wish list item is out of stock?',
+  ];
+  const reply: NoticeReply = { questions: [walk, ...kept.map(x => q('n:1', 'the clerk orders the supplies by email', 'who_handles', '', x))], wanted: [{ segmentId: 'n:1', excerpt: wish }] };
+  const r = readNotice(gold, c, reply, { asked: [] });
+  assert.deepEqual(r.cards.map(x => x.question), kept);
+  assert.deepEqual(r.dropped.filter(d => d.reason === 'about_wanted').length, 1);
+  assert.deepEqual(r.wanted.map(w => w.excerpt), [wish]);
+  // The walk's question alone, with the wish from the same reply set aside ("Not wanted") but kept before: still not raised.
+  assert.deepEqual(readNotice(gold, c, { questions: [walk], wanted: [] }, { asked: [], wantedSoFar: [wish] }).cards, []);
+  // With no wish anywhere, the same question is raised: the wish is what decides.
+  assert.equal(readNotice(gold, c, { questions: [walk], wanted: [] }, { asked: [] }).cards.length, 1);
+});

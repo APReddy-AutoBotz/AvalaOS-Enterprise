@@ -13,6 +13,10 @@
 // hand-written answers matched, by their keys only: the notes and their keys are made up. Set B keeps every guard of
 // the discovery replay (setBCases, setBAllowed): only on the platform's key, counted first by ids, held in memory,
 // never stored, logged or printed. The connection is the discovery replay's, repeated here so its file is unchanged.
+import { compareCall, compareLong, renderCompare, renderLong, type CompareResult } from './compare.ts';
+
+/** The long made-up call compared (owner, 28 November 2026): set A's longest, the sample's first call, and how many of its questions. */
+export const LONG = { id: 'A1', questions: 20 } as const;
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -90,27 +94,46 @@ const setB = (server: Server): Promise<CallCase[]> => setBCases(async (q: string
 async function main() {
   const args = process.argv.slice(2);
   const set = args[args.indexOf('--set') + 1] ?? 'dry';
+  // "said": measure 1 is judged alone (one transcript before and after a change; owner, 27 November 2026).
+  const judging = args.includes('--judge') ? args[args.indexOf('--judge') + 1] : 'all';
   if (!args.includes('--live') && !args.includes('--check')) {
     for (const c of [...setM(), ...(await setA())]) console.log(`${c.id}: ${c.passages.length} passages, ${windows(c.passages).length} windows.`);
     console.log('Set B (the two transcripts of "Project time writing") is read only in a live run, in the workflow.');
     return;
   }
-  if (args.includes('--live') && !['dry', 'a', 'b', 'all'].includes(set)) throw new ReplayStop('--set is dry, a, b or all.');
+  if (args.includes('--live') && !['dry', 'a', 'b', 'b1', 'all', 'compare', 'long'].includes(set)) throw new ReplayStop('--set is dry, a, b, b1, all, compare or long.');
+  if (judging !== 'all' && judging !== 'said') throw new ReplayStop('--judge is all or said.');
+  const withB = set === 'b' || set === 'b1' || set === 'all';
   const server = await connect();
   const a = await gateway(server, { action: 'allowance' });
   if (a.status !== 200 || !a.json?.ok) throw new ReplayStop(`The AI gateway did not answer (${a.status}).`);
   console.log(`Signed in. AI use counts against the chosen workspace, on ${a.json.source === 'workspace' ? 'its own' : "the platform's"} ${a.json.provider} key${a.json.budget ? `: ${a.json.used} of ${a.json.budget} tokens used this month` : ''}.`);
   if (args.includes('--check')) return;
-  if ((set === 'b' || set === 'all') && !setBAllowed(a.json.source)) throw new ReplayStop(SET_B_NOT_ON_PLATFORM);
+  if (withB && !setBAllowed(a.json.source)) throw new ReplayStop(SET_B_NOT_ON_PLATFORM);
   const ask = askVia(server);
+  // long: one long made-up call of set A, read from the repository's own files; set B is never read here.
+  if (set === 'long') {
+    const c = (await setA()).find(x => x.id === LONG.id)!;
+    console.log(renderLong(await compareLong(c, ask, LONG.questions)));
+    return;
+  }
+  // compare: the independent check on set M alone, each question read alone and together, against the hand-written answers.
+  if (set === 'compare') {
+    const out: CompareResult[] = [];
+    for (const c of setM()) out.push(await compareCall(c, answers.find(x => x.id === c.id)!, ask));
+    console.log(renderCompare(out));
+    return;
+  }
+  console.log(judging === 'said' ? 'Judged: measure 1 alone.' : 'Judged: measures 1 and 2.');
   const cases = [
-    ...(set === 'b' ? [] : setM()),
+    ...(set === 'b' || set === 'b1' ? [] : setM()),
     ...(set === 'a' || set === 'all' ? await setA() : []),
-    ...(set === 'b' || set === 'all' ? await setB(server) : []),
+    // b1: set B's first transcript alone, read under set B's guards (both are counted first by ids, then only it is kept).
+    ...(withB ? (await setB(server)).filter(c => set !== 'b1' || c.id === 'B1') : []),
   ];
   const results: CallCaseResult[] = [];
   for (const c of cases) {
-    const r = await replayCall(c, ask);
+    const r = await replayCall(c, ask, { judge: judging === 'said' ? 'said' : true });
     results.push(r);
     console.log(`${c.id}: ${r.passages} passages in ${r.windows} windows; ${r.suggested.length} suggested; ${r.raised.length} raised; ${r.found.length} answers found; ${r.tokens} tokens in ${r.calls} calls, ${r.judgingTokens} judging; ${r.failures} calls failed.`);
     const m = answers.find(x => x.id === c.id);
@@ -119,7 +142,7 @@ async function main() {
   console.log('');
   console.log(renderCallScorecard(scoreCalls(results, answers), `set ${set}`));
   const b = results.filter(r => r.id.startsWith('B'));
-  if (b.length) { console.log(''); console.log(renderCallScorecard(scoreCalls(b), 'set B alone')); }
+  if (b.length && set !== 'b' && set !== 'b1') { console.log(''); console.log(renderCallScorecard(scoreCalls(b), 'set B alone')); }
 }
 
 main().catch(e => {

@@ -6,12 +6,17 @@
 #
 # The set: "dry" (the two made-up sets of notes, set M), "a" (those, the made-up transcripts D1 and D2 as notes, and
 # the sample's three calls), "b" (the two transcripts of the process "Project time writing", read from the database at
-# run time, only on the platform's key) or "all" (the counting run). The log holds numbers only: never a passage, a
+# run time, only on the platform's key), "b1" (the first of those two alone, under the same guards) or "all" (the
+# counting run). "said" after the set judges measure 1 alone (one transcript before and after a change).
+# "compare" is the independent check: set M alone, each question read alone and all together against the call's
+# notes, scored against the hand-written answers (numbers only). "long" compares the same two ways of reading on one
+# long made-up call of set A (A1), counted against "Avala check", and prints each disagreement: that text is made up
+# and already in the repository. Set B is never read in it. The log holds numbers only: never a passage, a
 # note, a question, a quote or a value; on set M it names which hand-written answers matched by their made-up keys.
 #
 # How to start it: "Run workflow" once this file is on the default branch; before that, a push to a `claude/` branch
-# whose commit message holds `[call-replay dry]` (or `a`, `b`, `all`), as the Ask Avala measure is started. A push
-# without that marker runs nothing.
+# whose commit message holds `[call-replay dry]` (or `a`, `b`, `b1`, `all`, `compare`, `long`; with ` said` after the set, as in
+# `[call-replay b1 said]`), as the Ask Avala measure is started. A push without that marker runs nothing.
 #
 # The AI use is counted against one workspace, "Test" unless named (owner, 26 November 2026). The run signs in as a
 # trusted server with the project's server key, read with the access GitHub already holds for deploying the
@@ -24,8 +29,11 @@ on:
   workflow_dispatch:
     inputs:
       set:
-        description: Which calls (dry, a, b or all)
+        description: Which calls (dry, a, b, b1, all, compare or long)
         default: dry
+      judge:
+        description: What is judged (all, or said for measure 1 alone)
+        default: all
       workspace:
         description: Name of the workspace the AI use is counted against
         default: Test
@@ -46,7 +54,9 @@ jobs:
       PROJECT_REF: zpblzjedhqiuopfurjxh
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       REPLAY_WORKSPACE_NAME: ${{ inputs.workspace || 'Test' }}
+      REPLAY_WORKSPACE_INPUT: ${{ inputs.workspace }}
       REPLAY_SET_INPUT: ${{ inputs.set }}
+      REPLAY_JUDGE_INPUT: ${{ inputs.judge }}
       COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
     steps:
       - uses: actions/checkout@v4
@@ -57,11 +67,18 @@ jobs:
         run: |
           set -euo pipefail
           REPLAY_SET="${REPLAY_SET_INPUT:-}"
+          REPLAY_JUDGE="${REPLAY_JUDGE_INPUT:-}"
           if [ -z "$REPLAY_SET" ]; then
-            REPLAY_SET="$(printf '%s' "$COMMIT_MESSAGE" | grep -oE '\[call-replay (dry|a|b|all)\]' | head -1 | sed -E 's/\[call-replay (dry|a|b|all)\]/\1/' || true)"
+            MARK="$(printf '%s' "$COMMIT_MESSAGE" | grep -oE '\[call-replay (dry|a|b|b1|all|compare|long)( said)?\]' | head -1 || true)"
+            REPLAY_SET="$(printf '%s' "$MARK" | sed -E 's/\[call-replay (dry|a|b|b1|all|compare|long)( said)?\]/\1/')"
             REPLAY_SET="${REPLAY_SET:-dry}"
+            case "$MARK" in *' said]') REPLAY_JUDGE=said ;; esac
           fi
-          case "$REPLAY_SET" in dry|a|b|all) ;; *) echo "::error::The set is dry, a, b or all."; exit 1 ;; esac
+          REPLAY_JUDGE="${REPLAY_JUDGE:-all}"
+          case "$REPLAY_SET" in dry|a|b|b1|all|compare|long) ;; *) echo "::error::The set is dry, a, b, b1, all, compare or long."; exit 1 ;; esac
+          # The long made-up call is counted against "Avala check" unless a workspace was named (owner, 28 November 2026).
+          if [ "$REPLAY_SET" = long ] && [ -z "${REPLAY_WORKSPACE_INPUT:-}" ]; then REPLAY_WORKSPACE_NAME="Avala check"; export REPLAY_WORKSPACE_NAME; fi
+          case "$REPLAY_JUDGE" in all|said) ;; *) echo "::error::What is judged is all or said."; exit 1 ;; esac
           if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
             echo "::error::SUPABASE_ACCESS_TOKEN is not set, so the replay cannot sign in. Nothing was asked."
             exit 1
@@ -73,5 +90,5 @@ jobs:
             exit 1
           fi
           echo "::add-mask::$key"
-          echo "AI use is counted against the workspace \"$REPLAY_WORKSPACE_NAME\"; set \"$REPLAY_SET\"."
-          REPLAY_URL="https://$PROJECT_REF.supabase.co" REPLAY_KEY="$key" node eval/discovery/call/run.ts --live --set "$REPLAY_SET"
+          echo "AI use is counted against the workspace \"$REPLAY_WORKSPACE_NAME\"; set \"$REPLAY_SET\", judged \"$REPLAY_JUDGE\"."
+          REPLAY_URL="https://$PROJECT_REF.supabase.co" REPLAY_KEY="$key" node eval/discovery/call/run.ts --live --set "$REPLAY_SET" --judge "$REPLAY_JUDGE"

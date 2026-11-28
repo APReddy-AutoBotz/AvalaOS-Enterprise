@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Segment } from '../../domain/ai/gateway.ts';
 import { parseFile } from '../../domain/ingest/parsers/index.ts';
-import { fromSegments, readTranscript, renderScorecard, replayCase, ReplayStop, scoreReplay, SET_B_NOT_ON_PLATFORM, setBAllowed, setBCases, windows, type Ask, type CaseAnswers, type CaseResult, type Passage } from './replay.ts';
+import { fromSegments, readTranscript, renderScorecard, replayCase, ReplayStop, scoreReplay, SET_B_NOT_ON_PLATFORM, setBAllowed, setBCases, wantedLine, wantedMatches, windows, type Ask, type CaseAnswers, type CaseResult, type Passage } from './replay.ts';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, '../..');
@@ -116,6 +116,9 @@ async function main() {
   }
   console.log('');
   console.log(renderScorecard(scoreReplay(results, answers), `set ${set}`));
+  // On the made-up set only: which hand-written wanted statements matched, and what was marked besides.
+  const matches = wantedMatches(results, answers);
+  if (matches.length) { console.log(''); for (const m of matches) console.log(wantedLine(m)); }
   const b = results.filter(r => r.id.startsWith('B'));
   if (b.length) { console.log(''); console.log(renderScorecard(scoreReplay(b), 'set B alone')); }
 }

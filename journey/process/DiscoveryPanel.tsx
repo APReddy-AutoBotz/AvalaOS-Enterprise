@@ -8,17 +8,20 @@
 import React from 'react';
 import type { ExtractionRow, JourneyStore, ProcessRow, SourceRow, Workspace } from '../store/types.ts';
 import { StoreError } from '../store/types.ts';
-import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
+import type { AccessStatus, ProcessModel, Step } from '../../domain/processModel/types.ts';
 import { emptyModel } from '../../domain/processModel/empty.ts';
 import { assessProcess } from '../../domain/assess/process.ts';
 import { triage, type TriageItem } from '../../domain/questions/triage.ts';
-import { ACCESS, type Op } from '../../domain/questions/answer.ts';
+import { ACCESS, buildAnswer, namedChoice, type Op } from '../../domain/questions/answer.ts';
+import { emptyNamed, NamedChoice, takesNamed, type NamedValue } from './NamedChoice.tsx';
 import { answerFromNotes, type NoteFinding } from '../../domain/questions/notes.ts';
 import { interviewAnswer, interviewSegments, readInterview, type Reading } from '../../domain/questions/interview.ts';
 import { NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../domain/questions/ways.ts';
 import { offersPurpose } from '../../domain/plan/purpose.ts';
 import { ownWordsSource, sourceDate } from '../../domain/plan/start.ts';
 import { failedLine } from '../../domain/extract/failure.ts';
+import { IN_PROGRESS_LINE, runUnderWay } from '../../domain/extract/startLimit.ts';
+import { unreadAnswers, unreadLine, updateReads } from '../../domain/discovery/unread.ts';
 import { GROUP_HEADING, originLine, type Card } from '../../domain/discovery/card.ts';
 import { discoveryQueue } from '../../domain/discovery/queue.ts';
 import { startCards } from '../../domain/discovery/checklist.ts';
@@ -29,10 +32,14 @@ import { sessionSummary } from '../../domain/discovery/summary.ts';
 import {
   BUSY_LINE, commitSessionStep, countedReading, countSaved, dropLater, emptyState, FULL_LINE, keepAnswer, keepLater, keysBeingWritten, laterFor, readingsReviewed, readingsStarted, sourcesRead, takingInto, waitingAgainst,
   readState, reviewedReading, savedCount, skip, startedLine, startedReading, tookIntoSource, usedCall, type LaterWords, type SessionStep, type StoredSession,
+  dropNoticedWanted, dropRaised, noticedStep, raisedOf, wantedOf, type NoticedWanted,
 } from '../../domain/discovery/session.ts';
+import { discoveryQuestions, noticeSegments, readNotice, worthNoticing, type NoticeReply, type Said } from '../../domain/discovery/notice.ts';
 import {
-  cardItem, chooseEdit, keptLine, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
+  cardItem, chooseEdit, confirmedLine, keptLine, readAgainStopped, laterLine, leaveWith, notApplicable, notSavedLine, stageOf, stepsWithWords, updateLabel, updateNote, updateSources, wordsEdit, WORDS,
+  answerSaid, descriptionSaid, heldBackSteps, keepWantedEdit, noticeAsked,
 } from '../../domain/discovery/flow.ts';
+import { removeStep } from '../../domain/processModel/patch.ts';
 import { AnswerBox } from './AnswerFromNotes.tsx';
 import { ChangeReview, coarsePatch } from './SourcesStage.tsx';
 import { REVIEW_WORDS } from '../../domain/extract/reviewWords.ts';
@@ -80,6 +87,8 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     store.currentUser().then(u => setMe(u?.id ?? null)).catch(() => {});
   }, [store, workspace.id]);
 
+  // A reading someone else started, which this tab follows (it was refused a second one meanwhile).
+  const [following, setFollowing] = React.useState(false);
   // Follow a running reading; once it is done, count it against the session's cap (once).
   const running = Boolean(run && run.status !== 'done' && run.status !== 'failed');
   React.useEffect(() => {
@@ -141,12 +150,63 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     await commit(usedCall(r.usage)).catch(() => {});
     return r;
   };
+  /**
+   * Noticing (pull request 5b): what the person said, read for questions about it and for what they want to change.
+   * Only their words go; the passages read are kept so they are never sent again. It never stops the session: a
+   * call refused or failed simply raises nothing, and the cards by rule go on.
+   */
+  const noticeSaid = async (said: Said[], against?: ProcessModel) => {
+    if (!said.some(x => x.text.trim()) || !store.aiAvailable || allowanceGone || !canReadWords(state.use)) return;
+    try {
+      // What was read is checked against the session as stored now, not as this screen last drew it.
+      const latest = readState((await store.getDiscoverySession(process.id))?.state);
+      const fresh = said.filter(x => x.text.trim() && !latest.read.includes(x.ref));
+      if (!fresh.length || !canReadWords(latest.use)) return;
+      const draft = against ?? model ?? emptyModel(process.name);
+      const call = noticeSegments(draft, fresh, noticeAsked(draft, latest));
+      const r = await store.runAiTask(process.workspaceId, discoveryQuestions.id, call.segments as never);
+      await commit(usedCall(r.usage)).catch(() => {});
+      const read = readNotice(draft, call, (r.data ?? { questions: [], wanted: [] }) as NoticeReply, { asked: noticeAsked(draft, latest), wantedSoFar: [...wantedOf(latest).map(w => w.excerpt), ...(draft.meta.wanted ?? []).map(w => w.statement)] });
+      await commit(noticedStep(read.cards, read.wanted, fresh.map(x => x.ref), new Date().toISOString())).catch(() => {});
+    } catch (e) { if (budgetGone(e)) setAllowanceGone(true); }
+  };
+  // The description is noticed once its reading is done, against what that reading understood, so a question
+  // names the step it is about; the first reading waits for it before it can start the process (a step the
+  // person wants in future must be held back first). A description already read is never sent again.
+  const [noticing, setNoticing] = React.useState(false);
+  const noticingFor = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (run?.status !== 'done' || !run.model || !session || noticingFor.current === run.id) return;
+    const st = readState(session.state);
+    if (!readingsStarted(st).includes(run.id)) return;
+    const own = sources.filter(x => /^own-\d+$/.test(x.key) && sourcesRead(st, run.id).includes(x.id));
+    if (!own.length) return;
+    noticingFor.current = run.id;
+    const against = model?.steps.length ? model : run.model;
+    setNoticing(true);
+    (async () => {
+      const said = (await Promise.all(own.map(async x => descriptionSaid({ key: x.key, segments: await store.getSourceSegments(x.id) })))).flat();
+      await noticeSaid(said, against);
+    })().catch(() => {}).finally(() => setNoticing(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [run?.id, run?.status, session?.id, sources]);
   const speak = voiceProps(voice, store, workspace.id);
   const boxVoice = speak.transcribe ? { transcribe: async (audio: string) => { const t = await speak.transcribe!(audio); await commit(usedCall(null)).catch(() => {}); return t; } } : speak;
 
   /** Reads sources as the Sources stage does, and remembers that this session started it. */
   const read = async (ids: string[]) => {
-    const { runId } = await store.startExtraction(workspace.id, process.id, ids);
+    let runId: string;
+    try { ({ runId } = await store.startExtraction(workspace.id, process.id, ids)); }
+    catch (e) {
+      // A reading of this process is already under way (one at a time, domain/extract/startLimit.ts): follow it.
+      // It is not this session's, so it is not kept as one the session started.
+      const under = runUnderWay(e);
+      if (!under) throw e;
+      setFollowing(true);
+      setRun({ id: under, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
+      return;
+    }
+    setFollowing(false);
     // The session keeps which sources it read: the browser may not read a run's own list (review, 25 November 2026).
     await commit(startedReading(runId, ids));
     setRun({ id: runId, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
@@ -206,16 +266,23 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     setBusy(true); setError(null); setNotice(null);
     try {
       const kept = await keepWaiting();
-      if (typeof kept === 'string') return;
+      if (kept === 'failed') return;
+      // Answers saved by an earlier update whose reading did not start are read with the new ones (unread.ts).
       const latest = await store.listSources(process.id);
-      const newest = kept.ids[kept.ids.length - 1]!;
-      const base = updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), newest);
-      await read([...base.slice(0, -1), ...kept.ids.filter(id => !base.includes(id)), newest]);
+      const fresh = readState((await store.getDiscoverySession(process.id))?.state);
+      const unread = unreadAnswers(fresh, session?.startedAt, latest).ids;
+      const keptIds = kept === 'none' ? [] : kept.ids;
+      const answers = updateReads([], unread, keptIds);
+      if (!answers.length) return;
+      const base = updateSources(sourcesRead(fresh, run?.id), latest.filter(s => !s.archived), answers[answers.length - 1]!);
+      await read(updateReads(base.slice(0, -1), unread, keptIds));
     } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
   };
 
   const reviewing = run?.status === 'done' && run.model && hasSteps && readingsStarted(state).includes(run.id) && !readingsReviewed(state).includes(run.id) ? run : null;
   const waiting = state.waiting.length;
+  // Answers saved but not read into the draft: the reading of an update did not start (unread.ts).
+  const unread = session && session.status === 'open' ? unreadAnswers(state, session.startedAt, sources) : { ids: [], answers: 0 };
   const files = active.filter(s => !/^own-|^ans-/.test(s.key)).length;
 
   return (
@@ -236,8 +303,10 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
                 const e = chooseEdit(card, m, pick, { ...who, at: new Date().toISOString() });
                 if (e && !(await saveOp(e.op, e.summary))) return;
               }
-              const row = await store.addSource(process.id, ownWordsSource(words, sources.map(s => s.key), sourceDate()));
+              const own = ownWordsSource(words, sources.map(s => s.key), sourceDate());
+              const row = await store.addSource(process.id, own);
               announceProcessChanged(process.id);
+              // What was said is noticed once this reading is done (5b), from the stored words.
               await read([row.id]);
             } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
           }}
@@ -245,14 +314,29 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
       )}
 
       {stage === 'reading' && <p role="status" className="rounded-lg bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950" data-testid="discovery-reading">{hasSteps ? WORDS.updating : WORDS.reading}</p>}
+      {stage === 'reading' && following && <p className="text-sm text-slate-600" data-testid="reading-under-way">{IN_PROGRESS_LINE}</p>}
 
       {stage === 'first' && (
         <FirstReading store={store} process={process} run={run ?? null} lastRead={sourcesRead(state, run?.id)} boxVoice={boxVoice} busy={busy} active={active}
+          heldBack={run?.model ? heldBackSteps(m, run.model, state) : []} noticing={noticing}
+          readings={readingsStarted(state).length} stopped={readAgainStopped(state.use)}
           onRead={async ids => { setBusy(true); setError(null); try { await read(ids); } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); } }}
+          onReadAgain={async ids => {
+            // "Read it again" on a reading with no steps: the hourly limit is said in its own box (#258's words);
+            // a reading already under way is followed (read); anything else is the panel's error.
+            setBusy(true); setError(null);
+            try { await read(ids); return null; } catch (e) {
+              if (e instanceof StoreError && e.code === 'READINGS_PER_HOUR') return e.message;
+              if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e));
+              return null;
+            } finally { setBusy(false); }
+          }}
           onAdd={async words => {
             setBusy(true); setError(null);
             try {
               const row = await store.addSource(process.id, ownWordsSource(words, sources.map(s => s.key), sourceDate()));
+              // With no reading left in the session, the words are kept as a source and read at the next reading.
+              if (readAgainStopped(state.use)) { setNotice(WORDS.addedNotRead); return; }
               const latest = await store.listSources(process.id);
               await read(updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), row.id));
             } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
@@ -262,11 +346,12 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
       {stage === 'cards' && (
         <>
-          {waiting > 0 && !reviewing && (
+          {(waiting > 0 || unread.answers > 0) && !reviewing && (
             <div className="mb-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-waiting">
-              <p className="text-sm text-amber-950">{waiting} {waiting === 1 ? 'answer is' : 'answers are'} not in the draft yet.</p>
+              {waiting > 0 && <p className="text-sm text-amber-950">{waiting} {waiting === 1 ? 'answer is' : 'answers are'} not in the draft yet.</p>}
+              {unread.answers > 0 && !running && <p className="text-sm text-amber-950" data-testid="discovery-unread">{unreadLine(unread.answers)}</p>}
               {updateNote(active.length + 1, files) && <p className="text-xs text-amber-900">{updateNote(active.length + 1, files)}</p>}
-              <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting)}</Button>
+              <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting + unread.answers)}</Button>
             </div>
           )}
           {run?.status === 'failed' && readingsStarted(state).includes(run.id) && <div className="mb-4"><ErrorNote message={failedLine(run.error)} /><Button variant="secondary" onClick={() => { const ids = sourcesRead(state, run.id); void read(ids.length ? ids : active.map(x => x.id)); }}>Try again</Button></div>}
@@ -278,7 +363,12 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
               <button type="button" className="mt-2 text-xs font-medium text-slate-500 underline" onClick={() => void commit(reviewedReading(reviewing.id))}>Close this review</button>
             </div>
           )}
-          <Cards store={store} process={process} model={m} asksPurpose={asksPurpose} skipped={state.skipped} waitingKeys={state.waiting.map(w => w.key)} keys={[...sources.map(s => s.key), ...keysBeingWritten(state)]}
+          <WantedNoticed wanted={wantedOf(state)} kept={m.meta.wanted?.length ?? 0} busy={busy}
+            onKeep={async w => { if (await saveOp(keepWantedEdit(w).op, keepWantedEdit(w).summary)) await commit(dropNoticedWanted(w.excerpt)); }}
+            onDrop={async w => { await commit(dropNoticedWanted(w.excerpt)); }} />
+          <Cards store={store} process={process} model={m} asksPurpose={asksPurpose} skipped={state.skipped} raised={raisedOf(state)}
+            onActed={async card => { const keys = raisedOf(state).filter(r => r.key === card.key || sameTarget(r.target, card.target)).map(r => r.key); if (keys.length) await commit(dropRaised(keys)); }}
+            onSaid={(card, words) => { if (worthNoticing(words)) void noticeSaid([answerSaid(card.key, card.question, words, new Date().toISOString())]); }} waitingKeys={state.waiting.map(w => w.key)} keys={[...sources.map(s => s.key), ...keysBeingWritten(state)]}
             capped={capped || allowanceGone} boxVoice={boxVoice} saved={savedCount(state)} later={state.later} who={who} callAi={callAi} saveOp={saveOp} commit={commit}
             onAllowance={() => setAllowanceGone(true)} onNotice={setNotice} onError={setError} onOpenStage={onOpenStage}
             addWords={async (key, question, words) => {
@@ -290,6 +380,35 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     </section>
   );
 }
+
+/**
+ * What the person wants to change, as noticed in what they said (5b): each statement with its words, Keep (into
+ * the record under What you want to change) or Not wanted. Nothing is kept until Keep.
+ */
+function WantedNoticed({ wanted, kept, busy, onKeep, onDrop }: { wanted: NoticedWanted[]; kept: number; busy: boolean; onKeep: (w: NoticedWanted) => Promise<void>; onDrop: (w: NoticedWanted) => Promise<void> }) {
+  const [working, setWorking] = React.useState<string | null>(null);
+  if (!wanted.length) return null;
+  const act = async (w: NoticedWanted, f: (w: NoticedWanted) => Promise<void>) => { setWorking(w.excerpt); try { await f(w); } finally { setWorking(null); } };
+  return (
+    <div className="mb-4 rounded-xl border border-slate-200 bg-white p-4" data-testid="discovery-wanted">
+      <p className="text-sm font-semibold text-slate-900">What you want to change</p>
+      <p className="text-sm text-slate-600">You said these should happen in future. Kept, they stay in The brief under "What you want to change", never as steps of the work done today.{kept ? ` ${kept} kept so far.` : ''}</p>
+      <ul className="mt-2 divide-y divide-slate-100">
+        {wanted.map(w => (
+          <li key={w.excerpt} className="flex flex-wrap items-start justify-between gap-2 py-2" data-testid="discovery-wanted-item">
+            <p className="text-sm text-slate-800">“{w.excerpt}”</p>
+            <div className="flex gap-2">
+              <Button variant="secondary" disabled={busy || working !== null} onClick={() => void act(w, onKeep)}>Keep</Button>
+              <Button variant="ghost" disabled={busy || working !== null} onClick={() => void act(w, onDrop)}>Not wanted</Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+const sameTarget = (a: Card['target'], b: Card['target']) => a.kind === b.kind && (a.id ?? '') === (b.id ?? '') && (a.field ?? '') === (b.field ?? '');
 
 type BoxVoice = { transcribe?: (audio: string) => Promise<string>; voiceLine?: string };
 type Who = { me: string | null; name: string };
@@ -339,14 +458,24 @@ function Describe({ m, asksPurpose, boxVoice, capped, busy, onSave, onSources }:
   );
 }
 
-function FirstReading({ store, process, run, lastRead, boxVoice, busy, active, onRead, onAdd, onStarted }: {
+function FirstReading({ store, process, run, lastRead, heldBack, noticing, readings, stopped, boxVoice, busy, active, onRead, onReadAgain, onAdd, onStarted }: {
   store: JourneyStore; process: ProcessRow; run: ExtractionRow | null; lastRead: string[]; boxVoice: BoxVoice; busy: boolean; active: SourceRow[];
+  /** Steps whose every quote lies inside what the person said they want in future (5b): not steps of today's work. */
+  heldBack: Step[];
+  /** While what was said is being noticed, the process cannot be started from the reading. */
+  noticing: boolean;
+  /** Readings this session started, and why another cannot start (the session's cap), or null. */
+  readings: number; stopped: string | null;
   onRead: (ids: string[]) => void; onAdd: (words: string) => void; onStarted: () => void;
+  /** "Read it again": the hourly limit's words when it was refused for that, else null. */
+  onReadAgain: (ids: string[]) => Promise<string | null>;
 }) {
+  const [limited, setLimited] = React.useState<string | null>(null);
   const [adding, setAdding] = React.useState(false);
   const [words, setWords] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [addBack, setAddBack] = React.useState<string[]>([]);
   if (!run || !run.model) {
     return (
       <div className="space-y-2" data-testid="discovery-first">
@@ -356,8 +485,15 @@ function FirstReading({ store, process, run, lastRead, boxVoice, busy, active, o
       </div>
     );
   }
-  const extracted = run.model!;
+  const held = heldBack.filter(s => !addBack.includes(s.id));
+  // The reading without what is held back: the draft starts from today's work only.
+  // A step that cannot be taken out (a reading the check refuses) stays in, rather than stopping the screen.
+  const extracted = held.reduce((x, s) => { try { return removeStep(x, { stepId: s.id }).model; } catch { return x; } }, run.model!);
   const rows = stepsWithWords(extracted);
+  // No step of today's work: the reading found none, or everything it found is what the person wants in future.
+  const none = run.model.steps.length === 0;
+  const empty = extracted.steps.length === 0;
+  const again = () => void onReadAgain(lastRead.length ? lastRead : active.map(s => s.id)).then(setLimited);
   const start = async () => {
     setSaving(true); setError(null);
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -378,8 +514,16 @@ function FirstReading({ store, process, run, lastRead, boxVoice, busy, active, o
   return (
     <div className="space-y-3" data-testid="discovery-first">
       <h3 className="font-display text-lg font-semibold text-slate-900">What I understand so far</h3>
-      <p className="text-sm leading-6 text-slate-600">From what you said: {extracted.steps.length} {extracted.steps.length === 1 ? 'step' : 'steps'}, {extracted.roles.length} {extracted.roles.length === 1 ? 'role' : 'roles'} and {extracted.systems.length} {extracted.systems.length === 1 ? 'application' : 'applications'}. Each step shows the words it came from.</p>
-      <ol className="space-y-2" data-testid="discovery-steps">
+      {empty && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-no-steps">
+          <p className="text-sm leading-6 text-amber-950">{none ? WORDS.noSteps : WORDS.allHeld}</p>
+          {none && readings > 1 && <p className="text-sm leading-6 text-amber-950" data-testid="discovery-no-steps-again">{WORDS.noStepsAgain}</p>}
+          {none && stopped && <p className="text-sm leading-6 text-amber-950" data-testid="discovery-readings-used">{stopped}</p>}
+          {none && limited && <p role="alert" className="text-sm leading-6 text-amber-950" data-testid="discovery-read-limit">{limited}</p>}
+        </div>
+      )}
+      {!empty && <p className="text-sm leading-6 text-slate-600">From what you said: {extracted.steps.length} {extracted.steps.length === 1 ? 'step' : 'steps'}, {extracted.roles.length} {extracted.roles.length === 1 ? 'role' : 'roles'} and {extracted.systems.length} {extracted.systems.length === 1 ? 'application' : 'applications'}. Each step shows the words it came from.</p>}
+      {!empty && <ol className="space-y-2" data-testid="discovery-steps">
         {rows.map((r, i) => (
           <li key={i} className="rounded-lg border border-slate-200 bg-white px-3 py-2">
             <p className="text-sm font-semibold text-slate-900">{i + 1}. {r.name}</p>
@@ -387,24 +531,47 @@ function FirstReading({ store, process, run, lastRead, boxVoice, busy, active, o
             {r.words && <p className="mt-1 text-sm leading-6 text-slate-700">From your words: “{r.words}”</p>}
           </li>
         ))}
-      </ol>
+      </ol>}
+      {heldBack.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-held-back">
+          <p className="text-sm font-semibold text-amber-950">Held back: what you want to change</p>
+          <p className="text-sm text-amber-950">You said these should happen in future, so they are not steps of the work done today.</p>
+          <ul className="mt-2 space-y-2">
+            {heldBack.map(s => (
+              <li key={s.id} className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <p className="text-sm font-medium text-amber-950">{s.name}</p>
+                  {s.sources[0] && <p className="text-xs text-amber-900">“{s.sources[0].excerpt}”</p>}
+                </div>
+                <Button variant="secondary" aria-pressed={addBack.includes(s.id)} onClick={() => setAddBack(a => (a.includes(s.id) ? a.filter(x => x !== s.id) : [...a, s.id]))}>
+                  {addBack.includes(s.id) ? 'Hold it back again' : 'Add it as a step instead'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {noticing && <p role="status" className="text-sm text-slate-600" data-testid="discovery-noticing">Looking at what you said for questions and for what you want to change…</p>}
       <ErrorNote message={error} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="accent" onClick={start} disabled={saving || !extracted.steps.length}>Start the process from this</Button>
+        {!empty && <Button variant="accent" onClick={start} disabled={saving || noticing}>Start the process from this</Button>}
+        {empty && none && !stopped && <Button variant="accent" onClick={again} disabled={busy}>Read it again</Button>}
         <Button variant="secondary" onClick={() => setAdding(a => !a)}>Add to what I said</Button>
       </div>
-      <p className="text-xs text-slate-500">It becomes a working draft you can edit. Nothing is approved yet.</p>
+      {!empty && <p className="text-xs text-slate-500">It becomes a working draft you can edit. Nothing is approved yet.</p>}
       {adding && (
         <div className="space-y-2">
           <AnswerBox label="What to add" value={words} onChange={setWords} rows={4} placeholder="What else happens, who does it, in which application…" {...boxVoice} />
-          <Button disabled={busy || words.trim().length < 2} onClick={() => onAdd(words)}>Save and read it again</Button>
+          <Button disabled={busy || words.trim().length < 2} onClick={() => onAdd(words)}>{stopped ? 'Save my words' : 'Save and read it again'}</Button>
         </div>
       )}
     </div>
   );
 }
 
-function Cards({ model, asksPurpose, skipped, waitingKeys, keys, capped, boxVoice, saved, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
+function Cards({ model, asksPurpose, skipped, raised, onActed, onSaid, waitingKeys, keys, capped, boxVoice, saved, later, who, callAi, saveOp, commit, addWords, onAllowance, onNotice, onError, onOpenStage }: {
+  /** Questions raised from what was said, not yet acted on (5b). */
+  raised: Card[]; onActed: (card: Card) => Promise<void>; onSaid: (card: Card, words: string) => void;
   store: JourneyStore; process: ProcessRow; model: ProcessModel; asksPurpose: boolean; skipped: string[]; waitingKeys: string[]; keys: string[];
   capped: boolean; boxVoice: BoxVoice; saved: number; later: LaterWords[]; who: Who;
   callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string, say?: Say) => Promise<boolean>; commit: (step: SessionStep, say?: Say) => Promise<boolean>;
@@ -413,15 +580,17 @@ function Cards({ model, asksPurpose, skipped, waitingKeys, keys, capped, boxVoic
 }) {
   const assessment = React.useMemo(() => assessProcess(model), [model]);
   const t = React.useMemo(() => triage(model, assessment), [model, assessment]);
-  const queue = React.useMemo(() => discoveryQueue({ model, assessment, asksPurpose, skipped, triage: t }).filter(c => !waitingKeys.includes(c.key)), [model, assessment, asksPurpose, skipped, t, waitingKeys]);
-  const summary = sessionSummary(model, assessment, saved, later.length);
+  const queue = React.useMemo(() => discoveryQueue({ model, assessment, asksPurpose, skipped, triage: t, raised }).filter(c => !waitingKeys.includes(c.key)), [model, assessment, asksPurpose, skipped, t, waitingKeys, raised]);
+  // The closing line counts the cards this screen asks, as "Question 1 of N" does.
+  const summary = sessionSummary(model, assessment, saved, later.length, queue);
   const [showSummary, setShowSummary] = React.useState(false);
   const card = queue[0];
   return (
     <>
       {card && !showSummary ? (
         <React.Fragment key={card.key}><CardView card={card} item={cardItem(card, t)} model={model} n={1} of={queue.length} keys={keys} capped={capped} boxVoice={boxVoice} later={laterFor({ ...emptyState(), later }, card.key)} who={who}
-          callAi={callAi} saveOp={saveOp} commit={commit} addWords={addWords} onAllowance={onAllowance} onNotice={onNotice} onError={onError} onOpenStage={onOpenStage} waiting={waitingKeys.length} /></React.Fragment>
+          callAi={callAi} saveOp={saveOp} commit={commit} addWords={addWords} onAllowance={onAllowance} onNotice={onNotice} onError={onError} onOpenStage={onOpenStage} waiting={waitingKeys.length}
+          onActed={() => onActed(card)} onSaid={words => onSaid(card, words)} /></React.Fragment>
       ) : (
         <Summary summary={summary} onOpenStage={onOpenStage} />
       )}
@@ -443,8 +612,10 @@ function Summary({ summary, onOpenStage }: { summary: ReturnType<typeof sessionS
   );
 }
 
-function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who, callAi, saveOp: saveOnPanel, commit: commitOnPanel, addWords, onAllowance, onNotice, onOpenStage, waiting }: {
+function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who, callAi, saveOp: saveOnPanel, commit: commitOnPanel, addWords, onAllowance, onNotice, onOpenStage, waiting, onActed, onSaid }: {
   card: Card; item: TriageItem | undefined; model: ProcessModel; n: number; of: number; keys: string[]; capped: boolean; boxVoice: BoxVoice; waiting: number;
+  /** The card was acted on (a raised question leaves the session's list); words were saved (they may be noticed). */
+  onActed: () => Promise<void>; onSaid: (words: string) => void;
   /** Words kept on this card to read later: shown again in the box. */
   later: LaterWords | undefined; who: Who;
   callAi: (segments: unknown) => Promise<{ data: unknown }>; saveOp: (op: Op, summary: string, say?: Say) => Promise<boolean>; commit: (step: SessionStep, say?: Say) => Promise<boolean>;
@@ -465,10 +636,12 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
   const [asked, setAsked] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [field, setField] = React.useState<InputValue>({});
+  // "Someone else" (owner's walk, 28 November 2026): who does it, or which application, when the words did not say one in the process.
+  const [named, setNamed] = React.useState<NamedValue>(emptyNamed);
   const ways = item && (item.kind === 'ways' || item.kind === 'access');
   const way = card.answer === 'words' && !item ? 'waits' : card.answer;
 
-  const done = (line: string | null) => { onNotice(line); };
+  const done = (line: string | null, acted = true) => { onNotice(line); if (acted) void onActed(); };
   const run = async (f: () => Promise<void>) => { setBusy(true); onError(null); try { await f(); } catch (e) { if (e instanceof StoreError && e.code === 'BUDGET_EXCEEDED') onAllowance(); else onError(messageOf(e)); } finally { setBusy(false); } };
 
   const readWords = () => run(async () => {
@@ -485,7 +658,7 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
     const e = wordsEdit(model, item!, r.proposal, keys);
     if (!e) { onError('This answer cannot be recorded for this question.'); return; }
     if (e.keepWords) await addWords(e.keepWords.key, e.keepWords.question, e.keepWords.words);
-    if (await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(e.line ?? `Recorded: ${r.proposal.display}`); }
+    if (await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); onSaid(reading?.said ?? text); done(e.line ?? `Recorded: ${r.proposal.display}`); }
   });
   const wordsPreview = reading && (reading.r.kind === 'record' || reading.r.kind === 'confirm') ? wordsEdit(model, item!, reading.r.proposal, keys) : null;
 
@@ -496,7 +669,7 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
     if (await saveOp(e.op, e.summary)) done(null);
   });
   const keep = () => run(async () => {
-    if (await commit(keepAnswer({ key: card.key, words: text.trim(), question: card.question, at: new Date().toISOString() }))) done(keptLine(waiting + 1));
+    if (await commit(keepAnswer({ key: card.key, words: text.trim(), question: card.question, at: new Date().toISOString() }))) { onSaid(text); done(keptLine(waiting + 1)); }
   });
   const fieldSave = () => run(async () => {
     const op = inputEdit(card as InputCard, field);
@@ -504,6 +677,15 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
     if (await saveOp(op, `Discovery: ${card.question}`)) done(null);
   });
   const chosenReady = ways ? Boolean(waysRecordLine(model, item!, { pick, statuses })) : Boolean(pick);
+  const showNamed = way === 'words' && takesNamed(item) && (Boolean(followUp) || reading?.r.kind === 'unanswered');
+  const namedHeld = showNamed ? confirmedLine(model, item!.target) : null;
+  const namedReady = showNamed && !namedHeld && Boolean(buildAnswer(item!, model, named));
+  const saveNamed = () => run(async () => {
+    const what = namedChoice(item!, model, named)?.name;
+    const e = chooseEdit(card, model, named.pick, { ...who, at: new Date().toISOString(), item, named: named.named, words: followUp?.first ?? reading?.said });
+    if (!e || !what) { onError('Choose who does it, or type the name.'); return; }
+    if (await saveOp(e.op, e.summary)) { if (later) await commit(dropLater(card.key)); done(`Recorded: ${what}`); }
+  });
 
   return (
     <article className="rounded-xl border border-slate-200 bg-white p-4" data-testid="discovery-card">
@@ -551,6 +733,9 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
           </>
         )}
         {reading?.r.kind === 'unanswered' && <p className="text-sm text-slate-700">{reading.r.message}</p>}
+        {showNamed && (namedHeld
+          ? <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm leading-6 text-amber-950" data-testid="discovery-confirmed">{namedHeld}</p>
+          : <NamedChoice item={item!} model={model} value={named} onChange={setNamed} id={`named-${card.key}`} />)}
         {reading && (reading.r.kind === 'record' || reading.r.kind === 'confirm') && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2" data-testid="discovery-record">
             <p className="text-sm font-semibold text-sky-950">This will record</p>
@@ -565,8 +750,9 @@ function CardView({ card, item, model, n, of, keys, capped, boxVoice, later, who
         {way === 'choose' && <Button onClick={choose} disabled={busy || !chosenReady}>Save</Button>}
         {way === 'field' && <Button onClick={fieldSave} disabled={busy}>Save</Button>}
         {way === 'waits' && <Button onClick={keep} disabled={busy || text.trim().length < 2}>Save</Button>}
-        {way === 'words' && !reading && <Button onClick={readWords} disabled={busy || capped || text.trim().length < 2}>Read my answer</Button>}
-        {way === 'words' && capped && text.trim().length > 1 && <Button variant="secondary" onClick={() => run(async () => { if (await commit(keepLater({ key: card.key, question: card.question, words: text.trim(), at: new Date().toISOString() }))) done('Your words are kept with this session, to read later.'); })}>Keep my words to read later</Button>}
+        {showNamed && !namedHeld && <Button onClick={saveNamed} disabled={busy || !namedReady}>Save</Button>}
+        {way === 'words' && !reading && <Button variant={showNamed ? 'secondary' : undefined} onClick={readWords} disabled={busy || capped || text.trim().length < 2}>Read my answer</Button>}
+        {way === 'words' && capped && text.trim().length > 1 && <Button variant="secondary" onClick={() => run(async () => { if (await commit(keepLater({ key: card.key, question: card.question, words: text.trim(), at: new Date().toISOString() }))) done('Your words are kept with this session, to read later.', false); })}>Keep my words to read later</Button>}
         {reading && (reading.r.kind === 'record' || reading.r.kind === 'confirm') && <>
           <Button onClick={() => saveWords(reading.r as Extract<Reading, { kind: 'record' | 'confirm' }>)} disabled={busy}>Save</Button>
           <Button variant="secondary" onClick={() => setReading(null)}>Change my answer</Button>

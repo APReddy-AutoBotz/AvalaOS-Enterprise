@@ -17,6 +17,34 @@ export const WANTED_CUES: readonly RegExp[] = [
 
 export const hasWantedCue = (text: string): boolean => WANTED_CUES.some(re => re.test(text));
 
+/**
+ * A rule of today's work that is not kept (measure 4 of the replay, the owner's choice of 26 November 2026): a
+ * sentence that says something "should" (or is supposed to) happen and goes on with "but in practice", "but today"
+ * or the like says how the work goes today, not what is wanted in future ("The badge should be cancelled, but in
+ * practice we find out weeks later"). Such a statement is raised as a question, never marked wanted. A sentence that
+ * also carries a word about the future ("in future", "would like", "ideally" and the others in `WANTED_CUES`) stays
+ * wanted: "In future the system should block it, but today we check by hand" is a wish.
+ */
+export const SHOULD = /\b(should|is\s+supposed\s+to|are\s+supposed\s+to|ought\s+to)\b/i;
+export const NOT_KEPT = /\b(but|though|although|yet)\b[^.!?]*?\b(in\s+practice|in\s+reality|in\s+real\s+life|today|nowadays|right\s+now|at\s+the\s+moment|currently|actually|really|usually|often|sometimes|most\s+of\s+the\s+time|rarely|never|not\s+always|seldom|we\s+find|it\s+(doesn['’]t|does\s+not|isn['’]t|is\s+not)|nobody|no\s+one|people\s+(don['’]t|do\s+not|forget))\b/i;
+
+/** The sentence of a passage that holds the excerpt (the excerpt alone when it is not found). */
+export function sentenceAround(passage: string, excerpt: string): string {
+  const at = passage.toLowerCase().indexOf(excerpt.trim().toLowerCase());
+  if (at < 0 || !excerpt.trim()) return excerpt;
+  const before = passage.slice(0, at), after = passage.slice(at);
+  const start = Math.max(...['.', '!', '?', '\n'].map(c => before.lastIndexOf(c))) + 1;
+  const ends = ['.', '!', '?', '\n'].map(c => after.indexOf(c, excerpt.trim().length - 1)).filter(n => n >= 0);
+  return passage.slice(start, at + (ends.length ? Math.min(...ends) + 1 : after.length)).trim();
+}
+
+/** Whether a sentence states a rule of today's work that is not kept, rather than something wanted in future. */
+export function ruleNotKept(sentence: string): boolean {
+  if (!SHOULD.test(sentence) || !NOT_KEPT.test(sentence)) return false;
+  // Another word about the future than "should" keeps it a wish.
+  return !WANTED_CUES.some(re => !re.test('should') && re.test(sentence));
+}
+
 /** A statement marked wanted: the quote and the source it is in. */
 export interface WantedQuote { sourceId: string; excerpt: string }
 
