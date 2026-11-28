@@ -58,7 +58,7 @@ async function prepareCall(page: Page, processUrl: string) {
 }
 
 async function startPanel(call: Page) {
-  await call.getByLabel('Process owner or SME').check();
+  await call.getByRole('checkbox', { name: 'Process owner or SME', exact: true }).check();
   await call.getByTestId('start-panel').click();
   const panel = call.getByTestId('call-panel');
   await expect(panel).toBeVisible();
@@ -84,7 +84,7 @@ test('the briefing: for each kind of person and length, in order, with the agend
   // Nothing to start until someone is on the call.
   await expect(call.getByTestId('start-panel')).toBeDisabled();
 
-  await call.getByLabel('Process owner or SME').check();
+  await call.getByRole('checkbox', { name: 'Process owner or SME', exact: true }).check();
   await expect(call.getByRole('button', { name: '30 minutes' })).toHaveAttribute('aria-pressed', 'true');
   await expect(call.getByRole('heading', { name: 'For this call (8)' })).toBeVisible();
   await expect(call.getByRole('heading', { name: 'If there is time (5)' })).toBeVisible();
@@ -104,11 +104,11 @@ test('the briefing: for each kind of person and length, in order, with the agend
   expect(agenda).not.toMatch(/Why it matters|From the record|Who can answer/);
 
   // The other kinds of person.
-  await call.getByLabel('Process owner or SME').uncheck();
-  await call.getByLabel('IT or application owner').check();
+  await call.getByRole('checkbox', { name: 'Process owner or SME', exact: true }).uncheck();
+  await call.getByRole('checkbox', { name: 'IT or application owner', exact: true }).check();
   await expect(call.getByRole('heading', { name: 'For this call (4)' })).toBeVisible();
-  await call.getByLabel('IT or application owner').uncheck();
-  await call.getByLabel('Finance or controls').check();
+  await call.getByRole('checkbox', { name: 'IT or application owner', exact: true }).uncheck();
+  await call.getByRole('checkbox', { name: 'Finance or controls', exact: true }).check();
   await expect(call.getByRole('heading', { name: 'For this call (1)' })).toBeVisible();
   // Nothing was sent to the AI, and nothing kept.
   expect(await standInLog(call)).toEqual([]);
@@ -210,9 +210,13 @@ test('Discard writes nothing and forgets the call', async ({ page, context }) =>
 
 test('a viewer gets the briefing and no "Start the call panel"', async ({ page, context }) => {
   await withStandIns(context, replies);
-  const processUrl = await processWithRecord(page, 'viewer');
+  const processUrl = await processWithRecord(page);
   const call = await prepareCall(page, processUrl);
-  await call.getByLabel('Process owner or SME').check();
+  // The call page opened by someone who is a viewer in this workspace (Closing the gaps offers no Answer them to a viewer).
+  await call.evaluate(KEY => { const s = JSON.parse(localStorage.getItem(KEY)!); s.workspaces[0].role = 'viewer'; localStorage.setItem(KEY, JSON.stringify(s)); }, KEY);
+  await call.reload();
+  await expect(call.getByTestId('call-briefing')).toBeVisible();
+  await call.getByRole('checkbox', { name: 'Process owner or SME', exact: true }).check();
   await expect(call.getByRole('heading', { name: 'For this call (8)' })).toBeVisible();
   await expect(call.getByTestId('start-panel')).toHaveCount(0);
   await expect(call.getByTestId('viewer-line')).toHaveText('Someone who can edit this process can run the call panel.');
@@ -278,6 +282,6 @@ test('in the demo, the call opens under /demo with the briefing, and says the no
   await expect(page).toHaveURL(/\/demo\/process\/[0-9a-f-]{36}\/sources$/);
   await page.goto(page.url().replace(/\/sources$/, '/call'));
   await expect(page.getByTestId('call-briefing')).toBeVisible();
-  await page.getByLabel('Process owner or SME').check();
+  await page.getByRole('checkbox', { name: 'Process owner or SME', exact: true }).check();
   await expect(page.getByTestId('no-ai-line')).toBeVisible();
 });
