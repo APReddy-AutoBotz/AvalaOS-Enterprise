@@ -4,6 +4,7 @@
 import React from 'react';
 import type { JourneyStore } from '../store/types.ts';
 import { checkName, NAME_MAX, NAME_WORDS, nameFromAddress } from '../../domain/people/name.ts';
+import { NAME_LINE_CLOSED } from '../../domain/site/storage.ts';
 import { Button, CARD, cx, ErrorNote, messageOf } from '../ui.tsx';
 
 /** Other screens (the account menu, My work's line) read the name again when this event fires. */
@@ -56,11 +57,11 @@ export function YourName({ store }: { store: JourneyStore }) {
   );
 }
 
-const closedKey = (userId: string) => `avala:name-line-closed:${userId}`;
 
 /**
  * One quiet line at the top of My work while a person's name is still the one sign-up made from their address
- * ("Your name shows as 'ann'. Set your name"). It goes once a name is saved, or once closed (kept in the browser).
+ * ("Your name shows as 'ann'. Set your name"). It goes once a name is saved, or once closed: kept in the browser
+ * under a key that holds no id and goes at sign-out (domain/site/storage.ts).
  */
 export function SetNameLine({ store, userId, onOpen }: { store: JourneyStore; userId: string; onOpen: () => void }) {
   const [shows, setShows] = React.useState<string | null>(null);
@@ -68,7 +69,7 @@ export function SetNameLine({ store, userId, onOpen }: { store: JourneyStore; us
     if (store.kind === 'demo') return;
     let live = true;
     const read = () => {
-      try { if (localStorage.getItem(closedKey(userId))) { setShows(null); return; } } catch { /* storage unavailable */ }
+      try { if (localStorage.getItem(NAME_LINE_CLOSED)) { setShows(null); return; } } catch { /* storage unavailable */ }
       Promise.all([store.currentUser(), store.getMyName()]).then(([me, name]) => {
         if (!live) return;
         setShows(me && name !== null && nameFromAddress(name, me.email) ? (name.trim() || '') : null);
@@ -79,7 +80,7 @@ export function SetNameLine({ store, userId, onOpen }: { store: JourneyStore; us
     return () => { live = false; window.removeEventListener(NAME_CHANGED, read); };
   }, [store, userId]);
   if (shows === null) return null;
-  const close = () => { try { localStorage.setItem(closedKey(userId), '1'); } catch { /* storage unavailable */ } setShows(null); };
+  const close = () => { try { localStorage.setItem(NAME_LINE_CLOSED, '1'); } catch { /* storage unavailable */ } setShows(null); };
   return (
     <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate-600" data-testid="set-name-line">
       <span>{shows ? <>Your name shows as “{shows}”.</> : <>Your name is not set yet.</>}</span>

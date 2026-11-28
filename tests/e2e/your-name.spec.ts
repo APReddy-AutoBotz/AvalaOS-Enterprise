@@ -3,7 +3,7 @@
 // supabase/tests/own_display_name.sql and the words by domain/people/name.test.ts.
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect } from '@playwright/test';
-import { openSettings, signInAndCreateProcess } from './helpers.ts';
+import { openSettings, signInAndCreateProcess, signOut } from './helpers.ts';
 
 test('a person sets their own name; wrong names are refused in words; the menu, People and My work show it', async ({ page }) => {
   await signInAndCreateProcess(page);
@@ -66,7 +66,7 @@ test('a person sets their own name; wrong names are refused in words; the menu, 
   await expect(page.getByTestId('your-name').getByLabel('Name')).toHaveValue('Ann Reddy');
 });
 
-test('the line on My work can be closed, and stays closed', async ({ page }) => {
+test('the line on My work can be closed and stays closed; the note holds no id and goes at sign-out', async ({ page }) => {
   await signInAndCreateProcess(page);
   await page.goto('/work');
   await page.getByTestId('set-name-line').getByRole('button', { name: 'Close this line' }).click();
@@ -74,4 +74,17 @@ test('the line on My work can be closed, and stays closed', async ({ page }) => 
   await page.reload();
   await expect(page.getByRole('heading', { name: /Welcome back/ })).toBeVisible();
   await expect(page.getByTestId('set-name-line')).toHaveCount(0);
+  // What the browser keeps for it: one key, with no account's id in it.
+  const kept = await page.evaluate(() => Object.keys(localStorage).filter(k => k.includes('name-line')));
+  expect(kept).toEqual(['avala:name-line-closed']);
+
+  // Signing out removes it, so whoever signs in next is asked again.
+  await signOut(page);
+  await expect(page).toHaveURL(/\/signin$/);
+  expect(await page.evaluate(() => localStorage.getItem('avala:name-line-closed'))).toBeNull();
+  await page.getByLabel('Email').fill('analyst@example.test');
+  await page.getByLabel('Password').fill('secret-123');
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.goto('/work');
+  await expect(page.getByTestId('set-name-line')).toContainText('Your name shows as “analyst”.');
 });
