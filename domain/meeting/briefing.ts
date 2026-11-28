@@ -146,11 +146,15 @@ function standing(i: BriefingInput): string[] {
   return lines;
 }
 
-function openLine(m: ProcessModel, t: Triage, shape: number): string | null {
+/**
+ * "What is open". "Needed for sign-off" counts the questions the list labels so (cards of the group `signoff`), for
+ * everyone, not the triage group of that name, which is narrower (review chat, 28 November 2026: the header said 2
+ * while the list labelled 11).
+ */
+function openLine(m: ProcessModel, t: Triage, shape: number, signoff: number): string | null {
   const open = t.items.filter(x => !x.deferred);
   const decides = open.filter(couldChange).length;
   const conflicts = conflictCards(m).length;
-  const signoff = open.filter(x => x.group === 'signoff').length;
   const left = t.items.filter(x => x.deferred).length;
   const parts = [
     decides && `${decides} could change the recommendation`,
@@ -203,7 +207,7 @@ export function buildBriefing(i: BriefingInput): Briefing {
   const elsewhere = whoToAsk(t.items.filter(x => !listed.has(x.key) && (x.deferred ? !(x.assignedTo && names.some(nm => same(nm, x.assignedTo!))) : asked.has(x.key) && !kinds.has(x.owner))));
 
   return {
-    standing: standing(i), openLine: openLine(m, t, askedParts(m, t).shape.length),
+    standing: standing(i), openLine: openLine(m, t, parts.shape.length, discovery.filter(c => c.group === 'signoff').length),
     forCall: kept.slice(0, n), ifTime: kept.slice(n), leftOut, elsewhere, fits: n,
   };
 }

@@ -121,7 +121,13 @@ test('the analyst\'s own questions, moves and left out', () => {
 test('where the process stands, and what is open', () => {
   const b = brief(gold, everyone, { waitingInDiscovery: 2 });
   assert.deepEqual(b.standing, ['21 steps, 10 roles and 7 applications, from 6 sources.', 'Assessed: API-led integration.', '2 answers from Discovery are waiting for the draft.']);
-  assert.equal(b.openLine, '2 could change the recommendation · 4 about the shape of the process · 2 where the sources disagree · 7 needed for sign-off');
+  assert.equal(b.openLine, '2 could change the recommendation · 4 about the shape of the process · 2 where the sources disagree · 6 needed for sign-off');
+  // "Needed for sign-off" in the header counts what the list labels so (review chat, 28 November 2026).
+  const all = brief(gold, everyone, { minutes: 60 });
+  const labelled = [...all.forCall, ...all.ifTime, ...all.leftOut].filter(x => itemHeading(x) === 'Needed for sign-off').length;
+  assert.equal(all.openLine?.match(/(\d+) needed for sign-off/)?.[1], String(labelled));
+  const untargetedLine = brief(untargeted(gold), everyone, { minutes: 60 });
+  assert.equal(untargetedLine.openLine?.match(/(\d+) needed for sign-off/)?.[1], String([...untargetedLine.forCall, ...untargetedLine.ifTime].filter(x => itemHeading(x) === 'Needed for sign-off').length));
   const empty = brief({ ...structuredClone(gold), steps: [], flows: [], gateways: [], events: [] }, everyone);
   assert.equal(empty.standing[0], 'No steps yet: the call starts with the shape of the process.');
   const asIs = setPurpose(gold, { value: 'as_is', by: null, at: '2026-11-26T10:00:00.000Z' }).model;

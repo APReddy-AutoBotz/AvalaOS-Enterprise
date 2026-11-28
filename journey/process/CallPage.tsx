@@ -16,7 +16,8 @@ import type { StageId } from '../../domain/workspace/route.ts';
 import { buildBriefing } from '../../domain/meeting/briefing.ts';
 import { addNote, continueCall, editNote, newCall, notesFile, notesFileName, removeNote, unfinishedLine, type CallState } from '../../domain/meeting/kept.ts';
 import { askNow, dismissFound, leaveWithName, markAsked, readingDue, skipQuestion, type Readings } from '../../domain/meeting/panel.ts';
-import { buildReview, callEdit, callNotesSource, type SaveChoice } from '../../domain/meeting/review.ts';
+import { buildReview, callNotesSource, type SaveChoice } from '../../domain/meeting/review.ts';
+import { saveCall, savedBy } from '../../domain/meeting/save.ts';
 import { callAsked } from '../../domain/meeting/asked.ts';
 import { CALL_WORDS as W, day } from '../../domain/meeting/words.ts';
 import type { JourneyStore, Me, RevisionRow, SourceRow, Workspace } from '../store/types.ts';
@@ -197,28 +198,28 @@ function Call({ store, processId, me, data, onReload, stageHref }: { store: Jour
     const s = latest.current;
     if (!s) return;
     setBusy(true); setError(null);
-    const before = model;
     const rctx = { model, list, triage, timeZone: ZONE };
-    const review = buildReview(s, rctx);
     try {
-      const source = callNotesSource(s, { takenKeys: data.sources.map(x => x.key), by: data.myName || me.email, endedAt: s.endedAt ?? nowIso(), timeZone: ZONE });
-      if (!source) { setError('There are no notes to keep.'); return; }
-      let key = savedKey;
-      if (!key) {
-        await store.addSource(processId, { key: source.key, title: source.title, fileName: '', format: 'txt', kind: source.kind, segments: source.segments, inferred: false, warnings: [], byteSize: source.byteSize });
-        key = source.key; setSavedKey(key);
-      }
-      const edit = callEdit(s, review, choice, { ...rctx, source: { ...source, key }, date: day(s.startedAt, ZONE), by: { id: me.id, name: data.myName }, at: nowIso() });
-      // The record as saved: the editor's own state is not yet updated inside this handler.
-      let after: ProcessModel | null = null;
-      const ok = await editor.apply(m => { const r = edit.op(m); after = r.model; return r; }, edit.summary);
-      if (!ok || !after) { setError(W.notSaved('The record could not be saved', key)); return; }
+      // The notes are kept as a source first, then the one edit (domain/meeting/save.ts); a retry reuses that source.
+      const r = await saveCall({
+        s, review: buildReview(s, rctx), choice, ctx: rctx, takenKeys: data.sources.map(x => x.key), keptKey: savedKey,
+        by: { id: me.id, name: data.myName }, endedAt: s.endedAt ?? nowIso(), at: nowIso(), date: day(s.startedAt, ZONE),
+      }, {
+        addSource: async src => { await store.addSource(processId, { key: src.key, title: src.title, fileName: '', format: 'txt', kind: src.kind, segments: src.segments, inferred: false, warnings: [], byteSize: src.byteSize }); },
+        apply: async (op, summary) => {
+          // The record as saved: the editor's own state is not yet updated inside this handler.
+          let after: ProcessModel | null = null;
+          const ok = await editor.apply(m => { const x = op(m); after = x.model; return x; }, summary);
+          return ok && after ? { model: after } : { error: null };
+        },
+      });
+      if (r.key) setSavedKey(r.key);
+      if (!r.ok) { setError(r.error); return; }
       forgetCall(processId); latest.current = null; setCallState(null);
-      setResult(meetingResult(before, after));
-      setRecorded(edit.counts);
+      setResult(meetingResult(r.before, r.after));
+      setRecorded(r.counts);
       setView('saved');
-    } catch (e) { setError(savedKey ? W.notSaved(messageOf(e), savedKey) : W.notSavedNothing(messageOf(e))); }
-    finally { setBusy(false); }
+    } finally { setBusy(false); }
   };
 
   // Opened here because the browser blocked a new window (CALL_WORDS.blockedWindow).
@@ -274,7 +275,7 @@ function Call({ store, processId, me, data, onReload, stageHref }: { store: Jour
 
   if (view === 'review' && call) {
     const review = buildReview(call, { model, list, triage, timeZone: ZONE });
-    const title = callNotesSource(call, { takenKeys: data.sources.map(x => x.key), by: data.myName || me.email, endedAt: call.endedAt ?? nowIso(), timeZone: ZONE })?.title ?? '';
+    const title = callNotesSource(call, { takenKeys: data.sources.map(x => x.key), by: savedBy(data.myName), endedAt: call.endedAt ?? nowIso(), timeZone: ZONE })?.title ?? '';
     const shown = error && editor.error ? `${error} ${editor.error}` : error;
     return shell(<CallReview review={review} model={model} notesTitle={title} limited={limited} busy={busy} error={shown} onSave={save} onDiscard={discard} onDownload={download} />);
   }

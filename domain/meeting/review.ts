@@ -38,7 +38,9 @@ export function callNotesSource(s: CallState, a: { takenKeys: readonly string[];
   const key = answersKey(a.takenKeys);
   const when = `${day(s.startedAt, a.timeZone)}, ${clock(s.startedAt, a.timeZone)} to ${clock(a.endedAt, a.timeZone)}`;
   const segments: IngestSegment[] = s.notes.map((n, i) => ({ id: `${key}:${i + 1}`, sourceId: key, kind: 'paragraph' as const, text: flat(n.text), locator: locatorOf(n, i, a.timeZone) }));
-  return { key, title: a.by?.trim() ? `${CALL_NOTES_KIND} by ${a.by.trim()}, ${when}` : `${CALL_NOTES_KIND}, ${when}`, kind: CALL_NOTES_KIND, segments, byteSize: new TextEncoder().encode(segments.map(x => x.text).join('\n')).length };
+  // A name, never an email address (review chat, 28 November 2026): the title then names no one.
+  const by = a.by?.trim() && !a.by.includes('@') ? a.by.trim() : '';
+  return { key, title: by ? `${CALL_NOTES_KIND} by ${by}, ${when}` : `${CALL_NOTES_KIND}, ${when}`, kind: CALL_NOTES_KIND, segments, byteSize: new TextEncoder().encode(segments.map(x => x.text).join('\n')).length };
 }
 
 // ---------------------------------------------------------------- what the review lists
