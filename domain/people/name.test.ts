@@ -4,16 +4,16 @@ import { addressName, checkName, NAME_MAX, NAME_WORDS, nameFromAddress } from '.
 
 // The same cases as supabase/tests/own_display_name.sql, groups 1 to 3.
 test('a name is trimmed and kept; empty, too long and an email address are refused in plain words', () => {
-  assert.deepEqual(checkName('   Ann  Reddy   '), { ok: true, name: 'Ann  Reddy' });
-  assert.deepEqual(checkName('A'), { ok: true, name: 'A' });
-  assert.deepEqual(checkName('b'.repeat(NAME_MAX)), { ok: true, name: 'b'.repeat(80) });
-  assert.deepEqual(checkName("Siobhán O'Brien-Núñez"), { ok: true, name: "Siobhán O'Brien-Núñez" });
-  assert.deepEqual(checkName(''), { ok: false, reason: NAME_WORDS.empty });
-  assert.deepEqual(checkName('    '), { ok: false, reason: NAME_WORDS.empty });
-  assert.deepEqual(checkName('a'.repeat(81)), { ok: false, reason: NAME_WORDS.long });
-  assert.deepEqual(checkName('ann@example.com'), { ok: false, reason: NAME_WORDS.email });
-  assert.deepEqual(checkName('Ann <ann@x.com>'), { ok: false, reason: NAME_WORDS.email });
-  assert.deepEqual(checkName('a@b.c'), { ok: false, reason: NAME_WORDS.email });
+  assert.deepEqual(checkName('   Ann  Reddy   '), { ok: true, name: 'Ann  Reddy', reason: '' });
+  assert.deepEqual(checkName('A'), { ok: true, name: 'A', reason: '' });
+  assert.deepEqual(checkName('b'.repeat(NAME_MAX)), { ok: true, name: 'b'.repeat(80), reason: '' });
+  assert.deepEqual(checkName("Siobhán O'Brien-Núñez"), { ok: true, name: "Siobhán O'Brien-Núñez", reason: '' });
+  assert.deepEqual(checkName(''), { ok: false, name: '', reason: NAME_WORDS.empty });
+  assert.deepEqual(checkName('    '), { ok: false, name: '', reason: NAME_WORDS.empty });
+  assert.deepEqual(checkName('a'.repeat(81)), { ok: false, name: '', reason: NAME_WORDS.long });
+  assert.deepEqual(checkName('ann@example.com'), { ok: false, name: '', reason: NAME_WORDS.email });
+  assert.deepEqual(checkName('Ann <ann@x.com>'), { ok: false, name: '', reason: NAME_WORDS.email });
+  assert.deepEqual(checkName('a@b.c'), { ok: false, name: '', reason: NAME_WORDS.email });
 });
 
 test('characters are counted as the database counts them, not as UTF-16 units', () => {

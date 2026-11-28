@@ -5,7 +5,8 @@
 
 export const NAME_MAX = 80;
 
-export type NameCheck = { ok: true; name: string } | { ok: false; reason: string };
+/** `name` is the name to save when `ok`; `reason` says why not, in words, when not (each is '' otherwise). */
+export interface NameCheck { ok: boolean; name: string; reason: string }
 
 export const NAME_WORDS = {
   empty: 'Type your name.',
@@ -20,10 +21,11 @@ export const NAME_WORDS = {
 /** The name to save, trimmed at both ends, or why it cannot be. Counts characters as the database does. */
 export function checkName(raw: string): NameCheck {
   const name = raw.trim();
-  if (!name) return { ok: false, reason: NAME_WORDS.empty };
-  if ([...name].length > NAME_MAX) return { ok: false, reason: NAME_WORDS.long };
-  if (name.includes('@')) return { ok: false, reason: NAME_WORDS.email };
-  return { ok: true, name };
+  const no = (reason: string): NameCheck => ({ ok: false, name: '', reason });
+  if (!name) return no(NAME_WORDS.empty);
+  if ([...name].length > NAME_MAX) return no(NAME_WORDS.long);
+  if (name.includes('@')) return no(NAME_WORDS.email);
+  return { ok: true, name, reason: '' };
 }
 
 /** The part of an email address before the "@", which sign-up gives as a name when the sign-in gave none. */

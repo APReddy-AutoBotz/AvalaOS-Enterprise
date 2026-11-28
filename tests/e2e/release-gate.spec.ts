@@ -118,7 +118,7 @@ test('release gate: sources to documents to the board, accessible throughout', a
   await scan('Processes');
   await openSettings(page, 'People');
   await scan('People');
-  for (const section of ['Applications', 'Assessment', 'AI', 'Documents', 'Parts of Avala OS'] as const) {
+  for (const section of ['Applications', 'Assessment', 'AI', 'Documents', 'Parts of Avala OS', 'Your name'] as const) {
     await openSettings(page, section);
     await scan(`Settings: ${section}`);
   }
