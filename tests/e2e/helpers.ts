@@ -34,7 +34,7 @@ export async function signInAndCreateProcess(page: Page) {
 
 
 /** Opens a section of Settings from the top bar, as a person would (no page load, so the demo keeps its changes). */
-export async function openSettings(page: Page, section: 'People' | 'Applications' | 'Assessment' | 'AI' | 'Documents' | 'Parts of Avala OS' = 'People') {
+export async function openSettings(page: Page, section: 'People' | 'Applications' | 'Assessment' | 'AI' | 'Documents' | 'Parts of Avala OS' | 'Your name' = 'People') {
   await page.getByRole('banner').getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { name: 'Settings', exact: true })).toBeVisible();
   await page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link', { name: section, exact: true }).click();

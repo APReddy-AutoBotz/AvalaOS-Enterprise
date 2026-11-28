@@ -1,5 +1,6 @@
 // Settings of the workspace the person is in: its people, its applications, the lines assessments are
-// measured against, its AI, how its documents look, and which parts of Avala OS its organisation uses.
+// measured against, its AI, how its documents look, which parts of Avala OS its organisation uses, and the
+// person's own name.
 // One section at a time, chosen from the side menu; each has its own address (/settings/people …).
 import React from 'react';
 import type { JourneyStore, Workspace } from '../store/types.ts';
@@ -15,6 +16,7 @@ import { AiUsagePanel } from './AiUsage.tsx';
 import { DocumentBranding } from './DocumentBranding.tsx';
 import { OrganizationParts } from './OrganizationParts.tsx';
 import { WalkthroughRequests } from './WalkthroughRequests.tsx';
+import { YourName } from './YourName.tsx';
 
 // One mark per section, drawn in the current colour, so the menu can be scanned without reading it.
 const ICON: Record<SettingsSection, React.ReactNode> = {
@@ -24,6 +26,7 @@ const ICON: Record<SettingsSection, React.ReactNode> = {
   ai: <><path d="M8 3c.4 2.9 1.6 4.9 5 5.5-3.4.6-4.6 2.6-5 5.5-.4-2.9-1.6-4.9-5-5.5 3.4-.6 4.6-2.6 5-5.5Z" /><path d="M15 12c.2 1.5.8 2.3 2.2 2.6-1.4.3-2 1.1-2.2 2.6-.2-1.5-.8-2.3-2.2-2.6 1.4-.3 2-1.1 2.2-2.6Z" /></>,
   documents: <><path d="M5.5 2.8h6L15 6.3v10.9H5.5z" /><path d="M11.5 2.8v3.5H15M8 10.5h4.5M8 13.5h4.5" /></>,
   requests: <><path d="M3 5.5h14v9H3z" /><path d="m3.5 6 6.5 5 6.5-5" /></>,
+  you: <><circle cx="10" cy="6.8" r="3" /><path d="M4 17c.6-3.3 2.8-5 6-5s5.4 1.7 6 5" /></>,
   parts: <><rect x="2.5" y="4" width="15" height="5" rx="2.5" /><circle cx="14.8" cy="6.5" r="1.2" /><rect x="2.5" y="11" width="15" height="5" rx="2.5" /><circle cx="5.2" cy="13.5" r="1.2" /></>,
 };
 
@@ -58,6 +61,7 @@ export function SettingsPage({ store, nav, workspace, section, base = '' }: { st
             : section === 'ai' ? <><AiProviderSettings store={store} workspace={workspace} /><AiUsagePanel store={store} workspace={workspace} /></>
             : section === 'documents' ? <DocumentBranding store={store} workspace={workspace} />
             : section === 'requests' ? <WalkthroughRequests store={store} />
+            : section === 'you' ? <YourName store={store} />
             : <OrganizationParts store={store} workspace={workspace} />}
         </div>
       </div>

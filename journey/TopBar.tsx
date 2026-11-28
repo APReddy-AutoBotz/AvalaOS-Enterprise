@@ -5,6 +5,7 @@ import type { JourneyStore, Me, Workspace } from './store/types.ts';
 import { Button, cx, ErrorNote, Field, Menu, messageOf } from './ui.tsx';
 import { CALL_WORDS } from '../domain/meeting/words.ts';
 import { anyCallKept, downloadKeptCalls } from './process/callNotes.ts';
+import { NAME_CHANGED } from './pages/YourName.tsx';
 
 /** The workspaces a person belongs to and the one they are in, owned by the shell (JourneyApp.tsx). */
 export interface Workspaces {
@@ -89,8 +90,17 @@ function NewWorkspace({ store, workspace, onCreated, onCancel }: { store: Journe
   );
 }
 
-export function AccountMenu({ store, me }: { store: JourneyStore; me: Me }) {
-  const initial = (me.email.trim()[0] ?? '?').toUpperCase();
+export function AccountMenu({ store, me, onChangeName }: { store: JourneyStore; me: Me; onChangeName?: () => void }) {
+  // The person's own name above their address, read again when Settings → Your name saves one.
+  const [name, setName] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    let live = true;
+    const read = () => { store.getMyName().then(n => { if (live) setName(n); }).catch(() => { if (live) setName(null); }); };
+    read();
+    window.addEventListener(NAME_CHANGED, read);
+    return () => { live = false; window.removeEventListener(NAME_CHANGED, read); };
+  }, [store]);
+  const initial = ((name?.trim() || me.email.trim())[0] ?? '?').toUpperCase();
   // A call not finished on this device goes at sign-out (domain/site/storage.ts): the person is asked first.
   const [asking, setAsking] = React.useState(false);
   const signOut = () => { if (anyCallKept()) setAsking(true); else void store.signOut(); };
@@ -109,10 +119,12 @@ export function AccountMenu({ store, me }: { store: JourneyStore; me: Me }) {
     )}
     <Menu label="Account" testId="account-menu" buttonClassName="rounded-full"
       button={<span className="grid h-8 w-8 place-items-center rounded-full bg-[#002C4B] text-xs font-semibold text-white">{initial}</span>}>
-      {() => (
+      {close => (
         <>
           <p className="px-2.5 pb-0.5 pt-1.5 text-xs text-slate-500">Signed in as</p>
-          <p className="truncate px-2.5 pb-2 text-sm font-medium text-slate-900">{me.email}</p>
+          {name?.trim() && <p className="truncate px-2.5 text-sm font-semibold text-slate-900" data-testid="account-name">{name.trim()}</p>}
+          <p className={name?.trim() ? 'truncate px-2.5 pb-2 text-sm text-slate-600' : 'truncate px-2.5 pb-2 text-sm font-medium text-slate-900'}>{me.email}</p>
+          {onChangeName && <button type="button" className={item} onClick={() => { close(); onChangeName(); }}>Change your name</button>}
           <NeedsEmail store={store} />
           <div className="mt-1 border-t border-slate-100 pt-1">
             <button type="button" className={item} onClick={signOut}>Sign out</button>

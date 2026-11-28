@@ -239,6 +239,13 @@ export interface JourneyStore {
   clearWorkspaceAi(workspaceId: string): Promise<void>;
   /** A tiny real request with the workspace's provider (or the platform's), to prove the key works. */
   testWorkspaceAi(workspaceId: string): Promise<{ model: string; source: 'workspace' | 'platform' }>;
+  /** The signed-in person's own name as others see it (profiles.display_name); null when it cannot be read. */
+  getMyName(): Promise<string | null>;
+  /**
+   * Sets the signed-in person's own name (domain/people/name.ts: trimmed, 1 to 80 characters, never an email
+   * address; the database holds the same rule) and returns it as saved. Refused with 422 NAME_INVALID in words.
+   */
+  setMyName(name: string): Promise<string>;
   /** Whether the signed-in person gets the weekday "Needs you" email; null when it cannot be read. */
   getNeedsEmail(): Promise<boolean | null>;
   setNeedsEmail(on: boolean): Promise<void>;

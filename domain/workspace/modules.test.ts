@@ -26,10 +26,11 @@ test('the main navigation follows the workspace the person is in', () => {
   assert.deepEqual(navFor(null), { processes: true, board: true });
 });
 
-test('Settings shows People and the parts always, and the rest with the part they belong to', () => {
-  assert.deepEqual(settingsFor(undefined), ['people', 'applications', 'assessment', 'ai', 'documents', 'parts']);
-  assert.deepEqual(settingsFor(['assess']), ['people', 'applications', 'assessment', 'ai', 'parts']);
-  assert.deepEqual(settingsFor(['board']), ['people', 'parts']);
+test('Settings shows People, the parts and Your name always, and the rest with the part they belong to', () => {
+  assert.deepEqual(settingsFor(undefined), ['people', 'applications', 'assessment', 'ai', 'documents', 'parts', 'you']);
+  assert.deepEqual(settingsFor(['assess']), ['people', 'applications', 'assessment', 'ai', 'parts', 'you']);
+  assert.deepEqual(settingsFor(['board']), ['people', 'parts', 'you']);
+  assert.deepEqual(settingsFor(['board'], { platformOwner: true }), ['people', 'parts', 'you', 'requests']);
 });
 
 test('a part that is off says so, and that nothing was deleted', () => {
