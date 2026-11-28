@@ -58,8 +58,10 @@ export function interviewSegments(model: ProcessModel, item: TriageItem, answer:
 /** The one follow-up question when an answer gives no value, by the kind of answer the question needs. */
 export function followUpFor(item: TriageItem, model: ProcessModel): string {
   switch (item.kind) {
-    case 'role': return `I could not tell which role from that. Which of these does it: ${model.roles.map(r => r.name).join(', ')}?`;
-    case 'system': return `I could not tell which application from that. Which of these is used: ${model.systems.map(s => s.name).join(', ')}?`;
+    // The choice under it lists the roles (or applications) in the process and "Someone else" with a name to type
+    // (owner's walk, 28 November 2026: the true answer is often one not in the process yet).
+    case 'role': return model.roles.length ? 'I could not tell which role from that. Choose one below, or "Someone else" and type their role.' : 'I could not tell which role from that. Type their role below.';
+    case 'system': return model.systems.length ? 'I could not tell which application from that. Choose one below, or "Another application" and type its name.' : 'I could not tell which application from that. Type its name below.';
     case 'number': return 'I could not find a figure in that. What is the number?';
     case 'ways': return `I could not tell how the automation can reach it from that. Can it use the API, and the screens: can each be used, does it exist but is not confirmed, or is it not available? Say any other way in too (${(item.interfaces ?? []).slice(2).map(x => x.label.toLowerCase()).join(', ')}). Or is there no way in at all?`;
     case 'access': return `I could not tell from that. For each, can the automation use it, does it exist but is not confirmed for use, or is it not available? ${(item.interfaces ?? []).map(x => x.label).join('; ')}.`;

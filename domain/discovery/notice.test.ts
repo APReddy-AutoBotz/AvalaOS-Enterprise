@@ -128,3 +128,28 @@ test('"should …, but in practice …": asked about with its words, never marke
   assert.equal(capped.cards.length, NOTICE_LIMITS.questions);
   assert.ok(capped.dropped.some(d => d.reason === 'over_limit'));
 });
+
+// Owner's walk, 28 November 2026: one sentence gave a wish and a question about that wish, aimed at today's step.
+test('a question on the words of a wish, or about the future, is not raised; a question about today beside it is', () => {
+  const words: Said[] = [{ ref: 'own-1:1', sourceId: 'own-1', locator: { lineStart: 1 }, text: 'Today the clerk orders the paper by email. In future we would like the paper to be ordered automatically when stock runs low.' }];
+  const c = noticeSegments(gold, words, []);
+  const wish = 'In future we would like the paper to be ordered automatically when stock runs low.';
+  const reply: NoticeReply = {
+    questions: [
+      q('n:1', 'the paper to be ordered automatically', 'who_handles', '', 'Who decides when the stock is low?'),
+      q('n:1', 'Today the clerk orders the paper by email', 'who_handles', '', 'Who does the clerk email to order the paper?'),
+      q('n:1', 'Today the clerk orders the paper by email', 'who_handles', '', 'What is needed for the paper to be ordered automatically in future?'),
+    ],
+    wanted: [{ segmentId: 'n:1', excerpt: wish }],
+  };
+  const r = readNotice(gold, c, reply, { asked: [] });
+  assert.deepEqual(r.cards.map(x => x.question), ['Who does the clerk email to order the paper?']);
+  assert.deepEqual(r.dropped.filter(d => d.reason === 'about_wanted').length, 2);
+  assert.deepEqual(r.wanted.map(w => w.excerpt), [wish]);
+  // A wish kept before counts too.
+  const later = readNotice(gold, c, { questions: [reply.questions[0]!], wanted: [] }, { asked: [], wantedSoFar: [wish] });
+  assert.deepEqual(later.cards, []);
+  // "Should", "will", "needs to" alone do not put a question in the future.
+  const today = readNotice(gold, c, { questions: [q('n:1', 'Today the clerk orders the paper by email', 'who_handles', '', 'Who needs to approve the order before it is sent?')], wanted: [] }, { asked: [] });
+  assert.equal(today.cards.length, 1);
+});

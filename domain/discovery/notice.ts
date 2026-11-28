@@ -8,7 +8,7 @@ import type { ElementTarget, ProcessModel, SourceLocator } from '../processModel
 import { orderedSteps } from '../processModel/selectors.ts';
 import { sameQuestion } from '../questions/triage.ts';
 import { makeCard, type Card } from './card.ts';
-import { hasWantedCue, ruleNotKept, sentenceAround } from './wanted.ts';
+import { asksAboutFuture, hasWantedCue, ruleNotKept, sentenceAround } from './wanted.ts';
 
 const str = { type: 'string' } as const;
 
@@ -97,7 +97,7 @@ export interface NoticeReply {
   wanted: { segmentId: string; excerpt: string }[];
 }
 
-export type DropReason = 'not_their_words' | 'repeats_the_question' | 'unknown_pattern' | 'too_long' | 'contact_or_link' | 'already_asked' | 'already_known' | 'over_limit' | 'no_wanting_word' | 'rule_not_kept' | 'repeated' | 'no_card';
+export type DropReason = 'not_their_words' | 'repeats_the_question' | 'unknown_pattern' | 'too_long' | 'contact_or_link' | 'already_asked' | 'already_known' | 'over_limit' | 'no_wanting_word' | 'rule_not_kept' | 'about_wanted' | 'repeated' | 'no_card';
 
 export interface Noticed {
   /** Cards raised from what was said, in the order said, at most `NOTICE_LIMITS.questions`. */
@@ -152,7 +152,9 @@ export interface NoticeContext {
  * was given to; a question that is too long or carries a link, address or number; one already asked or
  * settled; more than five; a wanted statement without a wanting word. A statement that something should happen
  * and goes on with "but in practice" or the like is a rule of today's work that is not kept (`ruleNotKept`): it is
- * asked about ("What happens today when this is not done: …?"), never marked wanted. What is left becomes cards, in
+ * asked about ("What happens today when this is not done: …?"), never marked wanted. A question whose words lie
+ * inside, or hold, a statement of what is wanted (in this reply or kept before), or that asks about the future ("in
+ * future", "would like", "ideally" …, `asksAboutFuture`), is about the wish and not raised. What is left becomes cards, in
  * the order said, each quoting the words that raised it.
  */
 export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply, ctx: NoticeContext): Noticed {
@@ -164,6 +166,13 @@ export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply
   };
   const asked = [...ctx.asked];
   const cards: { card: Card; at: number }[] = [];
+  // What the person wants in future, in this reply and before it: a question on those words is about the wish, not
+  // about the work done today (owner's walk, 28 November 2026), so it is not raised; the wish is kept on its own.
+  const wishes = [
+    ...(reply.wanted ?? []).filter(w => { const said = call.ids.get(w.segmentId); const x = (w.excerpt ?? '').trim(); return said && x && hasWantedCue(x) && !ruleNotKept(sentenceAround(said.text, x)); }).map(w => norm(w.excerpt)),
+    ...(ctx.wantedSoFar ?? []).map(norm),
+  ].filter(Boolean);
+  const onAWish = (excerpt: string) => { const x = norm(excerpt); return Boolean(x) && wishes.some(w => w.includes(x) || x.includes(w)); };
   for (const q of reply.questions ?? []) {
     const said = call.ids.get(q.segmentId);
     const question = (q.question ?? '').trim(), why = (q.whyItMatters ?? '').trim(), excerpt = (q.excerpt ?? '').trim();
@@ -174,6 +183,7 @@ export function readNotice(m: ProcessModel, call: NoticeCall, reply: NoticeReply
       : !question || question.length > NOTICE_LIMITS.question || why.length > NOTICE_LIMITS.why ? 'too_long'
       : CONTACT.test(question) || CONTACT.test(why) ? 'contact_or_link'
       : asked.some(a => sameQuestion(a, question)) ? 'already_asked'
+      : onAWish(excerpt) || asksAboutFuture(question) ? 'about_wanted'
       : null;
     if (reason) { dropped.push({ what: 'question', reason }); continue; }
     const target = targetFor(m, q.pattern as Pattern, q.about ?? '');
