@@ -176,7 +176,7 @@ test('a whole call: notes, a reading, Ask next, the end reading and the review; 
   expect(await written(call)).toBe(before);
 
   await review.getByTestId('save-call').click();
-  await expect(call.getByTestId('call-saved')).toContainText('Saved.');
+  await expect(call.getByTestId('call-saved')).toContainText('Saved: 1 answer recorded, 1 left with someone.');
 
   // One source, the call's notes; one edit, with History's line; the role recorded on the match; the call forgotten.
   const after = await memory(call);
