@@ -8,18 +8,21 @@ import type { ProcessAssessment } from '../assess/process.ts';
 import { purposeOf } from '../plan/purpose.ts';
 import { groupLabel, GROUP_LABEL, triage } from '../questions/triage.ts';
 import { SETTLES_DECIDED } from '../questions/approvalCounts.ts';
-import { askedParts } from './queue.ts';
+import { askedParts, plainCard, triageCard } from './queue.ts';
 import type { Card } from './card.ts';
 
 /**
  * The questions the session must settle before it can end: those of the group that decides that the queue still asks
- * (not answered, left with someone or not applicable, and not asked by a shape card).
+ * (not answered, left with someone or not applicable, and not asked by a shape card). Only a question a card asks is
+ * counted, its own or a plain one (preview walk, 28 November 2026: a question with no card could change the
+ * recommendation, so the session could never end and no card was left to answer it). One no card can ask (a question
+ * too long for a card) stays open in Closing the gaps.
  */
 export function deciding(m: ProcessModel, a: ProcessAssessment): number {
   const purpose = purposeOf(m);
   if (purpose === 'as_is') return 0;
   const group = purpose === 'decided' ? SETTLES_DECIDED : GROUP_LABEL.decides;
-  return askedParts(m, triage(m, a)).items.filter(i => groupLabel(i) === group).length;
+  return askedParts(m, triage(m, a)).items.filter(i => groupLabel(i) === group && (triageCard(i, m) ?? plainCard(i, m))).length;
 }
 
 /** The shape cards the queue still asks: a gap a person closed or left with someone is not counted (review, 25 November 2026). */

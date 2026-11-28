@@ -1,8 +1,8 @@
 // The order of a discovery session's cards (package B, plan sections 1 and 6), decided by rules only:
 // the first cards; the shape of the process in step order; open conflicts; the questions that could
 // change the recommendation (or settle the decided approach); questions raised from what was said, in the
-// order said; the inputs that would sharpen the assessment; then what is needed for sign-off. A skipped
-// card goes to the end. The same inputs give the same cards in the same order.
+// order said; the inputs that would sharpen the assessment; then what is needed for sign-off. An open question with
+// no card of its own is asked as a plain question in its group's place (`plainCard`). A skipped card goes to the end. The same inputs give the same cards in the same order.
 import type { ProcessModel } from '../processModel/types.ts';
 import type { ProcessAssessment } from '../assess/process.ts';
 import { groupLabel, triage, type Triage, type TriageItem } from '../questions/triage.ts';
@@ -56,6 +56,21 @@ export function triageCard(item: TriageItem, m: ProcessModel): Card | null {
   });
 }
 
+/**
+ * An open question Discovery gives no card of its own (owner's preview walk, 28 November 2026: a reading's questions
+ * about the process as a whole, target `meta` with no field, q-1 to q-12, were asked only in Closing the gaps): a plain
+ * question answered in words, as Closing the gaps answers it. Its card stands for the triage item by key (`itemKey`),
+ * so the session reads the answer from the person's words and Save records it on the stored question; the target
+ * stays the question's own. A choice, or an application's ways in, always has a card of its own, so is never plain.
+ * The call briefing takes these from `discoveryQueue`, so the two ask the same questions (plan
+ * `claude/discovery-plain-questions-plan-28-nov.md`; the rule was the briefing's in package C, C3b).
+ */
+export function plainCard(item: TriageItem, m: ProcessModel): Card | null {
+  if (item.kind === 'choice' || item.kind === 'ways') return null;
+  const c = triageCard({ ...item, target: { kind: 'meta', field: 'flow' } }, m);
+  return c ? { ...c, target: item.target, answer: 'words' } : null;
+}
+
 /** The session's cards in the order they are asked. */
 type Target = { kind: string; id?: string | null; field?: string | null };
 const at = (x: Target) => `${x.kind}:${x.id ?? ''}:${x.field ?? ''}`;
@@ -96,6 +111,9 @@ export function discoveryQueue(i: QueueInput): Card[] {
   const parts = askedParts(m, t);
   const shape = parts.shape;
   const items = parts.items.map(x => triageCard(x, m)).filter((c): c is Card => c !== null);
+  // Every question the session asks with no card of its own joins as a plain question, in its group's place, after
+  // the questions of that group that have a card (the order the call briefing gave them, unchanged by the move).
+  const plain = parts.items.filter(x => !triageCard(x, m)).map(x => plainCard(x, m)).filter((c): c is Card => c !== null);
   // Questions raised from what was said (pull request 5b): one card per target. A raised question on a field another
   // card already asks about becomes that card, with the person's words as where it came from; one on a target a
   // person closed or left is not asked; the rest are cards of their own.
@@ -116,7 +134,7 @@ export function discoveryQueue(i: QueueInput): Card[] {
   // many cases …?" left with a named person came back as the first card): its stored question on the same target is
   // no longer open, while the input itself is still missing from the assessment.
   const inputs = inputCards(m, i.assessment).filter(c => !settledAt.has(at(c.target)));
-  const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...raised, ...inputs];
+  const all = [...startCards(m, { asksPurpose: i.asksPurpose }), ...shape, ...conflictCards(m), ...items, ...plain, ...raised, ...inputs];
   // One card per key, the first kept; a stable sort by group keeps each group's own order.
   const seen = new Set<string>();
   const unique = all.filter(c => (seen.has(c.key) ? false : (seen.add(c.key), true)));
