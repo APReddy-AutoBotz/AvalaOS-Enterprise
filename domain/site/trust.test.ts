@@ -78,7 +78,7 @@ test('the privacy notice lists what the browser keeps, what signing out removes,
   const text = pageText(TRUST.privacy);
   for (const kept of ['sign-in session', 'last workspace you opened', 'lists and maps shown', 'what was found in their sources and what you set aside']) assert.ok(text.includes(kept), kept);
   assert.ok(!text.includes('keeps two things'));
-  assert.match(text, /except how you like lists and maps shown in general\. The demo has no sign-in/);
+  assert.match(text, /except how you like lists and maps shown in general; with a call's notes not saved yet, it asks first\. The demo has no sign-in/);
   assert.match(text, /title, the site you came from/);
   assert.match(text, /the kind of browser and device/);
 });
@@ -88,4 +88,13 @@ test('the privacy notice says what is counted at a teardown, in the approved wor
   assert.ok(text.includes('the opening of the demo and of each published-process teardown in it, without cookies'));
   assert.ok(text.includes('picked a stage of the tour, or opened a teardown\'s documents. Never anything you type. Nothing else is counted inside the demo or the product,'));
   assert.ok(text.includes('which is about the made-up sample or a published teardown only'));
+});
+
+// Package C, C4b (owner, 28 November 2026): the notes taken in a call, in three places, for the release with the call screens.
+test('the privacy notice says what happens to the notes taken in a call: kept once saved, read to suggest the next question, kept in the browser until saved', () => {
+  const text = pageText(TRUST.privacy);
+  assert.ok(text.includes('and the notes you take in a call, once you save them.'), 'workspace content');
+  assert.ok(text.includes('or read the notes you take in a call to suggest the next question, the text or image needed for that request is sent'), 'what goes to the AI provider');
+  assert.ok(text.includes('and the notes of a call you have not saved yet.'), 'what the browser keeps');
+  assert.equal(UPDATED.privacy, null, 'the date is the release\'s, set in its own commit');
 });
