@@ -22,6 +22,7 @@ import { has, stagesFor } from '../../domain/workspace/modules.ts';
 import { openGaps } from '../process/openGaps.ts';
 import { loadProcessFacts, versionRows, type LoadedFacts } from '../processFacts.ts';
 import { cardLine, DUTY, Figures, hrs, People, Pill, StatusPill } from '../processCard.tsx';
+import { SetNameLine } from './YourName.tsx';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const dueText = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
@@ -91,7 +92,7 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
     hours > 0 && { value: hrs(hours), label: 'hours a year automation could take, at most' },
   ].filter((f): f is { value: string; label: string } => Boolean(f));
 
-  const head = (
+  const head = (<>
     <PageHead eyebrow={eyebrow} title={name ? `Welcome back, ${name}` : 'My work'} summary={<span data-testid="work-summary">{homeSummary(needs, mine)}</span>}>
       {figures.length > 0 && (
         <ul className="flex flex-wrap gap-y-3" data-testid="work-figures">
@@ -104,7 +105,8 @@ export function MyWorkPage({ store, nav, workspace, userId }: { store: JourneySt
         </ul>
       )}
     </PageHead>
-  );
+    <SetNameLine store={store} userId={userId} onOpen={() => nav.go({ page: 'settings', section: 'you' })} />
+  </>);
 
   if (!assess && mine.length === 0) {
     return (

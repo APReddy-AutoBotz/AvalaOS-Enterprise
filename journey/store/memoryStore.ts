@@ -35,6 +35,7 @@ import { hashValue } from '../../domain/processModel/hash.ts';
 import { DRAFT_CHANGES_SHOWN, type DraftChangeRow, type ExtractionRow, type VersionRow, type VersionStateRow } from './types.ts';
 import type { StandIn } from './standIns.ts';
 import { FULL_LINE, readState, STATE_LIMIT, stateTextLength, type SaveAnswer, type StoredSession } from '../../domain/discovery/session.ts';
+import { checkName, NAME_WORDS } from '../../domain/people/name.ts';
 
 interface StoredRevision extends RevisionRow { processId: string; model: ProcessModel }
 /** A kept version (package 14), as the database's approved_versions holds it. */
@@ -62,6 +63,8 @@ interface State {
   /** Only what the browser may know of a key: its last four characters. */
   ai?: Record<string, WorkspaceAi>;
   needsEmail?: boolean;
+  /** The signed-in person's own name, once they set it (Settings → Your name); else the address's first part. */
+  myName?: string;
   comments?: ItemComment[];
   itemEvents?: ItemEvent[];
   sprints?: Sprint[];
@@ -155,7 +158,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
     return { p, w };
   };
 
-  const nameOf = () => requireMe().email.split('@')[0]!;
+  const nameOf = () => state.myName ?? requireMe().email.split('@')[0]!;
   // The change record, as the database's recording triggers write it: one row per saved change, a person's
   // own or one that follows another; never a value. The tag and the approval guard read it.
   // As the database keeps them: what changed (added, changed, removed), which items by their names in the product,
@@ -192,7 +195,7 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
     const w = state.workspaces.find(x => x.id === workspaceId);
     if (!w) throw new StoreError(404, 'Workspace not found.');
     const all = (state.people ??= {});
-    return (all[workspaceId] ??= { members: [{ userId: me.id, name: me.email.split('@')[0]!, email: me.email, role: 'admin', job: null, canApprove: true, since: now() }], invites: [], audit: [] });
+    return (all[workspaceId] ??= { members: [{ userId: me.id, name: nameOf(), email: me.email, role: 'admin', job: null, canApprove: true, since: now() }], invites: [], audit: [] });
   };
   const adminOf = (workspaceId: string, strict = true) => {
     peopleOf(workspaceId);
@@ -714,6 +717,18 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
       save();
     },
     async testWorkspaceAi() { throw new StoreError(501, `Testing a key needs the server; it is not available ${where}.`); },
+    async getMyName() { requireMe(); return nameOf(); },
+    async setMyName(raw) {
+      const me = requireMe();
+      if (demo) throw new StoreError(403, NAME_WORDS.demo);
+      const checked = checkName(raw);
+      if (!checked.ok) throw new StoreError(422, checked.reason, 'NAME_INVALID');
+      state.myName = checked.name;
+      // Others read the name by id, as they read profiles: every workspace's list of people follows.
+      for (const p of Object.values(state.people ?? {})) for (const m of p.members) if (m.userId === me.id) m.name = checked.name;
+      save();
+      return checked.name;
+    },
     async getNeedsEmail() { requireMe(); return state.needsEmail ?? true; },
     async setNeedsEmail(on) { requireMe(); state.needsEmail = on; save(); },
     // The in-browser store has no AI, so it has no AI use and no allowance to report.

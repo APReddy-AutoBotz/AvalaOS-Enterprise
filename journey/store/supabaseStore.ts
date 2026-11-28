@@ -42,6 +42,7 @@ import type { Module } from '../../domain/workspace/modules.ts';
 import { validateApplication, type Application } from '../../domain/workspace/applications.ts';
 import type { WalkthroughRequest } from '../../domain/site/inquiry.ts';
 import { EXTRACTION_COLUMNS } from '../../domain/store/grantedSelects.ts';
+import { checkName, NAME_WORDS } from '../../domain/people/name.ts';
 
 /** PostgREST returns custom SQLSTATEs PTxyz as HTTP status xyz; map the rest to sensible statuses. */
 const APP_COLUMNS = 'id, name, aliases, kind, access, ui_allowed, remote, notes, updated_at, updated_by';
@@ -536,6 +537,27 @@ export function createSupabaseStore(url: string, publishableKey: string): Journe
     async testWorkspaceAi(workspaceId) {
       const r = await call('journey-ai', { action: 'health', workspaceId });
       return { model: String(r?.model ?? ''), source: r?.source === 'workspace' ? 'workspace' : 'platform' };
+    },
+    async getMyName() {
+      const { data: auth } = await db.auth.getUser();
+      if (!auth.user) return null;
+      const { data, error } = await db.from('profiles').select('display_name').eq('id', auth.user.id).maybeSingle();
+      if (error || !data) return null;
+      return String(data.display_name ?? '').trim();
+    },
+    async setMyName(raw) {
+      const checked = checkName(raw);
+      if (!checked.ok) throw new StoreError(422, checked.reason, 'NAME_INVALID');
+      const { data: auth } = await db.auth.getUser();
+      if (!auth.user) throw new StoreError(401, 'Sign in again to change your name.');
+      // The row policy lets a person update only their own row; the database trims and checks the name again.
+      const { data, error } = await db.from('profiles').update({ display_name: checked.name }).eq('id', auth.user.id).select('display_name').maybeSingle();
+      if (error) {
+        if (error.code === '23514' || /NAME_INVALID/.test(error.message ?? '')) throw new StoreError(422, NAME_WORDS.refused, 'NAME_INVALID');
+        fail(error);
+      }
+      if (!data) throw new StoreError(404, 'Your profile could not be found. Sign out and in again.');
+      return String(data.display_name).trim();
     },
     async getNeedsEmail() {
       const { data: auth } = await db.auth.getUser();

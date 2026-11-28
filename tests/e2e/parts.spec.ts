@@ -18,12 +18,12 @@ test('the owner switches an organisation\'s parts; hidden parts keep their work'
   await openSettings(page, 'Parts of Avala OS');
   await expect(page.getByTestId('organization-parts')).toContainText('uses The full journey');
   const sections = page.getByRole('navigation', { name: 'Settings sections' }).getByRole('link');
-  await expect(sections).toHaveText(['People', 'Applications', 'Assessment', 'AI', 'Documents', 'Parts of Avala OS']);
+  await expect(sections).toHaveText(['People', 'Applications', 'Assessment', 'AI', 'Documents', 'Parts of Avala OS', 'Your name']);
 
-  // The board on its own: no Processes in the menu, Settings keeps People and the parts, a process says it is off.
+  // The board on its own: no Processes in the menu, Settings keeps People, the parts and Your name, a process says it is off.
   await choose(/The Delivery board on its own/);
   await expect(main.getByRole('link')).toHaveText(['My work', 'Delivery board']);
-  await expect(sections).toHaveText(['People', 'Parts of Avala OS']);
+  await expect(sections).toHaveText(['People', 'Parts of Avala OS', 'Your name']);
   await page.goto('/processes');
   await expect(page.getByText('Processes and their assessment are not switched on')).toBeVisible();
   await page.goto(processUrl);

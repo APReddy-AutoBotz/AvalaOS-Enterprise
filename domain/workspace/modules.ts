@@ -51,7 +51,8 @@ export function settingsFor(modules: readonly string[] | undefined, opts: { plat
   const out: SettingsSection[] = ['people'];
   if (has(modules, 'assess')) out.push('applications', 'assessment', 'ai');
   if (has(modules, 'documents')) out.push('documents');
-  out.push('parts');
+  // A person's own name: everyone, in every set-up and role (domain/people/name.ts).
+  out.push('parts', 'you');
   // Walkthrough requests from the homepage are the platform owner's alone, in whichever workspace they are.
   if (opts.platformOwner) out.push('requests');
   return out;

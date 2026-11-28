@@ -193,7 +193,7 @@ export function Journey({ store, base = '', start }: { store: JourneyStore; base
                   <span className="hidden lg:inline">Settings</span>
                 </a>
               )}
-              {!demo && me && <AccountMenu store={store} me={me} />}
+              {!demo && me && <AccountMenu store={store} me={me} onChangeName={ws ? () => nav.go({ page: 'settings', section: 'you' }) : undefined} />}
             </div>
           )}
           {demo && <a href="/" className="hidden rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50 sm:block">Leave the demo</a>}
