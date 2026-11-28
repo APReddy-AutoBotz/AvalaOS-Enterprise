@@ -52,8 +52,16 @@ test('a question about the process as a whole is a card: counted in "Question 1 
   expect(seen).toContain(QUESTION);
   expect(seen).toHaveLength(n);
   // On its card, under the group that could change the recommendation.
-  // After one round the queue is back at its first card: Skip on to the question, card by card.
-  await expect(question).toHaveText(seen[0]!);
+  // Clear the round's skips (Skip on a card already skipped is #274's own fix), then Skip on to the question, card by card.
+  await page.evaluate(KEY => {
+    const s = JSON.parse(localStorage.getItem(KEY)!);
+    s.discovery[0].state.skipped = [];
+    localStorage.setItem(KEY, JSON.stringify(s));
+  }, KEY);
+  await page.reload();
+  await page.getByRole('banner').getByRole('button', { name: 'Ask Avala' }).click();
+  await page.getByTestId('ask-panel').getByRole('tab', { name: 'Discovery' }).click();
+  await expect(question).toHaveText(seen[0]!, { timeout: 20_000 });
   for (const q of seen.slice(1, seen.indexOf(QUESTION) + 1)) {
     await card.getByRole('button', { name: 'Skip' }).click();
     await expect(question).toHaveText(q);
