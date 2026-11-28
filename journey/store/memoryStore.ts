@@ -1,3 +1,4 @@
+import { readingRefusal, startRefused } from '../../domain/extract/startLimit.ts';
 import { forgetOnSignOut } from '../forgetOnSignOut.ts';
 import { leavesNoAdmin, PeopleError, roleOf, validateEmail, type AuditEntry } from '../../domain/people/roles.ts';
 import type { SectionComment } from '../../domain/docs/review.ts';
@@ -76,7 +77,7 @@ interface State {
   keptLooks?: { workspaceId: string; fingerprint: string; look: KeptLook }[];
   draftChanges?: DraftChange[];
   /** Browser tests only: readings the stand-in gave (the server's extraction_runs). */
-  extractions?: (ExtractionRow & { processId: string; done: ProcessModel; sourceIds: string[] })[];
+  extractions?: (ExtractionRow & { processId: string; createdBy?: string; done: ProcessModel; sourceIds: string[] })[];
   /** Package B: discovery sessions, by the server's rules (table discovery_sessions). */
   discovery?: (StoredSession & { workspaceId: string; updatedBy: string | null })[];
 }
@@ -563,12 +564,20 @@ export function createMemoryStore(options: MemoryStoreOptions = {}): MemoryStore
     async startExtraction(_workspaceId, processId, sourceIds) {
       // Browser tests only: the reading a test gave (journey/store/standIns.ts), done on the next look a moment later.
       if (!options.standIn) throw new StoreError(501, `Extraction needs the server; it is not available ${where}.`);
-      requireMe();
+      const me = requireMe();
       if (workspaceOf(processId).w.role === 'viewer') throw new StoreError(403, 'Reading the sources needs the editor or admin role.');
+      // The limit on starting readings, as public.extraction_start holds it (domain/extract/startLimit.ts): what
+      // another tab started counts too, so the runs are read again first.
+      if (!demo) state = { ...state, extractions: load().extractions ?? state.extractions };
+      const refused = startRefused(state.extractions ?? [], processId, me.id, Date.now());
+      if (refused) {
+        const r = readingRefusal(refused)!;
+        throw new StoreError(r.status, r.message, r.code, { runId: r.runId });
+      }
       const read = sourceIds.map(id => state.sources.find(x => x.id === id && x.processId === processId)).filter((x): x is NonNullable<typeof x> => Boolean(x));
       const model = options.standIn.read(read.map(x => ({ key: x.key, passages: x.segments.map(g => ({ text: g.text, place: g.locator?.heading ?? null })) }))) as ProcessModel;
       const at = now();
-      const run = { id: uuid(), processId, status: 'running' as const, error: null, createdAt: at, updatedAt: at, model: null, sourceIds: [...sourceIds], tokens: 0, done: model };
+      const run = { id: uuid(), processId, createdBy: me.id, status: 'running' as const, error: null, createdAt: at, updatedAt: at, model: null, sourceIds: [...sourceIds], tokens: 0, done: model };
       (state.extractions ??= []).push(run);
       save();
       return { runId: run.id };

@@ -186,6 +186,8 @@ const sourcesMap = (x: unknown): Record<string, string[]> =>
 /** The sources a reading this session started read; empty for a reading started elsewhere. */
 export const sourcesRead = (s: SessionState, runId: string | null | undefined): string[] => (runId ? sourcesMap(s.sources)[runId] ?? [] : []);
 export const readingsStarted = (s: SessionState): string[] => strings(s.started);
+/** Every source any reading this session started has read. */
+export const sourcesReadBySession = (s: SessionState): Set<string> => new Set(Object.values(sourcesMap(s.sources)).flat());
 
 /** An update's changes were reviewed (applied, or found to change nothing): its review is not shown again. */
 export const reviewedReading = (runId: string): SessionStep => s => ({ ...s, reviewed: [...new Set([...strings(s.reviewed), runId])] });

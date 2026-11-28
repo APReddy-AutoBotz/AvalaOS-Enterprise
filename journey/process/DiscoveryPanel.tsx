@@ -20,6 +20,8 @@ import { NO_WAY_IN, NO_WAY_IN_LABEL, waysMissing, waysRecordLine } from '../../d
 import { offersPurpose } from '../../domain/plan/purpose.ts';
 import { ownWordsSource, sourceDate } from '../../domain/plan/start.ts';
 import { failedLine } from '../../domain/extract/failure.ts';
+import { IN_PROGRESS_LINE, runUnderWay } from '../../domain/extract/startLimit.ts';
+import { unreadAnswers, unreadLine, updateReads } from '../../domain/discovery/unread.ts';
 import { GROUP_HEADING, originLine, type Card } from '../../domain/discovery/card.ts';
 import { discoveryQueue } from '../../domain/discovery/queue.ts';
 import { startCards } from '../../domain/discovery/checklist.ts';
@@ -85,6 +87,8 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     store.currentUser().then(u => setMe(u?.id ?? null)).catch(() => {});
   }, [store, workspace.id]);
 
+  // A reading someone else started, which this tab follows (it was refused a second one meanwhile).
+  const [following, setFollowing] = React.useState(false);
   // Follow a running reading; once it is done, count it against the session's cap (once).
   const running = Boolean(run && run.status !== 'done' && run.status !== 'failed');
   React.useEffect(() => {
@@ -191,7 +195,18 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
   /** Reads sources as the Sources stage does, and remembers that this session started it. */
   const read = async (ids: string[]) => {
-    const { runId } = await store.startExtraction(workspace.id, process.id, ids);
+    let runId: string;
+    try { ({ runId } = await store.startExtraction(workspace.id, process.id, ids)); }
+    catch (e) {
+      // A reading of this process is already under way (one at a time, domain/extract/startLimit.ts): follow it.
+      // It is not this session's, so it is not kept as one the session started.
+      const under = runUnderWay(e);
+      if (!under) throw e;
+      setFollowing(true);
+      setRun({ id: under, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
+      return;
+    }
+    setFollowing(false);
     // The session keeps which sources it read: the browser may not read a run's own list (review, 25 November 2026).
     await commit(startedReading(runId, ids));
     setRun({ id: runId, status: 'queued', error: null, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(), model: null });
@@ -251,16 +266,23 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
     setBusy(true); setError(null); setNotice(null);
     try {
       const kept = await keepWaiting();
-      if (typeof kept === 'string') return;
+      if (kept === 'failed') return;
+      // Answers saved by an earlier update whose reading did not start are read with the new ones (unread.ts).
       const latest = await store.listSources(process.id);
-      const newest = kept.ids[kept.ids.length - 1]!;
-      const base = updateSources(sourcesRead(state, run?.id), latest.filter(s => !s.archived), newest);
-      await read([...base.slice(0, -1), ...kept.ids.filter(id => !base.includes(id)), newest]);
+      const fresh = readState((await store.getDiscoverySession(process.id))?.state);
+      const unread = unreadAnswers(fresh, session?.startedAt, latest).ids;
+      const keptIds = kept === 'none' ? [] : kept.ids;
+      const answers = updateReads([], unread, keptIds);
+      if (!answers.length) return;
+      const base = updateSources(sourcesRead(fresh, run?.id), latest.filter(s => !s.archived), answers[answers.length - 1]!);
+      await read(updateReads(base.slice(0, -1), unread, keptIds));
     } catch (e) { if (budgetGone(e)) setAllowanceGone(true); else setError(messageOf(e)); } finally { setBusy(false); }
   };
 
   const reviewing = run?.status === 'done' && run.model && hasSteps && readingsStarted(state).includes(run.id) && !readingsReviewed(state).includes(run.id) ? run : null;
   const waiting = state.waiting.length;
+  // Answers saved but not read into the draft: the reading of an update did not start (unread.ts).
+  const unread = session && session.status === 'open' ? unreadAnswers(state, session.startedAt, sources) : { ids: [], answers: 0 };
   const files = active.filter(s => !/^own-|^ans-/.test(s.key)).length;
 
   return (
@@ -292,6 +314,7 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
       )}
 
       {stage === 'reading' && <p role="status" className="rounded-lg bg-sky-50 px-3 py-2 text-sm leading-6 text-sky-950" data-testid="discovery-reading">{hasSteps ? WORDS.updating : WORDS.reading}</p>}
+      {stage === 'reading' && following && <p className="text-sm text-slate-600" data-testid="reading-under-way">{IN_PROGRESS_LINE}</p>}
 
       {stage === 'first' && (
         <FirstReading store={store} process={process} run={run ?? null} lastRead={sourcesRead(state, run?.id)} boxVoice={boxVoice} busy={busy} active={active}
@@ -310,11 +333,12 @@ export function DiscoveryPanel({ store, workspace, process, model, sources, onOp
 
       {stage === 'cards' && (
         <>
-          {waiting > 0 && !reviewing && (
+          {(waiting > 0 || unread.answers > 0) && !reviewing && (
             <div className="mb-4 space-y-1 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3" data-testid="discovery-waiting">
-              <p className="text-sm text-amber-950">{waiting} {waiting === 1 ? 'answer is' : 'answers are'} not in the draft yet.</p>
+              {waiting > 0 && <p className="text-sm text-amber-950">{waiting} {waiting === 1 ? 'answer is' : 'answers are'} not in the draft yet.</p>}
+              {unread.answers > 0 && !running && <p className="text-sm text-amber-950" data-testid="discovery-unread">{unreadLine(unread.answers)}</p>}
               {updateNote(active.length + 1, files) && <p className="text-xs text-amber-900">{updateNote(active.length + 1, files)}</p>}
-              <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting)}</Button>
+              <Button variant="accent" onClick={update} disabled={busy || running || !canUpdateDraft(state.use)}>{updateLabel(waiting + unread.answers)}</Button>
             </div>
           )}
           {run?.status === 'failed' && readingsStarted(state).includes(run.id) && <div className="mb-4"><ErrorNote message={failedLine(run.error)} /><Button variant="secondary" onClick={() => { const ids = sourcesRead(state, run.id); void read(ids.length ? ids : active.map(x => x.id)); }}>Try again</Button></div>}

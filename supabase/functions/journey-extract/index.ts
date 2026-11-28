@@ -18,6 +18,7 @@
 // Deployed with verify_jwt = false: 'create' checks the user's session; stages check the run token.
 
 import { withCors } from '../../../domain/site/origins.ts';
+import { READING_LIMIT, readingRefusal, readStartAnswer, type StartAnswer } from '../../../domain/extract/startLimit.ts';
 import { buildImageRequest, buildListingRequest, buildOpenAIRequest, isRetryableStatus, missingListsMessage, verifyExcerpts, LIMITS, type TaskDefinition } from '../../../domain/ai/gateway.ts';
 import { toGatewaySegments, type IngestSegment } from '../../../domain/ingest/segment.ts';
 import { looksLikeTranscript, parsePlainText, parseSrt, parseTranscriptText, parseVtt } from '../../../domain/ingest/parsers/text.ts';
@@ -460,13 +461,30 @@ async function createRun(req: Request, body: any): Promise<Response> {
     if (used >= Number(env('AI_MONTHLY_TOKEN_BUDGET') || 2_000_000)) return fail(429, 'BUDGET_EXCEEDED', 'This workspace has used its AI allowance for the month.');
   }
 
+  // One reading at a time per process and a few an hour per person (domain/extract/startLimit.ts): the
+  // database checks both and writes the run in one step, so two starts sent together cannot both pass.
   const token = randomToken();
-  const [row] = await rest('extraction_runs', { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify({
-    kind: 'process', workspace_id: workspaceId, process_id: processId, created_by: user.id, token_hash: await sha256hex(token),
-    input: { processName, sources },
-  }) });
-  await trigger({ action: 'start', runId: row.id, token });
-  return reply(202, { ok: true, runId: row.id });
+  let answer: StartAnswer;
+  try {
+    answer = readStartAnswer(await rest('rpc/extraction_start', { method: 'POST', body: JSON.stringify({
+      target_workspace: workspaceId, target_process: processId, target_person: user.id, run_token_hash: await sha256hex(token),
+      run_input: { processName, sources }, per_person_hour: READING_LIMIT.perPersonHour, stall_seconds: READING_LIMIT.stallSeconds,
+    }) }));
+  } catch (e) {
+    // The detail goes to the log only; the caller gets a plain message.
+    console.error('reading start failed', (e as Error).message);
+    return fail(500, 'START_UNAVAILABLE', 'The reading could not be started just now. Try again in a minute.');
+  }
+  if (!answer.admitted) {
+    const refused = readingRefusal(answer)!;
+    const res = reply(refused.status, { ok: false, error: { code: refused.code, message: refused.message,
+      ...(refused.runId ? { runId: refused.runId } : {}), ...(refused.retryAfterSeconds ? { retryAfterSeconds: refused.retryAfterSeconds } : {}) } });
+    if (refused.retryAfterSeconds) res.headers.set('Retry-After', String(refused.retryAfterSeconds));
+    return res;
+  }
+  const runId = (answer as Extract<StartAnswer, { admitted: true }>).runId;
+  await trigger({ action: 'start', runId, token });
+  return reply(202, { ok: true, runId });
 }
 
 // ---- a run whose step was stopped from outside -----------------------------------------------

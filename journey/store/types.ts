@@ -196,7 +196,11 @@ export class StoreError extends Error {
   readonly status: number;
   /** The server function's own error code, when it gave one (for example BUDGET_EXCEEDED, RATE_LIMITED). */
   readonly code?: string;
-  constructor(status: number, message: string, code?: string) { super(message); this.status = status; if (code) this.code = code; }
+  /** The reading under way that a refused start names (`READING_IN_PROGRESS`, domain/extract/startLimit.ts). */
+  readonly runId?: string;
+  constructor(status: number, message: string, code?: string, extra?: { runId?: string }) {
+    super(message); this.status = status; if (code) this.code = code; if (extra?.runId) this.runId = extra.runId;
+  }
 }
 
 export interface JourneyStore {
