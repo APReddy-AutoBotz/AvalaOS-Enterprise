@@ -64,12 +64,12 @@ test('the edit fails after the notes were kept in the same press: it says the no
   assert.equal(r.ok, false);
   assert.equal(thrown.kept.length, 1, 'the notes were kept');
   assert.equal(r.key, 'ans-2');
-  assert.ok(!r.ok && r.error.includes('Your notes are kept as source ans-2'), 'not "nothing changed"');
-  assert.ok(!r.ok && !r.error.includes('Nothing changed'));
+  assert.ok(r.ok === false && r.error.includes('Your notes are kept as source ans-2'), 'not "nothing changed"');
+  assert.ok(r.ok === false && !r.error.includes('Nothing changed'));
 
   const refused = writes('refused');
   const r2 = await saveCall(input(call(), 'Asha'), refused.w);
-  assert.ok(!r2.ok && r2.error.includes('The draft moved on') && r2.error.includes('ans-2'));
+  assert.ok(r2.ok === false && r2.error.includes('The draft moved on') && r2.error.includes('ans-2'));
 
   // The retry with the kept key: no second source, and the edit saved.
   const again = writes('ok');
@@ -81,5 +81,5 @@ test('the edit fails after the notes were kept in the same press: it says the no
   // When keeping the notes itself fails, nothing was saved, and it says so.
   const failing: SaveWrites = { addSource: async () => { throw new Error('No connection'); }, apply: async () => ({ error: null }) };
   const r4 = await saveCall(input(call(), 'Asha'), failing);
-  assert.ok(!r4.ok && r4.key === null && r4.error.includes('Nothing changed'));
+  assert.ok(r4.ok === false && r4.key === null && r4.error.includes('Nothing changed'));
 });

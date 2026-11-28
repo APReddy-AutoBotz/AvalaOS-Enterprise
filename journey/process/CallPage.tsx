@@ -214,7 +214,7 @@ function Call({ store, processId, me, data, onReload, stageHref }: { store: Jour
         },
       });
       if (r.key) setSavedKey(r.key);
-      if (!r.ok) { setError(r.error); return; }
+      if (r.ok === false) { setError(r.error); return; }
       forgetCall(processId); latest.current = null; setCallState(null);
       setResult(meetingResult(r.before, r.after));
       setRecorded(r.counts);
