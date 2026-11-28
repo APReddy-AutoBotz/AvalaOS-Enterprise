@@ -143,6 +143,7 @@ export const CALL_WORDS = {
   discardCall: 'Discard the call',
   discardAsk: 'Discard the call? Your notes and everything found in them are removed from this device. Nothing was saved.',
   notSaved: (message: string, key: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Your notes are kept as source ${key}; nothing else changed. Try again.`,
+  notSavedNothing: (message: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Nothing changed, and your notes are still on this device. Try again.`,
   saved: (result: string) => `Saved. ${result}.`,
   stillOpen: 'Still open, by who to ask:',
   sendFiles: 'Send questions to the people who know',

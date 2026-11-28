@@ -9,6 +9,8 @@ export type StandInReplies = Record<string, unknown[]>;
 
 /** Segments from this source are what a person said or wrote; any other source is a source's passages. */
 export const PERSON_SOURCE = 'answers';
+/** The source id a call's notes carry while the call runs (domain/meeting/panel.ts, CALL_SOURCE). */
+const CALL_NOTES = 'call-notes';
 
 /**
  * Why the stand-in does not answer this call, or null when it does. It answers only the tasks the test
@@ -19,7 +21,8 @@ export function standInRefusal(replies: StandInReplies, task: string, segments: 
   if (!Object.hasOwn(replies, task) || !replies[task]!.length) return `The stand-in has no reply for ${task}.`;
   // Discovery's noticing (package B, 5b) reads a person's own words kept as sources (`own-N`, `ans-N`), and the
   // automatic look never asks that task; for it alone those keys count as what a person said.
-  const person = (k: string) => k === PERSON_SOURCE || (task === 'discoveryQuestions' && /^(own|ans)-\d+$/.test(k));
+  // A call's notes (package C) are what the analyst typed during the call: what a person said, for both tasks.
+  const person = (k: string) => k === PERSON_SOURCE || k === CALL_NOTES || (task === 'discoveryQuestions' && /^(own|ans)-\d+$/.test(k));
   const sources = [...new Set(segments.map(s => s.sourceId).filter((s): s is string => typeof s === 'string' && s.length > 0 && !person(s)))];
   if (sources.length) return `The stand-in answers only what a person said, not passages of ${sources.join(', ')}.`;
   return null;
