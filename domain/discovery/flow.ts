@@ -2,6 +2,7 @@
 // approved 24 November 2026): who sees the tab, where a session stands, and what each answer on a card writes.
 // The screen (journey/process/DiscoveryPanel.tsx) holds no rule of its own. Every write goes through the existing
 // operations (domain/processModel/patch.ts), a person's Save only; a value a person confirmed is never overwritten.
+import { SESSION_CAP, type SessionUse } from './limits.ts';
 import type { AccessStatus, ElementTarget, ProcessModel, RaisedBy, SourceLocator, Step } from '../processModel/types.ts';
 import { addQuestion, closeQuestions, deferQuestion, keepWanted, resolveConflict, setBriefFact, setPurpose } from '../processModel/patch.ts';
 import type { Said } from './notice.ts';
@@ -51,7 +52,20 @@ export const WORDS = {
   demo: 'Discovery asks about a process in conversation. It reads what people say, so it needs the AI, which the demo does not call. In a workspace, start a process with "Add and start with Ask Avala".',
   decided: 'An approach already decided is set in The brief, with who decided it and why.',
   allowance: (month: string) => `This workspace has used its AI allowance for the month, so Ask Avala cannot read words until it starts again on 1 ${month}. Questions with a choice or a number still save.`,
+  // A first reading with no steps (owner, 27 November 2026; plan `claude/discovery-no-steps-plan-27-nov.md`).
+  noSteps: 'I did not find any steps in what you said. Your words are kept. Read them again, or add who does what, one step after another.',
+  noStepsAgain: 'If it still finds none, adding a few steps in your own words usually helps.',
+  allHeld: 'Everything I found is something you want in future, so there is no step of the work done today yet. Add one of them as a step below, or add what is done today.',
+  readingsUsed: `This session has used its ${['no', 'one', 'two', 'three', 'four', 'five'][SESSION_CAP.readings] ?? SESSION_CAP.readings} readings. Add to what I said is still open; the words you add are kept for the next reading.`,
+  addedNotRead: 'Your words are kept as a source. This session cannot read them now; they are read at the next reading.',
 } as const;
+
+/** Why "Read it again" is not offered in this session, or null when it is: the readings, or the session's tokens. */
+export function readAgainStopped(u: SessionUse): string | null {
+  if (u.readings >= SESSION_CAP.readings) return WORDS.readingsUsed;
+  if (u.tokens >= SESSION_CAP.tokens) return 'This session has used what it may read. Add to what I said is still open; the words you add are kept for the next reading.';
+  return null;
+}
 
 /** Under a card whose words were kept to read later: when they were kept. */
 export const laterLine = (at: string) => `Your words, kept on ${new Date(at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', timeZone: 'UTC' })} to read later. Read them when you like, or clear them.`;
