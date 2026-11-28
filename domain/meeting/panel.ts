@@ -115,7 +115,12 @@ const plainItem = (it: TriageItem): TriageItem => (it.kind === 'choice' ? { ...i
 
 const dismissKey = (f: Pick<Found, 'itemKey' | 'noteId'>) => `${f.itemKey}@${f.noteId}`;
 export const isAnswered = (s: CallState, key: string): boolean => s.found.some(f => f.itemKey === key);
-const isDone = (s: CallState, card: Card, t: Triage) => s.asked.includes(card.key) || s.leftWith.some(l => l.key === card.key) || isAnswered(s, answerKey(card, t));
+/**
+ * Whether the notes state the answer outright. Only such an answer settles a question during the call: one found only
+ * by inference is still suggested, to confirm it (C3, owner, 28 November 2026; measure 1 counts stated answers only).
+ */
+export const isStated = (s: CallState, key: string): boolean => s.found.some(f => f.itemKey === key && f.certainty === 'stated');
+const isDone = (s: CallState, card: Card, t: Triage) => s.asked.includes(card.key) || s.leftWith.some(l => l.key === card.key) || isStated(s, answerKey(card, t));
 
 export interface ReadingPrep {
   /** The notes not read yet, with the one before as context: what noticing reads, and what the reading marks read. */
@@ -168,7 +173,7 @@ function raisedInLine(s: CallState, t: Triage, now: string | undefined): Raised[
 export function prepareReading(s: CallState, ctx: PrepContext): ReadingPrep {
   const notes = readingNotes(s);
   const t = ctx.triage;
-  const open = ctx.list.filter(x => !isDone(s, x.card, t) || (s.asked.includes(x.card.key) && !isAnswered(s, answerKey(x.card, t))));
+  const open = ctx.list.filter(x => !isDone(s, x.card, t) || (s.asked.includes(x.card.key) && !isStated(s, answerKey(x.card, t))));
   // F1: the 4 asked most recently and not answered yet, the latest first; then the list in its order.
   const asked = open.filter(x => s.asked.includes(x.card.key)).sort((a, b) => s.asked.indexOf(b.card.key) - s.asked.indexOf(a.card.key)).slice(0, READING_LIMITS.asked);
   const rest = open.filter(x => !s.asked.includes(x.card.key) && !s.leftWith.some(l => l.key === x.card.key));
@@ -214,8 +219,10 @@ function mergeFound(s: CallState, items: TriageItem[], ids: Map<string, string>,
     const note = noteOf(notes, p.quote);
     if (!note || s.dismissed.includes(dismissKey({ itemKey: p.itemKey, noteId: note.id }))) continue;
     // A later answer to the same question replaces an earlier one ("actually it is closer to 600").
+    // One found only by inference never replaces one the notes state.
     const i = found.findIndex(f => f.itemKey === p.itemKey);
     const f: Found = { ...p, noteId: note.id, readAt: at };
+    if (i >= 0 && found[i]!.certainty === 'stated' && p.certainty === 'inferred') continue;
     if (i >= 0) found[i] = f; else found.push(f);
   }
   return found;
@@ -245,7 +252,7 @@ export function applyReading(s: CallState, prep: ReadingPrep, r: { answers: Call
   let raised = s.raised.map(x => {
     const h = prep.held.find(y => y.cardKey === x.card.key);
     if (!h || !answered) return x;
-    return { ...x, state: found.some(f => f.itemKey === h.answerKey) ? 'answered' as const : 'ready' as const };
+    return { ...x, state: found.some(f => f.itemKey === h.answerKey && f.certainty === 'stated') ? 'answered' as const : 'ready' as const };
   });
   let wanted = s.wanted;
   if (prep.notice && r.notice && r.notice !== 'failed') {
@@ -281,7 +288,15 @@ export interface Suggestion {
   from: 'list' | 'note' | 'raised' | 'pinned';
   noteId?: string;
   own?: boolean;
+  /** The notes give an answer only by inference: the question is suggested to confirm it (CALL_WORDS.toConfirm). */
+  toConfirm?: { display: string; quote: string; noteId: string };
 }
+
+/**
+ * Whether readings can run on this call: yes; not this month, the workspace's allowance being used up; or not at all,
+ * the workspace having no AI (and the demo). When they cannot, the next question follows the list with its line.
+ */
+export type Readings = 'ok' | 'allowance' | 'noAi';
 
 const ready = (r: Raised, now: string) => r.state === 'ready' || (r.state === 'held' && Date.parse(now) - Date.parse(r.heldSince) >= HOLD_MS);
 
@@ -294,10 +309,24 @@ function readyToSuggest(s: CallState, card: Card, owner: QOwner, t: Triage): boo
   return !it || readSoFar(s, it.key);
 }
 
-/** Whether the next question waits for its notes to be read: not once the cap stops the minute readings, nor after a reading's answer call failed. */
-const gateOn = (s: CallState): boolean => !capReachedDuringCall(s.use, s.minutes) && !s.lastFailed;
+/**
+ * Whether the next question waits for its notes to be read: not when readings cannot run, not once the cap stops the
+ * minute readings, nor after a reading's answer call failed.
+ */
+const gateOn = (s: CallState, readings: Readings): boolean => readings === 'ok' && !capReachedDuringCall(s.use, s.minutes) && !s.lastFailed;
+
+/** The suggestion with its inferred answer, when the notes give one only by inference. */
+function withConfirm(s: CallState, sug: Suggestion, t: Triage): Suggestion {
+  const f = s.found.find(x => x.itemKey === answerKey(sug.card, t) && x.certainty === 'inferred');
+  return f ? { ...sug, toConfirm: { display: f.display, quote: f.quote, noteId: f.noteId } } : sug;
+}
 
 function pick(s: CallState, list: BriefItem[], t: Triage, now: string, gated: boolean): Suggestion | null {
+  const sug = pickPlain(s, list, t, now, gated);
+  return sug ? withConfirm(s, sug, t) : null;
+}
+
+function pickPlain(s: CallState, list: BriefItem[], t: Triage, now: string, gated: boolean): Suggestion | null {
   const kinds = new Set(s.attendees.map(a => a.kind));
   const nameFor = (k: QOwner) => s.attendees.find(a => a.kind === k && a.name)?.name;
   const fromRaised = (r: Raised, from: Suggestion['from']): Suggestion => ({ card: r.card, owner: r.owner, ...(nameFor(r.owner) ? { name: nameFor(r.owner) } : {}), from, noteId: r.noteId });
@@ -328,8 +357,8 @@ function pick(s: CallState, list: BriefItem[], t: Triage, now: string, gated: bo
  * every note a reading has read, except once the cap stops the minute readings or a reading's answer call failed:
  * then the list's order, as before.
  */
-export function nextQuestion(s: CallState, list: BriefItem[], t: Triage, now: string): Suggestion | null {
-  return pick(s, list, t, now, gateOn(s));
+export function nextQuestion(s: CallState, list: BriefItem[], t: Triage, now: string, readings: Readings = 'ok'): Suggestion | null {
+  return pick(s, list, t, now, gateOn(s, readings));
 }
 
 /**
@@ -338,7 +367,9 @@ export function nextQuestion(s: CallState, list: BriefItem[], t: Triage, now: st
  * (CALL_WORDS.readFailed; the list until a reading comes back); "checking" while no question left has been read
  * against every note so far (CALL_WORDS.checking; a reading starts at once, `readingDue` with `waiting`).
  */
-export function panelLine(s: CallState, list: BriefItem[], t: Triage, now: string): 'capped' | 'failed' | 'checking' | null {
+export function panelLine(s: CallState, list: BriefItem[], t: Triage, now: string, readings: Readings = 'ok'): 'allowance' | 'noAi' | 'capped' | 'failed' | 'checking' | null {
+  // "allowance": CALL_WORDS.allowanceUsed; "noAi": CALL_WORDS.noAiThisMonth. Both: the list's order.
+  if (readings !== 'ok') return readings;
   if (capReachedDuringCall(s.use, s.minutes)) return 'capped';
   if (s.lastFailed) return 'failed';
   return !pick(s, list, t, now, true) && pick(s, list, t, now, false) ? 'checking' : null;
@@ -398,7 +429,7 @@ export function prepareEnd(s: CallState, ctx: { model: ProcessModel; list: Brief
   const t = ctx.triage;
   const all: TriageItem[] = [];
   const keys = new Set<string>();
-  const push = (it: TriageItem | null) => { if (it && !keys.has(it.key) && !isAnswered(s, it.key)) { keys.add(it.key); all.push(it); } };
+  const push = (it: TriageItem | null) => { if (it && !keys.has(it.key) && !isStated(s, it.key)) { keys.add(it.key); all.push(it); } };
   const byKey = (k: string) => ctx.list.find(x => x.card.key === k);
   for (const k of [...s.asked].reverse()) { const x = byKey(k); if (x) push(readingItemFor(x.card, x.owner, t)); const r = s.raised.find(y => y.card.key === k); if (r) push(readingItemFor(r.card, r.owner, t)); }
   for (const x of ctx.list) push(readingItemFor(x.card, x.owner, t));
