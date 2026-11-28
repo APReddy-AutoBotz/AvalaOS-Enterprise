@@ -1,5 +1,6 @@
 // The process journey: sign in, pick a process, work through its stages.
 // Owns the paths /signin, /processes and /process/:id/:stage; everything else is the earlier app.
+import { CallPage } from './process/CallPage.tsx';
 import { DEMO_POINTER } from '../domain/site/demo.ts';
 import { DEMO_BASE } from '../domain/site/pages.ts';
 import { teardownBase } from '../domain/site/teardowns.ts';
@@ -146,6 +147,11 @@ export function Journey({ store, base = '', start }: { store: JourneyStore; base
   }, [me, nav]);
 
   if (me === undefined) return <Spinner />;
+  // The call page (package C) is a window of its own, without the top bar: the analyst shares another window.
+  if (me && nav.route.page === 'call') {
+    const id = nav.route.processId;
+    return <div className="min-h-screen bg-slate-50 text-slate-900"><CallPage store={store} processId={id} me={me} stageHref={stage => nav.href({ page: 'process', processId: id, stage })} /></div>;
+  }
 
   const signedIn = Boolean(me) && nav.route.page !== 'signin';
   // The board uses the width of the screen: six columns need the room.
@@ -229,7 +235,7 @@ export function Journey({ store, base = '', start }: { store: JourneyStore; base
           nav.route.page === 'processes' ? <React.Fragment key={ws.current.id}><ProcessesPage store={store} nav={nav} workspace={ws.current} /></React.Fragment> :
           nav.route.page === 'settings' ? <React.Fragment key={ws.current.id}><SettingsPage store={store} nav={nav} workspace={ws.current} section={nav.route.section} base={base} /></React.Fragment> :
           nav.route.page === 'board' ? <React.Fragment key={ws.current.id}><BoardPage store={store} nav={nav} ws={ws} projectId={nav.route.projectId} itemId={nav.route.itemId} /></React.Fragment> :
-            <React.Fragment key={nav.route.processId}><ProcessWorkspace store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} onWorkspace={ws.show} /></React.Fragment>}
+          nav.route.page === 'process' ? <React.Fragment key={nav.route.processId}><ProcessWorkspace store={store} nav={nav} processId={nav.route.processId} stage={nav.route.stage} onWorkspace={ws.show} /></React.Fragment> : null}
       </main>
     </div>
   );

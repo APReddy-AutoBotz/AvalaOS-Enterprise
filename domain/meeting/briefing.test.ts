@@ -7,7 +7,8 @@ import { assessProcess } from '../assess/process.ts';
 import { deferQuestion, setPurpose } from '../processModel/patch.ts';
 import { triage } from '../questions/triage.ts';
 import { hasOrigin } from '../discovery/card.ts';
-import { agendaText, arrange, buildBriefing, fits, itemHeading, moveItem, type BriefingInput } from './briefing.ts';
+import { agendaText, arrange, buildBriefing, fits, itemHeading, moveItem, type Briefing, type BriefingInput } from './briefing.ts';
+import { askedParts, coveringItem } from '../discovery/queue.ts';
 import type { Attendee } from './kept.ts';
 
 const gold: ProcessModel = JSON.parse(readFileSync(new URL('../../eval/corpus/ap-invoice/expected.model.json', import.meta.url), 'utf8'));
@@ -30,7 +31,9 @@ test('every line says where it came from and has a target', () => {
   const b = brief(gold, everyone, { minutes: 60 });
   for (const x of [...b.forCall, ...b.ifTime]) {
     assert.ok(hasOrigin(x.card.origin), `${x.card.key} says where it came from`);
-    assert.ok(x.card.target.kind === 'meta' ? x.card.target.field : x.card.target.id, `${x.card.key} has a target`);
+    // A target, or (a plain question Discovery gives no card, as the sample's "How long does a non-PO invoice take
+    // to handle?" on a figure with no id) the stored question it stands for, by key.
+    assert.ok((x.card.target.kind === 'meta' ? x.card.target.field : x.card.target.id) || x.card.itemKey, `${x.card.key} has a target`);
     assert.ok(itemHeading(x).length > 0);
   }
 });
@@ -118,7 +121,13 @@ test('the analyst\'s own questions, moves and left out', () => {
 test('where the process stands, and what is open', () => {
   const b = brief(gold, everyone, { waitingInDiscovery: 2 });
   assert.deepEqual(b.standing, ['21 steps, 10 roles and 7 applications, from 6 sources.', 'Assessed: API-led integration.', '2 answers from Discovery are waiting for the draft.']);
-  assert.equal(b.openLine, '2 could change the recommendation · 4 about the shape of the process · 2 where the sources disagree · 7 needed for sign-off');
+  assert.equal(b.openLine, '2 could change the recommendation · 4 about the shape of the process · 2 where the sources disagree · 6 needed for sign-off');
+  // "Needed for sign-off" in the header counts what the list labels so (review chat, 28 November 2026).
+  const all = brief(gold, everyone, { minutes: 60 });
+  const labelled = [...all.forCall, ...all.ifTime, ...all.leftOut].filter(x => itemHeading(x) === 'Needed for sign-off').length;
+  assert.equal(all.openLine?.match(/(\d+) needed for sign-off/)?.[1], String(labelled));
+  const untargetedLine = brief(untargeted(gold), everyone, { minutes: 60 });
+  assert.equal(untargetedLine.openLine?.match(/(\d+) needed for sign-off/)?.[1], String([...untargetedLine.forCall, ...untargetedLine.ifTime].filter(x => itemHeading(x) === 'Needed for sign-off').length));
   const empty = brief({ ...structuredClone(gold), steps: [], flows: [], gateways: [], events: [] }, everyone);
   assert.equal(empty.standing[0], 'No steps yet: the call starts with the shape of the process.');
   const asIs = setPurpose(gold, { value: 'as_is', by: null, at: '2026-11-26T10:00:00.000Z' }).model;
@@ -135,4 +144,52 @@ test('"Copy the agenda" holds the numbered questions only', () => {
   assert.ok(lines.includes('If there is time:'));
   assert.equal(lines.filter(l => /^\d+\. /.test(l)).length, b.forCall.length + b.ifTime.length);
   assert.ok(!/Why it matters|Missing:|You said|Changes the recommendation|item:|gap:/.test(text));
+});
+
+// Preview walk, 28 November 2026: a reading's questions about the process as a whole (target meta, no field) had no
+// Discovery card, so with their owner on the call they were neither on the list nor under "Not for this call".
+const untargeted = (m: ProcessModel): ProcessModel => ({
+  ...m,
+  openQuestions: [
+    ...m.openQuestions,
+    ...['Who signs off a supplier that is new to the business?', 'How are month-end cut-off invoices handled?', 'What happens to an invoice that arrives with no purchase order number?']
+      .map((question, n) => ({ id: `q-u${n + 1}`, target: { kind: 'meta' as const }, question, whyItMatters: '', owner: null, status: 'open' as const })),
+  ],
+});
+
+/** Every open item still asked appears once: on the list (for this call, if there is time, left out) or under "Not for this call". */
+function coverage(m: ProcessModel, b: Briefing) {
+  const t = triage(m, assessProcess(m));
+  const parts = askedParts(m, t);
+  const asked = new Set([...parts.items.map(x => x.key), ...parts.shape.map(c => coveringItem(c, t)?.key).filter((k): k is string => Boolean(k)), ...t.items.filter(x => x.deferred).map(x => x.key)]);
+  const shown = [...[...b.forCall, ...b.ifTime, ...b.leftOut].map(x => coveringItem(x.card, t)?.key).filter((k): k is string => Boolean(k)), ...b.elsewhere.flatMap(g => g.items.map(x => x.key))];
+  return { asked, shown };
+}
+
+test('every open question of a kind on the call is on the list; one with no card is a plain question, in the briefing\'s order', () => {
+  const m = untargeted(gold);
+  for (const people of [everyone, [{ kind: 'business' }], [{ kind: 'it' }], [{ kind: 'finance' }]] as Attendee[][]) {
+    const b = brief(m, people, { minutes: 60, arranged: { order: [], leftOut: ['item:q-u2'] } });
+    const { asked, shown } = coverage(m, b);
+    assert.deepEqual([...shown].sort(), [...asked].sort(), `${people.map(p => p.kind).join('+')}: each open item once`);
+    assert.equal(new Set(shown).size, shown.length, 'none twice');
+  }
+  const b = brief(m, [{ kind: 'business' }], { minutes: 60 });
+  const plain = [...b.forCall, ...b.ifTime].filter(x => x.card.key.startsWith('item:q-u'));
+  assert.equal(plain.length, 3);
+  for (const x of plain) {
+    assert.equal(x.card.answer, 'words');
+    assert.deepEqual(x.card.target, { kind: 'meta' }, 'the stored question\'s own target');
+    assert.ok(hasOrigin(x.card.origin));
+  }
+  // Not under "Not for this call" when their owner is on it.
+  assert.ok(!b.elsewhere.some(g => g.items.some(i => i.key.startsWith('q-u'))));
+  // In the briefing's order: what could change the recommendation first, the plain questions after it.
+  const all = [...b.forCall, ...b.ifTime];
+  const firstPlain = all.findIndex(x => x.card.key.startsWith('item:q-u'));
+  assert.ok(all.slice(firstPlain).every(x => x.card.group !== 'decides' && x.card.group !== 'settles'));
+  // Without their owner on the call they are under "Not for this call".
+  const it = brief(m, [{ kind: 'it' }]);
+  const askOwner = it.elsewhere.find(g => g.owner === 'business')!;
+  assert.equal(askOwner.items.filter(i => i.key.startsWith('q-u')).length, 3);
 });

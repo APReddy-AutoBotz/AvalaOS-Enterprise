@@ -1,6 +1,8 @@
 // Closing the gaps: the open questions after triage, answered one at a time with the right input
 // for each. Every answer is written to the process model, so the assessment and the documents
 // update at once. Nothing is written without the person pressing save.
+import { CALL_WORDS } from '../../domain/meeting/words.ts';
+import { openCall } from './openCall.ts';
 import React from 'react';
 import { whatFollows } from '../../domain/plan/purpose.ts';
 import type { AccessStatus, ProcessModel } from '../../domain/processModel/types.ts';
@@ -98,6 +100,8 @@ export function GapsAssistant({ processId, model, editor, canEdit, onClose, note
           {canEdit && <Button variant="secondary" onClick={() => editor.apply(all(...t.alreadyKnown.map(k => (m: ProcessModel) => closeQuestions(m, { questionIds: [k.questionId], answer: `Already recorded: ${k.why}` }))), `Closed ${t.alreadyKnown.length} questions the model already answers`)}>Close them</Button>}
         </div>
       )}
+
+      <PrepareCall processId={processId} />
 
       <div ref={sendRef} className="scroll-mt-4"><QuestionPacks model={model} t={t} plan={plan} branding={branding} canImport={canEdit} onImported={r => setReply(r)} /></div>
 
@@ -373,5 +377,22 @@ function QuestionCard({ item, model, canEdit, position, onApply, onSkip, onBack,
         </div>
       )}
     </article>
+  );
+}
+
+/**
+ * "Prepare a call" (package C, C3b): opens the call page in a window of its own, at /process/{id}/call under the
+ * prefix the journey runs under (the demo's too). If the browser blocks the window, the page opens here with a line.
+ */
+function PrepareCall({ processId }: { processId: string }) {
+  const open = () => openCall(processId);
+  return (
+    <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-5 py-4" data-testid="prepare-call">
+      <div>
+        <h4 className="font-display text-base font-semibold text-slate-900">{CALL_WORDS.prepare}</h4>
+        <p className="mt-0.5 text-sm text-slate-600">{CALL_WORDS.prepareLine}</p>
+      </div>
+      <Button variant="secondary" onClick={open}>{CALL_WORDS.prepare}</Button>
+    </section>
   );
 }

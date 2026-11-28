@@ -17,6 +17,8 @@ export const CALL_WORDS = {
   // Where it starts (section 3)
   prepare: 'Prepare a call',
   prepareLine: 'A briefing for a requirements call: what is open, in what order, and who on the call can answer it.',
+  /** C4a: the line under "Prepare a call" in Discovery's "Where discovery stands". */
+  prepareFromDiscovery: 'Ask the people who know in a call: the questions only they can answer are put in order for you.',
   blockedWindow: 'Opened here because the browser blocked a new window.',
   viewerLine: 'Someone who can edit this process can run the call panel.',
 
@@ -93,6 +95,7 @@ export const CALL_WORDS = {
   stated: 'Stated in your notes',
   inferred: 'Inferred: check it',
   quoteAt: (excerpt: string, time: string) => `'${excerpt}' · your note at ${time}`,
+  noteAt: (time: string) => `Your note at ${time}`,
   notRight: 'Not right',
   raisedHeading: (n: number) => `Raised from your notes (${n})`,
   askItNow: 'Ask it now',
@@ -138,12 +141,32 @@ export const CALL_WORDS = {
   ownHeadingReview: (n: number) => `Your own questions (${n})`,
   shapeHeading: 'About the shape of the process',
   shapeLine: 'Your notes say things about the steps, people or applications that the draft does not hold yet. They come into the draft when the notes are read as a source, after you save.',
-  notesKept: (title: string) => `Your notes are kept as a source, "${title}", so every answer can quote them.`,
+  /**
+   * Preview walk, 28 November 2026: an answer to one of the assessment's inputs is written by the Inputs view's own
+   * operation, which keeps no quote, so the line no longer says every answer quotes the notes.
+   */
+  notesKept: (title: string) => `Your notes are kept as a source, "${title}". An answer to an open question quotes the note it came from; a figure or another input of the assessment is recorded without a quote.`,
+  /** C4a: what the notes say should change, in the review (owner, 28 November 2026: not ticked by default). */
+  wantedHeading: (n: number) => `What you want to change (${n})`,
+  wantedLine: 'What your notes say should change. Tick what to keep: it goes to "What you want to change" in The brief, where it can be made a requirement. It never becomes a step of the work done today.',
+  heldBackLine: 'From what you want to change: not part of the work done today.',
+  inputNoQuote: 'Recorded in the assessment\'s inputs, which keep no quote: this answer will not cite your note.',
+  needsUnit: 'Say whether this time is in minutes or hours before you keep it.',
   save: 'Save',
   discardCall: 'Discard the call',
   discardAsk: 'Discard the call? Your notes and everything found in them are removed from this device. Nothing was saved.',
   notSaved: (message: string, key: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Your notes are kept as source ${key}; nothing else changed. Try again.`,
-  saved: (result: string) => `Saved. ${result}.`,
+  notSavedNothing: (message: string) => `Not saved: ${message.trim().replace(/\.?$/, '.')} Nothing changed, and your notes are still on this device. Try again.`,
+  /** Preview walk, 28 November 2026: what Save recorded comes first, so an answer to an input never reads as nothing saved. */
+  saved: (counts: { answers: number; kept: number; left: number; wanted?: number }, result: string) => {
+    const parts = [
+      counts.answers && plural(counts.answers, 'answer') + ' recorded',
+      counts.kept && `${plural(counts.kept, 'question')} kept open`,
+      counts.left && `${counts.left} left with someone`,
+      counts.wanted && `${plural(counts.wanted, 'change')} you want kept`,
+    ].filter(Boolean);
+    return `Saved: ${parts.length ? parts.join(', ') : 'your notes are kept as a source'}. ${result}.`;
+  },
   stillOpen: 'Still open, by who to ask:',
   sendFiles: 'Send questions to the people who know',
   readIntoDraft: 'Read the notes into the draft',
@@ -151,6 +174,6 @@ export const CALL_WORDS = {
 } as const;
 
 /** History's line for the call's one edit of the record. */
-export function callSummary(date: string, c: { answers: number; kept: number; left: number }): string {
-  return `Call of ${date}: ${plural(c.answers, 'answer')}, ${plural(c.kept, 'question')} kept open, ${c.left} left with someone`;
+export function callSummary(date: string, c: { answers: number; kept: number; left: number; wanted?: number }): string {
+  return `Call of ${date}: ${plural(c.answers, 'answer')}, ${plural(c.kept, 'question')} kept open, ${c.left} left with someone${c.wanted ? `, ${plural(c.wanted, 'change')} you want kept` : ''}`;
 }

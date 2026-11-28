@@ -3,7 +3,8 @@
 //
 //   await page.addInitScript(r => { (window as any).__avalaStandIns = r; }, { answerFromNotes: [reply] });
 //
-// and reads what was asked from window.__avalaStandInLog. Only a test build reaches this file
+// and reads what was asked from window.__avalaStandInLog. A reply `{ standInError: { status, code, message } }` is
+// thrown as the server's refusal with that code. Only a test build reaches this file
 // (__AVALA_STAND_INS__, set by vite.config.ts when VITE_JOURNEY_STORE is "memory"); the released build
 // leaves it out, which `node scripts/check-no-stand-ins.mjs dist` checks after `npm run build`.
 // The rules (which calls are answered, which refused) are domain/ai/standIn.ts.
@@ -29,7 +30,12 @@ export function standInFromPage(): StandIn | undefined {
       const said = task === 'discoveryQuestions' ? { said: segments.filter(x => x.id.startsWith('n:')).map(x => x.text) } : {};
       log.push(why ? { task, answered: false, why, ...said } : { task, answered: true, ...said });
       if (why) throw new StoreError(501, why);
-      return { data: standInReply(replies, used, task) };
+      const data = standInReply(replies, used, task);
+      // A reply `{ standInError: { status, code, message } }` stands for the server refusing with its own code: the
+      // month's allowance (BUDGET_EXCEEDED) or the minute limit (RATE_LIMITED), for the call panel's lines (package C).
+      const refused = (data as { standInError?: { status: number; code: string; message: string } } | null)?.standInError;
+      if (refused) throw new StoreError(refused.status, refused.message, refused.code);
+      return { data };
     },
     read(sources) {
       const r = standInReading(replies, used);

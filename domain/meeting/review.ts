@@ -5,14 +5,16 @@
 // written through the existing operations. Pure rules here: the screen applies the edit when the analyst saves.
 import type { IngestSegment } from '../ingest/segment.ts';
 import type { ElementTarget, ProcessModel, RaisedBy, SourceLocator, SourceRef } from '../processModel/types.ts';
-import { addQuestion, deferQuestion, type OpResult } from '../processModel/patch.ts';
+import { addQuestion, deferQuestion, keepWanted, type OpResult } from '../processModel/patch.ts';
+import { holdsBackWanted, insideWanted } from '../discovery/wanted.ts';
 import { all, buildAnswer, record, type Op } from '../questions/answer.ts';
 import type { Triage, TriageItem } from '../questions/triage.ts';
 import type { Card } from '../discovery/card.ts';
 import { coveringItem, triageCard } from '../discovery/queue.ts';
 import { chooseEdit } from '../discovery/flow.ts';
 import { answerAgainstConfirmed, answersKey } from '../discovery/answers.ts';
-import { inputEdit, periodFrom, type InputCard, type Period } from '../discovery/inputs.ts';
+import { inputEdit, periodFrom, type InputCard, type InputField, type InputValue, type Period } from '../discovery/inputs.ts';
+import { figureNeeds, figureText, unitFrom, type TimeUnit } from './figures.ts';
 import type { BriefItem } from './briefing.ts';
 import type { CallNote, CallState, Found, Raised } from './kept.ts';
 import { answerKey, itemFor } from './panel.ts';
@@ -37,7 +39,9 @@ export function callNotesSource(s: CallState, a: { takenKeys: readonly string[];
   const key = answersKey(a.takenKeys);
   const when = `${day(s.startedAt, a.timeZone)}, ${clock(s.startedAt, a.timeZone)} to ${clock(a.endedAt, a.timeZone)}`;
   const segments: IngestSegment[] = s.notes.map((n, i) => ({ id: `${key}:${i + 1}`, sourceId: key, kind: 'paragraph' as const, text: flat(n.text), locator: locatorOf(n, i, a.timeZone) }));
-  return { key, title: a.by?.trim() ? `${CALL_NOTES_KIND} by ${a.by.trim()}, ${when}` : `${CALL_NOTES_KIND}, ${when}`, kind: CALL_NOTES_KIND, segments, byteSize: new TextEncoder().encode(segments.map(x => x.text).join('\n')).length };
+  // A name, never an email address (review chat, 28 November 2026): the title then names no one.
+  const by = a.by?.trim() && !a.by.includes('@') ? a.by.trim() : '';
+  return { key, title: by ? `${CALL_NOTES_KIND} by ${by}, ${when}` : `${CALL_NOTES_KIND}, ${when}`, kind: CALL_NOTES_KIND, segments, byteSize: new TextEncoder().encode(segments.map(x => x.text).join('\n')).length };
 }
 
 // ---------------------------------------------------------------- what the review lists
@@ -71,19 +75,40 @@ export interface ReviewAnswer {
   /** The note's time on the analyst's clock. */
   time: string;
   certainty: Found['certainty'];
-  /** Ticked when the notes state it; not when it is inferred, nor a figure whose period is not said. */
+  /** Ticked when the notes state it; not when it is inferred, nor a figure whose period or unit is not said. */
   ticked: boolean;
+  /** What Save records, in words: a figure with its unit or period ("40 minutes"), else the value as found. */
+  record: string;
+  /**
+   * An answer to one of the assessment's inputs (a figure, a profile fact): written through the Inputs view's own
+   * operation, which keeps no quote, so the record does not cite the note (preview walk, 28 November 2026).
+   */
+  input: boolean;
+  /**
+   * Its every quote lies inside a statement of what should change (C4a): not ticked, since it is not part of the work
+   * done today; the statement itself is listed under "What you want to change".
+   */
+  heldBack: boolean;
   /** When it differs from a value a person confirmed: what Save does instead. */
   line: string | null;
   /** A number of cases with no period in its note: the period is asked before it can be kept. */
   needsPeriod: boolean;
+  /** A time with no unit in its note (minutes or hours): the unit is asked before it can be kept. */
+  needsUnit: boolean;
 }
 
 /**
  * A choice the notes seem to answer ("Is the work done today?", a conflict, a fact to pick): read only to learn that
  * it is answered (owner, 26 November 2026). Nothing is picked for the analyst: it is kept only with the answer they pick.
  */
-export interface ReviewChoose { id: string; key: string; question: string; quote: string; noteId: string; time: string; choices: [string, string][]; ticked: false }
+export interface ReviewChoose {
+  id: string; key: string; question: string; quote: string; noteId: string; time: string;
+  /** The answers to pick from; empty when the answer is an input's own field. */
+  choices: [string, string][];
+  /** One of the assessment's inputs (a change expected, an API, a fact, a figure per step): answered with the Inputs view's field. */
+  field?: InputField;
+  ticked: false;
+}
 
 /** The card and item a choice's answer is written through, when the key is a choice's. */
 function chooseOf(key: string, ctx: ReviewContext): { card: Card; item?: TriageItem } | null {
@@ -94,6 +119,9 @@ function chooseOf(key: string, ctx: ReviewContext): { card: Card; item?: TriageI
   if (fromList && !itemFor(fromList.card, fromList.owner, t)) return { card: fromList.card, ...(coveringItem(fromList.card, t) ? { item: coveringItem(fromList.card, t)! } : {}) };
   return null;
 }
+
+/** A statement of what should change, noticed in the notes (C4a): not ticked by default (owner, 28 November 2026). */
+export interface ReviewWanted { id: string; excerpt: string; noteId: string; time: string; ticked: false }
 
 export interface ReviewKeep { id: string; key: string; question: string; quote?: string; time?: string; asked: boolean; ticked: boolean; own: boolean }
 export interface ReviewLeft { id: string; key: string; question: string; name: string; ticked: boolean }
@@ -107,6 +135,8 @@ export interface Review {
   /** The analyst's own questions not answered. */
   own: ReviewKeep[];
   leftWith: ReviewLeft[];
+  /** "What you want to change": what the notes say should change, never a step or an answer about today's work. */
+  wanted: ReviewWanted[];
   /** Whether the notes raised or answered something about the shape of the process (the line under "About the shape"). */
   shape: boolean;
 }
@@ -120,16 +150,29 @@ export function buildReview(s: CallState, ctx: ReviewContext): Review {
   const note = (id: string) => s.notes.find(n => n.id === id);
   const answers: ReviewAnswer[] = [];
   const choose: ReviewChoose[] = [];
+  // What should change, as quotes of their notes: an answer quoted from inside one is held back (as Discovery holds back
+  // a reading's step), only where the work is done today, as there.
+  const wantedQuotes = s.wanted.map(w => ({ sourceId: w.noteId, excerpt: w.excerpt }));
+  const heldBack = (f: { noteId: string; quote: string }) => holdsBackWanted(ctx.model) && insideWanted({ sourceId: f.noteId, excerpt: f.quote }, wantedQuotes);
   for (const f of s.found) {
     const n = note(f.noteId);
     if (!n) continue;
     const ch = chooseOf(f.itemKey, ctx);
-    if (ch) { choose.push({ id: `choose:${f.itemKey}`, key: f.itemKey, question: ch.card.question, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), choices: ch.card.choices ?? ch.item?.choices ?? [], ticked: false }); continue; }
+    if (ch) {
+      const field = 'field' in ch.card ? (ch.card as InputCard).field : undefined;
+      choose.push({ id: `choose:${f.itemKey}`, key: f.itemKey, question: ch.card.question, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), choices: field ? [] : ch.card.choices ?? ch.item?.choices ?? [], ...(field ? { field } : {}), ticked: false });
+      continue;
+    }
     const o = originOf(f.itemKey, s, ctx);
     if (!o) continue;
-    const needsPeriod = f.itemKey === 'input:volume' && !periodFrom(n.text);
+    const needs = o.kind === 'input' ? figureNeeds(f.itemKey, n.text) : null;
+    const held = heldBack(f);
     const out = o.kind === 'item' ? answerAgainstConfirmed(ctx.model, { target: o.item.target, label: o.item.question, said: { value: f.display, quote: DRAFT_REF(f.quote) }, write: x => ({ model: x, patch: [] }) }) : null;
-    answers.push({ id: `answer:${f.itemKey}`, key: f.itemKey, question: o.item.question, display: f.display, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), certainty: f.certainty, ticked: f.certainty === 'stated' && !needsPeriod, line: out?.line ?? null, needsPeriod });
+    answers.push({
+      id: `answer:${f.itemKey}`, key: f.itemKey, question: o.item.question, display: f.display, quote: f.quote, noteId: f.noteId, time: clock(n.at, ctx.timeZone), certainty: f.certainty,
+      ticked: f.certainty === 'stated' && !needs && !held, heldBack: held, record: o.kind === 'input' ? figureText(f.itemKey, f.display, { period: periodFrom(n.text), unit: unitFrom(n.text) }) : f.display,
+      input: o.kind === 'input', line: out?.line ?? null, needsPeriod: needs === 'period', needsUnit: needs === 'unit',
+    });
   }
   const answered = new Set([...answers.map(a => a.key), ...choose.map(c => c.key)]);
   const left = new Set(s.leftWith.map(l => l.key));
@@ -147,7 +190,8 @@ export function buildReview(s: CallState, ctx: ReviewContext): Review {
   const question = (key: string) => ctx.list.find(x => x.card.key === key)?.card.question ?? s.raised.find(r => r.card.key === key)?.card.question;
   const leftWith: ReviewLeft[] = s.leftWith.filter(l => question(l.key) && !answered.has(cardAnswerKey(l.key, s, ctx))).map(l => ({ id: `left:${l.key}`, key: l.key, question: question(l.key)!, name: l.name, ticked: true }));
   const shape = s.raised.some(r => r.card.target.kind === 'meta') || answers.some(a => ctx.list.some(x => answerKey(x.card, t) === a.key && x.card.group === 'shape'));
-  return { answers, choose, keepOpen, own, leftWith, shape };
+  const wanted: ReviewWanted[] = s.wanted.filter(w => note(w.noteId)).map((w, i) => ({ id: `wanted:${i}`, excerpt: w.excerpt, noteId: w.noteId, time: clock(note(w.noteId)!.at, ctx.timeZone), ticked: false }));
+  return { answers, choose, keepOpen, own, leftWith, wanted, shape };
 }
 
 const cardAnswerKey = (cardKey: string, s: CallState, ctx: { list: BriefItem[]; triage: Triage }) => {
@@ -164,6 +208,10 @@ export interface SaveChoice {
   periods?: Readonly<Record<string, Period>>;
   /** The answer the analyst picked for a choice the notes seem to answer, by its key; none is picked for them. */
   picks?: Readonly<Record<string, string>>;
+  /** The unit said in the review for a time whose note gave none. */
+  units?: Readonly<Record<string, TimeUnit>>;
+  /** An input's field as filled in the review (a change expected, an API, a fact, a figure per step), by its key. */
+  inputs?: Readonly<Record<string, InputValue>>;
 }
 
 /** A question added only when the record does not already hold it open on the same target. */
@@ -174,7 +222,9 @@ const addOnce = (a: { target: ElementTarget; question: string; whyItMatters?: st
   return { model: r.model, patch: r.patch };
 };
 
-export interface CallEdit { op: Op; summary: string; counts: { answers: number; kept: number; left: number } }
+/** What Save writes, counted: answers, questions kept open, left with someone, and statements of what should change kept. */
+export interface CallCounts { answers: number; kept: number; left: number; wanted?: number }
+export interface CallEdit { op: Op; summary: string; counts: CallCounts }
 
 /**
  * The one edit of the record Save writes, with the notes already kept as `source`. Answers through `buildAnswer`
@@ -196,7 +246,7 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
   };
   const note = (excerpt: string) => `from ${key}: "${flat(excerpt).slice(0, 160)}"`;
   const ops: Op[] = [];
-  const counts = { answers: 0, kept: 0, left: 0 };
+  const counts: CallCounts = { answers: 0, kept: 0, left: 0, wanted: 0 };
 
   for (const a of review.answers.filter(x => choice.ticked.has(x.id))) {
     const f = s.found.find(x => x.itemKey === a.key);
@@ -204,8 +254,12 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
     if (!f || !o) continue;
     let op: Op | null = null;
     if (o.kind === 'input' && o.card) {
-      const period = choice.periods?.[a.key] ?? periodFrom(s.notes.find(n => n.id === f.noteId)?.text ?? '') ?? undefined;
-      op = inputEdit(o.card as InputCard, { number: Number(f.display), ...(period ? { period } : {}) });
+      const text = s.notes.find(n => n.id === f.noteId)?.text ?? '';
+      const period = choice.periods?.[a.key] ?? periodFrom(text) ?? undefined;
+      const unit = choice.units?.[a.key] ?? unitFrom(text) ?? undefined;
+      // A time is kept only with its unit: without it the Inputs view's operation would record minutes.
+      if (a.needsUnit && !unit) continue;
+      op = inputEdit(o.card as InputCard, { number: Number(f.display), ...(period ? { period } : {}), ...(unit ? { unit } : {}) });
     } else if (o.kind === 'raised' && o.raised) {
       op = record(o.item, `${f.display} (${note(f.quote)})`, 'answered', raisedBy(o.raised));
     } else if (o.kind === 'own') {
@@ -217,6 +271,14 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
     if (op) { ops.push(op); counts.answers++; }
   }
   for (const c of review.choose) {
+    // An input answered with its own field, through the Inputs view's operation.
+    if (c.field) {
+      const card = chooseOf(c.key, ctx)?.card as InputCard | undefined;
+      const value = choice.inputs?.[c.key];
+      const op = card && value ? inputEdit(card, value) : null;
+      if (op) { ops.push(op); counts.answers++; }
+      continue;
+    }
     const pick = choice.picks?.[c.key];
     const ch = pick ? chooseOf(c.key, ctx) : null;
     if (!pick || !ch) continue;
@@ -241,6 +303,13 @@ export function callEdit(s: CallState, review: Review, choice: SaveChoice, ctx: 
     const by = r ? raisedBy(r) : undefined;
     ops.push(m2 => deferQuestion(m2, { questionIds: item?.questionIds ?? [], owner: l.name, gap: { target: card.target, question: card.question, ...(by ? { raisedBy: by } : {}) } }));
     counts.left++;
+  }
+  // What should change, ticked in the review: kept with a quote of its note, as Discovery's Keep keeps it. It never
+  // becomes a step, a rule or an answer about the work done today.
+  for (const w of (review.wanted ?? []).filter(x => choice.ticked.has(x.id))) {
+    const q = ref(w.noteId, w.excerpt);
+    ops.push(m2 => { const r = keepWanted(m2, { statement: w.excerpt, sources: [q] }); return { model: r.model, patch: r.patch }; });
+    counts.wanted = (counts.wanted ?? 0) + 1;
   }
   const op: Op = ops.length ? all(...ops) : (x: ProcessModel): OpResult => ({ model: x, patch: [] });
   return { op, summary: callSummary(ctx.date, counts), counts };

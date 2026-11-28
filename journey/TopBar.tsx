@@ -3,6 +3,8 @@
 import React from 'react';
 import type { JourneyStore, Me, Workspace } from './store/types.ts';
 import { Button, cx, ErrorNote, Field, Menu, messageOf } from './ui.tsx';
+import { CALL_WORDS } from '../domain/meeting/words.ts';
+import { anyCallKept, downloadKeptCalls } from './process/callNotes.ts';
 
 /** The workspaces a person belongs to and the one they are in, owned by the shell (JourneyApp.tsx). */
 export interface Workspaces {
@@ -89,7 +91,22 @@ function NewWorkspace({ store, workspace, onCreated, onCancel }: { store: Journe
 
 export function AccountMenu({ store, me }: { store: JourneyStore; me: Me }) {
   const initial = (me.email.trim()[0] ?? '?').toUpperCase();
-  return (
+  // A call not finished on this device goes at sign-out (domain/site/storage.ts): the person is asked first.
+  const [asking, setAsking] = React.useState(false);
+  const signOut = () => { if (anyCallKept()) setAsking(true); else void store.signOut(); };
+  return (<>
+    {asking && (
+      <div role="dialog" aria-modal="true" aria-label="Sign out" className="fixed inset-0 z-30 flex items-center justify-center bg-slate-900/40 p-4" data-testid="sign-out-call">
+        <div className="max-w-md rounded-2xl bg-white p-6 shadow-lg">
+          <p className="text-sm text-slate-800">{CALL_WORDS.signOutAsk}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={downloadKeptCalls}>{CALL_WORDS.download}</Button>
+            <Button onClick={() => { setAsking(false); void store.signOut(); }}>{CALL_WORDS.signOutAnyway}</Button>
+            <Button variant="ghost" onClick={() => setAsking(false)}>{CALL_WORDS.cancel}</Button>
+          </div>
+        </div>
+      </div>
+    )}
     <Menu label="Account" testId="account-menu" buttonClassName="rounded-full"
       button={<span className="grid h-8 w-8 place-items-center rounded-full bg-[#002C4B] text-xs font-semibold text-white">{initial}</span>}>
       {() => (
@@ -98,12 +115,12 @@ export function AccountMenu({ store, me }: { store: JourneyStore; me: Me }) {
           <p className="truncate px-2.5 pb-2 text-sm font-medium text-slate-900">{me.email}</p>
           <NeedsEmail store={store} />
           <div className="mt-1 border-t border-slate-100 pt-1">
-            <button type="button" className={item} onClick={() => store.signOut()}>Sign out</button>
+            <button type="button" className={item} onClick={signOut}>Sign out</button>
           </div>
         </>
       )}
     </Menu>
-  );
+  </>);
 }
 
 /** The person's own choice: the weekday email when something new needs them (domain/work/digest.ts). */
